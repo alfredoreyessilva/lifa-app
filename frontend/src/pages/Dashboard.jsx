@@ -258,7 +258,7 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
           {league.state && <span style={{ fontSize: 12, color: 'var(--ink-dim)' }}>{league.state}</span>}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Link to={`/ligas/${league.slug}`} className="btn btn-outline btn-sm" target="_blank">Ver mi página</Link>
+          <Link to={`/ligas/${league.slug}`} className="btn btn-outline btn-sm">Ver mi página</Link>
           <button className="btn btn-outline btn-sm" onClick={onEditLeague}>Editar liga</button>
         </div>
       </div>
