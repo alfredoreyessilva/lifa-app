@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import TeamCard from '../components/TeamCard.jsx';
+import Loading from '../components/Loading.jsx';
 
 export default function LeaguePage() {
   const { slug } = useParams();
@@ -31,7 +32,7 @@ export default function LeaguePage() {
     );
   }
 
-  if (!league) return <div className="container"><div className="loading">Cargando…</div></div>;
+  if (!league) return <div className="container"><Loading /></div>;
 
   return (
     <div className="container">

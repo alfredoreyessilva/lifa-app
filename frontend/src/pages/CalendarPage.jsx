@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
+import Loading from '../components/Loading.jsx';
 
 const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 
@@ -25,7 +26,7 @@ export default function CalendarPage() {
     );
   }
 
-  if (!data) return <div className="container"><div className="loading">Cargando…</div></div>;
+  if (!data) return <div className="container"><Loading /></div>;
 
   const { category, matches } = data;
 

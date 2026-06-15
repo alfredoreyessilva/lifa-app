@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import Loading from '../components/Loading.jsx';
 
 export default function Home() {
   const [leagues, setLeagues] = useState(null);
@@ -40,7 +41,7 @@ export default function Home() {
 
       {error && <div className="form-error">{error}</div>}
 
-      {!leagues && !error && <div className="loading">Cargando ligas…</div>}
+      {!leagues && !error && <Loading message="Cargando ligas…" />}
 
       {leagues && leagues.length === 0 && (
         <div className="empty-state">
