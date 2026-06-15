@@ -8,7 +8,7 @@ export default function TopBar() {
     <header className="topbar">
       <div className="topbar-inner">
         <Link to="/" className="brand">
-          🏈 Calendario LFA <span>Fútbol Americano México</span>
+          🏈 <span>CALENDARIOS DE FOOTBALL AMERICANO MEXICO</span>
         </Link>
 
         {user ? (
