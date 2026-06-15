@@ -1,0 +1,28 @@
+import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext.jsx';
+
+export default function TopBar() {
+  const { user, logout } = useAuth();
+
+  return (
+    <header className="topbar">
+      <div className="topbar-inner">
+        <Link to="/" className="brand">
+          🏈 Calendario LFA <span>Fútbol Americano México</span>
+        </Link>
+
+        {user ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Link to="/panel" className="btn btn-outline btn-sm">Mi panel</Link>
+            <button onClick={logout} className="btn btn-ghost btn-sm">Cerrar sesión</button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Link to="/iniciar-sesion" className="btn btn-ghost btn-sm">Iniciar sesión</Link>
+            <Link to="/crear-cuenta" className="btn btn-outline btn-sm">Registrar mi liga</Link>
+          </div>
+        )}
+      </div>
+    </header>
+  );
+}
