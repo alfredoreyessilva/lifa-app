@@ -10,6 +10,14 @@ export default function LeaguePage() {
   const [teams, setTeams] = useState(null);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('categorias');
+  const [copied, setCopied] = useState(false);
+
+  function copyLink() {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   useEffect(() => {
     setLeague(null);
@@ -44,6 +52,9 @@ export default function LeaguePage() {
         </div>
         <h1 style={{ fontSize: 'clamp(32px, 6vw, 56px)' }}>{league.name}</h1>
         {league.description && <p>{league.description}</p>}
+        <button className="btn btn-outline btn-sm" onClick={copyLink} style={{ marginTop: 8 }}>
+          {copied ? '✓ Link copiado' : 'Compartir esta liga'}
+        </button>
       </section>
 
       <div className="tab-bar">

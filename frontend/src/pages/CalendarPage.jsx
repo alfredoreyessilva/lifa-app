@@ -9,10 +9,18 @@ export default function CalendarPage() {
   const { categoryId } = useParams();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     api.getMatches(categoryId).then(setData).catch((e) => setError(e.message));
   }, [categoryId]);
+
+  function copyLink() {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   if (error) {
     return (
@@ -30,13 +38,21 @@ export default function CalendarPage() {
 
   const { category, matches } = data;
 
+  const now = Date.now();
+  const nextMatch = matches.find(m => m.status === 'scheduled' && new Date(m.match_date).getTime() > now);
+
   return (
     <div className="container">
       <div className="crumb"><Link to="/">Inicio</Link> / {category.name}</div>
 
       <div className="section-head" style={{ marginTop: 24 }}>
         <h2>{category.name}</h2>
-        <span className="count">{matches.length} partidos</span>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <span className="count">{matches.length} partidos</span>
+          <button className="btn btn-outline btn-sm" onClick={copyLink}>
+            {copied ? '✓ Copiado' : 'Compartir'}
+          </button>
+        </div>
       </div>
 
       {matches.length === 0 ? (
@@ -46,21 +62,23 @@ export default function CalendarPage() {
         </div>
       ) : (
         <div className="match-list">
-          {matches.map((m) => <MatchRow key={m.id} match={m} />)}
+          {matches.map((m) => (
+            <MatchRow key={m.id} match={m} isNext={nextMatch?.id === m.id} />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function MatchRow({ match }) {
+function MatchRow({ match, isNext }) {
   const date = new Date(match.match_date);
   const day = date.getDate();
   const month = MESES[date.getMonth()];
   const time = date.toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' });
 
   return (
-    <div className="match-card">
+    <div className="match-card" style={isNext ? { borderLeft: '3px solid var(--flag)', paddingLeft: 13 } : {}}>
       <div className="match-date">
         <div className="day">{day}</div>
         <div className="month">{month}</div>
@@ -75,6 +93,7 @@ function MatchRow({ match }) {
           )}
         </div>
         <div className="match-meta">
+          {isNext && <span className="tag" style={{ color: 'var(--flag)', borderColor: 'var(--flag)' }}>Próximo</span>}
           {match.week_label && <span>{match.week_label}</span>}
           {match.venue && <span>{match.venue}</span>}
           {match.status === 'live' && <span className="tag live">En vivo</span>}
