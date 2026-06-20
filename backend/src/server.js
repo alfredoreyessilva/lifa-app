@@ -1,20 +1,18 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
 import leagueRoutes from './routes/leagues.js';
 import manageRoutes from './routes/manage.js';
 import uploadRoutes from './routes/upload.js';
 
-dotenv.config();
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Los logos ahora se sirven desde Cloudinary (URLs absolutas), ya no
+// necesitamos exponer una carpeta /uploads del filesystem local.
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

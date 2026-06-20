@@ -1,0 +1,17 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+backend/data.sqlite
+backend/data.sqlite-shm
+backend/data.sqlite-wal
+backend/*.sqlite
+backend/*.sqlite-shm
+backend/*.sqlite-wal
+backend/uploads/
+frontend/dist/
+*.log
+npm-debug.log*
+.DS_Store
+.vscode/
+.idea/
