@@ -260,17 +260,48 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
         <div style={{ display: 'flex', gap: 8 }}>
           <Link to={`/ligas/${league.slug}`} className="btn btn-outline btn-sm">Ver mi página</Link>
           <button className="btn btn-outline btn-sm" onClick={onEditLeague}>Editar liga</button>
+          <button className="btn btn-outline btn-sm" onClick={onAddCategory}>+ Agregar categoría</button>
         </div>
       </div>
 
       {categories.length === 0 && (
         <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>Esta liga no tiene categorías. Agrega la primera para empezar a publicar el calendario.</p>
       )}
-{teams.length === 0 && (
+
+      {teams.length === 0 && (
         <div className="form-error" style={{ background: 'rgba(255, 210, 63, 0.1)', borderColor: 'rgba(255, 210, 63, 0.3)', color: 'var(--flag)', marginBottom: 16 }}>
           Crea tus equipos para que sus logos aparezcan en sus partidos programados.
         </div>
       )}
+
+      <div className="category-block">
+        <div className="category-block-head">
+          <h4>Equipos</h4>
+          <button className="btn btn-ghost btn-sm" onClick={onAddTeam}>+ Equipo</button>
+        </div>
+
+        {teams.length === 0 ? (
+          <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>Sin equipos. Agrega el primero para que aparezcan en la sección "Equipos" pública.</p>
+        ) : (
+          teams.map((team) => (
+            <div key={team.id} className="admin-match-row">
+              <div>
+                <div className="who">{team.name}</div>
+                <div className="info">
+                  {team.location || 'Sin ubicación'}
+                  {' · '}
+                  {team.logo_url ? 'Con logo' : 'Sin logo'}
+                </div>
+              </div>
+              <div className="row-actions">
+                <button className="btn btn-outline btn-sm" onClick={() => onEditTeam(team)}>Editar</button>
+                <button className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => onDeleteTeam(team)}>Eliminar</button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
       {categories.map((cat) => (
         <div key={cat.id} className="category-block">
           <div className="category-block-head">
@@ -306,42 +337,9 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
           )}
         </div>
       ))}
-
-      <div style={{ marginTop: 16 }}>
-        <button className="btn btn-outline btn-sm" onClick={onAddCategory}>+ Agregar categoría</button>
-      </div>
-
-      <div className="category-block">
-        <div className="category-block-head">
-          <h4>Equipos</h4>
-          <button className="btn btn-ghost btn-sm" onClick={onAddTeam}>+ Equipo</button>
-        </div>
-
-        {teams.length === 0 ? (
-          <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>Sin equipos. Agrega el primero para que aparezcan en la sección "Equipos" pública.</p>
-        ) : (
-          teams.map((team) => (
-            <div key={team.id} className="admin-match-row">
-              <div>
-                <div className="who">{team.name}</div>
-                <div className="info">
-                  {team.location || 'Sin ubicación'}
-                  {' · '}
-                  {team.logo_url ? 'Con logo' : 'Sin logo'}
-                </div>
-              </div>
-              <div className="row-actions">
-                <button className="btn btn-outline btn-sm" onClick={() => onEditTeam(team)}>Editar</button>
-                <button className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => onDeleteTeam(team)}>Eliminar</button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
     </div>
   );
 }
-
 function EditLeagueForm({ league, onSubmit, onCancel }) {
   const [form, setForm] = useState({
     name: league.name,
