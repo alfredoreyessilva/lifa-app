@@ -249,6 +249,19 @@ export default function Dashboard() {
 
 function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDeleteCategory, onAddMatch, onEditMatch, onDeleteMatch, onAddTeam, onEditTeam, onDeleteTeam }) {
   const { league, categories, teams } = data;
+  // Todas las categorías inician colapsadas (panel compacto). Guardamos
+  // solo los IDs de las que el usuario decide abrir, para no perder el
+  // estado de scroll/posición cada vez que se actualiza la lista.
+  const [expandedIds, setExpandedIds] = useState(new Set());
+
+  function toggleCategory(id) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   return (
     <div className="league-panel">
@@ -302,44 +315,60 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
         )}
       </div>
 
-      {categories.map((cat) => (
-        <div key={cat.id} className="category-block">
-          <div className="category-block-head">
-            <h4>{cat.name}</h4>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => onAddMatch(cat)}>+ Partido</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => onEditCategory(cat)}>Renombrar</button>
-              <button className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => onDeleteCategory(cat)}>Eliminar</button>
-            </div>
-          </div>
-
-          {cat.matches.length === 0 ? (
-            <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>Sin partidos. Agrega el primero.</p>
-          ) : (
-            cat.matches.map((m) => (
-              <div key={m.id} className="admin-match-row">
-                <div>
-                  <div className="who">{m.home_team} vs {m.away_team}</div>
-                  <div className="info">
-                    {formatDate(m.match_date)}
-                    {m.week_label ? ` · ${m.week_label}` : ''}
-                    {' · '}
-                    {m.stream_url ? 'Con link de transmisión' : 'Sin link de transmisión'}
-                    {m.status === 'live' ? ' · En vivo' : m.status === 'finished' ? ' · Finalizado' : ''}
-                  </div>
-                </div>
-                <div className="row-actions">
-                  <button className="btn btn-outline btn-sm" onClick={() => onEditMatch(cat, m)}>Editar</button>
-                  <button className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => onDeleteMatch(cat, m)}>Eliminar</button>
-                </div>
+      {categories.map((cat) => {
+        const isOpen = expandedIds.has(cat.id);
+        return (
+          <div key={cat.id} className="category-block">
+            <div
+              className="category-block-head"
+              onClick={() => toggleCategory(cat.id)}
+              style={{ cursor: 'pointer' }}
+            >
+              <h4>
+                <span style={{ display: 'inline-block', transition: 'transform 0.15s ease', transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)', marginRight: 8 }}>▸</span>
+                {cat.name}
+                <span style={{ color: 'var(--ink-dim)', fontSize: 12, fontWeight: 400, marginLeft: 8 }}>
+                  {cat.matches.length === 0 ? 'sin partidos' : `${cat.matches.length} partido${cat.matches.length === 1 ? '' : 's'}`}
+                </span>
+              </h4>
+              <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
+                <button className="btn btn-ghost btn-sm" onClick={() => onAddMatch(cat)}>+ Partido</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => onEditCategory(cat)}>Renombrar</button>
+                <button className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => onDeleteCategory(cat)}>Eliminar</button>
               </div>
-            ))
-          )}
-        </div>
-      ))}
+            </div>
+
+            {isOpen && (
+              cat.matches.length === 0 ? (
+                <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>Sin partidos. Agrega el primero.</p>
+              ) : (
+                cat.matches.map((m) => (
+                  <div key={m.id} className="admin-match-row">
+                    <div>
+                      <div className="who">{m.home_team} vs {m.away_team}</div>
+                      <div className="info">
+                        {formatDate(m.match_date)}
+                        {m.week_label ? ` · ${m.week_label}` : ''}
+                        {' · '}
+                        {m.stream_url ? 'Con link de transmisión' : 'Sin link de transmisión'}
+                        {m.status === 'live' ? ' · En vivo' : m.status === 'finished' ? ' · Finalizado' : ''}
+                      </div>
+                    </div>
+                    <div className="row-actions">
+                      <button className="btn btn-outline btn-sm" onClick={() => onEditMatch(cat, m)}>Editar</button>
+                      <button className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => onDeleteMatch(cat, m)}>Eliminar</button>
+                    </div>
+                  </div>
+                ))
+              )
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
+
 function EditLeagueForm({ league, onSubmit, onCancel }) {
   const [form, setForm] = useState({
     name: league.name,
