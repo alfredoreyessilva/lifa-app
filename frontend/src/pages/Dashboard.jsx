@@ -278,7 +278,7 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn btn-ghost btn-sm" onClick={() => onAddMatch(cat)}>+ Partido</button>
               <button className="btn btn-ghost btn-sm" onClick={() => onEditCategory(cat)}>Renombrar</button>
-              <button className="btn btn-ghost btn-sm" style={{ color: 'var(--live)' }} onClick={() => onDeleteCategory(cat)}>Eliminar</button>
+              <button className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => onDeleteCategory(cat)}>Eliminar</button>
             </div>
           </div>
 
@@ -299,7 +299,7 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
                 </div>
                 <div className="row-actions">
                   <button className="btn btn-outline btn-sm" onClick={() => onEditMatch(cat, m)}>Editar</button>
-                  <button className="btn btn-ghost btn-sm" style={{ color: 'var(--live)' }} onClick={() => onDeleteMatch(cat, m)}>Eliminar</button>
+                  <button className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => onDeleteMatch(cat, m)}>Eliminar</button>
                 </div>
               </div>
             ))
@@ -332,7 +332,7 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
               </div>
               <div className="row-actions">
                 <button className="btn btn-outline btn-sm" onClick={() => onEditTeam(team)}>Editar</button>
-                <button className="btn btn-ghost btn-sm" style={{ color: 'var(--live)' }} onClick={() => onDeleteTeam(team)}>Eliminar</button>
+                <button className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => onDeleteTeam(team)}>Eliminar</button>
               </div>
             </div>
           ))

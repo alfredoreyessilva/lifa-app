@@ -125,11 +125,10 @@ a { color: inherit; }
 
 .btn-danger {
   background: transparent;
-  color: var(--live);
-  border-color: rgba(255, 82, 82, 0.4);
+  color: var(--flag);
+  border-color: rgba(255, 210, 63, 0.4);
 }
-.btn-danger:hover { background: rgba(255, 82, 82, 0.12); }
-
+.btn-danger:hover { background: rgba(255, 210, 63, 0.12); }
 .btn-sm { padding: 8px 14px; font-size: 11px; }
 .btn-block { width: 100%; }
 .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
