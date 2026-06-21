@@ -423,6 +423,11 @@ a { color: inherit; }
   font-family: var(--font-body);
   font-size: 14px;
 }
+.field input::placeholder,
+.field textarea::placeholder {
+  color: var(--flag);
+  opacity: 1;
+}
 .field input:focus,
 .field select:focus,
 .field textarea:focus {
