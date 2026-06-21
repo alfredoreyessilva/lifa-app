@@ -266,7 +266,11 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
       {categories.length === 0 && (
         <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>Esta liga no tiene categorías. Agrega la primera para empezar a publicar el calendario.</p>
       )}
-
+{teams.length === 0 && (
+        <div className="form-error" style={{ background: 'rgba(255, 210, 63, 0.1)', borderColor: 'rgba(255, 210, 63, 0.3)', color: 'var(--flag)', marginBottom: 16 }}>
+          Crea tus equipos para que sus logos aparezcan en sus partidos programados.
+        </div>
+      )}
       {categories.map((cat) => (
         <div key={cat.id} className="category-block">
           <div className="category-block-head">
