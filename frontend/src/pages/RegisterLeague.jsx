@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import LogoField from '../components/LogoField.jsx';
+import { required, maxLength, validUrl, runValidations } from '../utils/validation.js';
 
 export default function RegisterLeague() {
   const [name, setName] = useState('');
@@ -17,9 +18,22 @@ export default function RegisterLeague() {
   async function onSubmit(e) {
     e.preventDefault();
     setError('');
+
+    const validationError = runValidations([
+      () => required(name, 'El nombre de la liga'),
+      () => maxLength(name, 120, 'El nombre de la liga'),
+      () => maxLength(state, 80, 'El estado / región'),
+      () => validUrl(logoUrl, 'El logo'),
+      () => maxLength(description, 500, 'La descripción'),
+    ]);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setLoading(true);
     try {
-      await api.createLeague({ name, state, logo_url: logoUrl, description }, token);
+      await api.createLeague({ name: name.trim(), state: state.trim(), logo_url: logoUrl.trim(), description: description.trim() }, token);
       await refreshLeagues();
       navigate('/panel');
     } catch (e) {

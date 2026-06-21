@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { required, validEmail, runValidations } from '../utils/validation.js';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -15,9 +16,20 @@ export default function Login() {
   async function onSubmit(e) {
     e.preventDefault();
     setError('');
+
+    const validationError = runValidations([
+      () => required(email, 'El correo electrónico'),
+      () => validEmail(email),
+      () => required(password, 'La contraseña'),
+    ]);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setLoading(true);
     try {
-      const data = await api.login({ email, password });
+      const data = await api.login({ email: email.trim(), password });
       login(data.token, data.user);
       navigate(location.state?.from || '/panel');
     } catch (e) {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import LogoField from './LogoField.jsx';
+import { required, maxLength, validEmail, validUrl, runValidations } from '../utils/validation.js';
 
 export default function TeamForm({ initial, onSubmit, onCancel, submitLabel }) {
   const [form, setForm] = useState({
@@ -23,9 +24,34 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel }) {
   async function submit(e) {
     e.preventDefault();
     setError('');
+
+    const validationError = runValidations([
+      () => required(form.name, 'El nombre del equipo'),
+      () => maxLength(form.name, 80, 'El nombre del equipo'),
+      () => validEmail(form.contact_email),
+      () => validUrl(form.facebook_url, 'El enlace de Facebook'),
+      () => validUrl(form.instagram_url, 'El enlace de Instagram'),
+      () => validUrl(form.twitter_url, 'El enlace de X / Twitter'),
+      () => validUrl(form.website_url, 'El sitio web'),
+    ]);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setLoading(true);
     try {
-      await onSubmit(form);
+      await onSubmit({
+        ...form,
+        name: form.name.trim(),
+        location: form.location.trim(),
+        contact_email: form.contact_email.trim(),
+        contact_phone: form.contact_phone.trim(),
+        facebook_url: form.facebook_url.trim(),
+        instagram_url: form.instagram_url.trim(),
+        twitter_url: form.twitter_url.trim(),
+        website_url: form.website_url.trim(),
+      });
     } catch (e) {
       setError(e.message);
       setLoading(false);

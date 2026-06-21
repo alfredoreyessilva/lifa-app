@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { required, minLength, validEmail, runValidations } from '../utils/validation.js';
 
 export default function Register() {
   const [name, setName] = useState('');
@@ -15,9 +16,22 @@ export default function Register() {
   async function onSubmit(e) {
     e.preventDefault();
     setError('');
+
+    const validationError = runValidations([
+      () => required(name, 'El nombre'),
+      () => required(email, 'El correo electrónico'),
+      () => validEmail(email),
+      () => required(password, 'La contraseña'),
+      () => minLength(password, 6, 'La contraseña'),
+    ]);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setLoading(true);
     try {
-      const data = await api.register({ name, email, password });
+      const data = await api.register({ name: name.trim(), email: email.trim(), password });
       login(data.token, data.user);
       navigate('/registrar-liga');
     } catch (e) {

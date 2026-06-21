@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { required, maxLength, runValidations } from '../utils/validation.js';
 
 export default function CategoryForm({ initial, onSubmit, onCancel, submitLabel }) {
   const [name, setName] = useState(initial?.name || '');
@@ -8,9 +9,19 @@ export default function CategoryForm({ initial, onSubmit, onCancel, submitLabel 
   async function submit(e) {
     e.preventDefault();
     setError('');
+
+    const validationError = runValidations([
+      () => required(name, 'El nombre de la categoría'),
+      () => maxLength(name, 80, 'El nombre de la categoría'),
+    ]);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setLoading(true);
     try {
-      await onSubmit({ name });
+      await onSubmit({ name: name.trim() });
     } catch (e) {
       setError(e.message);
       setLoading(false);
