@@ -3,6 +3,7 @@ dotenv.config();
 
 import express from 'express';
 import cors from 'cors';
+import { initSchema } from './config/db.js';
 import authRoutes from './routes/auth.js';
 import leagueRoutes from './routes/leagues.js';
 import manageRoutes from './routes/manage.js';
@@ -11,8 +12,6 @@ import uploadRoutes from './routes/upload.js';
 const app = express();
 app.use(cors());
 app.use(express.json());
-// Los logos ahora se sirven desde Cloudinary (URLs absolutas), ya no
-// necesitamos exponer una carpeta /uploads del filesystem local.
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
@@ -27,4 +26,12 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`API corriendo en http://localhost:${PORT}`));
+
+initSchema()
+  .then(() => {
+    app.listen(PORT, () => console.log(`API corriendo en http://localhost:${PORT}`));
+  })
+  .catch((err) => {
+    console.error('Error inicializando la base de datos:', err);
+    process.exit(1);
+  });
