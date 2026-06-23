@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import TeamCard from '../components/TeamCard.jsx';
+import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
 import Loading from '../components/Loading.jsx';
 
 export default function LeaguePage() {
@@ -11,6 +12,7 @@ export default function LeaguePage() {
   const [error, setError] = useState('');
   const [tab, setTab] = useState('categorias');
   const [copied, setCopied] = useState(false);
+  const [selectedTeam, setSelectedTeam] = useState(null);
 
   function copyLink() {
     navigator.clipboard.writeText(window.location.href).then(() => {
@@ -19,11 +21,16 @@ export default function LeaguePage() {
     });
   }
 
+  function handleTeamClick(team) {
+    setSelectedTeam((prev) => (prev?.id === team.id ? null : team));
+  }
+
   useEffect(() => {
     setLeague(null);
     setTeams(null);
     setError('');
     setTab('categorias');
+    setSelectedTeam(null);
     api.getLeague(slug).then(setLeague).catch((e) => setError(e.message));
     api.getTeams(slug).then(setTeams).catch(() => setTeams([]));
   }, [slug]);
@@ -106,9 +113,21 @@ export default function LeaguePage() {
               <p>Esta liga aún no ha publicado sus equipos.</p>
             </div>
           ) : (
-            <div className="team-grid">
-              {teams.map((team) => <TeamCard key={team.id} team={team} />)}
-            </div>
+            <>
+              <div className="team-grid">
+                {teams.map((team) => (
+                  <TeamCard
+                    key={team.id}
+                    team={team}
+                    isSelected={selectedTeam?.id === team.id}
+                    onClick={() => handleTeamClick(team)}
+                  />
+                ))}
+              </div>
+              {selectedTeam && (
+                <TeamInfoPanel team={selectedTeam} onClose={() => setSelectedTeam(null)} />
+              )}
+            </>
           )}
         </>
       )}
