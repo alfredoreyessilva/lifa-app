@@ -253,6 +253,7 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
   // solo los IDs de las que el usuario decide abrir, para no perder el
   // estado de scroll/posición cada vez que se actualiza la lista.
   const [expandedIds, setExpandedIds] = useState(new Set());
+  const [teamsExpanded, setTeamsExpanded] = useState(false);
 
   function toggleCategory(id) {
     setExpandedIds((prev) => {
@@ -288,30 +289,44 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
       )}
 
       <div className="category-block">
-        <div className="category-block-head">
-          <h4>Equipos</h4>
-          <button className="btn btn-ghost btn-sm" onClick={onAddTeam}>+ Equipo</button>
+        <div
+          className="category-block-head"
+          onClick={() => setTeamsExpanded((prev) => !prev)}
+          style={{ cursor: 'pointer' }}
+        >
+          <h4>
+            <span style={{ display: 'inline-block', transition: 'transform 0.15s ease', transform: teamsExpanded ? 'rotate(90deg)' : 'rotate(0deg)', marginRight: 8 }}>▸</span>
+            Equipos
+            <span style={{ color: 'var(--ink-dim)', fontSize: 12, fontWeight: 400, marginLeft: 8 }}>
+              {teams.length === 0 ? 'sin equipos' : `${teams.length} equipo${teams.length === 1 ? '' : 's'}`}
+            </span>
+          </h4>
+          <div onClick={(e) => e.stopPropagation()}>
+            <button className="btn btn-ghost btn-sm" onClick={onAddTeam}>+ Equipo</button>
+          </div>
         </div>
 
-        {teams.length === 0 ? (
-          <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>Sin equipos. Agrega el primero para que aparezcan en la sección "Equipos" pública.</p>
-        ) : (
-          teams.map((team) => (
-            <div key={team.id} className="admin-match-row">
-              <div>
-                <div className="who">{team.name}</div>
-                <div className="info">
-                  {team.location || 'Sin ubicación'}
-                  {' · '}
-                  {team.logo_url ? 'Con logo' : 'Sin logo'}
+        {teamsExpanded && (
+          teams.length === 0 ? (
+            <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>Sin equipos. Agrega el primero para que aparezcan en la sección "Equipos" pública.</p>
+          ) : (
+            teams.map((team) => (
+              <div key={team.id} className="admin-match-row">
+                <div>
+                  <div className="who">{team.name}</div>
+                  <div className="info">
+                    {team.location || 'Sin ubicación'}
+                    {' · '}
+                    {team.logo_url ? 'Con logo' : 'Sin logo'}
+                  </div>
+                </div>
+                <div className="row-actions">
+                  <button className="btn btn-outline btn-sm" onClick={() => onEditTeam(team)}>Editar</button>
+                  <button className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => onDeleteTeam(team)}>Eliminar</button>
                 </div>
               </div>
-              <div className="row-actions">
-                <button className="btn btn-outline btn-sm" onClick={() => onEditTeam(team)}>Editar</button>
-                <button className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => onDeleteTeam(team)}>Eliminar</button>
-              </div>
-            </div>
-          ))
+            ))
+          )
         )}
       </div>
 
