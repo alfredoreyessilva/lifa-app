@@ -787,3 +787,66 @@ a { color: inherit; }
   color: var(--paper);
   border-bottom-color: var(--flag);
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   INSTRUCCIÓN: pega estos estilos al FINAL de frontend/src/styles.css
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ---------- Team editor (formulario con vista pública editable) ---------- */
+.team-editor-preview {
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+/* Banner editable */
+.team-editor-banner {
+  position: relative;
+  overflow: hidden;
+}
+.team-editor-cover-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+}
+.team-editor-banner-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 1;
+}
+.team-editor-banner-actions {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+/* Logo con botones de edición debajo */
+.team-editor-logo-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.team-editor-logo-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Modal más ancho para el editor de equipo */
+.modal:has(.team-editor-preview) {
+  max-width: 560px;
+}
