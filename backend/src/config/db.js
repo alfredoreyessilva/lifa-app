@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS teams (
   league_id INTEGER NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   logo_url TEXT,
+  cover_url TEXT,
   location TEXT,
   contact_email TEXT,
   contact_phone TEXT,
@@ -121,10 +122,19 @@ CREATE INDEX IF NOT EXISTS idx_matches_date ON matches(match_date);
 
 export async function initSchema() {
   await exec(schemaSql);
+
+  // Columnas que se agregaron después del schema original.
+  // Postgres ignora las que ya existen gracias a IF NOT EXISTS.
   const newTeamColumns = [
-    'location TEXT', 'contact_email TEXT', 'contact_phone TEXT',
-    'facebook_url TEXT', 'instagram_url TEXT', 'twitter_url TEXT',
-    'website_url TEXT', 'sort_order INTEGER DEFAULT 0',
+    'location TEXT',
+    'contact_email TEXT',
+    'contact_phone TEXT',
+    'facebook_url TEXT',
+    'instagram_url TEXT',
+    'twitter_url TEXT',
+    'website_url TEXT',
+    'sort_order INTEGER DEFAULT 0',
+    'cover_url TEXT',          // ← NUEVA: imagen de portada del equipo
   ];
   for (const col of newTeamColumns) {
     await exec(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS ${col}`).catch(() => {});
