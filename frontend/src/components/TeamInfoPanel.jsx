@@ -10,13 +10,21 @@ export default function TeamInfoPanel({ team, onClose }) {
   }, [onClose]);
 
   const hasContact = team.location || team.contact_email || team.contact_phone;
-  const hasLinks = team.facebook_url || team.instagram_url || team.twitter_url || team.website_url;
+  const hasLinks   = team.facebook_url || team.instagram_url || team.twitter_url || team.website_url;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="team-profile-modal" onClick={(e) => e.stopPropagation()}>
 
-        <div className="team-profile-banner">
+        {/* BANNER — muestra imagen de portada si existe, de lo contrario el degradado */}
+        <div
+          className="team-profile-banner"
+          style={team.cover_url ? {
+            backgroundImage: `url(${team.cover_url})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          } : {}}
+        >
           <button className="team-profile-close" onClick={onClose}>✕</button>
         </div>
 

@@ -128,36 +128,56 @@ router.delete('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(asy
 
 /* ===================== EQUIPOS ===================== */
 
-function validateTeamFields({ contact_email, facebook_url, instagram_url, twitter_url, website_url, logo_url }) {
+// ── CAMBIO 1: validateTeamFields ahora valida cover_url ──────────────────
+function validateTeamFields({ contact_email, facebook_url, instagram_url, twitter_url, website_url, logo_url, cover_url }) {
   if (contact_email && !isValidEmail(contact_email)) return 'El correo de contacto no tiene un formato válido';
   if (facebook_url && !isValidUrl(facebook_url)) return 'El enlace de Facebook no es una dirección web válida';
   if (instagram_url && !isValidUrl(instagram_url)) return 'El enlace de Instagram no es una dirección web válida';
   if (twitter_url && !isValidUrl(twitter_url)) return 'El enlace de X / Twitter no es una dirección web válida';
   if (website_url && !isValidUrl(website_url)) return 'El sitio web no es una dirección web válida';
   if (logo_url && !isValidUrl(logo_url)) return 'El logo no es una dirección web válida';
+  if (cover_url && !isValidUrl(cover_url)) return 'La imagen de portada no es una dirección web válida';
   return null;
 }
 
+// ── CAMBIO 2: POST /leagues/:leagueId/teams con cover_url ──────────────
 router.post('/leagues/:leagueId/teams', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
-  const { name, logo_url, location, contact_email, contact_phone, facebook_url, instagram_url, twitter_url, website_url, sort_order } = req.body;
+  const {
+    name, logo_url, cover_url, location, contact_email, contact_phone,
+    facebook_url, instagram_url, twitter_url, website_url, sort_order,
+  } = req.body;
+
   if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre del equipo es obligatorio' });
 
-  const validationError = validateTeamFields({ contact_email, facebook_url, instagram_url, twitter_url, website_url, logo_url });
+  const validationError = validateTeamFields({ contact_email, facebook_url, instagram_url, twitter_url, website_url, logo_url, cover_url });
   if (validationError) return res.status(400).json({ error: validationError });
 
   const result = await db.prepare(`
-    INSERT INTO teams (league_id, name, logo_url, location, contact_email, contact_phone, facebook_url, instagram_url, twitter_url, website_url, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO teams (league_id, name, logo_url, cover_url, location, contact_email, contact_phone, facebook_url, instagram_url, twitter_url, website_url, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    req.league.id, name.trim(), logo_url || null, location || null, contact_email || null, contact_phone || null,
-    facebook_url || null, instagram_url || null, twitter_url || null, website_url || null, sort_order || 0
+    req.league.id, name.trim(),
+    logo_url || null,
+    cover_url || null,
+    location || null,
+    contact_email || null,
+    contact_phone || null,
+    facebook_url || null,
+    instagram_url || null,
+    twitter_url || null,
+    website_url || null,
+    sort_order || 0,
   );
 
   res.status(201).json(await db.prepare('SELECT * FROM teams WHERE id = ?').get(result.lastInsertRowid));
 }));
 
+// ── CAMBIO 3: PUT /teams/:id con cover_url ─────────────────────────────
 router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
-  const { name, logo_url, location, contact_email, contact_phone, facebook_url, instagram_url, twitter_url, website_url, sort_order } = req.body;
+  const {
+    name, logo_url, cover_url, location, contact_email, contact_phone,
+    facebook_url, instagram_url, twitter_url, website_url, sort_order,
+  } = req.body;
   const t = req.team;
 
   const resolved = {
@@ -167,34 +187,33 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
     twitter_url: twitter_url ?? t.twitter_url,
     website_url: website_url ?? t.website_url,
     logo_url: logo_url ?? t.logo_url,
+    cover_url: cover_url ?? t.cover_url,
   };
   const validationError = validateTeamFields(resolved);
   if (validationError) return res.status(400).json({ error: validationError });
 
   await db.prepare(`
     UPDATE teams SET
-      name = COALESCE(?, name),
-      logo_url = COALESCE(?, logo_url),
-      location = COALESCE(?, location),
+      name          = COALESCE(?, name),
+      logo_url      = COALESCE(?, logo_url),
+      cover_url     = COALESCE(?, cover_url),
+      location      = COALESCE(?, location),
       contact_email = COALESCE(?, contact_email),
       contact_phone = COALESCE(?, contact_phone),
-      facebook_url = COALESCE(?, facebook_url),
+      facebook_url  = COALESCE(?, facebook_url),
       instagram_url = COALESCE(?, instagram_url),
-      twitter_url = COALESCE(?, twitter_url),
-      website_url = COALESCE(?, website_url),
-      sort_order = COALESCE(?, sort_order)
+      twitter_url   = COALESCE(?, twitter_url),
+      website_url   = COALESCE(?, website_url),
+      sort_order    = COALESCE(?, sort_order)
     WHERE id = ?
   `).run(
-    toNull(name), toNull(logo_url), toNull(location), toNull(contact_email), toNull(contact_phone),
-    toNull(facebook_url), toNull(instagram_url), toNull(twitter_url), toNull(website_url), toNull(sort_order), t.id
+    toNull(name), toNull(logo_url), toNull(cover_url),
+    toNull(location), toNull(contact_email), toNull(contact_phone),
+    toNull(facebook_url), toNull(instagram_url), toNull(twitter_url),
+    toNull(website_url), toNull(sort_order), t.id,
   );
 
   res.json(await db.prepare('SELECT * FROM teams WHERE id = ?').get(t.id));
-}));
-
-router.delete('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
-  await db.prepare('DELETE FROM teams WHERE id = ?').run(req.team.id);
-  res.json({ ok: true });
 }));
 
 /* ===================== PANEL DE LIGA ===================== */
