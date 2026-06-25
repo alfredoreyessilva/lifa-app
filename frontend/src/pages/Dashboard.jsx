@@ -16,8 +16,7 @@ export default function Dashboard() {
   const [leagueData, setLeagueData] = useState(null);
   const [error, setError] = useState('');
 
-  // Modal state
-  const [modal, setModal] = useState(null); // { type, ... }
+  const [modal, setModal] = useState(null);
 
   useEffect(() => {
     if (leagues.length > 0 && !selectedLeagueId) {
@@ -58,6 +57,9 @@ export default function Dashboard() {
     );
   }
 
+  // Lista de equipos de la liga actual para el combobox
+  const currentTeams = leagueData?.teams || [];
+
   return (
     <div className="container">
       <div className="dash-header">
@@ -67,8 +69,11 @@ export default function Dashboard() {
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           {leagues.length > 1 && (
-            <select value={selectedLeagueId || ''} onChange={(e) => setSelectedLeagueId(Number(e.target.value))}
-              style={{ background: 'var(--card)', border: '1px solid var(--line)', color: 'var(--ink)', padding: '10px 12px', borderRadius: 4 }}>
+            <select
+              value={selectedLeagueId || ''}
+              onChange={(e) => setSelectedLeagueId(Number(e.target.value))}
+              style={{ background: 'var(--card)', border: '1px solid var(--line)', color: 'var(--ink)', padding: '10px 12px', borderRadius: 4 }}
+            >
               {leagues.map((lg) => <option key={lg.id} value={lg.id}>{lg.name}</option>)}
             </select>
           )}
@@ -158,10 +163,12 @@ export default function Dashboard() {
         </Modal>
       )}
 
+      {/* ── add-match y edit-match reciben la lista de equipos ── */}
       {modal?.type === 'add-match' && (
         <Modal title={`Nuevo partido — ${modal.category.name}`} onClose={() => setModal(null)}>
           <MatchForm
             submitLabel="Crear partido"
+            teams={currentTeams}
             onCancel={() => setModal(null)}
             onSubmit={async (payload) => {
               await api.createMatch(modal.category.id, payload, token);
@@ -177,6 +184,7 @@ export default function Dashboard() {
           <MatchForm
             initial={modal.match}
             submitLabel="Guardar cambios"
+            teams={currentTeams}
             onCancel={() => setModal(null)}
             onSubmit={async (payload) => {
               await api.updateMatch(modal.match.id, payload, token);
@@ -232,7 +240,7 @@ export default function Dashboard() {
 
       {modal?.type === 'delete-team' && (
         <Modal title="Eliminar equipo" onClose={() => setModal(null)}>
-          <p>¿Seguro que quieres eliminar <strong>{modal.team.name}</strong>?</p>
+          <p>¿Seguro que quieres eliminar <strong>{modal.team.name}</strong>? Esta acción no se puede deshacer.</p>
           <div className="modal-actions">
             <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
             <button className="btn btn-danger" onClick={async () => {
@@ -249,9 +257,6 @@ export default function Dashboard() {
 
 function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDeleteCategory, onAddMatch, onEditMatch, onDeleteMatch, onAddTeam, onEditTeam, onDeleteTeam }) {
   const { league, categories, teams } = data;
-  // Todas las categorías inician colapsadas (panel compacto). Guardamos
-  // solo los IDs de las que el usuario decide abrir, para no perder el
-  // estado de scroll/posición cada vez que se actualiza la lista.
   const [expandedIds, setExpandedIds] = useState(new Set());
   const [teamsExpanded, setTeamsExpanded] = useState(false);
 
@@ -312,12 +317,19 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
           ) : (
             teams.map((team) => (
               <div key={team.id} className="admin-match-row">
-                <div>
-                  <div className="who">{team.name}</div>
-                  <div className="info">
-                    {team.location || 'Sin ubicación'}
-                    {' · '}
-                    {team.logo_url ? 'Con logo' : 'Sin logo'}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {team.logo_url && (
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
+                      <img src={team.logo_url} alt={team.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                  )}
+                  <div>
+                    <div className="who">{team.name}</div>
+                    <div className="info">
+                      {team.location || 'Sin ubicación'}
+                      {' · '}
+                      {team.logo_url ? 'Con logo' : 'Sin logo'}
+                    </div>
                   </div>
                 </div>
                 <div className="row-actions">
@@ -386,12 +398,12 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
 
 function EditLeagueForm({ league, onSubmit, onCancel }) {
   const [form, setForm] = useState({
-    name: league.name,
-    state: league.state || '',
-    logo_url: league.logo_url || '',
+    name:        league.name,
+    state:       league.state       || '',
+    logo_url:    league.logo_url    || '',
     description: league.description || '',
   });
-  const [error, setError] = useState('');
+  const [error, setError]   = useState('');
   const [loading, setLoading] = useState(false);
 
   async function submit(e) {

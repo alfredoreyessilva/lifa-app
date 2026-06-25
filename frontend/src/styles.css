@@ -850,3 +850,99 @@ a { color: inherit; }
 .modal:has(.team-editor-preview) {
   max-width: 560px;
 }
+
+/* ---------- Team combobox (autocompletado en MatchForm) ---------- */
+.team-combobox-wrap {
+  position: relative;
+}
+
+.team-combobox-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.team-combobox-input-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.team-combobox-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--card);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.team-combobox-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.team-combobox-logo--initials {
+  font-size: 10px;
+  font-family: var(--font-display);
+  color: var(--ink-dim);
+  letter-spacing: 0.05em;
+}
+
+.team-combobox-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  margin-top: 4px;
+  padding: 4px 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+}
+
+.team-combobox-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--ink);
+  transition: background 0.1s;
+}
+
+.team-combobox-item:hover {
+  background: var(--surface);
+}
+
+.team-combobox-item-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-family: var(--font-display);
+  color: var(--ink-dim);
+}
+
+.team-combobox-item-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

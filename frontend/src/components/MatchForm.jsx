@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { required, differentFrom, validUrl, minValue, runValidations } from '../utils/validation.js';
 
 function toLocalInputValue(isoString) {
@@ -8,8 +8,6 @@ function toLocalInputValue(isoString) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// Convierte el valor de un input datetime-local ("YYYY-MM-DDTHH:mm") a ISO string,
-// sin depender de new Date(string) que puede dar Invalid Date en algunos navegadores/locales.
 function localInputToISO(value) {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value || '');
   if (!match) return null;
@@ -25,29 +23,121 @@ function isPastDate(localInputValue) {
   return new Date(iso) < new Date();
 }
 
-export default function MatchForm({ initial, onSubmit, onCancel, submitLabel }) {
+function initials(name) {
+  return (name || '')
+    .split(' ')
+    .filter((w) => w.length > 2 || /^[A-ZÁÉÍÓÚÑ]/.test(w))
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
+}
+
+// ── Combobox de equipo con sugerencias y logo ────────────────────────────────
+function TeamCombobox({ label, value, onChange, teams }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value);
+  const wrapRef = useRef(null);
+
+  // Sincroniza el input si el valor cambia externamente
+  useEffect(() => { setQuery(value); }, [value]);
+
+  // Cierra al hacer clic fuera
+  useEffect(() => {
+    function handleClick(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const filtered = (teams || []).filter((t) =>
+    t.name.toLowerCase().includes((query || '').toLowerCase())
+  );
+
+  function handleInput(e) {
+    setQuery(e.target.value);
+    onChange(e.target.value);
+    setOpen(true);
+  }
+
+  function select(team) {
+    setQuery(team.name);
+    onChange(team.name);
+    setOpen(false);
+  }
+
+  const selectedTeam = (teams || []).find(
+    (t) => t.name.toLowerCase() === (query || '').toLowerCase()
+  );
+
+  return (
+    <div className="field team-combobox-wrap" ref={wrapRef}>
+      <label>{label}</label>
+      <div className="team-combobox-input-row">
+        {/* minilogo si hay coincidencia exacta */}
+        {selectedTeam?.logo_url && (
+          <div className="team-combobox-logo">
+            <img src={selectedTeam.logo_url} alt={selectedTeam.name} />
+          </div>
+        )}
+        {selectedTeam && !selectedTeam.logo_url && (
+          <div className="team-combobox-logo team-combobox-logo--initials">
+            {initials(selectedTeam.name)}
+          </div>
+        )}
+        <input
+          required
+          value={query}
+          onChange={handleInput}
+          onFocus={() => setOpen(true)}
+          autoComplete="off"
+          placeholder="Nombre del equipo"
+        />
+      </div>
+
+      {open && filtered.length > 0 && (
+        <ul className="team-combobox-list">
+          {filtered.map((team) => (
+            <li
+              key={team.id}
+              className="team-combobox-item"
+              onMouseDown={(e) => { e.preventDefault(); select(team); }}
+            >
+              <div className="team-combobox-item-logo">
+                {team.logo_url
+                  ? <img src={team.logo_url} alt={team.name} />
+                  : <span>{initials(team.name)}</span>}
+              </div>
+              <span>{team.name}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ── Formulario principal ─────────────────────────────────────────────────────
+export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, teams }) {
   const [form, setForm] = useState({
-    home_team: initial?.home_team || '',
-    away_team: initial?.away_team || '',
+    home_team:  initial?.home_team  || '',
+    away_team:  initial?.away_team  || '',
     match_date: toLocalInputValue(initial?.match_date) || '',
-    venue: initial?.venue || '',
+    venue:      initial?.venue      || '',
     stream_url: initial?.stream_url || '',
     week_label: initial?.week_label || '',
-    status: initial?.status || 'scheduled',
+    status:     initial?.status     || 'scheduled',
     home_score: initial?.home_score ?? '',
     away_score: initial?.away_score ?? '',
   });
-  const [error, setError] = useState('');
+  const [error, setError]   = useState('');
   const [loading, setLoading] = useState(false);
 
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  // Si el formulario se abre para editar un partido que ya tiene fecha pasada
-  // pero quedó guardado con un estado distinto a "finished" (datos previos a
-  // esta validación), lo corregimos al cargar para no dejar al usuario
-  // atorado con un select bloqueado en un valor inválido.
   useEffect(() => {
     if (isPastDate(form.match_date) && form.status !== 'finished') {
       update('status', 'finished');
@@ -55,9 +145,6 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Si la fecha elegida ya pasó, forzamos el estado a "Finalizado" — una liga que
-  // registra su calendario a mitad de temporada necesita poder cargar partidos
-  // anteriores, y lo más útil es asumir que ya se jugaron en vez de bloquear.
   function handleDateChange(value) {
     update('match_date', value);
     if (isPastDate(value) && form.status !== 'finished') {
@@ -65,7 +152,7 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel }) 
     }
   }
 
-  const matchIsPast = isPastDate(form.match_date);
+  const matchIsPast   = isPastDate(form.match_date);
   const scoreRequired = form.status === 'finished';
 
   async function submit(e) {
@@ -73,10 +160,7 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel }) 
     setError('');
 
     const isoDate = localInputToISO(form.match_date);
-    if (!isoDate) {
-      setError('Ingresa una fecha y hora válidas.');
-      return;
-    }
+    if (!isoDate) { setError('Ingresa una fecha y hora válidas.'); return; }
 
     const validationError = runValidations([
       () => required(form.home_team, 'El equipo local'),
@@ -84,23 +168,20 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel }) 
       () => differentFrom(form.home_team.trim().toLowerCase(), form.away_team.trim().toLowerCase(), 'El equipo local y el equipo visitante no pueden ser el mismo'),
       () => validUrl(form.stream_url, 'El link de transmisión'),
       () => (matchIsPast && form.status !== 'finished' ? 'Si la fecha del partido ya pasó, el estado debe ser "Finalizado"' : null),
-      () => (scoreRequired ? required(form.home_score, 'El marcador local') : null),
+      () => (scoreRequired ? required(form.home_score, 'El marcador local')     : null),
       () => (scoreRequired ? required(form.away_score, 'El marcador visitante') : null),
       () => minValue(form.home_score, 0, 'El marcador local'),
       () => minValue(form.away_score, 0, 'El marcador visitante'),
     ]);
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
+    if (validationError) { setError(validationError); return; }
 
     setLoading(true);
     try {
       await onSubmit({
         ...form,
-        home_team: form.home_team.trim(),
-        away_team: form.away_team.trim(),
-        venue: form.venue.trim(),
+        home_team:  form.home_team.trim(),
+        away_team:  form.away_team.trim(),
+        venue:      form.venue.trim(),
         stream_url: form.stream_url.trim(),
         week_label: form.week_label.trim(),
         match_date: isoDate,
@@ -118,19 +199,28 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel }) 
       {error && <div className="form-error">{error}</div>}
 
       <div className="field-row">
-        <div className="field">
-          <label>Equipo local</label>
-          <input required value={form.home_team} onChange={(e) => update('home_team', e.target.value)} />
-        </div>
-        <div className="field">
-          <label>Equipo visitante</label>
-          <input required value={form.away_team} onChange={(e) => update('away_team', e.target.value)} />
-        </div>
+        <TeamCombobox
+          label="Equipo local"
+          value={form.home_team}
+          onChange={(v) => update('home_team', v)}
+          teams={teams}
+        />
+        <TeamCombobox
+          label="Equipo visitante"
+          value={form.away_team}
+          onChange={(v) => update('away_team', v)}
+          teams={teams}
+        />
       </div>
 
       <div className="field">
         <label>Fecha y hora</label>
-        <input type="datetime-local" required value={form.match_date} onChange={(e) => handleDateChange(e.target.value)} />
+        <input
+          type="datetime-local"
+          required
+          value={form.match_date}
+          onChange={(e) => handleDateChange(e.target.value)}
+        />
         {matchIsPast && (
           <small style={{ color: 'var(--ink-dim)', display: 'block', marginTop: 4 }}>
             Esta fecha ya pasó — el partido se marcará como "Finalizado" y deberás capturar el marcador.
@@ -145,17 +235,29 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel }) 
 
       <div className="field">
         <label>Jornada / etiqueta (opcional)</label>
-        <input value={form.week_label} onChange={(e) => update('week_label', e.target.value)} placeholder="Ej. Jornada 4" />
+        <input
+          value={form.week_label}
+          onChange={(e) => update('week_label', e.target.value)}
+          placeholder="Ej. Jornada 4"
+        />
       </div>
 
       <div className="field">
         <label>Link de transmisión (opcional)</label>
-        <input value={form.stream_url} onChange={(e) => update('stream_url', e.target.value)} placeholder="https://…" />
+        <input
+          value={form.stream_url}
+          onChange={(e) => update('stream_url', e.target.value)}
+          placeholder="https://…"
+        />
       </div>
 
       <div className="field">
         <label>Estado del partido</label>
-        <select value={form.status} onChange={(e) => update('status', e.target.value)} disabled={matchIsPast}>
+        <select
+          value={form.status}
+          onChange={(e) => update('status', e.target.value)}
+          disabled={matchIsPast}
+        >
           <option value="scheduled">Programado</option>
           <option value="live">En vivo</option>
           <option value="finished">Finalizado</option>
@@ -171,11 +273,21 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel }) 
         <div className="field-row">
           <div className="field">
             <label>Marcador local</label>
-            <input type="number" min="0" required={scoreRequired} value={form.home_score} onChange={(e) => update('home_score', e.target.value)} />
+            <input
+              type="number" min="0"
+              required={scoreRequired}
+              value={form.home_score}
+              onChange={(e) => update('home_score', e.target.value)}
+            />
           </div>
           <div className="field">
             <label>Marcador visitante</label>
-            <input type="number" min="0" required={scoreRequired} value={form.away_score} onChange={(e) => update('away_score', e.target.value)} />
+            <input
+              type="number" min="0"
+              required={scoreRequired}
+              value={form.away_score}
+              onChange={(e) => update('away_score', e.target.value)}
+            />
           </div>
         </div>
       )}
