@@ -37,7 +37,7 @@ router.get('/:slug/teams', asyncHandler(async (req, res) => {
   const league = await db.prepare(`SELECT * FROM leagues WHERE slug = ? AND status = 'approved'`).get(req.params.slug);
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
   const teams = await db.prepare(`
-    SELECT id, name, logo_url, location, contact_email, contact_phone, facebook_url, instagram_url, twitter_url, website_url
+    SELECT id, name, logo_url, cover_url, location, contact_email, contact_phone, facebook_url, instagram_url, twitter_url, website_url
     FROM teams WHERE league_id = ? ORDER BY sort_order ASC, name ASC
   `).all(league.id);
   res.json(teams);
