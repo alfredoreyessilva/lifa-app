@@ -48,6 +48,20 @@ export const api = {
   deleteMatch: (matchId, token) =>
     request(`/manage/matches/${matchId}`, { method: 'DELETE', token }),
 
+  // Importación masiva desde Excel
+  importMatches: async (categoryId, file, token) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${BASE}/manage/categories/${categoryId}/matches/import`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'No se pudo importar el archivo');
+    return data;
+  },
+
   // Subida de imágenes
   uploadImage: async (file, token) => {
     const formData = new FormData();
@@ -59,7 +73,7 @@ export const api = {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'No se pudo subir la imagen');
-    return data; // { url }
+    return data;
   },
 
   // Equipos

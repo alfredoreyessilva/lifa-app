@@ -1,4 +1,6 @@
 import express from 'express';
+import multer from 'multer';
+import * as XLSX from 'xlsx';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
 import { categoryOwnerRequired, matchOwnerRequired, leagueOwnerRequired, teamOwnerRequired } from '../middleware/ownership.js';
@@ -10,6 +12,17 @@ const router = express.Router();
 function toNull(value) {
   return value === undefined ? null : value;
 }
+
+// Multer para archivos Excel
+const xlsxUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = /\.(xlsx|xls)$/.test(file.originalname.toLowerCase());
+    if (ok) cb(null, true);
+    else cb(new Error('Solo se permiten archivos .xlsx o .xls'));
+  },
+});
 
 /* ===================== CATEGORÍAS ===================== */
 
@@ -84,16 +97,148 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
   res.status(201).json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(result.lastInsertRowid));
 }));
 
+/* ── IMPORTACIÓN MASIVA DESDE EXCEL ── */
+router.post(
+  '/categories/:categoryId/matches/import',
+  authRequired,
+  categoryOwnerRequired,
+  xlsxUpload.single('file'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No se recibió ningún archivo' });
+
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
+    const sheet    = workbook.Sheets[workbook.SheetNames[0]];
+    const rows     = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'El archivo está vacío o no tiene filas de datos' });
+    }
+
+    const imported = [];
+    const skipped  = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row  = rows[i];
+      const rowN = i + 2;
+
+      try {
+        const get = (keys) => {
+          for (const k of keys) {
+            const found = Object.keys(row).find(
+              (rk) => rk.trim().toLowerCase() === k.toLowerCase()
+            );
+            if (found !== undefined) return String(row[found] ?? '').trim();
+          }
+          return '';
+        };
+
+        const fechaRaw  = get(['Fecha', 'fecha', 'FECHA']);
+        const horaRaw   = get(['Hora', 'hora', 'HORA']);
+        const homeTeam  = get(['Equipo Local', 'equipo local', 'local', 'home']);
+        const awayTeam  = get(['Equipo Visitante', 'equipo visitante', 'visitante', 'away']);
+        const venue     = get(['Sede', 'sede', 'SEDE']);
+        const weekLabel = get(['Jornada', 'jornada', 'JORNADA', 'Week', 'week']);
+        const streamUrl = get(['Link de transmisión', 'link de transmision', 'stream', 'url', 'transmision']);
+
+        if (!homeTeam || !awayTeam) {
+          skipped.push({ row: rowN, reason: 'Faltan equipos local o visitante' });
+          continue;
+        }
+
+        if (homeTeam.toLowerCase() === awayTeam.toLowerCase()) {
+          skipped.push({ row: rowN, reason: 'El equipo local y visitante son iguales' });
+          continue;
+        }
+
+        // Parsear fecha
+        let matchDate = null;
+        if (fechaRaw) {
+          let parsedDate = null;
+
+          // xlsx puede entregar un Date real si la celda es de tipo fecha
+          const rawFechaKey = Object.keys(row).find(k => k.trim().toLowerCase() === 'fecha');
+          if (rawFechaKey && row[rawFechaKey] instanceof Date) {
+            parsedDate = new Date(row[rawFechaKey]);
+          }
+
+          if (!parsedDate || isNaN(parsedDate)) {
+            const dmyMatch = /^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/.exec(fechaRaw);
+            if (dmyMatch) {
+              parsedDate = new Date(Number(dmyMatch[3]), Number(dmyMatch[2]) - 1, Number(dmyMatch[1]));
+            }
+          }
+
+          if (!parsedDate || isNaN(parsedDate)) {
+            const ymdMatch = /^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/.exec(fechaRaw);
+            if (ymdMatch) {
+              parsedDate = new Date(Number(ymdMatch[1]), Number(ymdMatch[2]) - 1, Number(ymdMatch[3]));
+            }
+          }
+
+          if (parsedDate && !isNaN(parsedDate)) {
+            if (horaRaw) {
+              const hmMatch = /^(\d{1,2}):(\d{2})/.exec(horaRaw);
+              if (hmMatch) {
+                parsedDate.setHours(Number(hmMatch[1]), Number(hmMatch[2]), 0, 0);
+              }
+            }
+            matchDate = parsedDate.toISOString();
+          }
+        }
+
+        // Validar URL de stream
+        let validStream = '';
+        if (streamUrl) {
+          try {
+            const u = new URL(streamUrl);
+            if (u.protocol === 'http:' || u.protocol === 'https:') validStream = streamUrl;
+          } catch { /* URL inválida, se omite */ }
+        }
+
+        const isPast = matchDate ? new Date(matchDate) < new Date() : false;
+        const status = isPast ? 'finished' : 'scheduled';
+
+        const result = await db.prepare(`
+          INSERT INTO matches (category_id, home_team, away_team, match_date, venue, stream_url, week_label, status, home_score, away_score)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          req.category.id,
+          homeTeam,
+          awayTeam,
+          matchDate    || null,
+          venue        || null,
+          validStream  || null,
+          weekLabel    || null,
+          status,
+          null,
+          null,
+        );
+
+        imported.push(result.lastInsertRowid);
+
+      } catch (err) {
+        skipped.push({ row: rowN, reason: err.message });
+      }
+    }
+
+    res.status(201).json({
+      imported:    imported.length,
+      skipped:     skipped.length,
+      skippedRows: skipped,
+    });
+  })
+);
+
 router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
   const { home_team, away_team, match_date, venue, stream_url, week_label, status, home_score, away_score } = req.body;
   const m = req.match;
 
   const resolved = {
-    home_team: home_team ?? m.home_team,
-    away_team: away_team ?? m.away_team,
+    home_team:  home_team  ?? m.home_team,
+    away_team:  away_team  ?? m.away_team,
     match_date: match_date ?? m.match_date,
     stream_url: stream_url ?? m.stream_url,
-    status: status ?? m.status,
+    status:     status     ?? m.status,
     home_score: home_score !== undefined ? home_score : m.home_score,
     away_score: away_score !== undefined ? away_score : m.away_score,
   };
@@ -103,13 +248,13 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
 
   await db.prepare(`
     UPDATE matches SET
-      home_team = COALESCE(?, home_team),
-      away_team = COALESCE(?, away_team),
+      home_team  = COALESCE(?, home_team),
+      away_team  = COALESCE(?, away_team),
       match_date = COALESCE(?, match_date),
-      venue = COALESCE(?, venue),
+      venue      = COALESCE(?, venue),
       stream_url = COALESCE(?, stream_url),
       week_label = COALESCE(?, week_label),
-      status = COALESCE(?, status),
+      status     = COALESCE(?, status),
       home_score = COALESCE(?, home_score),
       away_score = COALESCE(?, away_score)
     WHERE id = ?
@@ -128,19 +273,17 @@ router.delete('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(asy
 
 /* ===================== EQUIPOS ===================== */
 
-// ── CAMBIO 1: validateTeamFields ahora valida cover_url ──────────────────
 function validateTeamFields({ contact_email, facebook_url, instagram_url, twitter_url, website_url, logo_url, cover_url }) {
   if (contact_email && !isValidEmail(contact_email)) return 'El correo de contacto no tiene un formato válido';
-  if (facebook_url && !isValidUrl(facebook_url)) return 'El enlace de Facebook no es una dirección web válida';
-  if (instagram_url && !isValidUrl(instagram_url)) return 'El enlace de Instagram no es una dirección web válida';
-  if (twitter_url && !isValidUrl(twitter_url)) return 'El enlace de X / Twitter no es una dirección web válida';
-  if (website_url && !isValidUrl(website_url)) return 'El sitio web no es una dirección web válida';
-  if (logo_url && !isValidUrl(logo_url)) return 'El logo no es una dirección web válida';
-  if (cover_url && !isValidUrl(cover_url)) return 'La imagen de portada no es una dirección web válida';
+  if (facebook_url  && !isValidUrl(facebook_url))    return 'El enlace de Facebook no es una dirección web válida';
+  if (instagram_url && !isValidUrl(instagram_url))   return 'El enlace de Instagram no es una dirección web válida';
+  if (twitter_url   && !isValidUrl(twitter_url))     return 'El enlace de X / Twitter no es una dirección web válida';
+  if (website_url   && !isValidUrl(website_url))     return 'El sitio web no es una dirección web válida';
+  if (logo_url      && !isValidUrl(logo_url))        return 'El logo no es una dirección web válida';
+  if (cover_url     && !isValidUrl(cover_url))       return 'La imagen de portada no es una dirección web válida';
   return null;
 }
 
-// ── CAMBIO 2: POST /leagues/:leagueId/teams con cover_url ──────────────
 router.post('/leagues/:leagueId/teams', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
   const {
     name, logo_url, cover_url, location, contact_email, contact_phone,
@@ -157,22 +300,21 @@ router.post('/leagues/:leagueId/teams', authRequired, leagueOwnerRequired, async
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.league.id, name.trim(),
-    logo_url || null,
-    cover_url || null,
-    location || null,
+    logo_url      || null,
+    cover_url     || null,
+    location      || null,
     contact_email || null,
     contact_phone || null,
-    facebook_url || null,
+    facebook_url  || null,
     instagram_url || null,
-    twitter_url || null,
-    website_url || null,
-    sort_order || 0,
+    twitter_url   || null,
+    website_url   || null,
+    sort_order    || 0,
   );
 
   res.status(201).json(await db.prepare('SELECT * FROM teams WHERE id = ?').get(result.lastInsertRowid));
 }));
 
-// ── CAMBIO 3: PUT /teams/:id con cover_url ─────────────────────────────
 router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
   const {
     name, logo_url, cover_url, location, contact_email, contact_phone,
@@ -182,12 +324,12 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
 
   const resolved = {
     contact_email: contact_email ?? t.contact_email,
-    facebook_url: facebook_url ?? t.facebook_url,
+    facebook_url:  facebook_url  ?? t.facebook_url,
     instagram_url: instagram_url ?? t.instagram_url,
-    twitter_url: twitter_url ?? t.twitter_url,
-    website_url: website_url ?? t.website_url,
-    logo_url: logo_url ?? t.logo_url,
-    cover_url: cover_url ?? t.cover_url,
+    twitter_url:   twitter_url   ?? t.twitter_url,
+    website_url:   website_url   ?? t.website_url,
+    logo_url:      logo_url      ?? t.logo_url,
+    cover_url:     cover_url     ?? t.cover_url,
   };
   const validationError = validateTeamFields(resolved);
   if (validationError) return res.status(400).json({ error: validationError });
@@ -207,13 +349,18 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
       sort_order    = COALESCE(?, sort_order)
     WHERE id = ?
   `).run(
-    toNull(name), toNull(logo_url), toNull(cover_url),
-    toNull(location), toNull(contact_email), toNull(contact_phone),
-    toNull(facebook_url), toNull(instagram_url), toNull(twitter_url),
-    toNull(website_url), toNull(sort_order), t.id,
+    toNull(name),          toNull(logo_url),      toNull(cover_url),
+    toNull(location),      toNull(contact_email), toNull(contact_phone),
+    toNull(facebook_url),  toNull(instagram_url), toNull(twitter_url),
+    toNull(website_url),   toNull(sort_order),    t.id,
   );
 
   res.json(await db.prepare('SELECT * FROM teams WHERE id = ?').get(t.id));
+}));
+
+router.delete('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare('DELETE FROM teams WHERE id = ?').run(req.team.id);
+  res.json({ ok: true });
 }));
 
 /* ===================== PANEL DE LIGA ===================== */

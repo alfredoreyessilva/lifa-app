@@ -7,6 +7,7 @@ import CategoryForm from '../components/CategoryForm.jsx';
 import MatchForm from '../components/MatchForm.jsx';
 import LogoField from '../components/LogoField.jsx';
 import TeamForm from '../components/TeamForm.jsx';
+import ExcelImport from '../components/ExcelImport.jsx';
 
 const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 
@@ -15,7 +16,6 @@ export default function Dashboard() {
   const [selectedLeagueId, setSelectedLeagueId] = useState(null);
   const [leagueData, setLeagueData] = useState(null);
   const [error, setError] = useState('');
-
   const [modal, setModal] = useState(null);
 
   useEffect(() => {
@@ -57,7 +57,6 @@ export default function Dashboard() {
     );
   }
 
-  // Lista de equipos de la liga actual para el combobox
   const currentTeams = leagueData?.teams || [];
 
   return (
@@ -97,6 +96,7 @@ export default function Dashboard() {
           onAddMatch={(cat) => setModal({ type: 'add-match', category: cat })}
           onEditMatch={(cat, match) => setModal({ type: 'edit-match', category: cat, match })}
           onDeleteMatch={(cat, match) => setModal({ type: 'delete-match', category: cat, match })}
+          onImportMatches={(cat) => setModal({ type: 'import-matches', category: cat })}
           onAddTeam={() => setModal({ type: 'add-team' })}
           onEditTeam={(team) => setModal({ type: 'edit-team', team })}
           onDeleteTeam={(team) => setModal({ type: 'delete-team', team })}
@@ -163,7 +163,6 @@ export default function Dashboard() {
         </Modal>
       )}
 
-      {/* ── add-match y edit-match reciben la lista de equipos ── */}
       {modal?.type === 'add-match' && (
         <Modal title={`Nuevo partido — ${modal.category.name}`} onClose={() => setModal(null)}>
           <MatchForm
@@ -206,6 +205,17 @@ export default function Dashboard() {
               setModal(null);
             }}>Eliminar</button>
           </div>
+        </Modal>
+      )}
+
+      {modal?.type === 'import-matches' && (
+        <Modal title={`Subir calendario — ${modal.category.name}`} onClose={() => setModal(null)}>
+          <ExcelImport
+            categoryId={modal.category.id}
+            categoryName={modal.category.name}
+            onCancel={() => setModal(null)}
+            onDone={() => { refresh(); setModal(null); }}
+          />
         </Modal>
       )}
 
@@ -255,7 +265,7 @@ export default function Dashboard() {
   );
 }
 
-function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDeleteCategory, onAddMatch, onEditMatch, onDeleteMatch, onAddTeam, onEditTeam, onDeleteTeam }) {
+function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDeleteCategory, onAddMatch, onEditMatch, onDeleteMatch, onImportMatches, onAddTeam, onEditTeam, onDeleteTeam }) {
   const { league, categories, teams } = data;
   const [expandedIds, setExpandedIds] = useState(new Set());
   const [teamsExpanded, setTeamsExpanded] = useState(false);
@@ -293,12 +303,9 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
         </div>
       )}
 
+      {/* Sección equipos */}
       <div className="category-block">
-        <div
-          className="category-block-head"
-          onClick={() => setTeamsExpanded((prev) => !prev)}
-          style={{ cursor: 'pointer' }}
-        >
+        <div className="category-block-head" onClick={() => setTeamsExpanded((prev) => !prev)} style={{ cursor: 'pointer' }}>
           <h4>
             <span style={{ display: 'inline-block', transition: 'transform 0.15s ease', transform: teamsExpanded ? 'rotate(90deg)' : 'rotate(0deg)', marginRight: 8 }}>▸</span>
             Equipos
@@ -326,8 +333,7 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
                   <div>
                     <div className="who">{team.name}</div>
                     <div className="info">
-                      {team.location || 'Sin ubicación'}
-                      {' · '}
+                      {team.location || 'Sin ubicación'}{' · '}
                       {team.logo_url ? 'Con logo' : 'Sin logo'}
                     </div>
                   </div>
@@ -342,15 +348,12 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
         )}
       </div>
 
+      {/* Categorías */}
       {categories.map((cat) => {
         const isOpen = expandedIds.has(cat.id);
         return (
           <div key={cat.id} className="category-block">
-            <div
-              className="category-block-head"
-              onClick={() => toggleCategory(cat.id)}
-              style={{ cursor: 'pointer' }}
-            >
+            <div className="category-block-head" onClick={() => toggleCategory(cat.id)} style={{ cursor: 'pointer' }}>
               <h4>
                 <span style={{ display: 'inline-block', transition: 'transform 0.15s ease', transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)', marginRight: 8 }}>▸</span>
                 {cat.name}
@@ -360,6 +363,7 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
               </h4>
               <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
                 <button className="btn btn-ghost btn-sm" onClick={() => onAddMatch(cat)}>+ Partido</button>
+                <button className="btn btn-outline btn-sm" onClick={() => onImportMatches(cat)}>📥 Subir calendario</button>
                 <button className="btn btn-ghost btn-sm" onClick={() => onEditCategory(cat)}>Renombrar</button>
                 <button className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => onDeleteCategory(cat)}>Eliminar</button>
               </div>
@@ -443,6 +447,7 @@ function EditLeagueForm({ league, onSubmit, onCancel }) {
 }
 
 function formatDate(iso) {
+  if (!iso) return 'Sin fecha';
   const d = new Date(iso);
   const time = d.toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' });
   return `${d.getDate()} ${MESES[d.getMonth()]} · ${time}`;
