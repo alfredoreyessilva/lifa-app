@@ -94,7 +94,7 @@ function MatchRow({ match, isNext }) {
         </div>
         <div className="match-meta">
           {isNext && <span className="tag" style={{ color: 'var(--flag)', borderColor: 'var(--flag)' }}>Próximo</span>}
-          {match.week_label && <span>{match.week_label}</span>}
+          {match.week_label && <span>{/^\d+$/.test(match.week_label) ? `Jornada ${match.week_label}` : match.week_label}</span>}
           {match.venue && <span>{match.venue}</span>}
           {match.status === 'live' && <span className="tag live">En vivo</span>}
           {match.status === 'finished' && <span className="tag finished">Finalizado</span>}

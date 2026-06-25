@@ -118,6 +118,13 @@ function TeamCombobox({ label, value, onChange, teams }) {
   );
 }
 
+// Extrae el número de jornada de valores como "Jornada 4", "4", "" → "4" o ""
+function parseWeekNumber(val) {
+  if (!val) return '';
+  const match = /(\d+)/.exec(String(val));
+  return match ? match[1] : '';
+}
+
 // ── Formulario principal ─────────────────────────────────────────────────────
 export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, teams }) {
   const [form, setForm] = useState({
@@ -126,7 +133,7 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
     match_date: toLocalInputValue(initial?.match_date) || '',
     venue:      initial?.venue      || '',
     stream_url: initial?.stream_url || '',
-    week_label: initial?.week_label || '',
+    week_label: parseWeekNumber(initial?.week_label),
     status:     initial?.status     || 'scheduled',
     home_score: initial?.home_score ?? '',
     away_score: initial?.away_score ?? '',
@@ -234,12 +241,20 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
       </div>
 
       <div className="field">
-        <label>Jornada / etiqueta (opcional)</label>
-        <input
-          value={form.week_label}
-          onChange={(e) => update('week_label', e.target.value)}
-          placeholder="Ej. Jornada 4"
-        />
+        <label>Jornada (opcional)</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ color: 'var(--ink-dim)', fontSize: 14, whiteSpace: 'nowrap' }}>Jornada</span>
+          <select
+            value={form.week_label}
+            onChange={(e) => update('week_label', e.target.value)}
+            style={{ width: 90 }}
+          >
+            <option value="">—</option>
+            {Array.from({ length: 30 }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={String(n)}>{n}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="field">

@@ -379,7 +379,7 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
                       <div className="who">{m.home_team} vs {m.away_team}</div>
                       <div className="info">
                         {formatDate(m.match_date)}
-                        {m.week_label ? ` · ${m.week_label}` : ''}
+                        {m.week_label ? ` · ${/^\d+$/.test(m.week_label) ? 'Jornada ' + m.week_label : m.week_label}` : ''}
                         {' · '}
                         {m.stream_url ? 'Con link de transmisión' : 'Sin link de transmisión'}
                         {m.status === 'live' ? ' · En vivo' : m.status === 'finished' ? ' · Finalizado' : ''}

@@ -28,7 +28,7 @@ export default function ExcelImport({ categoryId, categoryName, onDone, onCancel
       'Mayas CDMX',
       'Fundidores MTY',
       'Estadio Azteca',
-      'Jornada 1',
+      '1',
       'https://youtube.com/...',
     ];
 
