@@ -34,9 +34,23 @@ export default function ExcelImport({ categoryId, categoryName, onDone, onCancel
 
     const ws = XLSX.utils.aoa_to_sheet([headers, example]);
 
+    // Forzar Fecha (A2) y Hora (B2) como texto para que Excel
+    // no las convierta automáticamente a número o fecha serial.
+    ['A2', 'B2'].forEach((cell) => {
+      if (ws[cell]) {
+        ws[cell].t = 's'; // tipo string
+        ws[cell].z = '@'; // formato texto
+      }
+    });
+
+    // Formato texto en toda la columna A y B (filas 1-200)
+    if (!ws['!cols']) ws['!cols'] = [];
+    ws['!cols'][0] = { wch: 14, z: '@' }; // Fecha → texto
+    ws['!cols'][1] = { wch: 8,  z: '@' }; // Hora  → texto
+
     // Anchos de columna
     ws['!cols'] = [
-      { wch: 14 }, { wch: 8 }, { wch: 22 }, { wch: 22 },
+      { wch: 14, z: '@' }, { wch: 8, z: '@' }, { wch: 22 }, { wch: 22 },
       { wch: 20 }, { wch: 14 }, { wch: 35 },
     ];
 
