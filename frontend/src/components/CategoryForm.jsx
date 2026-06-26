@@ -1,3 +1,4 @@
+import CharField from './CharField.jsx';
 import { useState } from 'react';
 import { required, maxLength, runValidations } from '../utils/validation.js';
 
@@ -33,7 +34,7 @@ export default function CategoryForm({ initial, onSubmit, onCancel, submitLabel 
       {error && <div className="form-error">{error}</div>}
       <div className="field">
         <label>Nombre de la categoría</label>
-        <input required value={name} onChange={(e) => setName(e.target.value.toUpperCase())} placeholder="Ej. Varonil Mayor" />
+        <CharField required max={40} uppercase value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. VARONIL MAYOR" />
       </div>
       <div className="modal-actions">
         <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancelar</button>

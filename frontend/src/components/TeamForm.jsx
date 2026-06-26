@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { required, maxLength, validEmail, validUrl, runValidations } from '../utils/validation.js';
+import CharField from './CharField.jsx';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 function initials(name) {
@@ -206,7 +207,7 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel }) {
               </div>
               <div className="field">
                 <label>📞 Teléfono</label>
-                <input value={form.contact_phone} onChange={(e) => update('contact_phone', e.target.value.toUpperCase())} />
+                <CharField max={20} uppercase value={form.contact_phone} onChange={(e) => update('contact_phone', e.target.value)} />
               </div>
             </div>
           </div>

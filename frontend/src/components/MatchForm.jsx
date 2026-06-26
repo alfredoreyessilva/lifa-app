@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { required, differentFrom, validUrl, minValue, runValidations } from '../utils/validation.js';
+import CharField from './CharField.jsx';
 
 function toLocalInputValue(isoString) {
   if (!isoString) return '';
@@ -237,7 +238,7 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
 
       <div className="field">
         <label>Sede (opcional)</label>
-        <input value={form.venue} onChange={(e) => update('venue', e.target.value.toUpperCase())} />
+        <CharField max={40} uppercase value={form.venue} onChange={(e) => update('venue', e.target.value)} />
       </div>
 
       <div className="field">

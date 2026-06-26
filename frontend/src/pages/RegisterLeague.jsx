@@ -3,17 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import LogoField from '../components/LogoField.jsx';
-import { required, maxLength, validUrl, runValidations } from '../utils/validation.js';
+import CharField from '../components/CharField.jsx';
+import { required, validUrl, runValidations } from '../utils/validation.js';
 
 export default function RegisterLeague() {
-  const [name, setName] = useState('');
-  const [state, setState] = useState('');
-  const [logoUrl, setLogoUrl] = useState('');
+  const [name, setName]               = useState('');
+  const [state, setState]             = useState('');
+  const [logoUrl, setLogoUrl]         = useState('');
   const [description, setDescription] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const { token, refreshLeagues } = useAuth();
-  const navigate = useNavigate();
+  const [error, setError]             = useState('');
+  const [loading, setLoading]         = useState(false);
+  const { token, refreshLeagues }     = useAuth();
+  const navigate                      = useNavigate();
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -21,19 +22,18 @@ export default function RegisterLeague() {
 
     const validationError = runValidations([
       () => required(name, 'El nombre de la liga'),
-      () => maxLength(name, 120, 'El nombre de la liga'),
-      () => maxLength(state, 80, 'El estado / región'),
       () => validUrl(logoUrl, 'El logo'),
-      () => maxLength(description, 500, 'La descripción'),
     ]);
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
+    if (validationError) { setError(validationError); return; }
 
     setLoading(true);
     try {
-      await api.createLeague({ name: name.trim(), state: state.trim(), logo_url: logoUrl.trim(), description: description.trim() }, token);
+      await api.createLeague({
+        name:        name.trim(),
+        state:       state.trim(),
+        logo_url:    logoUrl.trim(),
+        description: description.trim(),
+      }, token);
       await refreshLeagues();
       navigate('/panel');
     } catch (e) {
@@ -54,16 +54,36 @@ export default function RegisterLeague() {
         <form onSubmit={onSubmit}>
           <div className="field">
             <label>Nombre de la liga</label>
-            <input required value={name} onChange={(e) => setName(e.target.value.toUpperCase())} placeholder="Ej. Liga de Fútbol Americano de Jalisco" />
+            <CharField
+              required
+              max={40}
+              uppercase
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ej. LIGA DE FÚTBOL AMERICANO JALISCO"
+            />
           </div>
           <div className="field">
             <label>Estado / Región</label>
-            <input value={state} onChange={(e) => setState(e.target.value.toUpperCase())} placeholder="Ej. Jalisco" />
+            <CharField
+              max={40}
+              uppercase
+              value={state}
+              onChange={(e) => setState(e.target.value)}
+              placeholder="Ej. JALISCO"
+            />
           </div>
           <LogoField value={logoUrl} onChange={setLogoUrl} />
           <div className="field">
             <label>Descripción breve (opcional)</label>
-            <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+            <CharField
+              as="textarea"
+              rows={3}
+              max={100}
+              uppercase
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
           </div>
           <button className="btn btn-flag btn-block" disabled={loading}>
             {loading ? 'Registrando…' : 'Registrar liga'}

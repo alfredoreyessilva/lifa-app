@@ -8,6 +8,7 @@ import MatchForm from '../components/MatchForm.jsx';
 import LogoField from '../components/LogoField.jsx';
 import TeamForm from '../components/TeamForm.jsx';
 import ExcelImport from '../components/ExcelImport.jsx';
+import CharField from '../components/CharField.jsx';
 
 const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 
@@ -427,16 +428,16 @@ function EditLeagueForm({ league, onSubmit, onCancel }) {
       {error && <div className="form-error">{error}</div>}
       <div className="field">
         <label>Nombre</label>
-        <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value.toUpperCase() })} />
+        <CharField required max={40} uppercase value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
       </div>
       <div className="field">
         <label>Estado / Región</label>
-        <input value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value.toUpperCase() })} />
+        <CharField max={40} uppercase value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} />
       </div>
       <LogoField value={form.logo_url} onChange={(url) => setForm({ ...form, logo_url: url })} />
       <div className="field">
         <label>Descripción</label>
-        <textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        <CharField as="textarea" rows={3} max={100} uppercase value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
       </div>
       <div className="modal-actions">
         <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancelar</button>
