@@ -6,14 +6,13 @@ export default function SponsorBar() {
   const [sponsors, setSponsors] = useState([]);
   const location = useLocation();
 
-  // No mostrar en el panel ni en admin
-  const hidden = location.pathname.startsWith('/panel') || location.pathname.startsWith('/admin');
-  if (hidden) return null;
-
   useEffect(() => {
     api.getSponsors().then(setSponsors).catch(() => {});
   }, []);
 
+  // No mostrar en el panel ni en admin (siempre después de los hooks)
+  const hidden = location.pathname.startsWith('/panel') || location.pathname.startsWith('/admin');
+  if (hidden) return null;
   if (sponsors.length === 0) return null;
 
   return (
