@@ -115,6 +115,15 @@ CREATE TABLE IF NOT EXISTS matches (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS sponsors (
+  id SERIAL PRIMARY KEY,
+  name TEXT,
+  logo_url TEXT NOT NULL,
+  link_url TEXT,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_categories_league ON categories(league_id);
 CREATE INDEX IF NOT EXISTS idx_matches_category ON matches(category_id);
 CREATE INDEX IF NOT EXISTS idx_matches_date ON matches(match_date);
@@ -123,8 +132,7 @@ CREATE INDEX IF NOT EXISTS idx_matches_date ON matches(match_date);
 export async function initSchema() {
   await exec(schemaSql);
 
-  // Columnas que se agregaron después del schema original.
-  // Postgres ignora las que ya existen gracias a IF NOT EXISTS.
+  // Columnas agregadas después del schema original
   const newTeamColumns = [
     'location TEXT',
     'contact_email TEXT',
@@ -134,7 +142,7 @@ export async function initSchema() {
     'twitter_url TEXT',
     'website_url TEXT',
     'sort_order INTEGER DEFAULT 0',
-    'cover_url TEXT',          // ← NUEVA: imagen de portada del equipo
+    'cover_url TEXT',
   ];
   for (const col of newTeamColumns) {
     await exec(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS ${col}`).catch(() => {});

@@ -1021,3 +1021,175 @@ a { color: inherit; }
   font-size: 12px;
   line-height: 1.8;
 }
+
+/* ---------- Layout general con barra lateral ---------- */
+.app-layout {
+  display: flex;
+  align-items: flex-start;
+  min-height: calc(100vh - 56px);
+}
+ 
+.app-main {
+  flex: 1;
+  min-width: 0;
+}
+ 
+/* ---------- Barra lateral de patrocinadores ---------- */
+.sponsor-bar {
+  position: sticky;
+  top: 72px; /* debajo del topbar */
+  width: 88px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 8px;
+  margin-left: 8px;
+}
+ 
+.sponsor-bar-label {
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  font-family: var(--font-eyebrow);
+  text-align: center;
+}
+ 
+.sponsor-bar-logos {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+}
+ 
+.sponsor-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--card);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+ 
+.sponsor-logo:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+ 
+.sponsor-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 4px;
+}
+ 
+.sponsor-logo a {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+ 
+/* ---------- Panel de admin ---------- */
+.admin-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+ 
+.admin-stat-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 24px 16px;
+  text-align: center;
+}
+ 
+.admin-stat-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+ 
+.admin-stat-value {
+  font-size: 36px;
+  font-family: var(--font-display);
+  color: var(--flag);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+ 
+.admin-stat-label {
+  font-size: 12px;
+  color: var(--ink-dim);
+  letter-spacing: 0.05em;
+}
+ 
+.admin-sponsor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+ 
+.admin-sponsor-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+ 
+.admin-sponsor-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+ 
+.admin-sponsor-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 4px;
+}
+ 
+.admin-sponsor-info {
+  flex: 1;
+  min-width: 0;
+}
+ 
+/* Botón danger */
+.btn-danger {
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-danger:hover {
+  background: #b91c1c;
+}
+ 
+/* Responsive: ocultar barra lateral en pantallas pequeñas */
+@media (max-width: 768px) {
+  .sponsor-bar {
+    display: none;
+  }
+}

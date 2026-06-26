@@ -13,7 +13,11 @@ export default function TopBar() {
 
         {user ? (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <Link to="/panel" className="btn btn-outline btn-sm">Mi panel</Link>
+            {user.role === 'admin' ? (
+              <Link to="/admin" className="btn btn-outline btn-sm">Panel Admin</Link>
+            ) : (
+              <Link to="/panel" className="btn btn-outline btn-sm">Mi panel</Link>
+            )}
             <button onClick={logout} className="btn btn-ghost btn-sm">Cerrar sesión</button>
           </div>
         ) : (

@@ -88,4 +88,28 @@ export const api = {
   // Panel de administración de liga
   getManageLeague: (leagueId, token) =>
     request(`/manage/leagues/${leagueId}/manage`, { token }),
+
+  // Patrocinadores (público — para mostrar en la barra lateral)
+  getSponsors: () => request('/admin/sponsors'),
+
+  // Admin — estadísticas
+  adminGetStats: (token) => request('/admin/stats', { token }),
+
+  // Admin — patrocinadores
+  adminCreateSponsor: (payload, token) =>
+    request('/admin/sponsors', { method: 'POST', body: payload, token }),
+  adminUpdateSponsor: (id, payload, token) =>
+    request(`/admin/sponsors/${id}`, { method: 'PUT', body: payload, token }),
+  adminDeleteSponsor: (id, token) =>
+    request(`/admin/sponsors/${id}`, { method: 'DELETE', token }),
+
+  // Admin — ligas
+  adminGetLeagues: (token) => request('/admin/leagues', { token }),
+  adminDeleteLeague: (id, token) =>
+    request(`/admin/leagues/${id}`, { method: 'DELETE', token }),
+
+  // Admin — usuarios
+  adminGetUsers: (token) => request('/admin/users', { token }),
+  adminDeleteUser: (id, token) =>
+    request(`/admin/users/${id}`, { method: 'DELETE', token }),
 };
