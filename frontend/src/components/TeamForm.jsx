@@ -183,7 +183,7 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel }) {
             <input
               required
               value={form.name}
-              onChange={(e) => update('name', e.target.value)}
+              onChange={(e) => update('name', e.target.value.toUpperCase())}
               placeholder="Ej. Mayas CDMX"
               style={{ textAlign: 'center', fontSize: 20, fontFamily: 'var(--font-display)' }}
             />
@@ -197,7 +197,7 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel }) {
 
             <div className="field">
               <label>📍 Ubicación</label>
-              <input value={form.location} onChange={(e) => update('location', e.target.value)} placeholder="Ej. Ciudad de México" />
+              <input value={form.location} onChange={(e) => update('location', e.target.value.toUpperCase())} placeholder="Ej. Ciudad de México" />
             </div>
             <div className="field-row" style={{ marginTop: 8 }}>
               <div className="field">
@@ -206,7 +206,7 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel }) {
               </div>
               <div className="field">
                 <label>📞 Teléfono</label>
-                <input value={form.contact_phone} onChange={(e) => update('contact_phone', e.target.value)} />
+                <input value={form.contact_phone} onChange={(e) => update('contact_phone', e.target.value.toUpperCase())} />
               </div>
             </div>
           </div>

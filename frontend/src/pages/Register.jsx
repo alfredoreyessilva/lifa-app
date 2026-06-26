@@ -33,7 +33,7 @@ export default function Register() {
     try {
       const data = await api.register({ name: name.trim(), email: email.trim(), password });
       login(data.token, data.user);
-      navigate(data.user.role === 'admin' ? '/admin' : '/registrar-liga');
+      navigate('/registrar-liga');
     } catch (e) {
       setError(e.message);
     } finally {
@@ -52,7 +52,7 @@ export default function Register() {
         <form onSubmit={onSubmit}>
           <div className="field">
             <label>Nombre completo</label>
-            <input required value={name} onChange={(e) => setName(e.target.value)} />
+            <input required value={name} onChange={(e) => setName(e.target.value.toUpperCase())} />
           </div>
           <div className="field">
             <label>Correo electrónico</label>

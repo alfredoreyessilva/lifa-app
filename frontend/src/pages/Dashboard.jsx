@@ -427,11 +427,11 @@ function EditLeagueForm({ league, onSubmit, onCancel }) {
       {error && <div className="form-error">{error}</div>}
       <div className="field">
         <label>Nombre</label>
-        <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value.toUpperCase() })} />
       </div>
       <div className="field">
         <label>Estado / Región</label>
-        <input value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} />
+        <input value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value.toUpperCase() })} />
       </div>
       <LogoField value={form.logo_url} onChange={(url) => setForm({ ...form, logo_url: url })} />
       <div className="field">

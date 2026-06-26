@@ -54,11 +54,11 @@ export default function RegisterLeague() {
         <form onSubmit={onSubmit}>
           <div className="field">
             <label>Nombre de la liga</label>
-            <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Liga de Fútbol Americano de Jalisco" />
+            <input required value={name} onChange={(e) => setName(e.target.value.toUpperCase())} placeholder="Ej. Liga de Fútbol Americano de Jalisco" />
           </div>
           <div className="field">
             <label>Estado / Región</label>
-            <input value={state} onChange={(e) => setState(e.target.value)} placeholder="Ej. Jalisco" />
+            <input value={state} onChange={(e) => setState(e.target.value.toUpperCase())} placeholder="Ej. Jalisco" />
           </div>
           <LogoField value={logoUrl} onChange={setLogoUrl} />
           <div className="field">

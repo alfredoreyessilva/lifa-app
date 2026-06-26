@@ -33,7 +33,7 @@ router.put('/categories/:categoryId', authRequired, categoryOwnerRequired, async
   }
   await db.prepare(`
     UPDATE categories SET name = COALESCE(?, name), sort_order = COALESCE(?, sort_order) WHERE id = ?
-  `).run(toNull(name ? name.trim() : name), toNull(sort_order), req.category.id);
+  `).run(toNull(name ? name.trim().toUpperCase() : name), toNull(sort_order), req.category.id);
   res.json(await db.prepare('SELECT * FROM categories WHERE id = ?').get(req.category.id));
 }));
 
@@ -88,8 +88,8 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
     INSERT INTO matches (category_id, home_team, away_team, match_date, venue, stream_url, week_label, status, home_score, away_score)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    req.category.id, home_team.trim(), away_team.trim(), match_date, venue || null, stream_url || null,
-    week_label || null, resolvedStatus,
+    req.category.id, home_team.trim().toUpperCase(), away_team.trim().toUpperCase(), match_date, venue ? venue.trim().toUpperCase() : null, stream_url || null,
+    week_label ? week_label.trim().toUpperCase() : null, resolvedStatus,
     home_score === '' || home_score === undefined ? null : home_score,
     away_score === '' || away_score === undefined ? null : away_score
   );
@@ -203,12 +203,12 @@ router.post(
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           req.category.id,
-          homeTeam,
-          awayTeam,
+          homeTeam.toUpperCase(),
+          awayTeam.toUpperCase(),
           matchDate    || null,
-          venue        || null,
+          venue        ? venue.toUpperCase()     : null,
           validStream  || null,
-          weekLabel    || null,
+          weekLabel    ? weekLabel.toUpperCase() : null,
           status,
           null,
           null,
@@ -299,12 +299,12 @@ router.post('/leagues/:leagueId/teams', authRequired, leagueOwnerRequired, async
     INSERT INTO teams (league_id, name, logo_url, cover_url, location, contact_email, contact_phone, facebook_url, instagram_url, twitter_url, website_url, sort_order)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    req.league.id, name.trim(),
+    req.league.id, name.trim().toUpperCase(),
     logo_url      || null,
     cover_url     || null,
-    location      || null,
+    location      ? location.trim().toUpperCase()           : null,
     contact_email || null,
-    contact_phone || null,
+    contact_phone ? contact_phone.trim().toUpperCase()     : null,
     facebook_url  || null,
     instagram_url || null,
     twitter_url   || null,

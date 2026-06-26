@@ -33,7 +33,7 @@ export default function CategoryForm({ initial, onSubmit, onCancel, submitLabel 
       {error && <div className="form-error">{error}</div>}
       <div className="field">
         <label>Nombre de la categoría</label>
-        <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Varonil Mayor" />
+        <input required value={name} onChange={(e) => setName(e.target.value.toUpperCase())} placeholder="Ej. Varonil Mayor" />
       </div>
       <div className="modal-actions">
         <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancelar</button>

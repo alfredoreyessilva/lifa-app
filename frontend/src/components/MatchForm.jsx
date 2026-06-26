@@ -89,7 +89,7 @@ function TeamCombobox({ label, value, onChange, teams }) {
         <input
           required
           value={query}
-          onChange={handleInput}
+          onChange={(e) => { e.target.value = e.target.value.toUpperCase(); handleInput(e); }}
           onFocus={() => setOpen(true)}
           autoComplete="off"
           placeholder="Nombre del equipo"
@@ -237,7 +237,7 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
 
       <div className="field">
         <label>Sede (opcional)</label>
-        <input value={form.venue} onChange={(e) => update('venue', e.target.value)} />
+        <input value={form.venue} onChange={(e) => update('venue', e.target.value.toUpperCase())} />
       </div>
 
       <div className="field">
