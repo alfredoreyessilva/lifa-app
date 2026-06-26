@@ -14,7 +14,10 @@ export default function TopBar() {
         {user ? (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {user.role === 'admin' ? (
-              <Link to="/admin" className="btn btn-outline btn-sm">Panel Admin</Link>
+              <>
+                <Link to="/panel" className="btn btn-ghost btn-sm">Mi panel</Link>
+                <Link to="/admin" className="btn btn-outline btn-sm">Panel Admin</Link>
+              </>
             ) : (
               <Link to="/panel" className="btn btn-outline btn-sm">Mi panel</Link>
             )}
