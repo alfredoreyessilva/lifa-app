@@ -3,6 +3,7 @@ import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
 import { leagueOwnerRequired } from '../middleware/ownership.js';
 import { isValidUrl, isNonEmptyString } from '../utils/validation.js';
+import { isValidTimezone } from '../utils/timezones.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = express.Router();
@@ -53,18 +54,19 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
 }));
 
 router.post('/', authRequired, asyncHandler(async (req, res) => {
-  const { name, logo_url, state, description } = req.body;
+  const { name, logo_url, state, description, timezone } = req.body;
   if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre de la liga es obligatorio' });
   if (logo_url && !isValidUrl(logo_url)) return res.status(400).json({ error: 'El logo no es una dirección web válida' });
+  if (timezone && !isValidTimezone(timezone)) return res.status(400).json({ error: 'La zona horaria seleccionada no es válida' });
 
   let slug = slugify(name);
   const existing = await db.prepare('SELECT id FROM leagues WHERE slug = ?').get(slug);
   if (existing) slug = `${slug}-${Date.now().toString().slice(-5)}`;
 
   const result = await db.prepare(`
-    INSERT INTO leagues (name, slug, logo_url, state, description, owner_user_id, status)
-    VALUES (?, ?, ?, ?, ?, ?, 'approved')
-  `).run(name.trim(), slug, logo_url || null, state || null, description || null, req.user.id);
+    INSERT INTO leagues (name, slug, logo_url, state, description, owner_user_id, status, timezone)
+    VALUES (?, ?, ?, ?, ?, ?, 'approved', ?)
+  `).run(name.trim(), slug, logo_url || null, state || null, description || null, req.user.id, timezone || 'America/Mexico_City');
 
   res.status(201).json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(result.lastInsertRowid));
 }));
@@ -74,12 +76,15 @@ function toNull(value) {
 }
 
 router.put('/:id', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
-  const { name, logo_url, state, description } = req.body;
+  const { name, logo_url, state, description, timezone } = req.body;
   const league = req.league;
 
   if (logo_url && !isValidUrl(logo_url)) return res.status(400).json({ error: 'El logo no es una dirección web válida' });
   if (name !== undefined && !isNonEmptyString(name)) {
     return res.status(400).json({ error: 'El nombre de la liga no puede estar vacío' });
+  }
+  if (timezone && !isValidTimezone(timezone)) {
+    return res.status(400).json({ error: 'La zona horaria seleccionada no es válida' });
   }
 
   await db.prepare(`
@@ -87,9 +92,10 @@ router.put('/:id', authRequired, leagueOwnerRequired, asyncHandler(async (req, r
       name = COALESCE(?, name),
       logo_url = COALESCE(?, logo_url),
       state = COALESCE(?, state),
-      description = COALESCE(?, description)
+      description = COALESCE(?, description),
+      timezone = COALESCE(?, timezone)
     WHERE id = ?
-  `).run(toNull(name ? name.trim() : name), toNull(logo_url), toNull(state), toNull(description), league.id);
+  `).run(toNull(name ? name.trim() : name), toNull(logo_url), toNull(state), toNull(description), toNull(timezone), league.id);
 
   res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(league.id));
 }));

@@ -132,7 +132,6 @@ CREATE INDEX IF NOT EXISTS idx_matches_date ON matches(match_date);
 export async function initSchema() {
   await exec(schemaSql);
 
-  // Columnas agregadas después del schema original
   const newTeamColumns = [
     'location TEXT',
     'contact_email TEXT',
@@ -147,6 +146,10 @@ export async function initSchema() {
   for (const col of newTeamColumns) {
     await exec(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS ${col}`).catch(() => {});
   }
+
+  await exec(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/Mexico_City'`).catch(() => {});
+  await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS timezone TEXT`).catch(() => {});
+  await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS tickets_url TEXT`).catch(() => {});
 }
 
 export default db;

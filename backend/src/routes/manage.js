@@ -5,6 +5,7 @@ import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
 import { categoryOwnerRequired, matchOwnerRequired, leagueOwnerRequired, teamOwnerRequired } from '../middleware/ownership.js';
 import { isValidEmail, isValidUrl, isNonEmptyString } from '../utils/validation.js';
+import { isValidTimezone } from '../utils/timezones.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = express.Router();
@@ -13,7 +14,6 @@ function toNull(value) {
   return value === undefined ? null : value;
 }
 
-// Multer para archivos Excel
 const xlsxUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -44,13 +44,13 @@ router.delete('/categories/:categoryId', authRequired, categoryOwnerRequired, as
 
 /* ===================== PARTIDOS ===================== */
 
-function validateMatchFields({ home_team, away_team, stream_url, status, home_score, away_score, match_date }) {
+function validateMatchFields({ home_team, away_team, stream_url, tickets_url, status, home_score, away_score, match_date, timezone }) {
   if (home_team && away_team && home_team.trim().toLowerCase() === away_team.trim().toLowerCase()) {
     return 'El equipo local y el equipo visitante no pueden ser el mismo';
   }
-  if (stream_url && !isValidUrl(stream_url)) {
-    return 'El link de transmisión no es una dirección web válida';
-  }
+  if (stream_url && !isValidUrl(stream_url)) return 'El link de transmisión no es una dirección web válida';
+  if (tickets_url && !isValidUrl(tickets_url)) return 'El link de boletos no es una dirección web válida';
+  if (timezone && !isValidTimezone(timezone)) return 'La zona horaria seleccionada no es válida';
   if (match_date) {
     const isPast = new Date(match_date) < new Date();
     if (isPast && status !== 'finished') {
@@ -75,23 +75,31 @@ function validateMatchFields({ home_team, away_team, stream_url, status, home_sc
 }
 
 router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequired, asyncHandler(async (req, res) => {
-  const { home_team, away_team, match_date, venue, stream_url, week_label, status, home_score, away_score } = req.body;
+  const { home_team, away_team, match_date, venue, stream_url, tickets_url, week_label, status, home_score, away_score, timezone } = req.body;
   if (!isNonEmptyString(home_team) || !isNonEmptyString(away_team) || !match_date) {
     return res.status(400).json({ error: 'Se requieren equipo local, visitante y fecha' });
   }
 
   const resolvedStatus = status || 'scheduled';
-  const validationError = validateMatchFields({ home_team, away_team, stream_url, status: resolvedStatus, home_score, away_score, match_date });
+  const validationError = validateMatchFields({ home_team, away_team, stream_url, tickets_url, status: resolvedStatus, home_score, away_score, match_date, timezone });
   if (validationError) return res.status(400).json({ error: validationError });
 
   const result = await db.prepare(`
-    INSERT INTO matches (category_id, home_team, away_team, match_date, venue, stream_url, week_label, status, home_score, away_score)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO matches (category_id, home_team, away_team, match_date, venue, stream_url, tickets_url, week_label, status, home_score, away_score, timezone)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    req.category.id, home_team.trim().toUpperCase(), away_team.trim().toUpperCase(), match_date, venue ? venue.trim().toUpperCase() : null, stream_url || null,
-    week_label ? week_label.trim().toUpperCase() : null, resolvedStatus,
+    req.category.id,
+    home_team.trim().toUpperCase(),
+    away_team.trim().toUpperCase(),
+    match_date,
+    venue ? venue.trim().toUpperCase() : null,
+    stream_url || null,
+    tickets_url || null,
+    week_label ? week_label.trim().toUpperCase() : null,
+    resolvedStatus,
     home_score === '' || home_score === undefined ? null : home_score,
-    away_score === '' || away_score === undefined ? null : away_score
+    away_score === '' || away_score === undefined ? null : away_score,
+    timezone || null
   );
 
   res.status(201).json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(result.lastInsertRowid));
@@ -150,31 +158,25 @@ router.post(
           continue;
         }
 
-        // Parsear fecha
         let matchDate = null;
         if (fechaRaw) {
           let parsedDate = null;
-
-          // xlsx puede entregar un Date real si la celda es de tipo fecha
           const rawFechaKey = Object.keys(row).find(k => k.trim().toLowerCase() === 'fecha');
           if (rawFechaKey && row[rawFechaKey] instanceof Date) {
             parsedDate = new Date(row[rawFechaKey]);
           }
-
           if (!parsedDate || isNaN(parsedDate)) {
             const dmyMatch = /^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/.exec(fechaRaw);
             if (dmyMatch) {
               parsedDate = new Date(Number(dmyMatch[3]), Number(dmyMatch[2]) - 1, Number(dmyMatch[1]));
             }
           }
-
           if (!parsedDate || isNaN(parsedDate)) {
             const ymdMatch = /^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/.exec(fechaRaw);
             if (ymdMatch) {
               parsedDate = new Date(Number(ymdMatch[1]), Number(ymdMatch[2]) - 1, Number(ymdMatch[3]));
             }
           }
-
           if (parsedDate && !isNaN(parsedDate)) {
             if (horaRaw) {
               const hmMatch = /^(\d{1,2}):(\d{2})/.exec(horaRaw);
@@ -186,7 +188,6 @@ router.post(
           }
         }
 
-        // Validar URL de stream
         let validStream = '';
         if (streamUrl) {
           try {
@@ -230,17 +231,19 @@ router.post(
 );
 
 router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
-  const { home_team, away_team, match_date, venue, stream_url, week_label, status, home_score, away_score } = req.body;
+  const { home_team, away_team, match_date, venue, stream_url, tickets_url, week_label, status, home_score, away_score, timezone } = req.body;
   const m = req.match;
 
   const resolved = {
-    home_team:  home_team  ?? m.home_team,
-    away_team:  away_team  ?? m.away_team,
-    match_date: match_date ?? m.match_date,
-    stream_url: stream_url ?? m.stream_url,
-    status:     status     ?? m.status,
-    home_score: home_score !== undefined ? home_score : m.home_score,
-    away_score: away_score !== undefined ? away_score : m.away_score,
+    home_team:   home_team  ?? m.home_team,
+    away_team:   away_team  ?? m.away_team,
+    match_date:  match_date ?? m.match_date,
+    stream_url:  stream_url ?? m.stream_url,
+    tickets_url: tickets_url ?? m.tickets_url,
+    status:      status     ?? m.status,
+    home_score:  home_score !== undefined ? home_score : m.home_score,
+    away_score:  away_score !== undefined ? away_score : m.away_score,
+    timezone:    timezone   ?? m.timezone,
   };
 
   const validationError = validateMatchFields(resolved);
@@ -248,19 +251,22 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
 
   await db.prepare(`
     UPDATE matches SET
-      home_team  = COALESCE(?, home_team),
-      away_team  = COALESCE(?, away_team),
-      match_date = COALESCE(?, match_date),
-      venue      = COALESCE(?, venue),
-      stream_url = COALESCE(?, stream_url),
-      week_label = COALESCE(?, week_label),
-      status     = COALESCE(?, status),
-      home_score = COALESCE(?, home_score),
-      away_score = COALESCE(?, away_score)
+      home_team   = COALESCE(?, home_team),
+      away_team   = COALESCE(?, away_team),
+      match_date  = COALESCE(?, match_date),
+      venue       = COALESCE(?, venue),
+      stream_url  = COALESCE(?, stream_url),
+      tickets_url = COALESCE(?, tickets_url),
+      week_label  = COALESCE(?, week_label),
+      status      = COALESCE(?, status),
+      home_score  = COALESCE(?, home_score),
+      away_score  = COALESCE(?, away_score),
+      timezone    = COALESCE(?, timezone)
     WHERE id = ?
   `).run(
-    toNull(home_team), toNull(away_team), toNull(match_date), toNull(venue), toNull(stream_url),
-    toNull(week_label), toNull(status), toNull(home_score), toNull(away_score), m.id
+    toNull(home_team), toNull(away_team), toNull(match_date), toNull(venue),
+    toNull(stream_url), toNull(tickets_url), toNull(week_label), toNull(status),
+    toNull(home_score), toNull(away_score), toNull(timezone), m.id
   );
 
   res.json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id));
@@ -302,9 +308,9 @@ router.post('/leagues/:leagueId/teams', authRequired, leagueOwnerRequired, async
     req.league.id, name.trim().toUpperCase(),
     logo_url      || null,
     cover_url     || null,
-    location      ? location.trim().toUpperCase()           : null,
+    location      ? location.trim().toUpperCase()       : null,
     contact_email || null,
-    contact_phone ? contact_phone.trim().toUpperCase()     : null,
+    contact_phone ? contact_phone.trim().toUpperCase() : null,
     facebook_url  || null,
     instagram_url || null,
     twitter_url   || null,

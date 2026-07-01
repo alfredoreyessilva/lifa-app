@@ -9,8 +9,11 @@ import LogoField from '../components/LogoField.jsx';
 import TeamForm from '../components/TeamForm.jsx';
 import ExcelImport from '../components/ExcelImport.jsx';
 import CharField from '../components/CharField.jsx';
+import TimezoneSelect from '../components/TimezoneSelect.jsx';
+import { getTimezoneLabel } from '../utils/timezones.js';
 
 const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+const DEFAULT_TZ = 'America/Mexico_City';
 
 export default function Dashboard() {
   const { token, leagues, refreshLeagues } = useAuth();
@@ -59,6 +62,7 @@ export default function Dashboard() {
   }
 
   const currentTeams = leagueData?.teams || [];
+  const leagueTimezone = leagueData?.league?.timezone || DEFAULT_TZ;
 
   return (
     <div className="container">
@@ -169,6 +173,7 @@ export default function Dashboard() {
           <MatchForm
             submitLabel="Crear partido"
             teams={currentTeams}
+            leagueTimezone={leagueTimezone}
             onCancel={() => setModal(null)}
             onSubmit={async (payload) => {
               await api.createMatch(modal.category.id, payload, token);
@@ -185,6 +190,7 @@ export default function Dashboard() {
             initial={modal.match}
             submitLabel="Guardar cambios"
             teams={currentTeams}
+            leagueTimezone={leagueTimezone}
             onCancel={() => setModal(null)}
             onSubmit={async (payload) => {
               await api.updateMatch(modal.match.id, payload, token);
@@ -286,6 +292,11 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
         <div>
           <h3>{league.name}</h3>
           {league.state && <span style={{ fontSize: 12, color: 'var(--ink-dim)' }}>{league.state}</span>}
+          {league.timezone && (
+            <span style={{ fontSize: 11, color: 'var(--ink-dim)', display: 'block', marginTop: 2 }}>
+              🕐 {getTimezoneLabel(league.timezone)}
+            </span>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <Link to={`/ligas/${league.slug}`} className="btn btn-outline btn-sm">Ver mi página</Link>
@@ -379,7 +390,7 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
                     <div>
                       <div className="who">{m.home_team} vs {m.away_team}</div>
                       <div className="info">
-                        {formatDate(m.match_date)}
+                        {formatDate(m.match_date, m.timezone || DEFAULT_TZ)}
                         {m.week_label ? ` · ${/^\d+$/.test(m.week_label) ? 'Jornada ' + m.week_label : m.week_label}` : ''}
                         {' · '}
                         {m.stream_url ? 'Con link de transmisión' : 'Sin link de transmisión'}
@@ -407,8 +418,9 @@ function EditLeagueForm({ league, onSubmit, onCancel }) {
     state:       league.state       || '',
     logo_url:    league.logo_url    || '',
     description: league.description || '',
+    timezone:    league.timezone    || DEFAULT_TZ,
   });
-  const [error, setError]   = useState('');
+  const [error, setError]     = useState('');
   const [loading, setLoading] = useState(false);
 
   async function submit(e) {
@@ -439,6 +451,11 @@ function EditLeagueForm({ league, onSubmit, onCancel }) {
         <label>Descripción</label>
         <CharField as="textarea" rows={3} max={100} uppercase value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
       </div>
+      <TimezoneSelect
+        label="Zona horaria de la liga"
+        value={form.timezone}
+        onChange={(tz) => setForm({ ...form, timezone: tz })}
+      />
       <div className="modal-actions">
         <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancelar</button>
         <button className="btn btn-flag" disabled={loading}>{loading ? 'Guardando…' : 'Guardar cambios'}</button>
@@ -447,9 +464,11 @@ function EditLeagueForm({ league, onSubmit, onCancel }) {
   );
 }
 
-function formatDate(iso) {
+function formatDate(iso, tz) {
   if (!iso) return 'Sin fecha';
   const d = new Date(iso);
-  const time = d.toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' });
-  return `${d.getDate()} ${MESES[d.getMonth()]} · ${time}`;
+  const dayStr = d.toLocaleString('es-MX', { timeZone: tz, day: 'numeric' });
+  const monthIndex = Number(d.toLocaleString('en-US', { timeZone: tz, month: 'numeric' })) - 1;
+  const time = d.toLocaleTimeString('es-MX', { timeZone: tz, hour: 'numeric', minute: '2-digit' });
+  return `${dayStr} ${MESES[monthIndex]} · ${time}`;
 }

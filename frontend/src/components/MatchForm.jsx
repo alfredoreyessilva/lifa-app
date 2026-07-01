@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { required, differentFrom, validUrl, minValue, runValidations } from '../utils/validation.js';
 import CharField from './CharField.jsx';
+import TimezoneSelect from './TimezoneSelect.jsx';
 
 function toLocalInputValue(isoString) {
   if (!isoString) return '';
@@ -34,16 +35,13 @@ function initials(name) {
     .toUpperCase();
 }
 
-// ── Combobox de equipo con sugerencias y logo ────────────────────────────────
 function TeamCombobox({ label, value, onChange, teams }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value);
   const wrapRef = useRef(null);
 
-  // Sincroniza el input si el valor cambia externamente
   useEffect(() => { setQuery(value); }, [value]);
 
-  // Cierra al hacer clic fuera
   useEffect(() => {
     function handleClick(e) {
       if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
@@ -76,7 +74,6 @@ function TeamCombobox({ label, value, onChange, teams }) {
     <div className="field team-combobox-wrap" ref={wrapRef}>
       <label>{label}</label>
       <div className="team-combobox-input-row">
-        {/* minilogo si hay coincidencia exacta */}
         {selectedTeam?.logo_url && (
           <div className="team-combobox-logo">
             <img src={selectedTeam.logo_url} alt={selectedTeam.name} />
@@ -119,27 +116,29 @@ function TeamCombobox({ label, value, onChange, teams }) {
   );
 }
 
-// Extrae el número de jornada de valores como "Jornada 4", "4", "" → "4" o ""
 function parseWeekNumber(val) {
   if (!val) return '';
   const match = /(\d+)/.exec(String(val));
   return match ? match[1] : '';
 }
 
-// ── Formulario principal ─────────────────────────────────────────────────────
-export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, teams }) {
+export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, teams, leagueTimezone }) {
+  const defaultTimezone = initial?.timezone || leagueTimezone || 'America/Mexico_City';
+
   const [form, setForm] = useState({
-    home_team:  initial?.home_team  || '',
-    away_team:  initial?.away_team  || '',
-    match_date: toLocalInputValue(initial?.match_date) || '',
-    venue:      initial?.venue      || '',
-    stream_url: initial?.stream_url || '',
-    week_label: parseWeekNumber(initial?.week_label),
-    status:     initial?.status     || 'scheduled',
-    home_score: initial?.home_score ?? '',
-    away_score: initial?.away_score ?? '',
+    home_team:   initial?.home_team   || '',
+    away_team:   initial?.away_team   || '',
+    match_date:  toLocalInputValue(initial?.match_date) || '',
+    venue:       initial?.venue       || '',
+    stream_url:  initial?.stream_url  || '',
+    tickets_url: initial?.tickets_url || '',
+    week_label:  parseWeekNumber(initial?.week_label),
+    status:      initial?.status      || 'scheduled',
+    home_score:  initial?.home_score  ?? '',
+    away_score:  initial?.away_score  ?? '',
+    timezone:    defaultTimezone,
   });
-  const [error, setError]   = useState('');
+  const [error, setError]     = useState('');
   const [loading, setLoading] = useState(false);
 
   function update(key, value) {
@@ -150,7 +149,7 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
     if (isPastDate(form.match_date) && form.status !== 'finished') {
       update('status', 'finished');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function handleDateChange(value) {
@@ -174,7 +173,8 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
       () => required(form.home_team, 'El equipo local'),
       () => required(form.away_team, 'El equipo visitante'),
       () => differentFrom(form.home_team.trim().toLowerCase(), form.away_team.trim().toLowerCase(), 'El equipo local y el equipo visitante no pueden ser el mismo'),
-      () => validUrl(form.stream_url, 'El link de transmisión'),
+      () => validUrl(form.stream_url,  'El link de transmisión'),
+      () => validUrl(form.tickets_url, 'El link de boletos'),
       () => (matchIsPast && form.status !== 'finished' ? 'Si la fecha del partido ya pasó, el estado debe ser "Finalizado"' : null),
       () => (scoreRequired ? required(form.home_score, 'El marcador local')     : null),
       () => (scoreRequired ? required(form.away_score, 'El marcador visitante') : null),
@@ -187,14 +187,16 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
     try {
       await onSubmit({
         ...form,
-        home_team:  form.home_team.trim(),
-        away_team:  form.away_team.trim(),
-        venue:      form.venue.trim(),
-        stream_url: form.stream_url.trim(),
-        week_label: form.week_label.trim(),
-        match_date: isoDate,
-        home_score: form.home_score === '' ? null : Number(form.home_score),
-        away_score: form.away_score === '' ? null : Number(form.away_score),
+        home_team:   form.home_team.trim(),
+        away_team:   form.away_team.trim(),
+        venue:       form.venue.trim(),
+        stream_url:  form.stream_url.trim(),
+        tickets_url: form.tickets_url.trim(),
+        week_label:  form.week_label.trim(),
+        match_date:  isoDate,
+        home_score:  form.home_score === '' ? null : Number(form.home_score),
+        away_score:  form.away_score === '' ? null : Number(form.away_score),
+        timezone:    form.timezone,
       });
     } catch (e) {
       setError(e.message);
@@ -236,6 +238,15 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
         )}
       </div>
 
+      <TimezoneSelect
+        label="Zona horaria de este partido"
+        value={form.timezone}
+        onChange={(v) => update('timezone', v)}
+      />
+      <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: -8, marginBottom: 16 }}>
+        Por defecto usa la zona de tu liga. Cámbiala solo si este partido se juega en otra región.
+      </div>
+
       <div className="field">
         <label>Sede (opcional)</label>
         <CharField max={40} uppercase value={form.venue} onChange={(e) => update('venue', e.target.value)} />
@@ -263,6 +274,15 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
         <input
           value={form.stream_url}
           onChange={(e) => update('stream_url', e.target.value)}
+          placeholder="https://…"
+        />
+      </div>
+
+      <div className="field">
+        <label>Link de boletos (opcional)</label>
+        <input
+          value={form.tickets_url}
+          onChange={(e) => update('tickets_url', e.target.value)}
           placeholder="https://…"
         />
       </div>

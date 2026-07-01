@@ -11,6 +11,8 @@
   --ink-dim: #d9f0db;
   --card: #347e3a;
   --card-hover: #3d9344;
+  --surface: #2a6e30;
+  --surface-dim: rgba(0, 0, 0, 0.15);
 
   --font-display: 'Anton', sans-serif;
   --font-eyebrow: 'Oswald', sans-serif;
@@ -1191,5 +1193,278 @@ a { color: inherit; }
 @media (max-width: 768px) {
   .sponsor-bar {
     display: none;
+  }
+}
+/* ---------- Responsive: topbar móvil ---------- */
+@media (max-width: 640px) {
+
+  /* Oculta el texto largo de la marca, deja solo el emoji */
+  .brand span {
+    display: none;
+  }
+
+  /* Reduce padding del topbar */
+  .topbar-inner {
+    padding: 12px 16px;
+  }
+
+  /* Reduce tamaño del emoji de la marca */
+  .brand {
+    font-size: 20px;
+  }
+
+  /* Los botones del nav en móvil más compactos */
+  .topbar-inner .btn-sm {
+    padding: 6px 10px;
+    font-size: 10px;
+  }
+
+  /* Hero más compacto en móvil */
+  .hero {
+    padding: 40px 0 32px;
+  }
+
+  /* Match card: apilar fecha arriba, acción abajo */
+  .match-card {
+    grid-template-columns: 72px 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .match-action {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+
+  /* Panel: botones de categoría en columna */
+  .category-block-head {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .category-block-head > div {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  /* Dashboard header apilado */
+  .dash-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  /* Tabs más compactos */
+  .tab-btn {
+    padding: 10px 14px;
+    font-size: 11px;
+  }
+
+  /* Formularios ocupan todo el ancho */
+  .form-card {
+    margin: 24px auto;
+    padding: 24px 16px;
+  }
+
+  /* field-row apilado en móvil */
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  /* Container con menos padding */
+  .container {
+    padding: 0 16px;
+  }
+
+  /* Modal ocupa más pantalla */
+  .modal {
+    margin: 16px;
+    padding: 20px 16px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  /* League panel head apilado */
+  .league-panel-head {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+}
+
+/* ---------- Match card nueva (tipo marcador) ---------- */
+.match-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  padding-bottom: 64px;
+}
+
+.match-card-new {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.match-card-new:hover {
+  background: var(--card-hover);
+  border-color: var(--line-strong);
+}
+
+.match-card-new--next {
+  border-color: var(--flag);
+}
+
+.match-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.match-card-datetime {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.match-card-date {
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+}
+
+.match-card-time {
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  color: var(--flag);
+  font-weight: 600;
+}
+
+.match-card-tz {
+  font-size: 10px;
+  color: var(--ink-dim);
+  letter-spacing: 0.03em;
+}
+
+.match-card-status {
+  flex-shrink: 0;
+}
+
+.match-card-body {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.match-card-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.match-card-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--field);
+  border: 2px solid var(--line-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--flag);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.match-card-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.match-card-team-name {
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  line-height: 1.3;
+  max-width: 110px;
+}
+
+.match-card-score {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: 28px;
+  color: var(--paper);
+  white-space: nowrap;
+}
+
+.match-card-score-sep {
+  color: var(--ink-dim);
+  font-size: 20px;
+}
+
+.match-card-score-vs {
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  color: var(--ink-dim);
+}
+
+.match-card-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--ink-dim);
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.match-card-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+/* Móvil: 1 columna */
+@media (max-width: 640px) {
+  .match-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .match-card-logo {
+    width: 44px;
+    height: 44px;
+    font-size: 12px;
+  }
+
+  .match-card-score {
+    font-size: 22px;
+  }
+
+  .match-card-team-name {
+    font-size: 11px;
+    max-width: 90px;
   }
 }

@@ -4,6 +4,7 @@ import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import LogoField from '../components/LogoField.jsx';
 import CharField from '../components/CharField.jsx';
+import TimezoneSelect from '../components/TimezoneSelect.jsx';
 import { required, validUrl, runValidations } from '../utils/validation.js';
 
 export default function RegisterLeague() {
@@ -11,6 +12,7 @@ export default function RegisterLeague() {
   const [state, setState]             = useState('');
   const [logoUrl, setLogoUrl]         = useState('');
   const [description, setDescription] = useState('');
+  const [timezone, setTimezone]       = useState('America/Mexico_City');
   const [error, setError]             = useState('');
   const [loading, setLoading]         = useState(false);
   const { token, refreshLeagues }     = useAuth();
@@ -33,6 +35,7 @@ export default function RegisterLeague() {
         state:       state.trim(),
         logo_url:    logoUrl.trim(),
         description: description.trim(),
+        timezone,
       }, token);
       await refreshLeagues();
       navigate('/panel');
@@ -84,6 +87,14 @@ export default function RegisterLeague() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
+          </div>
+          <TimezoneSelect
+            label="Zona horaria de la liga"
+            value={timezone}
+            onChange={setTimezone}
+          />
+          <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: -8, marginBottom: 16 }}>
+            Esta zona se usará por defecto en todos los partidos de tu liga. Podrás cambiarla partido por partido si lo necesitas.
           </div>
           <button className="btn btn-flag btn-block" disabled={loading}>
             {loading ? 'Registrando…' : 'Registrar liga'}
