@@ -26,30 +26,58 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 router.get('/:slug', asyncHandler(async (req, res) => {
-  const league = await db.prepare(`SELECT * FROM leagues WHERE slug = ? AND status = 'approved'`).get(req.params.slug);
+  const league = await db.prepare(`
+    SELECT * FROM leagues WHERE slug = ? AND status = 'approved'
+  `).get(req.params.slug);
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
+
   const categories = await db.prepare(`
-    SELECT id, name, sort_order FROM categories WHERE league_id = ? ORDER BY sort_order ASC, name ASC
+    SELECT id, name, sort_order FROM categories
+    WHERE league_id = ? ORDER BY sort_order ASC, name ASC
   `).all(league.id);
+
   res.json({ ...league, categories });
 }));
 
 router.get('/:slug/teams', asyncHandler(async (req, res) => {
-  const league = await db.prepare(`SELECT * FROM leagues WHERE slug = ? AND status = 'approved'`).get(req.params.slug);
+  const league = await db.prepare(`
+    SELECT * FROM leagues WHERE slug = ? AND status = 'approved'
+  `).get(req.params.slug);
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
+
   const teams = await db.prepare(`
-    SELECT id, name, logo_url, cover_url, location, contact_email, contact_phone, facebook_url, instagram_url, twitter_url, website_url
-    FROM teams WHERE league_id = ? ORDER BY sort_order ASC, name ASC
+    SELECT id, name, logo_url, cover_url, location, contact_email, contact_phone,
+           facebook_url, instagram_url, twitter_url, website_url
+    FROM teams WHERE league_id = ?
+    ORDER BY sort_order ASC, name ASC
   `).all(league.id);
+
   res.json(teams);
 }));
 
 router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
-  const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(req.params.categoryId);
+  const category = await db.prepare(`
+    SELECT * FROM categories WHERE id = ?
+  `).get(req.params.categoryId);
   if (!category) return res.status(404).json({ error: 'Categoría no encontrada' });
+
+  // Trae los partidos con los logos de los equipos
+  // haciendo JOIN con teams por nombre dentro de la misma liga
   const matches = await db.prepare(`
-    SELECT * FROM matches WHERE category_id = ? ORDER BY match_date ASC
+    SELECT
+      m.*,
+      th.logo_url AS home_logo_url,
+      ta.logo_url AS away_logo_url
+    FROM matches m
+    LEFT JOIN categories c  ON c.id  = m.category_id
+    LEFT JOIN teams th      ON th.league_id = c.league_id
+                           AND UPPER(th.name) = UPPER(m.home_team)
+    LEFT JOIN teams ta      ON ta.league_id = c.league_id
+                           AND UPPER(ta.name) = UPPER(m.away_team)
+    WHERE m.category_id = ?
+    ORDER BY m.match_date ASC
   `).all(category.id);
+
   res.json({ category, matches });
 }));
 
@@ -66,7 +94,10 @@ router.post('/', authRequired, asyncHandler(async (req, res) => {
   const result = await db.prepare(`
     INSERT INTO leagues (name, slug, logo_url, state, description, owner_user_id, status, timezone)
     VALUES (?, ?, ?, ?, ?, ?, 'approved', ?)
-  `).run(name.trim(), slug, logo_url || null, state || null, description || null, req.user.id, timezone || 'America/Mexico_City');
+  `).run(
+    name.trim(), slug, logo_url || null, state || null,
+    description || null, req.user.id, timezone || 'America/Mexico_City'
+  );
 
   res.status(201).json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(result.lastInsertRowid));
 }));
@@ -89,13 +120,20 @@ router.put('/:id', authRequired, leagueOwnerRequired, asyncHandler(async (req, r
 
   await db.prepare(`
     UPDATE leagues SET
-      name = COALESCE(?, name),
-      logo_url = COALESCE(?, logo_url),
-      state = COALESCE(?, state),
+      name        = COALESCE(?, name),
+      logo_url    = COALESCE(?, logo_url),
+      state       = COALESCE(?, state),
       description = COALESCE(?, description),
-      timezone = COALESCE(?, timezone)
+      timezone    = COALESCE(?, timezone)
     WHERE id = ?
-  `).run(toNull(name ? name.trim() : name), toNull(logo_url), toNull(state), toNull(description), toNull(timezone), league.id);
+  `).run(
+    toNull(name ? name.trim() : name),
+    toNull(logo_url),
+    toNull(state),
+    toNull(description),
+    toNull(timezone),
+    league.id
+  );
 
   res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(league.id));
 }));
