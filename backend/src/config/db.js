@@ -150,6 +150,10 @@ export async function initSchema() {
   await exec(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/Mexico_City'`).catch(() => {});
   await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS timezone TEXT`).catch(() => {});
   await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS tickets_url TEXT`).catch(() => {});
+
+  // Temporada y año en categorías
+  await exec(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS season TEXT`).catch(() => {});
+  await exec(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS year INTEGER`).catch(() => {});
 }
 
 export default db;

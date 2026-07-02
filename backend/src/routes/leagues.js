@@ -32,8 +32,9 @@ router.get('/:slug', asyncHandler(async (req, res) => {
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
 
   const categories = await db.prepare(`
-    SELECT id, name, sort_order FROM categories
-    WHERE league_id = ? ORDER BY sort_order ASC, name ASC
+    SELECT id, name, season, year, sort_order
+    FROM categories WHERE league_id = ?
+    ORDER BY sort_order ASC, name ASC
   `).all(league.id);
 
   res.json({ ...league, categories });
@@ -61,8 +62,6 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
   `).get(req.params.categoryId);
   if (!category) return res.status(404).json({ error: 'Categoría no encontrada' });
 
-  // Trae los partidos con los logos de los equipos
-  // haciendo JOIN con teams por nombre dentro de la misma liga
   const matches = await db.prepare(`
     SELECT
       m.*,
@@ -139,12 +138,19 @@ router.put('/:id', authRequired, leagueOwnerRequired, asyncHandler(async (req, r
 }));
 
 router.post('/:leagueId/categories', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
-  const { name, sort_order } = req.body;
+  const { name, sort_order, season, year } = req.body;
   if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre de la categoría es obligatorio' });
 
   const result = await db.prepare(`
-    INSERT INTO categories (league_id, name, sort_order) VALUES (?, ?, ?)
-  `).run(req.league.id, name.trim(), sort_order || 0);
+    INSERT INTO categories (league_id, name, sort_order, season, year)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    req.league.id,
+    name.trim().toUpperCase(),
+    sort_order || 0,
+    season ? season.trim().toUpperCase() : null,
+    year ? parseInt(year) : null
+  );
 
   res.status(201).json(await db.prepare('SELECT * FROM categories WHERE id = ?').get(result.lastInsertRowid));
 }));

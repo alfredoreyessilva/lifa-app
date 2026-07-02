@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import TeamCard from '../components/TeamCard.jsx';
 import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
@@ -7,12 +7,13 @@ import Loading from '../components/Loading.jsx';
 
 export default function LeaguePage() {
   const { slug } = useParams();
-  const [league, setLeague] = useState(null);
-  const [teams, setTeams] = useState(null);
-  const [error, setError] = useState('');
-  const [tab, setTab] = useState('categorias');
-  const [copied, setCopied] = useState(false);
+  const [league, setLeague]           = useState(null);
+  const [teams, setTeams]             = useState(null);
+  const [error, setError]             = useState('');
+  const [tab, setTab]                 = useState('categorias');
+  const [copied, setCopied]           = useState(false);
   const [selectedTeam, setSelectedTeam] = useState(null);
+  const navigate = useNavigate();
 
   function copyLink() {
     navigator.clipboard.writeText(window.location.href).then(() => {
@@ -86,12 +87,21 @@ export default function LeaguePage() {
               <p>Esta liga aún no ha publicado sus categorías.</p>
             </div>
           ) : (
-            <div className="category-list">
-              {league.categories.map((cat, i) => (
-                <Link key={cat.id} to={`/categorias/${cat.id}/calendario`} className="category-pill">
-                  <span className="yard-num">{String(i + 1).padStart(2, '0')}</span>
-                  {cat.name}
-                </Link>
+            <div className="category-grid">
+              {league.categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  className="category-card"
+                  onClick={() => navigate(`/categorias/${cat.id}/calendario`)}
+                >
+                  <div className="category-card-name">{cat.name}</div>
+                  {(cat.season || cat.year) && (
+                    <div className="category-card-sub">
+                      {[cat.season, cat.year].filter(Boolean).join(' ')}
+                    </div>
+                  )}
+                  <div className="category-card-arrow">→</div>
+                </button>
               ))}
             </div>
           )}
