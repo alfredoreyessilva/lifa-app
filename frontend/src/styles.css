@@ -1744,4 +1744,86 @@ a { color: inherit; }
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
 }
+/* ---------- Logo de liga clickeable ---------- */
+.league-logo-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: block;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
 
+.league-logo-btn:hover {
+  transform: scale(1.06);
+  opacity: 0.9;
+}
+
+/* ---------- Tarjeta de información de la liga ---------- */
+.league-info-panel {
+  background: var(--card);
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  width: 100%;
+  max-width: 440px;
+  max-height: 88vh;
+  overflow-y: auto;
+  margin: 20px;
+}
+
+.league-info-banner {
+  height: 140px;
+  background: linear-gradient(135deg, var(--field-deep) 0%, var(--field) 100%);
+  border-radius: 16px 16px 0 0;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.league-info-logo-wrap {
+  display: flex;
+  justify-content: flex-start;
+  padding: 0 20px;
+  margin-top: -36px;
+  position: relative;
+  z-index: 1;
+}
+
+.league-info-body {
+  padding: 12px 20px 24px;
+}
+
+.league-info-name {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--ink);
+  margin: 0 0 4px;
+  letter-spacing: 0.02em;
+}
+
+.league-info-section {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  margin-top: 14px;
+}
+
+.league-info-section-title {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--flag);
+  text-transform: uppercase;
+  font-family: var(--font-eyebrow);
+  margin-bottom: 10px;
+}
+
+.league-info-teams {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.league-info-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}

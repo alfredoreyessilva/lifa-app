@@ -37,7 +37,13 @@ router.get('/:slug', asyncHandler(async (req, res) => {
     ORDER BY sort_order ASC, name ASC
   `).all(league.id);
 
-  res.json({ ...league, categories });
+  const teams = await db.prepare(`
+    SELECT id, name, logo_url
+    FROM teams WHERE league_id = ?
+    ORDER BY sort_order ASC, name ASC
+  `).all(league.id);
+
+  res.json({ ...league, categories, teams });
 }));
 
 router.get('/:slug/teams', asyncHandler(async (req, res) => {
@@ -81,21 +87,37 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
 }));
 
 router.post('/', authRequired, asyncHandler(async (req, res) => {
-  const { name, logo_url, state, description, timezone } = req.body;
+  const {
+    name, logo_url, cover_url, state, description, timezone,
+    facebook_url, instagram_url, twitter_url, youtube_url,
+    tiktok_url, website_url, whatsapp,
+  } = req.body;
+
   if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre de la liga es obligatorio' });
-  if (logo_url && !isValidUrl(logo_url)) return res.status(400).json({ error: 'El logo no es una dirección web válida' });
-  if (timezone && !isValidTimezone(timezone)) return res.status(400).json({ error: 'La zona horaria seleccionada no es válida' });
+  if (logo_url     && !isValidUrl(logo_url))     return res.status(400).json({ error: 'El logo no es una dirección web válida' });
+  if (cover_url    && !isValidUrl(cover_url))    return res.status(400).json({ error: 'La portada no es una dirección web válida' });
+  if (facebook_url && !isValidUrl(facebook_url)) return res.status(400).json({ error: 'El enlace de Facebook no es válido' });
+  if (instagram_url && !isValidUrl(instagram_url)) return res.status(400).json({ error: 'El enlace de Instagram no es válido' });
+  if (twitter_url  && !isValidUrl(twitter_url))  return res.status(400).json({ error: 'El enlace de X/Twitter no es válido' });
+  if (youtube_url  && !isValidUrl(youtube_url))  return res.status(400).json({ error: 'El enlace de YouTube no es válido' });
+  if (tiktok_url   && !isValidUrl(tiktok_url))   return res.status(400).json({ error: 'El enlace de TikTok no es válido' });
+  if (website_url  && !isValidUrl(website_url))  return res.status(400).json({ error: 'El sitio web no es válido' });
+  if (timezone     && !isValidTimezone(timezone)) return res.status(400).json({ error: 'La zona horaria seleccionada no es válida' });
 
   let slug = slugify(name);
   const existing = await db.prepare('SELECT id FROM leagues WHERE slug = ?').get(slug);
   if (existing) slug = `${slug}-${Date.now().toString().slice(-5)}`;
 
   const result = await db.prepare(`
-    INSERT INTO leagues (name, slug, logo_url, state, description, owner_user_id, status, timezone)
-    VALUES (?, ?, ?, ?, ?, ?, 'approved', ?)
+    INSERT INTO leagues (name, slug, logo_url, cover_url, state, description, owner_user_id, status, timezone,
+      facebook_url, instagram_url, twitter_url, youtube_url, tiktok_url, website_url, whatsapp)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    name.trim(), slug, logo_url || null, state || null,
-    description || null, req.user.id, timezone || 'America/Mexico_City'
+    name.trim(), slug, logo_url || null, cover_url || null,
+    state || null, description || null, req.user.id,
+    timezone || 'America/Mexico_City',
+    facebook_url || null, instagram_url || null, twitter_url || null,
+    youtube_url || null, tiktok_url || null, website_url || null, whatsapp || null
   );
 
   res.status(201).json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(result.lastInsertRowid));
@@ -106,32 +128,47 @@ function toNull(value) {
 }
 
 router.put('/:id', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
-  const { name, logo_url, state, description, timezone } = req.body;
+  const {
+    name, logo_url, cover_url, state, description, timezone,
+    facebook_url, instagram_url, twitter_url, youtube_url,
+    tiktok_url, website_url, whatsapp,
+  } = req.body;
   const league = req.league;
 
-  if (logo_url && !isValidUrl(logo_url)) return res.status(400).json({ error: 'El logo no es una dirección web válida' });
-  if (name !== undefined && !isNonEmptyString(name)) {
-    return res.status(400).json({ error: 'El nombre de la liga no puede estar vacío' });
-  }
-  if (timezone && !isValidTimezone(timezone)) {
-    return res.status(400).json({ error: 'La zona horaria seleccionada no es válida' });
-  }
+  if (logo_url      && !isValidUrl(logo_url))      return res.status(400).json({ error: 'El logo no es una dirección web válida' });
+  if (cover_url     && !isValidUrl(cover_url))     return res.status(400).json({ error: 'La portada no es una dirección web válida' });
+  if (name !== undefined && !isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre de la liga no puede estar vacío' });
+  if (timezone      && !isValidTimezone(timezone)) return res.status(400).json({ error: 'La zona horaria seleccionada no es válida' });
+  if (facebook_url  && !isValidUrl(facebook_url))  return res.status(400).json({ error: 'El enlace de Facebook no es válido' });
+  if (instagram_url && !isValidUrl(instagram_url)) return res.status(400).json({ error: 'El enlace de Instagram no es válido' });
+  if (twitter_url   && !isValidUrl(twitter_url))   return res.status(400).json({ error: 'El enlace de X/Twitter no es válido' });
+  if (youtube_url   && !isValidUrl(youtube_url))   return res.status(400).json({ error: 'El enlace de YouTube no es válido' });
+  if (tiktok_url    && !isValidUrl(tiktok_url))    return res.status(400).json({ error: 'El enlace de TikTok no es válido' });
+  if (website_url   && !isValidUrl(website_url))   return res.status(400).json({ error: 'El sitio web no es válido' });
 
   await db.prepare(`
     UPDATE leagues SET
-      name        = COALESCE(?, name),
-      logo_url    = COALESCE(?, logo_url),
-      state       = COALESCE(?, state),
-      description = COALESCE(?, description),
-      timezone    = COALESCE(?, timezone)
+      name          = COALESCE(?, name),
+      logo_url      = COALESCE(?, logo_url),
+      cover_url     = COALESCE(?, cover_url),
+      state         = COALESCE(?, state),
+      description   = COALESCE(?, description),
+      timezone      = COALESCE(?, timezone),
+      facebook_url  = COALESCE(?, facebook_url),
+      instagram_url = COALESCE(?, instagram_url),
+      twitter_url   = COALESCE(?, twitter_url),
+      youtube_url   = COALESCE(?, youtube_url),
+      tiktok_url    = COALESCE(?, tiktok_url),
+      website_url   = COALESCE(?, website_url),
+      whatsapp      = COALESCE(?, whatsapp)
     WHERE id = ?
   `).run(
     toNull(name ? name.trim() : name),
-    toNull(logo_url),
-    toNull(state),
-    toNull(description),
-    toNull(timezone),
-    league.id
+    toNull(logo_url), toNull(cover_url),
+    toNull(state), toNull(description), toNull(timezone),
+    toNull(facebook_url), toNull(instagram_url), toNull(twitter_url),
+    toNull(youtube_url), toNull(tiktok_url), toNull(website_url),
+    toNull(whatsapp), league.id
   );
 
   res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(league.id));

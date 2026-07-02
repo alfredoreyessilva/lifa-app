@@ -150,10 +150,23 @@ export async function initSchema() {
   await exec(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/Mexico_City'`).catch(() => {});
   await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS timezone TEXT`).catch(() => {});
   await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS tickets_url TEXT`).catch(() => {});
-
-  // Temporada y año en categorías
   await exec(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS season TEXT`).catch(() => {});
   await exec(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS year INTEGER`).catch(() => {});
+
+  // Redes sociales y contacto de la liga
+  const newLeagueColumns = [
+    'cover_url TEXT',
+    'facebook_url TEXT',
+    'instagram_url TEXT',
+    'twitter_url TEXT',
+    'youtube_url TEXT',
+    'tiktok_url TEXT',
+    'website_url TEXT',
+    'whatsapp TEXT',
+  ];
+  for (const col of newLeagueColumns) {
+    await exec(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS ${col}`).catch(() => {});
+  }
 }
 
 export default db;

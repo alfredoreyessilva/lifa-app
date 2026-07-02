@@ -61,8 +61,8 @@ export default function Dashboard() {
     );
   }
 
-  const currentTeams = leagueData?.teams || [];
-  const leagueTimezone = leagueData?.league?.timezone || DEFAULT_TZ;
+  const currentTeams    = leagueData?.teams || [];
+  const leagueTimezone  = leagueData?.league?.timezone || DEFAULT_TZ;
 
   return (
     <div className="container">
@@ -108,8 +108,6 @@ export default function Dashboard() {
         />
       )}
 
-      {/* ---- Modals ---- */}
-
       {modal?.type === 'edit-league' && (
         <Modal title="Editar liga" onClose={() => setModal(null)}>
           <EditLeagueForm
@@ -127,77 +125,39 @@ export default function Dashboard() {
 
       {modal?.type === 'add-category' && (
         <Modal title="Nueva categoría" onClose={() => setModal(null)}>
-          <CategoryForm
-            submitLabel="Crear categoría"
-            onCancel={() => setModal(null)}
-            onSubmit={async (payload) => {
-              await api.createCategory(leagueData.league.id, payload, token);
-              refresh();
-              setModal(null);
-            }}
-          />
+          <CategoryForm submitLabel="Crear categoría" onCancel={() => setModal(null)}
+            onSubmit={async (payload) => { await api.createCategory(leagueData.league.id, payload, token); refresh(); setModal(null); }} />
         </Modal>
       )}
 
       {modal?.type === 'edit-category' && (
         <Modal title="Editar categoría" onClose={() => setModal(null)}>
-          <CategoryForm
-            initial={modal.category}
-            submitLabel="Guardar cambios"
-            onCancel={() => setModal(null)}
-            onSubmit={async (payload) => {
-              await api.updateCategory(modal.category.id, payload, token);
-              refresh();
-              setModal(null);
-            }}
-          />
+          <CategoryForm initial={modal.category} submitLabel="Guardar cambios" onCancel={() => setModal(null)}
+            onSubmit={async (payload) => { await api.updateCategory(modal.category.id, payload, token); refresh(); setModal(null); }} />
         </Modal>
       )}
 
       {modal?.type === 'delete-category' && (
         <Modal title="Eliminar categoría" onClose={() => setModal(null)}>
-          <p>¿Seguro que quieres eliminar <strong>{modal.category.name}</strong> y todos sus partidos? Esta acción no se puede deshacer.</p>
+          <p>¿Seguro que quieres eliminar <strong>{modal.category.name}</strong> y todos sus partidos?</p>
           <div className="modal-actions">
             <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
-            <button className="btn btn-danger" onClick={async () => {
-              await api.deleteCategory(modal.category.id, token);
-              refresh();
-              setModal(null);
-            }}>Eliminar</button>
+            <button className="btn btn-danger" onClick={async () => { await api.deleteCategory(modal.category.id, token); refresh(); setModal(null); }}>Eliminar</button>
           </div>
         </Modal>
       )}
 
       {modal?.type === 'add-match' && (
         <Modal title={`Nuevo partido — ${modal.category.name}`} onClose={() => setModal(null)}>
-          <MatchForm
-            submitLabel="Crear partido"
-            teams={currentTeams}
-            leagueTimezone={leagueTimezone}
-            onCancel={() => setModal(null)}
-            onSubmit={async (payload) => {
-              await api.createMatch(modal.category.id, payload, token);
-              refresh();
-              setModal(null);
-            }}
-          />
+          <MatchForm submitLabel="Crear partido" teams={currentTeams} leagueTimezone={leagueTimezone} onCancel={() => setModal(null)}
+            onSubmit={async (payload) => { await api.createMatch(modal.category.id, payload, token); refresh(); setModal(null); }} />
         </Modal>
       )}
 
       {modal?.type === 'edit-match' && (
         <Modal title={`Editar partido — ${modal.category.name}`} onClose={() => setModal(null)}>
-          <MatchForm
-            initial={modal.match}
-            submitLabel="Guardar cambios"
-            teams={currentTeams}
-            leagueTimezone={leagueTimezone}
-            onCancel={() => setModal(null)}
-            onSubmit={async (payload) => {
-              await api.updateMatch(modal.match.id, payload, token);
-              refresh();
-              setModal(null);
-            }}
-          />
+          <MatchForm initial={modal.match} submitLabel="Guardar cambios" teams={currentTeams} leagueTimezone={leagueTimezone} onCancel={() => setModal(null)}
+            onSubmit={async (payload) => { await api.updateMatch(modal.match.id, payload, token); refresh(); setModal(null); }} />
         </Modal>
       )}
 
@@ -206,65 +166,38 @@ export default function Dashboard() {
           <p>¿Seguro que quieres eliminar <strong>{modal.match.home_team} vs {modal.match.away_team}</strong>?</p>
           <div className="modal-actions">
             <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
-            <button className="btn btn-danger" onClick={async () => {
-              await api.deleteMatch(modal.match.id, token);
-              refresh();
-              setModal(null);
-            }}>Eliminar</button>
+            <button className="btn btn-danger" onClick={async () => { await api.deleteMatch(modal.match.id, token); refresh(); setModal(null); }}>Eliminar</button>
           </div>
         </Modal>
       )}
 
       {modal?.type === 'import-matches' && (
         <Modal title={`Subir calendario — ${modal.category.name}`} onClose={() => setModal(null)}>
-          <ExcelImport
-            categoryId={modal.category.id}
-            categoryName={modal.category.name}
-            onCancel={() => setModal(null)}
-            onDone={() => { refresh(); setModal(null); }}
-          />
+          <ExcelImport categoryId={modal.category.id} categoryName={modal.category.name}
+            onCancel={() => setModal(null)} onDone={() => { refresh(); setModal(null); }} />
         </Modal>
       )}
 
       {modal?.type === 'add-team' && (
         <Modal title="Nuevo equipo" onClose={() => setModal(null)}>
-          <TeamForm
-            submitLabel="Crear equipo"
-            onCancel={() => setModal(null)}
-            onSubmit={async (payload) => {
-              await api.createTeam(leagueData.league.id, payload, token);
-              refresh();
-              setModal(null);
-            }}
-          />
+          <TeamForm submitLabel="Crear equipo" onCancel={() => setModal(null)}
+            onSubmit={async (payload) => { await api.createTeam(leagueData.league.id, payload, token); refresh(); setModal(null); }} />
         </Modal>
       )}
 
       {modal?.type === 'edit-team' && (
         <Modal title="Editar equipo" onClose={() => setModal(null)}>
-          <TeamForm
-            initial={modal.team}
-            submitLabel="Guardar cambios"
-            onCancel={() => setModal(null)}
-            onSubmit={async (payload) => {
-              await api.updateTeam(modal.team.id, payload, token);
-              refresh();
-              setModal(null);
-            }}
-          />
+          <TeamForm initial={modal.team} submitLabel="Guardar cambios" onCancel={() => setModal(null)}
+            onSubmit={async (payload) => { await api.updateTeam(modal.team.id, payload, token); refresh(); setModal(null); }} />
         </Modal>
       )}
 
       {modal?.type === 'delete-team' && (
         <Modal title="Eliminar equipo" onClose={() => setModal(null)}>
-          <p>¿Seguro que quieres eliminar <strong>{modal.team.name}</strong>? Esta acción no se puede deshacer.</p>
+          <p>¿Seguro que quieres eliminar <strong>{modal.team.name}</strong>?</p>
           <div className="modal-actions">
             <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
-            <button className="btn btn-danger" onClick={async () => {
-              await api.deleteTeam(modal.team.id, token);
-              refresh();
-              setModal(null);
-            }}>Eliminar</button>
+            <button className="btn btn-danger" onClick={async () => { await api.deleteTeam(modal.team.id, token); refresh(); setModal(null); }}>Eliminar</button>
           </div>
         </Modal>
       )}
@@ -274,14 +207,13 @@ export default function Dashboard() {
 
 function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDeleteCategory, onAddMatch, onEditMatch, onDeleteMatch, onImportMatches, onAddTeam, onEditTeam, onDeleteTeam }) {
   const { league, categories, teams } = data;
-  const [expandedIds, setExpandedIds] = useState(new Set());
+  const [expandedIds, setExpandedIds]     = useState(new Set());
   const [teamsExpanded, setTeamsExpanded] = useState(false);
 
   function toggleCategory(id) {
     setExpandedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   }
@@ -315,7 +247,6 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
         </div>
       )}
 
-      {/* Sección equipos */}
       <div className="category-block">
         <div className="category-block-head" onClick={() => setTeamsExpanded((prev) => !prev)} style={{ cursor: 'pointer' }}>
           <h4>
@@ -332,7 +263,7 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
 
         {teamsExpanded && (
           teams.length === 0 ? (
-            <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>Sin equipos. Agrega el primero para que aparezcan en la sección "Equipos" pública.</p>
+            <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>Sin equipos. Agrega el primero.</p>
           ) : (
             teams.map((team) => (
               <div key={team.id} className="admin-match-row">
@@ -344,10 +275,7 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
                   )}
                   <div>
                     <div className="who">{team.name}</div>
-                    <div className="info">
-                      {team.location || 'Sin ubicación'}{' · '}
-                      {team.logo_url ? 'Con logo' : 'Sin logo'}
-                    </div>
+                    <div className="info">{team.location || 'Sin ubicación'} · {team.logo_url ? 'Con logo' : 'Sin logo'}</div>
                   </div>
                 </div>
                 <div className="row-actions">
@@ -360,7 +288,6 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
         )}
       </div>
 
-      {/* Categorías */}
       {categories.map((cat) => {
         const isOpen = expandedIds.has(cat.id);
         return (
@@ -392,8 +319,7 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
                       <div className="info">
                         {formatDate(m.match_date, m.timezone || DEFAULT_TZ)}
                         {m.week_label ? ` · ${/^\d+$/.test(m.week_label) ? 'Jornada ' + m.week_label : m.week_label}` : ''}
-                        {' · '}
-                        {m.stream_url ? 'Con link de transmisión' : 'Sin link de transmisión'}
+                        {' · '}{m.stream_url ? 'Con transmisión' : 'Sin transmisión'}
                         {m.status === 'live' ? ' · En vivo' : m.status === 'finished' ? ' · Finalizado' : ''}
                       </div>
                     </div>
@@ -414,48 +340,91 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
 
 function EditLeagueForm({ league, onSubmit, onCancel }) {
   const [form, setForm] = useState({
-    name:        league.name,
-    state:       league.state       || '',
-    logo_url:    league.logo_url    || '',
-    description: league.description || '',
-    timezone:    league.timezone    || DEFAULT_TZ,
+    name:          league.name,
+    state:         league.state         || '',
+    logo_url:      league.logo_url      || '',
+    cover_url:     league.cover_url     || '',
+    description:   league.description   || '',
+    timezone:      league.timezone      || DEFAULT_TZ,
+    facebook_url:  league.facebook_url  || '',
+    instagram_url: league.instagram_url || '',
+    twitter_url:   league.twitter_url   || '',
+    youtube_url:   league.youtube_url   || '',
+    tiktok_url:    league.tiktok_url    || '',
+    website_url:   league.website_url   || '',
+    whatsapp:      league.whatsapp      || '',
   });
-  const [error, setError]     = useState('');
+  const [error,   setError]   = useState('');
   const [loading, setLoading] = useState(false);
+
+  function update(key, value) { setForm((f) => ({ ...f, [key]: value })); }
 
   async function submit(e) {
     e.preventDefault();
     setError('');
     setLoading(true);
-    try {
-      await onSubmit(form);
-    } catch (e) {
-      setError(e.message);
-      setLoading(false);
-    }
+    try { await onSubmit(form); }
+    catch (e) { setError(e.message); setLoading(false); }
   }
 
   return (
     <form onSubmit={submit}>
       {error && <div className="form-error">{error}</div>}
+
       <div className="field">
         <label>Nombre</label>
-        <CharField required max={40} uppercase value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        <CharField required max={40} uppercase value={form.name} onChange={(e) => update('name', e.target.value)} />
       </div>
       <div className="field">
         <label>Estado / Región</label>
-        <CharField max={40} uppercase value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} />
+        <CharField max={40} uppercase value={form.state} onChange={(e) => update('state', e.target.value)} />
       </div>
-      <LogoField value={form.logo_url} onChange={(url) => setForm({ ...form, logo_url: url })} />
       <div className="field">
         <label>Descripción</label>
-        <CharField as="textarea" rows={3} max={100} uppercase value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        <CharField as="textarea" rows={3} max={100} uppercase value={form.description} onChange={(e) => update('description', e.target.value)} />
       </div>
-      <TimezoneSelect
-        label="Zona horaria de la liga"
-        value={form.timezone}
-        onChange={(tz) => setForm({ ...form, timezone: tz })}
-      />
+
+      <LogoField value={form.logo_url} onChange={(url) => update('logo_url', url)} />
+
+      <div className="field">
+        <label>Foto de portada (opcional)</label>
+        <LogoField value={form.cover_url} onChange={(url) => update('cover_url', url)} />
+      </div>
+
+      <TimezoneSelect label="Zona horaria de la liga" value={form.timezone} onChange={(tz) => update('timezone', tz)} />
+
+      <div style={{ fontSize: 11, letterSpacing: '0.15em', color: 'var(--flag)', textTransform: 'uppercase', margin: '16px 0 12px', fontFamily: 'var(--font-eyebrow)' }}>
+        Redes sociales y contacto
+      </div>
+      <div className="field">
+        <label>WhatsApp</label>
+        <input value={form.whatsapp} onChange={(e) => update('whatsapp', e.target.value)} placeholder="Ej. 5512345678 o https://wa.me/521..." />
+      </div>
+      <div className="field">
+        <label>Facebook</label>
+        <input value={form.facebook_url} onChange={(e) => update('facebook_url', e.target.value)} placeholder="https://facebook.com/..." />
+      </div>
+      <div className="field">
+        <label>Instagram</label>
+        <input value={form.instagram_url} onChange={(e) => update('instagram_url', e.target.value)} placeholder="https://instagram.com/..." />
+      </div>
+      <div className="field">
+        <label>X / Twitter</label>
+        <input value={form.twitter_url} onChange={(e) => update('twitter_url', e.target.value)} placeholder="https://x.com/..." />
+      </div>
+      <div className="field">
+        <label>YouTube</label>
+        <input value={form.youtube_url} onChange={(e) => update('youtube_url', e.target.value)} placeholder="https://youtube.com/..." />
+      </div>
+      <div className="field">
+        <label>TikTok</label>
+        <input value={form.tiktok_url} onChange={(e) => update('tiktok_url', e.target.value)} placeholder="https://tiktok.com/..." />
+      </div>
+      <div className="field">
+        <label>Sitio web</label>
+        <input value={form.website_url} onChange={(e) => update('website_url', e.target.value)} placeholder="https://..." />
+      </div>
+
       <div className="modal-actions">
         <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancelar</button>
         <button className="btn btn-flag" disabled={loading}>{loading ? 'Guardando…' : 'Guardar cambios'}</button>
@@ -467,8 +436,8 @@ function EditLeagueForm({ league, onSubmit, onCancel }) {
 function formatDate(iso, tz) {
   if (!iso) return 'Sin fecha';
   const d = new Date(iso);
-  const dayStr = d.toLocaleString('es-MX', { timeZone: tz, day: 'numeric' });
+  const dayStr     = d.toLocaleString('es-MX', { timeZone: tz, day: 'numeric' });
   const monthIndex = Number(d.toLocaleString('en-US', { timeZone: tz, month: 'numeric' })) - 1;
-  const time = d.toLocaleTimeString('es-MX', { timeZone: tz, hour: 'numeric', minute: '2-digit' });
+  const time       = d.toLocaleTimeString('es-MX', { timeZone: tz, hour: 'numeric', minute: '2-digit' });
   return `${dayStr} ${MESES[monthIndex]} · ${time}`;
 }
