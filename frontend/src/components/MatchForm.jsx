@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { required, differentFrom, validUrl, minValue, runValidations } from '../utils/validation.js';
 import CharField from './CharField.jsx';
 import TimezoneSelect from './TimezoneSelect.jsx';
+import { getMatchStatus } from '../utils/matchStatus.js';
 
 function toLocalInputValue(isoString) {
   if (!isoString) return '';
@@ -19,12 +20,6 @@ function localInputToISO(value) {
   return d.toISOString();
 }
 
-function isPastDate(localInputValue) {
-  const iso = localInputToISO(localInputValue);
-  if (!iso) return false;
-  return new Date(iso) < new Date();
-}
-
 function initials(name) {
   return (name || '')
     .split(' ')
@@ -36,9 +31,9 @@ function initials(name) {
 }
 
 function TeamCombobox({ label, value, onChange, teams }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen]   = useState(false);
   const [query, setQuery] = useState(value);
-  const wrapRef = useRef(null);
+  const wrapRef           = useRef(null);
 
   useEffect(() => { setQuery(value); }, [value]);
 
@@ -133,34 +128,33 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
     stream_url:  initial?.stream_url  || '',
     tickets_url: initial?.tickets_url || '',
     week_label:  parseWeekNumber(initial?.week_label),
-    status:      initial?.status      || 'scheduled',
     home_score:  initial?.home_score  ?? '',
     away_score:  initial?.away_score  ?? '',
     timezone:    defaultTimezone,
   });
-  const [error, setError]     = useState('');
+  const [error,   setError]   = useState('');
   const [loading, setLoading] = useState(false);
 
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  useEffect(() => {
-    if (isPastDate(form.match_date) && form.status !== 'finished') {
-      update('status', 'finished');
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function handleDateChange(value) {
-    update('match_date', value);
-    if (isPastDate(value) && form.status !== 'finished') {
-      update('status', 'finished');
-    }
+  // Construye un objeto temporal para calcular el estado actual del partido
+  function getCurrentStatus() {
+    const isoDate = localInputToISO(form.match_date);
+    if (!isoDate) return 'scheduled';
+    return getMatchStatus({
+      match_date: isoDate,
+      home_score: form.home_score === '' ? null : form.home_score,
+      away_score: form.away_score === '' ? null : form.away_score,
+    });
   }
 
-  const matchIsPast   = isPastDate(form.match_date);
-  const scoreRequired = form.status === 'finished';
+  // El marcador solo se pide cuando el partido ya terminó (no cuando está en vivo)
+  const currentStatus   = getCurrentStatus();
+  const matchIsFinished = currentStatus === 'finished';
+  const matchIsLive     = currentStatus === 'live';
+  const matchIsPast     = currentStatus === 'live' || currentStatus === 'finished';
 
   async function submit(e) {
     e.preventDefault();
@@ -172,12 +166,16 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
     const validationError = runValidations([
       () => required(form.home_team, 'El equipo local'),
       () => required(form.away_team, 'El equipo visitante'),
-      () => differentFrom(form.home_team.trim().toLowerCase(), form.away_team.trim().toLowerCase(), 'El equipo local y el equipo visitante no pueden ser el mismo'),
+      () => differentFrom(
+        form.home_team.trim().toLowerCase(),
+        form.away_team.trim().toLowerCase(),
+        'El equipo local y el equipo visitante no pueden ser el mismo'
+      ),
       () => validUrl(form.stream_url,  'El link de transmisión'),
       () => validUrl(form.tickets_url, 'El link de boletos'),
-      () => (matchIsPast && form.status !== 'finished' ? 'Si la fecha del partido ya pasó, el estado debe ser "Finalizado"' : null),
-      () => (scoreRequired ? required(form.home_score, 'El marcador local')     : null),
-      () => (scoreRequired ? required(form.away_score, 'El marcador visitante') : null),
+      // Marcador obligatorio solo cuando ya terminó (no en vivo)
+      () => (matchIsFinished ? required(form.home_score, 'El marcador local')     : null),
+      () => (matchIsFinished ? required(form.away_score, 'El marcador visitante') : null),
       () => minValue(form.home_score, 0, 'El marcador local'),
       () => minValue(form.away_score, 0, 'El marcador visitante'),
     ]);
@@ -197,6 +195,7 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
         home_score:  form.home_score === '' ? null : Number(form.home_score),
         away_score:  form.away_score === '' ? null : Number(form.away_score),
         timezone:    form.timezone,
+        status:      currentStatus,
       });
     } catch (e) {
       setError(e.message);
@@ -229,11 +228,16 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
           type="datetime-local"
           required
           value={form.match_date}
-          onChange={(e) => handleDateChange(e.target.value)}
+          onChange={(e) => update('match_date', e.target.value)}
         />
-        {matchIsPast && (
+        {matchIsLive && (
+          <small style={{ color: 'var(--live)', display: 'block', marginTop: 4 }}>
+            🔴 Este partido está en vivo ahora. Podrás capturar el marcador cuando termine.
+          </small>
+        )}
+        {matchIsFinished && (
           <small style={{ color: 'var(--ink-dim)', display: 'block', marginTop: 4 }}>
-            Esta fecha ya pasó — el partido se marcará como "Finalizado" y deberás capturar el marcador.
+            Este partido ya terminó — captura el marcador final.
           </small>
         )}
       </div>
@@ -287,31 +291,15 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
         />
       </div>
 
-      <div className="field">
-        <label>Estado del partido</label>
-        <select
-          value={form.status}
-          onChange={(e) => update('status', e.target.value)}
-          disabled={matchIsPast}
-        >
-          <option value="scheduled">Programado</option>
-          <option value="live">En vivo</option>
-          <option value="finished">Finalizado</option>
-        </select>
-        {matchIsPast && (
-          <small style={{ color: 'var(--ink-dim)', display: 'block', marginTop: 4 }}>
-            No se puede cambiar: la fecha del partido ya pasó.
-          </small>
-        )}
-      </div>
-
-      {scoreRequired && (
+      {/* Marcador — solo cuando el partido ya terminó, NO cuando está en vivo */}
+      {matchIsFinished && (
         <div className="field-row">
           <div className="field">
             <label>Marcador local</label>
             <input
-              type="number" min="0"
-              required={scoreRequired}
+              type="number"
+              min="0"
+              required
               value={form.home_score}
               onChange={(e) => update('home_score', e.target.value)}
             />
@@ -319,8 +307,9 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
           <div className="field">
             <label>Marcador visitante</label>
             <input
-              type="number" min="0"
-              required={scoreRequired}
+              type="number"
+              min="0"
+              required
               value={form.away_score}
               onChange={(e) => update('away_score', e.target.value)}
             />
@@ -330,7 +319,9 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
 
       <div className="modal-actions">
         <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancelar</button>
-        <button className="btn btn-flag" disabled={loading}>{loading ? 'Guardando…' : submitLabel}</button>
+        <button className="btn btn-flag" disabled={loading}>
+          {loading ? 'Guardando…' : submitLabel}
+        </button>
       </div>
     </form>
   );

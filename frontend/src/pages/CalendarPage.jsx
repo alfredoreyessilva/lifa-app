@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import Loading from '../components/Loading.jsx';
+import { getMatchStatus } from '../utils/matchStatus.js';
 
 const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 const DEFAULT_TZ = 'America/Mexico_City';
@@ -47,10 +48,10 @@ const TZ_LABELS = {
 function getMatchParts(isoString, tz) {
   const zone = tz || DEFAULT_TZ;
   const date = new Date(isoString);
-  const dayStr = date.toLocaleString('es-MX', { timeZone: zone, day: 'numeric' });
+  const dayStr     = date.toLocaleString('es-MX', { timeZone: zone, day: 'numeric' });
   const monthIndex = Number(date.toLocaleString('en-US', { timeZone: zone, month: 'numeric' })) - 1;
-  const time = date.toLocaleTimeString('es-MX', { timeZone: zone, hour: 'numeric', minute: '2-digit' });
-  const tzLabel = TZ_LABELS[zone] || zone;
+  const time       = date.toLocaleTimeString('es-MX', { timeZone: zone, hour: 'numeric', minute: '2-digit' });
+  const tzLabel    = TZ_LABELS[zone] || zone;
   return { day: dayStr, month: MESES[monthIndex], time, tzLabel };
 }
 
@@ -64,14 +65,13 @@ function initials(name) {
     .toUpperCase();
 }
 
-// Extrae las jornadas únicas de los partidos
 function getJornadas(matches) {
   const seen = new Set();
   return matches
     .filter((m) => m.week_label)
     .reduce((acc, m) => {
       const label = /^\d+$/.test(m.week_label) ? `Jornada ${m.week_label}` : m.week_label;
-      const key = m.week_label;
+      const key   = m.week_label;
       if (!seen.has(key)) { seen.add(key); acc.push({ key, label }); }
       return acc;
     }, [])
@@ -82,7 +82,6 @@ function getJornadas(matches) {
     });
 }
 
-// Extrae equipos únicos
 function getEquipos(matches) {
   const seen = new Set();
   const equipos = [];
@@ -91,16 +90,12 @@ function getEquipos(matches) {
       { name: m.home_team, logo: m.home_logo_url },
       { name: m.away_team, logo: m.away_logo_url },
     ]) {
-      if (!seen.has(name)) {
-        seen.add(name);
-        equipos.push({ name, logo });
-      }
+      if (!seen.has(name)) { seen.add(name); equipos.push({ name, logo }); }
     }
   }
   return equipos.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-// Extrae sedes únicas
 function getSedes(matches) {
   const seen = new Set();
   return matches
@@ -112,31 +107,29 @@ function getSedes(matches) {
     .sort((a, b) => a.localeCompare(b));
 }
 
-const VIEWS = ['completo', 'jornada', 'equipo', 'sede'];
-const VIEW_LABELS = {
-  completo: 'Calendario completo',
-  jornada:  'Jornada',
-  equipo:   'Equipo',
-  sede:     'Sede',
-};
+const VIEWS        = ['completo', 'jornada', 'equipo', 'sede'];
+const VIEW_LABELS  = { completo: 'Calendario completo', jornada: 'Jornada', equipo: 'Equipo', sede: 'Sede' };
 
 export default function CalendarPage() {
   const { categoryId } = useParams();
-  const [data, setData]       = useState(null);
-  const [error, setError]     = useState('');
-  const [copied, setCopied]   = useState(false);
-  const [view, setView]       = useState('completo');
-  const [selected, setSelected] = useState(null); // jornada/equipo/sede seleccionada
+  const [data, setData]         = useState(null);
+  const [error, setError]       = useState('');
+  const [copied, setCopied]     = useState(false);
+  const [view, setView]         = useState('completo');
+  const [selected, setSelected] = useState(null);
+  const [now, setNow]           = useState(Date.now());
 
   useEffect(() => {
     api.getMatches(categoryId).then(setData).catch((e) => setError(e.message));
   }, [categoryId]);
 
-  // Al cambiar de vista, limpiar la selección
-  function changeView(v) {
-    setView(v);
-    setSelected(null);
-  }
+  // Actualiza "now" cada 30 segundos para que los estados cambien en tiempo real
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  function changeView(v) { setView(v); setSelected(null); }
 
   function copyLink() {
     navigator.clipboard.writeText(window.location.href).then(() => {
@@ -160,10 +153,8 @@ export default function CalendarPage() {
   if (!data) return <div className="container"><Loading /></div>;
 
   const { category, matches } = data;
-  const now = Date.now();
-  const nextMatch = matches.find(m => m.status === 'scheduled' && new Date(m.match_date).getTime() > now);
+  const nextMatch = matches.find(m => getMatchStatus(m) === 'scheduled');
 
-  // Partidos filtrados según la vista y selección actual
   let filteredMatches = matches;
   if (view === 'jornada' && selected) {
     filteredMatches = matches.filter((m) => m.week_label === selected);
@@ -181,7 +172,6 @@ export default function CalendarPage() {
     <div className="container">
       <div className="crumb"><Link to="/">Inicio</Link> / {category.name}</div>
 
-      {/* Header con título y filtros */}
       <div className="calendar-header">
         <h2>{category.name}</h2>
         <div className="calendar-view-bar">
@@ -198,7 +188,6 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* Contador y compartir */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <span className="count">{matches.length} partidos</span>
         <button className="btn btn-outline btn-sm" onClick={copyLink}>
@@ -213,12 +202,10 @@ export default function CalendarPage() {
         </div>
       ) : (
         <>
-          {/* VISTA: Calendario completo */}
           {view === 'completo' && (
-            <MatchGrid matches={matches} nextMatch={nextMatch} />
+            <MatchGrid matches={matches} nextMatch={nextMatch} now={now} />
           )}
 
-          {/* VISTA: Jornada */}
           {view === 'jornada' && !selected && (
             <div className="filter-grid">
               {jornadas.length === 0 ? (
@@ -235,20 +222,14 @@ export default function CalendarPage() {
               })}
             </div>
           )}
-
           {view === 'jornada' && selected && (
             <>
-              <button className="filter-back" onClick={() => setSelected(null)}>
-                ← Todas las jornadas
-              </button>
-              <div className="filter-selected-title">
-                {/^\d+$/.test(selected) ? `Jornada ${selected}` : selected}
-              </div>
-              <MatchGrid matches={filteredMatches} nextMatch={nextMatch} />
+              <button className="filter-back" onClick={() => setSelected(null)}>← Todas las jornadas</button>
+              <div className="filter-selected-title">{/^\d+$/.test(selected) ? `Jornada ${selected}` : selected}</div>
+              <MatchGrid matches={filteredMatches} nextMatch={nextMatch} now={now} />
             </>
           )}
 
-          {/* VISTA: Equipo */}
           {view === 'equipo' && !selected && (
             <div className="filter-grid">
               {equipos.length === 0 ? (
@@ -258,9 +239,7 @@ export default function CalendarPage() {
                 return (
                   <button key={eq.name} className="filter-card" onClick={() => setSelected(eq.name)}>
                     <div className="filter-card-logo">
-                      {eq.logo
-                        ? <img src={eq.logo} alt={eq.name} />
-                        : <span>{initials(eq.name)}</span>}
+                      {eq.logo ? <img src={eq.logo} alt={eq.name} /> : <span>{initials(eq.name)}</span>}
                     </div>
                     <div className="filter-card-label">{eq.name}</div>
                     <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
@@ -269,18 +248,14 @@ export default function CalendarPage() {
               })}
             </div>
           )}
-
           {view === 'equipo' && selected && (
             <>
-              <button className="filter-back" onClick={() => setSelected(null)}>
-                ← Todos los equipos
-              </button>
+              <button className="filter-back" onClick={() => setSelected(null)}>← Todos los equipos</button>
               <div className="filter-selected-title">{selected}</div>
-              <MatchGrid matches={filteredMatches} nextMatch={nextMatch} />
+              <MatchGrid matches={filteredMatches} nextMatch={nextMatch} now={now} />
             </>
           )}
 
-          {/* VISTA: Sede */}
           {view === 'sede' && !selected && (
             <div className="filter-grid">
               {sedes.length === 0 ? (
@@ -297,14 +272,11 @@ export default function CalendarPage() {
               })}
             </div>
           )}
-
           {view === 'sede' && selected && (
             <>
-              <button className="filter-back" onClick={() => setSelected(null)}>
-                ← Todas las sedes
-              </button>
+              <button className="filter-back" onClick={() => setSelected(null)}>← Todas las sedes</button>
               <div className="filter-selected-title">📍 {selected}</div>
-              <MatchGrid matches={filteredMatches} nextMatch={nextMatch} />
+              <MatchGrid matches={filteredMatches} nextMatch={nextMatch} now={now} />
             </>
           )}
         </>
@@ -313,45 +285,38 @@ export default function CalendarPage() {
   );
 }
 
-/* ── Grid de partidos ── */
-function MatchGrid({ matches, nextMatch }) {
+function MatchGrid({ matches, nextMatch, now }) {
   if (matches.length === 0) {
-    return (
-      <div className="empty-state">
-        <p>No hay partidos en esta selección.</p>
-      </div>
-    );
+    return <div className="empty-state"><p>No hay partidos en esta selección.</p></div>;
   }
   return (
     <div className="match-grid">
       {matches.map((m) => (
-        <MatchCard key={m.id} match={m} isNext={nextMatch?.id === m.id} />
+        <MatchCard key={m.id} match={m} isNext={nextMatch?.id === m.id} now={now} />
       ))}
     </div>
   );
 }
 
-/* ── Tarjeta de partido ── */
 function TeamBadge({ name, logoUrl }) {
   return (
     <div className="match-card-team">
       <div className="match-card-logo">
-        {logoUrl
-          ? <img src={logoUrl} alt={name} />
-          : <span>{initials(name)}</span>}
+        {logoUrl ? <img src={logoUrl} alt={name} /> : <span>{initials(name)}</span>}
       </div>
       <div className="match-card-team-name">{name}</div>
     </div>
   );
 }
 
-function MatchCard({ match, isNext }) {
+function MatchCard({ match, isNext, now }) {
   const { day, month, time, tzLabel } = getMatchParts(match.match_date, match.timezone);
-  const isFinished = match.status === 'finished';
-  const isLive     = match.status === 'live';
+  const status     = getMatchStatus(match);
+  const isFinished = status === 'finished';
+  const isLive     = status === 'live';
 
   return (
-    <div className={`match-card-new${isNext ? ' match-card-new--next' : ''}`}>
+    <div className={`match-card-new${isNext ? ' match-card-new--next' : ''}${isLive ? ' match-card-new--live' : ''}`}>
       <div className="match-card-header">
         <div className="match-card-datetime">
           <span className="match-card-date">{day} {month}</span>
@@ -359,8 +324,8 @@ function MatchCard({ match, isNext }) {
           <span className="match-card-tz">{tzLabel}</span>
         </div>
         <div className="match-card-status">
-          {isNext     && <span className="tag" style={{ color: 'var(--flag)', borderColor: 'var(--flag)' }}>Próximo</span>}
-          {isLive     && <span className="tag live">En vivo</span>}
+          {isNext     && !isLive && <span className="tag" style={{ color: 'var(--flag)', borderColor: 'var(--flag)' }}>Próximo</span>}
+          {isLive     && <span className="tag live">🔴 En vivo</span>}
           {isFinished && <span className="tag finished">Finalizado</span>}
         </div>
       </div>
@@ -370,7 +335,9 @@ function MatchCard({ match, isNext }) {
         <div className="match-card-score">
           {isFinished && match.home_score !== null
             ? <><span>{match.home_score}</span><span className="match-card-score-sep">—</span><span>{match.away_score}</span></>
-            : <span className="match-card-score-vs">VS</span>}
+            : isLive
+              ? <span className="match-card-score-live">EN VIVO</span>
+              : <span className="match-card-score-vs">VS</span>}
         </div>
         <TeamBadge name={match.away_team} logoUrl={match.away_logo_url} />
       </div>
@@ -386,7 +353,7 @@ function MatchCard({ match, isNext }) {
         <div className="match-card-actions">
           {match.stream_url && (
             <a href={match.stream_url} target="_blank" rel="noopener noreferrer" className="btn btn-flag btn-sm">
-              Ver partido
+              {isLive ? '🔴 Ver en vivo' : 'Ver partido'}
             </a>
           )}
           {match.tickets_url && (

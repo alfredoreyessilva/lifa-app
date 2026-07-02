@@ -1726,3 +1726,22 @@ a { color: inherit; }
     grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   }
 }
+/* Tarjeta en vivo */
+.match-card-new--live {
+  border-color: var(--live);
+  box-shadow: 0 0 0 1px var(--live);
+}
+
+.match-card-score-live {
+  font-family: var(--font-eyebrow);
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  color: var(--live);
+  animation: pulse-live 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+

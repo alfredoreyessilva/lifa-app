@@ -55,19 +55,15 @@ router.delete('/categories/:categoryId', authRequired, categoryOwnerRequired, as
 
 /* ===================== PARTIDOS ===================== */
 
-function validateMatchFields({ home_team, away_team, stream_url, tickets_url, status, home_score, away_score, match_date, timezone }) {
+function validateMatchFields({ home_team, away_team, stream_url, tickets_url, status, home_score, away_score, timezone }) {
   if (home_team && away_team && home_team.trim().toLowerCase() === away_team.trim().toLowerCase()) {
     return 'El equipo local y el equipo visitante no pueden ser el mismo';
   }
   if (stream_url  && !isValidUrl(stream_url))  return 'El link de transmisión no es una dirección web válida';
   if (tickets_url && !isValidUrl(tickets_url)) return 'El link de boletos no es una dirección web válida';
   if (timezone && !isValidTimezone(timezone))  return 'La zona horaria seleccionada no es válida';
-  if (match_date) {
-    const isPast = new Date(match_date) < new Date();
-    if (isPast && status !== 'finished') {
-      return 'Si la fecha del partido ya pasó, el estado debe ser "finished" (Finalizado)';
-    }
-  }
+
+  // Marcador obligatorio solo cuando el estado es finalizado
   if (status === 'finished') {
     if (home_score === null || home_score === undefined || home_score === '') {
       return 'El marcador local es obligatorio cuando el partido está finalizado';
@@ -92,7 +88,7 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
   }
 
   const resolvedStatus = status || 'scheduled';
-  const validationError = validateMatchFields({ home_team, away_team, stream_url, tickets_url, status: resolvedStatus, home_score, away_score, match_date, timezone });
+  const validationError = validateMatchFields({ home_team, away_team, stream_url, tickets_url, status: resolvedStatus, home_score, away_score, timezone });
   if (validationError) return res.status(400).json({ error: validationError });
 
   const result = await db.prepare(`
@@ -103,10 +99,10 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
     home_team.trim().toUpperCase(),
     away_team.trim().toUpperCase(),
     match_date,
-    venue       ? venue.trim().toUpperCase()       : null,
+    venue       ? venue.trim().toUpperCase()      : null,
     stream_url  || null,
     tickets_url || null,
-    week_label  ? week_label.trim().toUpperCase()  : null,
+    week_label  ? week_label.trim().toUpperCase() : null,
     resolvedStatus,
     home_score === '' || home_score === undefined ? null : home_score,
     away_score === '' || away_score === undefined ? null : away_score,
@@ -207,9 +203,6 @@ router.post(
           } catch { /* URL inválida */ }
         }
 
-        const isPast = matchDate ? new Date(matchDate) < new Date() : false;
-        const status = isPast ? 'finished' : 'scheduled';
-
         const result = await db.prepare(`
           INSERT INTO matches (category_id, home_team, away_team, match_date, venue, stream_url, week_label, status, home_score, away_score)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -218,10 +211,12 @@ router.post(
           homeTeam.toUpperCase(),
           awayTeam.toUpperCase(),
           matchDate   || null,
-          venue       ? venue.toUpperCase()      : null,
+          venue       ? venue.toUpperCase()     : null,
           validStream || null,
-          weekLabel   ? weekLabel.toUpperCase()  : null,
-          status, null, null,
+          weekLabel   ? weekLabel.toUpperCase() : null,
+          'scheduled',
+          null,
+          null,
         );
 
         imported.push(result.lastInsertRowid);
