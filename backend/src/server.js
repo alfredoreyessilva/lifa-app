@@ -4,11 +4,12 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import { initSchema } from './config/db.js';
-import authRoutes from './routes/auth.js';
-import leagueRoutes from './routes/leagues.js';
-import manageRoutes from './routes/manage.js';
-import uploadRoutes from './routes/upload.js';
-import adminRoutes from './routes/admin.js';
+import authRoutes          from './routes/auth.js';
+import leagueRoutes        from './routes/leagues.js';
+import manageRoutes        from './routes/manage.js';
+import uploadRoutes        from './routes/upload.js';
+import adminRoutes         from './routes/admin.js';
+import notificationRoutes  from './routes/notifications.js';
 
 const app = express();
 app.use(cors());
@@ -16,11 +17,12 @@ app.use(express.json());
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
-app.use('/api/auth', authRoutes);
-app.use('/api/leagues', leagueRoutes);
-app.use('/api/manage', manageRoutes);
-app.use('/api/upload', uploadRoutes);
-app.use('/api/admin', adminRoutes);
+app.use('/api/auth',          authRoutes);
+app.use('/api/leagues',       leagueRoutes);
+app.use('/api/manage',        manageRoutes);
+app.use('/api/upload',        uploadRoutes);
+app.use('/api/admin',         adminRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);

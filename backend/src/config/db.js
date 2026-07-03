@@ -124,9 +124,22 @@ CREATE TABLE IF NOT EXISTS sponsors (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id SERIAL PRIMARY KEY,
+  endpoint TEXT NOT NULL,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  league_id INTEGER REFERENCES leagues(id) ON DELETE CASCADE,
+  match_id  INTEGER REFERENCES matches(id)  ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(endpoint, league_id, match_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_categories_league ON categories(league_id);
 CREATE INDEX IF NOT EXISTS idx_matches_category ON matches(category_id);
 CREATE INDEX IF NOT EXISTS idx_matches_date ON matches(match_date);
+CREATE INDEX IF NOT EXISTS idx_push_league ON push_subscriptions(league_id);
+CREATE INDEX IF NOT EXISTS idx_push_match  ON push_subscriptions(match_id);
 `;
 
 export async function initSchema() {
@@ -153,7 +166,6 @@ export async function initSchema() {
   await exec(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS season TEXT`).catch(() => {});
   await exec(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS year INTEGER`).catch(() => {});
 
-  // Redes sociales y contacto de la liga
   const newLeagueColumns = [
     'cover_url TEXT',
     'facebook_url TEXT',

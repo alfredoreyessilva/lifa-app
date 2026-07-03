@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import TeamCard from '../components/TeamCard.jsx';
 import Loading from '../components/Loading.jsx';
+import SubscribeButton from '../components/SubscribeButton.jsx';
 
 function initials(name) {
   return (name || '')
@@ -14,7 +15,6 @@ function initials(name) {
     .toUpperCase();
 }
 
-/* ── Tarjeta de información de la liga ── */
 function LeagueInfoPanel({ league, onClose }) {
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape') onClose(); }
@@ -24,20 +24,18 @@ function LeagueInfoPanel({ league, onClose }) {
 
   const teams   = league.teams || [];
   const socials = [
-    { key: 'whatsapp',      label: 'WhatsApp',   href: league.whatsapp?.startsWith('http') ? league.whatsapp : league.whatsapp ? `https://wa.me/${league.whatsapp.replace(/\D/g, '')}` : null },
-    { key: 'facebook_url',  label: 'Facebook',   href: league.facebook_url },
-    { key: 'instagram_url', label: 'Instagram',  href: league.instagram_url },
+    { key: 'whatsapp',      label: 'WhatsApp',    href: league.whatsapp?.startsWith('http') ? league.whatsapp : league.whatsapp ? `https://wa.me/${league.whatsapp.replace(/\D/g, '')}` : null },
+    { key: 'facebook_url',  label: 'Facebook',    href: league.facebook_url },
+    { key: 'instagram_url', label: 'Instagram',   href: league.instagram_url },
     { key: 'twitter_url',   label: 'X / Twitter', href: league.twitter_url },
-    { key: 'youtube_url',   label: 'YouTube',    href: league.youtube_url },
-    { key: 'tiktok_url',    label: 'TikTok',     href: league.tiktok_url },
-    { key: 'website_url',   label: 'Sitio web',  href: league.website_url },
+    { key: 'youtube_url',   label: 'YouTube',     href: league.youtube_url },
+    { key: 'tiktok_url',    label: 'TikTok',      href: league.tiktok_url },
+    { key: 'website_url',   label: 'Sitio web',   href: league.website_url },
   ].filter((s) => s.href);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="league-info-panel" onClick={(e) => e.stopPropagation()}>
-
-        {/* Banner / portada */}
         <div
           className="league-info-banner"
           style={league.cover_url ? {
@@ -49,22 +47,17 @@ function LeagueInfoPanel({ league, onClose }) {
           <button className="team-profile-close" onClick={onClose}>✕</button>
         </div>
 
-        {/* Logo sobre el banner */}
         <div className="league-info-logo-wrap">
           <div className="league-logo" style={{ width: 72, height: 72, fontSize: 22, border: '3px solid var(--field)', flexShrink: 0 }}>
-            {league.logo_url
-              ? <img src={league.logo_url} alt={league.name} />
-              : initials(league.name)}
+            {league.logo_url ? <img src={league.logo_url} alt={league.name} /> : initials(league.name)}
           </div>
         </div>
 
-        {/* Cuerpo */}
         <div className="league-info-body">
           <h3 className="league-info-name">{league.name}</h3>
           {league.state && <p style={{ fontSize: 13, color: 'var(--flag)', margin: '0 0 8px', fontFamily: 'var(--font-eyebrow)', letterSpacing: '0.08em' }}>{league.state}</p>}
           {league.description && <p style={{ fontSize: 13, color: 'var(--ink-dim)', margin: '0 0 16px', lineHeight: 1.5 }}>{league.description}</p>}
 
-          {/* Redes sociales */}
           {socials.length > 0 && (
             <div className="league-info-section">
               <div className="league-info-section-title">Contacto y redes</div>
@@ -78,7 +71,6 @@ function LeagueInfoPanel({ league, onClose }) {
             </div>
           )}
 
-          {/* Equipos */}
           {teams.length > 0 && (
             <div className="league-info-section">
               <div className="league-info-section-title">Equipos registrados</div>
@@ -86,9 +78,7 @@ function LeagueInfoPanel({ league, onClose }) {
                 {teams.map((team) => (
                   <div key={team.id} className="league-info-team">
                     <div className="league-logo" style={{ width: 44, height: 44, fontSize: 13, flexShrink: 0 }}>
-                      {team.logo_url
-                        ? <img src={team.logo_url} alt={team.name} />
-                        : initials(team.name)}
+                      {team.logo_url ? <img src={team.logo_url} alt={team.name} /> : initials(team.name)}
                     </div>
                     <span style={{ fontSize: 11, color: 'var(--ink-dim)', textAlign: 'center', lineHeight: 1.3, maxWidth: 60 }}>{team.name}</span>
                   </div>
@@ -106,16 +96,15 @@ function LeagueInfoPanel({ league, onClose }) {
   );
 }
 
-/* ── Página principal de la liga ── */
 export default function LeaguePage() {
   const { slug } = useParams();
-  const [league, setLeague]           = useState(null);
-  const [teams,  setTeams]            = useState(null);
-  const [error,  setError]            = useState('');
-  const [tab,    setTab]              = useState('categorias');
-  const [copied, setCopied]           = useState(false);
+  const [league, setLeague]               = useState(null);
+  const [teams,  setTeams]                = useState(null);
+  const [error,  setError]                = useState('');
+  const [tab,    setTab]                  = useState('categorias');
+  const [copied, setCopied]               = useState(false);
   const [showLeagueInfo, setShowLeagueInfo] = useState(false);
-  const [selectedTeam, setSelectedTeam]     = useState(null);
+  const [selectedTeam, setSelectedTeam]   = useState(null);
   const navigate = useNavigate();
 
   function copyLink() {
@@ -146,7 +135,6 @@ export default function LeaguePage() {
 
   if (!league) return <div className="container"><Loading /></div>;
 
-  // Liga con equipos incluidos para la tarjeta
   const leagueWithTeams = { ...league, teams: teams || [] };
 
   return (
@@ -154,7 +142,6 @@ export default function LeaguePage() {
       <div className="crumb"><Link to="/">Inicio</Link> / {league.name}</div>
 
       <section className="hero" style={{ paddingTop: 40, paddingBottom: 24 }}>
-        {/* Logo clickeable */}
         <button
           className="league-logo-btn"
           onClick={() => setShowLeagueInfo(true)}
@@ -168,9 +155,13 @@ export default function LeaguePage() {
 
         <h1 style={{ fontSize: 'clamp(32px, 6vw, 56px)' }}>{league.name}</h1>
         {league.description && <p>{league.description}</p>}
-        <button className="btn btn-outline btn-sm" onClick={copyLink} style={{ marginTop: 8 }}>
-          {copied ? '✓ Link copiado' : 'Compartir esta liga'}
-        </button>
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginTop: 12 }}>
+          <button className="btn btn-outline btn-sm" onClick={copyLink}>
+            {copied ? '✓ Link copiado' : 'Compartir esta liga'}
+          </button>
+          <SubscribeButton leagueId={league.id} label="Notificarme de partidos" />
+        </div>
       </section>
 
       <div className="tab-bar">
@@ -221,14 +212,18 @@ export default function LeaguePage() {
           ) : (
             <div className="team-grid">
               {teams.map((team) => (
-                <TeamCard key={team.id} team={team} isSelected={selectedTeam?.id === team.id} onClick={() => setSelectedTeam((prev) => prev?.id === team.id ? null : team)} />
+                <TeamCard
+                  key={team.id}
+                  team={team}
+                  isSelected={selectedTeam?.id === team.id}
+                  onClick={() => setSelectedTeam((prev) => prev?.id === team.id ? null : team)}
+                />
               ))}
             </div>
           )}
         </>
       )}
 
-      {/* Tarjeta de información de la liga */}
       {showLeagueInfo && (
         <LeagueInfoPanel league={leagueWithTeams} onClose={() => setShowLeagueInfo(false)} />
       )}

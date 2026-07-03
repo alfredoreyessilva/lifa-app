@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import Loading from '../components/Loading.jsx';
 import { getMatchStatus } from '../utils/matchStatus.js';
+import SubscribeButton from '../components/SubscribeButton.jsx';
 
 const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 const DEFAULT_TZ = 'America/Mexico_City';
@@ -46,8 +47,8 @@ const TZ_LABELS = {
 };
 
 function getMatchParts(isoString, tz) {
-  const zone = tz || DEFAULT_TZ;
-  const date = new Date(isoString);
+  const zone       = tz || DEFAULT_TZ;
+  const date       = new Date(isoString);
   const dayStr     = date.toLocaleString('es-MX', { timeZone: zone, day: 'numeric' });
   const monthIndex = Number(date.toLocaleString('en-US', { timeZone: zone, month: 'numeric' })) - 1;
   const time       = date.toLocaleTimeString('es-MX', { timeZone: zone, hour: 'numeric', minute: '2-digit' });
@@ -83,7 +84,7 @@ function getJornadas(matches) {
 }
 
 function getEquipos(matches) {
-  const seen = new Set();
+  const seen    = new Set();
   const equipos = [];
   for (const m of matches) {
     for (const { name, logo } of [
@@ -107,8 +108,8 @@ function getSedes(matches) {
     .sort((a, b) => a.localeCompare(b));
 }
 
-const VIEWS        = ['completo', 'jornada', 'equipo', 'sede'];
-const VIEW_LABELS  = { completo: 'Calendario completo', jornada: 'Jornada', equipo: 'Equipo', sede: 'Sede' };
+const VIEWS       = ['completo', 'jornada', 'equipo', 'sede'];
+const VIEW_LABELS = { completo: 'Calendario completo', jornada: 'Jornada', equipo: 'Equipo', sede: 'Sede' };
 
 export default function CalendarPage() {
   const { categoryId } = useParams();
@@ -123,7 +124,6 @@ export default function CalendarPage() {
     api.getMatches(categoryId).then(setData).catch((e) => setError(e.message));
   }, [categoryId]);
 
-  // Actualiza "now" cada 30 segundos para que los estados cambien en tiempo real
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(interval);
@@ -156,13 +156,9 @@ export default function CalendarPage() {
   const nextMatch = matches.find(m => getMatchStatus(m) === 'scheduled');
 
   let filteredMatches = matches;
-  if (view === 'jornada' && selected) {
-    filteredMatches = matches.filter((m) => m.week_label === selected);
-  } else if (view === 'equipo' && selected) {
-    filteredMatches = matches.filter((m) => m.home_team === selected || m.away_team === selected);
-  } else if (view === 'sede' && selected) {
-    filteredMatches = matches.filter((m) => m.venue === selected);
-  }
+  if (view === 'jornada' && selected) filteredMatches = matches.filter((m) => m.week_label === selected);
+  else if (view === 'equipo' && selected) filteredMatches = matches.filter((m) => m.home_team === selected || m.away_team === selected);
+  else if (view === 'sede'   && selected) filteredMatches = matches.filter((m) => m.venue === selected);
 
   const jornadas = getJornadas(matches);
   const equipos  = getEquipos(matches);
@@ -177,11 +173,7 @@ export default function CalendarPage() {
         <div className="calendar-view-bar">
           <span className="calendar-view-label">Ver por:</span>
           {VIEWS.map((v) => (
-            <button
-              key={v}
-              className={`calendar-view-btn${view === v ? ' active' : ''}`}
-              onClick={() => changeView(v)}
-            >
+            <button key={v} className={`calendar-view-btn${view === v ? ' active' : ''}`} onClick={() => changeView(v)}>
               {VIEW_LABELS[v]}
             </button>
           ))}
@@ -202,24 +194,22 @@ export default function CalendarPage() {
         </div>
       ) : (
         <>
-          {view === 'completo' && (
-            <MatchGrid matches={matches} nextMatch={nextMatch} now={now} />
-          )}
+          {view === 'completo' && <MatchGrid matches={matches} nextMatch={nextMatch} now={now} />}
 
           {view === 'jornada' && !selected && (
             <div className="filter-grid">
-              {jornadas.length === 0 ? (
-                <div className="empty-state"><p>Ningún partido tiene jornada asignada.</p></div>
-              ) : jornadas.map((j) => {
-                const count = matches.filter((m) => m.week_label === j.key).length;
-                return (
-                  <button key={j.key} className="filter-card" onClick={() => setSelected(j.key)}>
-                    <div className="filter-card-num">{j.key.replace(/\D/g, '') || j.key}</div>
-                    <div className="filter-card-label">{j.label}</div>
-                    <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
-                  </button>
-                );
-              })}
+              {jornadas.length === 0
+                ? <div className="empty-state"><p>Ningún partido tiene jornada asignada.</p></div>
+                : jornadas.map((j) => {
+                    const count = matches.filter((m) => m.week_label === j.key).length;
+                    return (
+                      <button key={j.key} className="filter-card" onClick={() => setSelected(j.key)}>
+                        <div className="filter-card-num">{j.key.replace(/\D/g, '') || j.key}</div>
+                        <div className="filter-card-label">{j.label}</div>
+                        <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
+                      </button>
+                    );
+                  })}
             </div>
           )}
           {view === 'jornada' && selected && (
@@ -232,20 +222,20 @@ export default function CalendarPage() {
 
           {view === 'equipo' && !selected && (
             <div className="filter-grid">
-              {equipos.length === 0 ? (
-                <div className="empty-state"><p>No hay equipos en este calendario.</p></div>
-              ) : equipos.map((eq) => {
-                const count = matches.filter((m) => m.home_team === eq.name || m.away_team === eq.name).length;
-                return (
-                  <button key={eq.name} className="filter-card" onClick={() => setSelected(eq.name)}>
-                    <div className="filter-card-logo">
-                      {eq.logo ? <img src={eq.logo} alt={eq.name} /> : <span>{initials(eq.name)}</span>}
-                    </div>
-                    <div className="filter-card-label">{eq.name}</div>
-                    <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
-                  </button>
-                );
-              })}
+              {equipos.length === 0
+                ? <div className="empty-state"><p>No hay equipos en este calendario.</p></div>
+                : equipos.map((eq) => {
+                    const count = matches.filter((m) => m.home_team === eq.name || m.away_team === eq.name).length;
+                    return (
+                      <button key={eq.name} className="filter-card" onClick={() => setSelected(eq.name)}>
+                        <div className="filter-card-logo">
+                          {eq.logo ? <img src={eq.logo} alt={eq.name} /> : <span>{initials(eq.name)}</span>}
+                        </div>
+                        <div className="filter-card-label">{eq.name}</div>
+                        <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
+                      </button>
+                    );
+                  })}
             </div>
           )}
           {view === 'equipo' && selected && (
@@ -258,18 +248,18 @@ export default function CalendarPage() {
 
           {view === 'sede' && !selected && (
             <div className="filter-grid">
-              {sedes.length === 0 ? (
-                <div className="empty-state"><p>Ningún partido tiene sede asignada.</p></div>
-              ) : sedes.map((sede) => {
-                const count = matches.filter((m) => m.venue === sede).length;
-                return (
-                  <button key={sede} className="filter-card" onClick={() => setSelected(sede)}>
-                    <div className="filter-card-icon">📍</div>
-                    <div className="filter-card-label">{sede}</div>
-                    <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
-                  </button>
-                );
-              })}
+              {sedes.length === 0
+                ? <div className="empty-state"><p>Ningún partido tiene sede asignada.</p></div>
+                : sedes.map((sede) => {
+                    const count = matches.filter((m) => m.venue === sede).length;
+                    return (
+                      <button key={sede} className="filter-card" onClick={() => setSelected(sede)}>
+                        <div className="filter-card-icon">📍</div>
+                        <div className="filter-card-label">{sede}</div>
+                        <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
+                      </button>
+                    );
+                  })}
             </div>
           )}
           {view === 'sede' && selected && (
@@ -286,14 +276,10 @@ export default function CalendarPage() {
 }
 
 function MatchGrid({ matches, nextMatch, now }) {
-  if (matches.length === 0) {
-    return <div className="empty-state"><p>No hay partidos en esta selección.</p></div>;
-  }
+  if (matches.length === 0) return <div className="empty-state"><p>No hay partidos en esta selección.</p></div>;
   return (
     <div className="match-grid">
-      {matches.map((m) => (
-        <MatchCard key={m.id} match={m} isNext={nextMatch?.id === m.id} now={now} />
-      ))}
+      {matches.map((m) => <MatchCard key={m.id} match={m} isNext={nextMatch?.id === m.id} now={now} />)}
     </div>
   );
 }
@@ -314,6 +300,7 @@ function MatchCard({ match, isNext, now }) {
   const status     = getMatchStatus(match);
   const isFinished = status === 'finished';
   const isLive     = status === 'live';
+  const isScheduled = status === 'scheduled';
 
   return (
     <div className={`match-card-new${isNext ? ' match-card-new--next' : ''}${isLive ? ' match-card-new--live' : ''}`}>
@@ -324,7 +311,7 @@ function MatchCard({ match, isNext, now }) {
           <span className="match-card-tz">{tzLabel}</span>
         </div>
         <div className="match-card-status">
-          {isNext     && !isLive && <span className="tag" style={{ color: 'var(--flag)', borderColor: 'var(--flag)' }}>Próximo</span>}
+          {isNext && !isLive && <span className="tag" style={{ color: 'var(--flag)', borderColor: 'var(--flag)' }}>Próximo</span>}
           {isLive     && <span className="tag live">🔴 En vivo</span>}
           {isFinished && <span className="tag finished">Finalizado</span>}
         </div>
@@ -361,6 +348,13 @@ function MatchCard({ match, isNext, now }) {
               Comprar boletos
             </a>
           )}
+        </div>
+      )}
+
+      {/* Botón de notificación solo para partidos programados */}
+      {isScheduled && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
+          <SubscribeButton matchId={match.id} label="Avisarme de este partido" />
         </div>
       )}
     </div>
