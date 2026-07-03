@@ -150,7 +150,7 @@ router.post('/trigger', asyncHandler(async (req, res) => {
     }
   }
 
-  res.json({ ok: true, sent });
+  res.json({ ok: true });
 }));
 
 export default router;
