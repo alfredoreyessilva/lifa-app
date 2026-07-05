@@ -131,8 +131,9 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   auth TEXT NOT NULL,
   league_id INTEGER REFERENCES leagues(id) ON DELETE CASCADE,
   match_id  INTEGER REFERENCES matches(id)  ON DELETE CASCADE,
+  team_name TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(endpoint, league_id, match_id)
+  UNIQUE(endpoint, league_id, match_id, team_name)
 );
 
 CREATE INDEX IF NOT EXISTS idx_categories_league ON categories(league_id);
@@ -179,6 +180,17 @@ export async function initSchema() {
   for (const col of newLeagueColumns) {
     await exec(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS ${col}`).catch(() => {});
   }
+
+  await exec(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS team_name TEXT`).catch(() => {});
+  await exec(`CREATE INDEX IF NOT EXISTS idx_push_team ON push_subscriptions(team_name)`).catch(() => {});
+
+  await exec(`
+    ALTER TABLE push_subscriptions DROP CONSTRAINT IF EXISTS push_subscriptions_endpoint_league_id_match_id_key
+  `).catch(() => {});
+  await exec(`
+    ALTER TABLE push_subscriptions ADD CONSTRAINT push_subscriptions_unique
+    UNIQUE (endpoint, league_id, match_id, team_name)
+  `).catch(() => {});
 }
 
 export default db;

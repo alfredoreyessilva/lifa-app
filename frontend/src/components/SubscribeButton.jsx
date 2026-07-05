@@ -15,21 +15,34 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
 
-async function getCurrentSubscription() {
-  if (!('serviceWorker' in navigator)) return null;
+async function getOrCreateSubscription(vapidKey) {
   const reg = await navigator.serviceWorker.ready;
-  return reg.pushManager.getSubscription();
+  let sub   = await reg.pushManager.getSubscription();
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly:      true,
+      applicationServerKey: urlBase64ToUint8Array(vapidKey),
+    });
+  }
+  return sub;
 }
 
-async function subscribe(leagueId, matchId) {
-  const reg     = await navigator.serviceWorker.ready;
-  const vapidKey = await getVapidKey();
-
-  const subscription = await reg.pushManager.subscribe({
-    userVisibleOnly:      true,
-    applicationServerKey: urlBase64ToUint8Array(vapidKey),
+async function checkSubscription(endpoint, leagueId, matchId, teamName) {
+  const res = await fetch(`${BASE}/notifications/check`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      endpoint,
+      league_id: leagueId || null,
+      match_id:  matchId  || null,
+      team_name: teamName || null,
+    }),
   });
+  const data = await res.json();
+  return data.subscribed;
+}
 
+async function saveSubscription(subscription, leagueId, matchId, teamName) {
   await fetch(`${BASE}/notifications/subscribe`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -37,13 +50,12 @@ async function subscribe(leagueId, matchId) {
       subscription,
       league_id: leagueId || null,
       match_id:  matchId  || null,
+      team_name: teamName || null,
     }),
   });
-
-  return subscription;
 }
 
-async function unsubscribe(subscription, leagueId, matchId) {
+async function removeSubscription(subscription, leagueId, matchId, teamName) {
   await fetch(`${BASE}/notifications/unsubscribe`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -51,14 +63,18 @@ async function unsubscribe(subscription, leagueId, matchId) {
       subscription: { endpoint: subscription.endpoint },
       league_id: leagueId || null,
       match_id:  matchId  || null,
+      team_name: teamName || null,
     }),
   });
 }
 
-// leagueId: suscribirse a toda la liga
-// matchId:  suscribirse a un partido específico
-export default function SubscribeButton({ leagueId, matchId, label = 'Notificarme' }) {
-  const [status,  setStatus]  = useState('loading'); // loading | unsupported | subscribed | unsubscribed
+// Props:
+// leagueId  → suscripción a toda la liga
+// matchId   → suscripción a un partido específico
+// teamName  → suscripción a un equipo específico
+// label     → texto del botón cuando no está suscrito
+export default function SubscribeButton({ leagueId, matchId, teamName, label = 'Notificarme' }) {
+  const [status,  setStatus]  = useState('loading');
   const [working, setWorking] = useState(false);
 
   useEffect(() => {
@@ -66,13 +82,20 @@ export default function SubscribeButton({ leagueId, matchId, label = 'Notificarm
       setStatus('unsupported');
       return;
     }
-    // Registrar el service worker si no está registrado
+
     navigator.serviceWorker.register('/sw.js').catch(() => {});
 
-    getCurrentSubscription().then((sub) => {
-      setStatus(sub ? 'subscribed' : 'unsubscribed');
-    });
-  }, []);
+    navigator.serviceWorker.ready.then(async (reg) => {
+      const sub = await reg.pushManager.getSubscription();
+      if (!sub) { setStatus('unsubscribed'); return; }
+
+      // Verificar si está suscrito específicamente a este liga/partido/equipo
+      const isSubscribed = await checkSubscription(
+        sub.endpoint, leagueId, matchId, teamName
+      );
+      setStatus(isSubscribed ? 'subscribed' : 'unsubscribed');
+    }).catch(() => setStatus('unsubscribed'));
+  }, [leagueId, matchId, teamName]);
 
   async function toggle() {
     setWorking(true);
@@ -80,15 +103,18 @@ export default function SubscribeButton({ leagueId, matchId, label = 'Notificarm
       if (status === 'unsubscribed') {
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
-          alert('Necesitas permitir las notificaciones en tu navegador para activar esta función.');
+          alert('Necesitas permitir las notificaciones en tu navegador.');
           setWorking(false);
           return;
         }
-        await subscribe(leagueId, matchId);
+        const vapidKey = await getVapidKey();
+        const sub      = await getOrCreateSubscription(vapidKey);
+        await saveSubscription(sub, leagueId, matchId, teamName);
         setStatus('subscribed');
       } else {
-        const sub = await getCurrentSubscription();
-        if (sub) await unsubscribe(sub, leagueId, matchId);
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) await removeSubscription(sub, leagueId, matchId, teamName);
         setStatus('unsubscribed');
       }
     } catch (err) {
@@ -109,7 +135,7 @@ export default function SubscribeButton({ leagueId, matchId, label = 'Notificarm
       className={`btn btn-sm ${isSubscribed ? 'btn-flag' : 'btn-outline'}`}
       onClick={toggle}
       disabled={working}
-      title={isSubscribed ? 'Cancelar notificaciones' : 'Activar notificaciones'}
+      title={isSubscribed ? 'Cancelar notificaciones' : label}
     >
       {working
         ? '…'

@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import SubscribeButton from './SubscribeButton.jsx';
 
 export default function TeamInfoPanel({ team, onClose }) {
   useEffect(() => {
@@ -16,7 +17,7 @@ export default function TeamInfoPanel({ team, onClose }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="team-profile-modal" onClick={(e) => e.stopPropagation()}>
 
-        {/* BANNER — muestra imagen de portada si existe, de lo contrario el degradado */}
+        {/* BANNER */}
         <div
           className="team-profile-banner"
           style={team.cover_url ? {
@@ -85,6 +86,14 @@ export default function TeamInfoPanel({ team, onClose }) {
               Este equipo no ha agregado información de contacto.
             </p>
           )}
+
+          {/* Botón de notificaciones por equipo */}
+          <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>
+            <SubscribeButton
+              teamName={team.name}
+              label={`Notificarme de partidos de ${team.name}`}
+            />
+          </div>
         </div>
       </div>
     </div>
