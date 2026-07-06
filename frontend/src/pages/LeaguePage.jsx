@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import TeamCard from '../components/TeamCard.jsx';
+import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
 import Loading from '../components/Loading.jsx';
 import SubscribeButton from '../components/SubscribeButton.jsx';
 
@@ -98,13 +99,13 @@ function LeagueInfoPanel({ league, onClose }) {
 
 export default function LeaguePage() {
   const { slug } = useParams();
-  const [league, setLeague]               = useState(null);
-  const [teams,  setTeams]                = useState(null);
-  const [error,  setError]                = useState('');
-  const [tab,    setTab]                  = useState('categorias');
-  const [copied, setCopied]               = useState(false);
+  const [league, setLeague]                 = useState(null);
+  const [teams,  setTeams]                  = useState(null);
+  const [error,  setError]                  = useState('');
+  const [tab,    setTab]                    = useState('categorias');
+  const [copied, setCopied]                 = useState(false);
   const [showLeagueInfo, setShowLeagueInfo] = useState(false);
-  const [selectedTeam, setSelectedTeam]   = useState(null);
+  const [selectedTeam,   setSelectedTeam]   = useState(null);
   const navigate = useNavigate();
 
   function copyLink() {
@@ -112,6 +113,10 @@ export default function LeaguePage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  }
+
+  function handleTeamClick(team) {
+    setSelectedTeam((prev) => (prev?.id === team.id ? null : team));
   }
 
   useEffect(() => {
@@ -210,16 +215,24 @@ export default function LeaguePage() {
               <p>Esta liga aún no ha publicado sus equipos.</p>
             </div>
           ) : (
-            <div className="team-grid">
-              {teams.map((team) => (
-                <TeamCard
-                  key={team.id}
-                  team={team}
-                  isSelected={selectedTeam?.id === team.id}
-                  onClick={() => setSelectedTeam((prev) => prev?.id === team.id ? null : team)}
+            <>
+              <div className="team-grid">
+                {teams.map((team) => (
+                  <TeamCard
+                    key={team.id}
+                    team={team}
+                    isSelected={selectedTeam?.id === team.id}
+                    onClick={() => handleTeamClick(team)}
+                  />
+                ))}
+              </div>
+              {selectedTeam && (
+                <TeamInfoPanel
+                  team={selectedTeam}
+                  onClose={() => setSelectedTeam(null)}
                 />
-              ))}
-            </div>
+              )}
+            </>
           )}
         </>
       )}
