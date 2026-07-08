@@ -27,6 +27,7 @@ export const api = {
   getLeagues: () => request('/leagues'),
   getLeague: (slug) => request(`/leagues/${slug}`),
   getMatches: (categoryId) => request(`/leagues/categories/${categoryId}/matches`),
+  getMatch: (matchId) => request(`/leagues/matches/${matchId}`),
 
   // Crear / editar liga
   createLeague: (payload, token) => request('/leagues', { method: 'POST', body: payload, token }),

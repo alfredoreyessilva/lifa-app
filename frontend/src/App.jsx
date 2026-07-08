@@ -4,6 +4,7 @@ import SponsorBar from './components/SponsorBar.jsx';
 import Home from './pages/Home.jsx';
 import LeaguePage from './pages/LeaguePage.jsx';
 import CalendarPage from './pages/CalendarPage.jsx';
+import MatchPage from './pages/MatchPage.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import RegisterLeague from './pages/RegisterLeague.jsx';
@@ -23,6 +24,7 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/ligas/:slug" element={<LeaguePage />} />
             <Route path="/categorias/:categoryId/calendario" element={<CalendarPage />} />
+            <Route path="/partidos/:matchId" element={<MatchPage />} />
             <Route path="/iniciar-sesion" element={<Login />} />
             <Route path="/crear-cuenta" element={<Register />} />
             <Route

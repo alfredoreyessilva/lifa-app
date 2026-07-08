@@ -25,6 +25,37 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json(leagues);
 }));
 
+// Detalle de un solo partido (usado para el link "compartir partido").
+// Se registra con path literal "matches" en el primer segmento, así que
+// nunca choca con la ruta "/:slug" (que es de un solo segmento) ni con
+// "/:slug/teams" (cuyo segundo segmento siempre es la palabra "teams").
+router.get('/matches/:matchId', asyncHandler(async (req, res) => {
+  const match = await db.prepare(`
+    SELECT
+      m.*,
+      c.name    AS category_name,
+      c.season  AS season,
+      c.year    AS year,
+      l.id      AS league_id,
+      l.name    AS league_name,
+      l.slug    AS league_slug,
+      l.logo_url AS league_logo_url,
+      l.timezone AS league_timezone,
+      th.logo_url AS home_logo_url,
+      ta.logo_url AS away_logo_url
+    FROM matches m
+    LEFT JOIN categories c ON c.id = m.category_id
+    LEFT JOIN leagues l    ON l.id = c.league_id
+    LEFT JOIN teams th     ON th.league_id = l.id AND UPPER(th.name) = UPPER(m.home_team)
+    LEFT JOIN teams ta     ON ta.league_id = l.id AND UPPER(ta.name) = UPPER(m.away_team)
+    WHERE m.id = ?
+  `).get(req.params.matchId);
+
+  if (!match) return res.status(404).json({ error: 'Partido no encontrado' });
+
+  res.json(match);
+}));
+
 router.get('/:slug', asyncHandler(async (req, res) => {
   const league = await db.prepare(`
     SELECT * FROM leagues WHERE slug = ? AND status = 'approved'

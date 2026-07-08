@@ -3,68 +3,9 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import Loading from '../components/Loading.jsx';
 import { getMatchStatus } from '../utils/matchStatus.js';
+import { getMatchParts, initials } from '../utils/matchDisplay.js';
+import { shareLink } from '../utils/share.js';
 import SubscribeButton from '../components/SubscribeButton.jsx';
-
-const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
-const DEFAULT_TZ = 'America/Mexico_City';
-
-const TZ_LABELS = {
-  'America/Tijuana':                'Hora Pacífico MX',
-  'America/Hermosillo':             'Hora Sonora',
-  'America/Mazatlan':               'Hora Pacífico MX',
-  'America/Chihuahua':              'Hora Chihuahua',
-  'America/Mexico_City':            'Hora Centro MX',
-  'America/Merida':                 'Hora Centro MX',
-  'America/Cancun':                 'Hora Cancún',
-  'America/Los_Angeles':            'Hora Pacífico EE.UU.',
-  'America/Denver':                 'Hora Montaña EE.UU.',
-  'America/Chicago':                'Hora Centro EE.UU.',
-  'America/New_York':               'Hora Este EE.UU.',
-  'America/Vancouver':              'Hora Pacífico CA',
-  'America/Edmonton':               'Hora Montaña CA',
-  'America/Winnipeg':               'Hora Centro CA',
-  'America/Toronto':                'Hora Este CA',
-  'America/Halifax':                'Hora Atlántico CA',
-  'America/Guatemala':              'Hora Guatemala',
-  'America/Belize':                 'Hora Belice',
-  'America/Tegucigalpa':            'Hora Honduras',
-  'America/Managua':                'Hora Nicaragua',
-  'America/Costa_Rica':             'Hora Costa Rica',
-  'America/Panama':                 'Hora Panamá',
-  'America/Havana':                 'Hora Cuba',
-  'America/Santo_Domingo':          'Hora R. Dominicana',
-  'America/Puerto_Rico':            'Hora Puerto Rico',
-  'America/Bogota':                 'Hora Colombia',
-  'America/Lima':                   'Hora Perú',
-  'America/Caracas':                'Hora Venezuela',
-  'America/Guayaquil':              'Hora Ecuador',
-  'America/La_Paz':                 'Hora Bolivia',
-  'America/Santiago':               'Hora Chile',
-  'America/Argentina/Buenos_Aires': 'Hora Argentina',
-  'America/Montevideo':             'Hora Uruguay',
-  'America/Asuncion':               'Hora Paraguay',
-  'America/Sao_Paulo':              'Hora Brasil',
-};
-
-function getMatchParts(isoString, tz) {
-  const zone       = tz || DEFAULT_TZ;
-  const date       = new Date(isoString);
-  const dayStr     = date.toLocaleString('es-MX', { timeZone: zone, day: 'numeric' });
-  const monthIndex = Number(date.toLocaleString('en-US', { timeZone: zone, month: 'numeric' })) - 1;
-  const time       = date.toLocaleTimeString('es-MX', { timeZone: zone, hour: 'numeric', minute: '2-digit' });
-  const tzLabel    = TZ_LABELS[zone] || zone;
-  return { day: dayStr, month: MESES[monthIndex], time, tzLabel };
-}
-
-function initials(name) {
-  return (name || '')
-    .split(' ')
-    .filter((w) => w.length > 2 || /^[A-ZÁÉÍÓÚÑ]/.test(w))
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase();
-}
 
 function getJornadas(matches) {
   const seen = new Set();
@@ -297,10 +238,24 @@ function TeamBadge({ name, logoUrl }) {
 
 function MatchCard({ match, isNext, now }) {
   const { day, month, time, tzLabel } = getMatchParts(match.match_date, match.timezone);
-  const status     = getMatchStatus(match);
-  const isFinished = status === 'finished';
-  const isLive     = status === 'live';
+  const status      = getMatchStatus(match);
+  const isFinished  = status === 'finished';
+  const isLive      = status === 'live';
   const isScheduled = status === 'scheduled';
+  const [shareState, setShareState] = useState('idle');
+
+  async function handleShare() {
+    const url = `${window.location.origin}/partidos/${match.id}`;
+    const result = await shareLink(
+      url,
+      `${match.home_team} vs ${match.away_team}`,
+      'Mira este partido en LIFA'
+    );
+    if (result === 'copied') {
+      setShareState('copied');
+      setTimeout(() => setShareState('idle'), 2000);
+    }
+  }
 
   return (
     <div className={`match-card-new${isNext ? ' match-card-new--next' : ''}${isLive ? ' match-card-new--live' : ''}`}>
@@ -336,20 +291,21 @@ function MatchCard({ match, isNext, now }) {
         </div>
       )}
 
-      {(match.stream_url || match.tickets_url) && (
-        <div className="match-card-actions">
-          {match.stream_url && (
-            <a href={match.stream_url} target="_blank" rel="noopener noreferrer" className="btn btn-flag btn-sm">
-              {isLive ? '🔴 Ver en vivo' : 'Ver partido'}
-            </a>
-          )}
-          {match.tickets_url && (
-            <a href={match.tickets_url} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
-              Comprar boletos
-            </a>
-          )}
-        </div>
-      )}
+      <div className="match-card-actions">
+        {match.stream_url && (
+          <a href={match.stream_url} target="_blank" rel="noopener noreferrer" className="btn btn-flag btn-sm">
+            {isLive ? '🔴 Ver en vivo' : 'Ver partido'}
+          </a>
+        )}
+        {match.tickets_url && (
+          <a href={match.tickets_url} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
+            Comprar boletos
+          </a>
+        )}
+        <button className="btn btn-outline btn-sm" type="button" onClick={handleShare}>
+          {shareState === 'copied' ? '✓ Link copiado' : '🔗 Compartir'}
+        </button>
+      </div>
 
       {/* Botón de notificación solo para partidos programados */}
       {isScheduled && (
