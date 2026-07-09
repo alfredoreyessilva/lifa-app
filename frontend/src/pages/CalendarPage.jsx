@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import Loading from '../components/Loading.jsx';
 import { getMatchStatus } from '../utils/matchStatus.js';
@@ -49,16 +49,37 @@ function getSedes(matches) {
     .sort((a, b) => a.localeCompare(b));
 }
 
+// Texto del botón "Compartir" según la vista y selección actuales.
+// Devuelve null cuando el botón debe estar oculto.
+function getShareLabel(view, selected) {
+  if (view === 'completo') return 'Compartir calendario completo';
+  if (!selected) return null; // Oculto: estás viendo la lista de opciones (equipos/sedes/jornadas) sin elegir ninguna
+  if (view === 'jornada') {
+    const label = /^\d+$/.test(selected) ? `Jornada ${selected}` : selected;
+    return `Compartir calendario de la ${label}`;
+  }
+  if (view === 'equipo') return `Compartir calendario de ${selected}`;
+  if (view === 'sede')   return `Compartir calendario de ${selected}`;
+  return null;
+}
+
 const VIEWS       = ['completo', 'jornada', 'equipo', 'sede'];
 const VIEW_LABELS = { completo: 'Calendario completo', jornada: 'Jornada', equipo: 'Equipo', sede: 'Sede' };
 
 export default function CalendarPage() {
   const { categoryId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // La vista y la selección se inicializan desde la URL, para que un link
+  // compartido abra directamente en el mismo filtro que tenía quien lo compartió.
+  const initialView = VIEWS.includes(searchParams.get('view')) ? searchParams.get('view') : 'completo';
+  const initialSel  = searchParams.get('sel') || null;
+
   const [data, setData]         = useState(null);
   const [error, setError]       = useState('');
   const [copied, setCopied]     = useState(false);
-  const [view, setView]         = useState('completo');
-  const [selected, setSelected] = useState(null);
+  const [view, setView]         = useState(initialView);
+  const [selected, setSelected] = useState(initialSel);
   const [now, setNow]           = useState(Date.now());
 
   useEffect(() => {
@@ -70,13 +91,33 @@ export default function CalendarPage() {
     return () => clearInterval(interval);
   }, []);
 
-  function changeView(v) { setView(v); setSelected(null); }
+  // Mantiene la URL sincronizada con el filtro activo (vista + selección),
+  // así el link que se comparte siempre refleja lo que se está viendo.
+  useEffect(() => {
+    const params = {};
+    if (view !== 'completo') params.view = view;
+    if (selected) params.sel = selected;
+    setSearchParams(params, { replace: true });
+  }, [view, selected]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function copyLink() {
-    navigator.clipboard.writeText(window.location.href).then(() => {
+  function changeView(v) { setView(v); setSelected(null); setCopied(false); }
+
+  function selectFilter(value) { setSelected(value); setCopied(false); }
+
+  function clearSelection() { setSelected(null); setCopied(false); }
+
+  // Usa la misma ventanita nativa de compartir (WhatsApp, Mensajes, etc.)
+  // que ya usa el botón de compartir partido, en vez de solo copiar el link.
+  async function handleShareCalendar(shareLabel) {
+    const result = await shareLink(
+      window.location.href,
+      shareLabel,
+      `Mira el calendario de ${category.name} en LIFA`
+    );
+    if (result === 'copied') {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    });
+    }
   }
 
   if (error) {
@@ -104,6 +145,7 @@ export default function CalendarPage() {
   const jornadas = getJornadas(matches);
   const equipos  = getEquipos(matches);
   const sedes    = getSedes(matches);
+  const shareLabel = getShareLabel(view, selected);
 
   return (
     <div className="container">
@@ -123,9 +165,11 @@ export default function CalendarPage() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <span className="count">{matches.length} partidos</span>
-        <button className="btn btn-outline btn-sm" onClick={copyLink}>
-          {copied ? '✓ Copiado' : 'Compartir'}
-        </button>
+        {shareLabel && (
+          <button className="btn btn-outline btn-sm" onClick={() => handleShareCalendar(shareLabel)}>
+            {copied ? '✓ Link copiado' : shareLabel}
+          </button>
+        )}
       </div>
 
       {matches.length === 0 ? (
@@ -144,7 +188,7 @@ export default function CalendarPage() {
                 : jornadas.map((j) => {
                     const count = matches.filter((m) => m.week_label === j.key).length;
                     return (
-                      <button key={j.key} className="filter-card" onClick={() => setSelected(j.key)}>
+                      <button key={j.key} className="filter-card" onClick={() => selectFilter(j.key)}>
                         <div className="filter-card-num">{j.key.replace(/\D/g, '') || j.key}</div>
                         <div className="filter-card-label">{j.label}</div>
                         <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
@@ -155,7 +199,7 @@ export default function CalendarPage() {
           )}
           {view === 'jornada' && selected && (
             <>
-              <button className="filter-back" onClick={() => setSelected(null)}>← Todas las jornadas</button>
+              <button className="filter-back" onClick={clearSelection}>← Todas las jornadas</button>
               <div className="filter-selected-title">{/^\d+$/.test(selected) ? `Jornada ${selected}` : selected}</div>
               <MatchGrid matches={filteredMatches} nextMatch={nextMatch} now={now} />
             </>
@@ -168,7 +212,7 @@ export default function CalendarPage() {
                 : equipos.map((eq) => {
                     const count = matches.filter((m) => m.home_team === eq.name || m.away_team === eq.name).length;
                     return (
-                      <button key={eq.name} className="filter-card" onClick={() => setSelected(eq.name)}>
+                      <button key={eq.name} className="filter-card" onClick={() => selectFilter(eq.name)}>
                         <div className="filter-card-logo">
                           {eq.logo ? <img src={eq.logo} alt={eq.name} /> : <span>{initials(eq.name)}</span>}
                         </div>
@@ -181,7 +225,7 @@ export default function CalendarPage() {
           )}
           {view === 'equipo' && selected && (
             <>
-              <button className="filter-back" onClick={() => setSelected(null)}>← Todos los equipos</button>
+              <button className="filter-back" onClick={clearSelection}>← Todos los equipos</button>
               <div className="filter-selected-title">{selected}</div>
               <MatchGrid matches={filteredMatches} nextMatch={nextMatch} now={now} />
             </>
@@ -194,7 +238,7 @@ export default function CalendarPage() {
                 : sedes.map((sede) => {
                     const count = matches.filter((m) => m.venue === sede).length;
                     return (
-                      <button key={sede} className="filter-card" onClick={() => setSelected(sede)}>
+                      <button key={sede} className="filter-card" onClick={() => selectFilter(sede)}>
                         <div className="filter-card-icon">📍</div>
                         <div className="filter-card-label">{sede}</div>
                         <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
@@ -205,7 +249,7 @@ export default function CalendarPage() {
           )}
           {view === 'sede' && selected && (
             <>
-              <button className="filter-back" onClick={() => setSelected(null)}>← Todas las sedes</button>
+              <button className="filter-back" onClick={clearSelection}>← Todas las sedes</button>
               <div className="filter-selected-title">📍 {selected}</div>
               <MatchGrid matches={filteredMatches} nextMatch={nextMatch} now={now} />
             </>
