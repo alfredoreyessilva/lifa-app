@@ -25,39 +25,10 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json(leagues);
 }));
 
-// Vista cross-liga: todos los partidos de todas las ligas aprobadas,
-// de los próximos 7 días, incluyendo los que están en vivo ahora mismo
-// (aunque hayan empezado hasta 3 horas antes, para no perderlos a media transmisión).
-// IMPORTANTE: esta ruta debe registrarse ANTES que "/matches/:matchId",
-// si no, Express interpretaría "upcoming" como si fuera un ID de partido.
-router.get('/matches/upcoming', asyncHandler(async (req, res) => {
-  const matches = await db.prepare(`
-    SELECT
-      m.*,
-      c.name    AS category_name,
-      c.season  AS season,
-      c.year    AS year,
-      l.id      AS league_id,
-      l.name    AS league_name,
-      l.slug    AS league_slug,
-      l.logo_url AS league_logo_url,
-      l.timezone AS league_timezone,
-      th.logo_url AS home_logo_url,
-      ta.logo_url AS away_logo_url
-    FROM matches m
-    JOIN categories c ON c.id = m.category_id
-    JOIN leagues l    ON l.id = c.league_id
-    LEFT JOIN teams th ON th.league_id = l.id AND UPPER(th.name) = UPPER(m.home_team)
-    LEFT JOIN teams ta ON ta.league_id = l.id AND UPPER(ta.name) = UPPER(m.away_team)
-    WHERE l.status = 'approved'
-      AND m.match_date::timestamptz >= (NOW() - INTERVAL '3 hours')
-      AND m.match_date::timestamptz <= (NOW() + INTERVAL '7 days')
-    ORDER BY m.match_date ASC
-  `).all();
-
-  res.json(matches);
-}));
-
+// Detalle de un solo partido (usado para el link "compartir partido").
+// Se registra con path literal "matches" en el primer segmento, así que
+// nunca choca con la ruta "/:slug" (que es de un solo segmento) ni con
+// "/:slug/teams" (cuyo segundo segmento siempre es la palabra "teams").
 router.get('/matches/:matchId', asyncHandler(async (req, res) => {
   const match = await db.prepare(`
     SELECT

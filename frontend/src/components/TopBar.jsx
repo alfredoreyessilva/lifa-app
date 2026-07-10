@@ -7,12 +7,9 @@ export default function TopBar() {
   return (
     <header className="topbar">
       <div className="topbar-inner">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-          <Link to="/" className="brand">
-            🏈 <span>CALENDARIOS DE FOOTBALL AMERICANO MEXICO</span>
-          </Link>
-          <Link to="/partidos" className="btn btn-outline btn-sm">📅 Partidos</Link>
-        </div>
+        <Link to="/" className="brand">
+          🏈 <span>CALENDARIOS DE FOOTBALL AMERICANO MEXICO</span>
+        </Link>
 
         {user ? (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
