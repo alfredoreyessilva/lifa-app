@@ -5,6 +5,7 @@ import Home from './pages/Home.jsx';
 import LeaguePage from './pages/LeaguePage.jsx';
 import CalendarPage from './pages/CalendarPage.jsx';
 import MatchPage from './pages/MatchPage.jsx';
+import UpcomingPage from './pages/UpcomingPage.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import RegisterLeague from './pages/RegisterLeague.jsx';
@@ -22,6 +23,7 @@ export default function App() {
         <main className="app-main">
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/partidos" element={<UpcomingPage />} />
             <Route path="/ligas/:slug" element={<LeaguePage />} />
             <Route path="/categorias/:categoryId/calendario" element={<CalendarPage />} />
             <Route path="/partidos/:matchId" element={<MatchPage />} />

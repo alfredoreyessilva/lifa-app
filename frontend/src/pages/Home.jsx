@@ -3,15 +3,20 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import Loading from '../components/Loading.jsx';
+import CrossLeagueMatchCard from '../components/CrossLeagueMatchCard.jsx';
 
 export default function Home() {
   const [leagues, setLeagues] = useState(null);
   const [error, setError] = useState('');
+  const [upcoming, setUpcoming] = useState(null);
   const { token, leagues: myLeagues } = useAuth();
 
   useEffect(() => {
     api.getLeagues().then(setLeagues).catch((e) => setError(e.message));
+    api.getUpcomingMatches().then(setUpcoming).catch(() => setUpcoming([]));
   }, []);
+
+  const preview = (upcoming || []).slice(0, 4);
 
   return (
     <div className="container">
@@ -33,6 +38,18 @@ export default function Home() {
           )}
         </div>
       </section>
+
+      {preview.length > 0 && (
+        <>
+          <div className="section-head">
+            <h2>Próximos partidos</h2>
+            <Link to="/partidos" className="btn btn-outline btn-sm">Ver todos →</Link>
+          </div>
+          <div className="match-grid">
+            {preview.map((m) => <CrossLeagueMatchCard key={m.id} match={m} />)}
+          </div>
+        </>
+      )}
 
       <div className="section-head" id="ligas">
         <h2>Ligas</h2>
