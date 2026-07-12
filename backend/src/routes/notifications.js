@@ -21,21 +21,38 @@ function ensureVapid() {
   vapidConfigured = true;
 }
 
+// Envía las notificaciones en paralelo (no una por una) para que el cronjob no tarde
+// demasiado y cron-job.org no lo marque como fallido/deshabilitado.
 async function sendToSubs(subs, payload) {
-  let errors = 0;
-  for (const sub of subs) {
-    try {
-      await webpush.sendNotification(
+  const results = await Promise.allSettled(
+    subs.map((sub) =>
+      webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
         JSON.stringify(payload)
-      );
-    } catch (err) {
-      if (err.statusCode === 410) {
-        await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(sub.endpoint);
-      }
+      )
+    )
+  );
+
+  let errors = 0;
+  const expiredEndpoints = [];
+
+  results.forEach((result, idx) => {
+    if (result.status === 'rejected') {
       errors++;
+      if (result.reason?.statusCode === 410) {
+        expiredEndpoints.push(subs[idx].endpoint);
+      }
     }
+  });
+
+  if (expiredEndpoints.length > 0) {
+    await Promise.allSettled(
+      expiredEndpoints.map((endpoint) =>
+        db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint)
+      )
+    );
   }
+
   return errors;
 }
 
@@ -118,6 +135,9 @@ router.post('/trigger', asyncHandler(async (req, res) => {
 
   const now = Date.now();
 
+  // Solo trae partidos dentro de la ventana relevante (3h antes a 1h después de "ahora")
+  // y que aún les falte alguna notificación por enviar. Esto evita que la tabla completa
+  // de partidos sin marcador se revise en cada corrida del cronjob.
   const matches = await db.prepare(`
     SELECT m.*, c.league_id,
            l.name as league_name, l.slug as league_slug
@@ -127,6 +147,8 @@ router.post('/trigger', asyncHandler(async (req, res) => {
     WHERE m.match_date IS NOT NULL
       AND m.home_score IS NULL
       AND m.away_score IS NULL
+      AND (m.notified_upcoming = FALSE OR m.notified_live = FALSE)
+      AND m.match_date::timestamptz BETWEEN (NOW() - INTERVAL '3 hours') AND (NOW() + INTERVAL '1 hour')
   `).all();
 
   for (const match of matches) {
@@ -134,8 +156,9 @@ router.post('/trigger', asyncHandler(async (req, res) => {
     const endTime   = matchTime + LIVE_WINDOW_MS;
     const timeUntil = matchTime - now;
 
-    const isUpcoming = timeUntil > 0 && timeUntil <= NOTIFY_WINDOW_MS;
-    const isLive     = now >= matchTime && now < endTime;
+    // Solo se considera "por notificar" si esa notificación específica no se ha enviado antes
+    const isUpcoming = timeUntil > 0 && timeUntil <= NOTIFY_WINDOW_MS && !match.notified_upcoming;
+    const isLive     = now >= matchTime && now < endTime && !match.notified_live;
 
     if (!isUpcoming && !isLive) continue;
 
@@ -177,9 +200,14 @@ router.post('/trigger', asyncHandler(async (req, res) => {
       (sub, idx, arr) => arr.findIndex((s) => s.endpoint === sub.endpoint) === idx
     );
 
-    if (allSubs.length === 0) continue;
+    if (allSubs.length > 0) {
+      await sendToSubs(allSubs, payload);
+    }
 
-    await sendToSubs(allSubs, payload);
+    // Se marca como notificado aunque no hubiera suscriptores, para no volver a
+    // evaluar este mismo evento (próximo/en vivo) en la siguiente corrida del cronjob.
+    const notifiedColumn = isLive ? 'notified_live' : 'notified_upcoming';
+    await db.prepare(`UPDATE matches SET ${notifiedColumn} = TRUE WHERE id = ?`).run(match.id);
   }
 
   res.json({ ok: true });

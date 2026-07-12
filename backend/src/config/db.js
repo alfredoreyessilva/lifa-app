@@ -167,6 +167,10 @@ export async function initSchema() {
   await exec(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS season TEXT`).catch(() => {});
   await exec(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS year INTEGER`).catch(() => {});
 
+  // Control de notificaciones ya enviadas por partido (evita reenvíos repetidos del cronjob)
+  await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_upcoming BOOLEAN NOT NULL DEFAULT FALSE`).catch(() => {});
+  await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_live BOOLEAN NOT NULL DEFAULT FALSE`).catch(() => {});
+
   const newLeagueColumns = [
     'cover_url TEXT',
     'facebook_url TEXT',
