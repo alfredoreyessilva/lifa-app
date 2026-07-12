@@ -93,6 +93,39 @@ router.get('/:slug/teams', asyncHandler(async (req, res) => {
   res.json(teams);
 }));
 
+// Metadatos ligeros para compartir el calendario de una categoría (usado por el
+// middleware de Vercel para armar los meta tags Open Graph al compartir un link).
+// Si se pasa ?team=Nombre, además devuelve el logo de ese equipo específico.
+router.get('/categories/:categoryId/share-meta', asyncHandler(async (req, res) => {
+  const category = await db.prepare(`
+    SELECT c.*, l.name AS league_name, l.slug AS league_slug,
+           l.logo_url AS league_logo_url, l.id AS league_id
+    FROM categories c
+    JOIN leagues l ON l.id = c.league_id
+    WHERE c.id = ?
+  `).get(req.params.categoryId);
+
+  if (!category) return res.status(404).json({ error: 'Categoría no encontrada' });
+
+  let team_logo_url = null;
+  const teamName = req.query.team;
+  if (teamName) {
+    const team = await db.prepare(`
+      SELECT logo_url FROM teams WHERE league_id = ? AND UPPER(name) = UPPER(?)
+    `).get(category.league_id, teamName);
+    team_logo_url = team?.logo_url || null;
+  }
+
+  res.json({
+    league_name: category.league_name,
+    league_slug: category.league_slug,
+    league_logo_url: category.league_logo_url,
+    category_name: category.name,
+    team_name: teamName || null,
+    team_logo_url,
+  });
+}));
+
 router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
   const category = await db.prepare(`
     SELECT * FROM categories WHERE id = ?
