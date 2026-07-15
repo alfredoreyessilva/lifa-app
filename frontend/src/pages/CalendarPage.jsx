@@ -38,15 +38,18 @@ function getEquipos(matches) {
   return equipos.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// Solo toma en cuenta sedes reales (creadas desde el panel y asignadas a un
+// partido vía venue_id) — el texto libre viejo (m.venue) ya no se usa aquí,
+// así se eliminan los duplicados causados por escribir la misma sede distinto.
 function getSedes(matches) {
-  const seen = new Set();
-  return matches
-    .filter((m) => m.venue)
-    .reduce((acc, m) => {
-      if (!seen.has(m.venue)) { seen.add(m.venue); acc.push(m.venue); }
-      return acc;
-    }, [])
-    .sort((a, b) => a.localeCompare(b));
+  const seen = new Map();
+  for (const m of matches) {
+    if (m.venue_id && !seen.has(m.venue_id)) {
+      seen.set(m.venue_id, m.venue_name);
+    }
+  }
+  return Array.from(seen, ([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // Texto del botón "Compartir" según la vista y selección actuales.
@@ -140,12 +143,18 @@ export default function CalendarPage() {
   let filteredMatches = matches;
   if (view === 'jornada' && selected) filteredMatches = matches.filter((m) => m.week_label === selected);
   else if (view === 'equipo' && selected) filteredMatches = matches.filter((m) => m.home_team === selected || m.away_team === selected);
-  else if (view === 'sede'   && selected) filteredMatches = matches.filter((m) => m.venue === selected);
+  else if (view === 'sede'   && selected) filteredMatches = matches.filter((m) => String(m.venue_id) === selected);
 
   const jornadas = getJornadas(matches);
   const equipos  = getEquipos(matches);
   const sedes    = getSedes(matches);
-  const shareLabel = getShareLabel(view, selected);
+
+  // Para "sede" lo seleccionado en la URL es el id de la sede; buscamos su
+  // nombre real para mostrarlo en los títulos y en el botón de compartir.
+  const selectedSedeName = view === 'sede' && selected
+    ? (sedes.find((s) => String(s.id) === selected)?.name || null)
+    : null;
+  const shareLabel = getShareLabel(view, view === 'sede' ? selectedSedeName : selected);
 
   return (
     <div className="container">
@@ -234,13 +243,13 @@ export default function CalendarPage() {
           {view === 'sede' && !selected && (
             <div className="filter-grid">
               {sedes.length === 0
-                ? <div className="empty-state"><p>Ningún partido tiene sede asignada.</p></div>
+                ? <div className="empty-state"><p>Ningún partido tiene una sede registrada asignada todavía.</p></div>
                 : sedes.map((sede) => {
-                    const count = matches.filter((m) => m.venue === sede).length;
+                    const count = matches.filter((m) => m.venue_id === sede.id).length;
                     return (
-                      <button key={sede} className="filter-card" onClick={() => selectFilter(sede)}>
+                      <button key={sede.id} className="filter-card" onClick={() => selectFilter(String(sede.id))}>
                         <div className="filter-card-icon">📍</div>
-                        <div className="filter-card-label">{sede}</div>
+                        <div className="filter-card-label">{sede.name}</div>
                         <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
                       </button>
                     );
@@ -250,7 +259,7 @@ export default function CalendarPage() {
           {view === 'sede' && selected && (
             <>
               <button className="filter-back" onClick={clearSelection}>← Todas las sedes</button>
-              <div className="filter-selected-title">📍 {selected}</div>
+              <div className="filter-selected-title">📍 {selectedSedeName}</div>
               <MatchGrid matches={filteredMatches} nextMatch={nextMatch} now={now} />
             </>
           )}
@@ -287,6 +296,10 @@ function MatchCard({ match, isNext, now }) {
   const isLive      = status === 'live';
   const isScheduled = status === 'scheduled';
   const [shareState, setShareState] = useState('idle');
+
+  // Preferimos la sede real (registrada en el panel); si el partido es viejo
+  // y todavía no se le ha asignado una, mostramos el texto libre de respaldo.
+  const venueLabel = match.venue_name || match.venue;
 
   async function handleShare() {
     const url = `${window.location.origin}/partidos/${match.id}`;
@@ -328,10 +341,10 @@ function MatchCard({ match, isNext, now }) {
         <TeamBadge name={match.away_team} logoUrl={match.away_logo_url} />
       </div>
 
-      {(match.venue || match.week_label) && (
+      {(venueLabel || match.week_label) && (
         <div className="match-card-meta">
           {match.week_label && <span>{/^\d+$/.test(match.week_label) ? `Jornada ${match.week_label}` : match.week_label}</span>}
-          {match.venue && <span>{match.venue}</span>}
+          {venueLabel && <span>{venueLabel}</span>}
         </div>
       )}
 
