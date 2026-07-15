@@ -7,6 +7,7 @@ import CategoryForm from '../components/CategoryForm.jsx';
 import MatchForm from '../components/MatchForm.jsx';
 import LogoField from '../components/LogoField.jsx';
 import TeamForm from '../components/TeamForm.jsx';
+import VenueForm from '../components/VenueForm.jsx';
 import ExcelImport from '../components/ExcelImport.jsx';
 import CharField from '../components/CharField.jsx';
 import TimezoneSelect from '../components/TimezoneSelect.jsx';
@@ -61,7 +62,8 @@ export default function Dashboard() {
     );
   }
 
-  const currentTeams    = leagueData?.teams || [];
+  const currentTeams    = leagueData?.teams  || [];
+  const currentVenues   = leagueData?.venues || [];
   const leagueTimezone  = leagueData?.league?.timezone || DEFAULT_TZ;
 
   return (
@@ -105,6 +107,9 @@ export default function Dashboard() {
           onAddTeam={() => setModal({ type: 'add-team' })}
           onEditTeam={(team) => setModal({ type: 'edit-team', team })}
           onDeleteTeam={(team) => setModal({ type: 'delete-team', team })}
+          onAddVenue={() => setModal({ type: 'add-venue' })}
+          onEditVenue={(venue) => setModal({ type: 'edit-venue', venue })}
+          onDeleteVenue={(venue) => setModal({ type: 'delete-venue', venue })}
         />
       )}
 
@@ -149,14 +154,16 @@ export default function Dashboard() {
 
       {modal?.type === 'add-match' && (
         <Modal title={`Nuevo partido — ${modal.category.name}`} onClose={() => setModal(null)}>
-          <MatchForm submitLabel="Crear partido" teams={currentTeams} leagueTimezone={leagueTimezone} onCancel={() => setModal(null)}
+          <MatchForm submitLabel="Crear partido" teams={currentTeams} venues={currentVenues} leagueTimezone={leagueTimezone}
+            token={token} leagueId={leagueData.league.id} onVenueCreated={refresh} onCancel={() => setModal(null)}
             onSubmit={async (payload) => { await api.createMatch(modal.category.id, payload, token); refresh(); setModal(null); }} />
         </Modal>
       )}
 
       {modal?.type === 'edit-match' && (
         <Modal title={`Editar partido — ${modal.category.name}`} onClose={() => setModal(null)}>
-          <MatchForm initial={modal.match} submitLabel="Guardar cambios" teams={currentTeams} leagueTimezone={leagueTimezone} onCancel={() => setModal(null)}
+          <MatchForm initial={modal.match} submitLabel="Guardar cambios" teams={currentTeams} venues={currentVenues} leagueTimezone={leagueTimezone}
+            token={token} leagueId={leagueData.league.id} onVenueCreated={refresh} onCancel={() => setModal(null)}
             onSubmit={async (payload) => { await api.updateMatch(modal.match.id, payload, token); refresh(); setModal(null); }} />
         </Modal>
       )}
@@ -201,14 +208,44 @@ export default function Dashboard() {
           </div>
         </Modal>
       )}
+
+      {modal?.type === 'add-venue' && (
+        <Modal title="Nueva sede" onClose={() => setModal(null)}>
+          <VenueForm submitLabel="Crear sede" onCancel={() => setModal(null)}
+            onSubmit={async (payload) => { await api.createVenue(leagueData.league.id, payload, token); refresh(); setModal(null); }} />
+        </Modal>
+      )}
+
+      {modal?.type === 'edit-venue' && (
+        <Modal title="Editar sede" onClose={() => setModal(null)}>
+          <VenueForm initial={modal.venue} submitLabel="Guardar cambios" onCancel={() => setModal(null)}
+            onSubmit={async (payload) => { await api.updateVenue(modal.venue.id, payload, token); refresh(); setModal(null); }} />
+        </Modal>
+      )}
+
+      {modal?.type === 'delete-venue' && (
+        <Modal title="Eliminar sede" onClose={() => setModal(null)}>
+          <p>¿Seguro que quieres eliminar <strong>{modal.venue.name}</strong>?</p>
+          <div className="modal-actions">
+            <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
+            <button className="btn btn-danger" onClick={async () => { await api.deleteVenue(modal.venue.id, token); refresh(); setModal(null); }}>Eliminar</button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
-function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDeleteCategory, onAddMatch, onEditMatch, onDeleteMatch, onImportMatches, onAddTeam, onEditTeam, onDeleteTeam }) {
-  const { league, categories, teams } = data;
-  const [expandedIds, setExpandedIds]     = useState(new Set());
-  const [teamsExpanded, setTeamsExpanded] = useState(false);
+function LeaguePanel({
+  data, onEditLeague, onAddCategory, onEditCategory, onDeleteCategory,
+  onAddMatch, onEditMatch, onDeleteMatch, onImportMatches,
+  onAddTeam, onEditTeam, onDeleteTeam,
+  onAddVenue, onEditVenue, onDeleteVenue,
+}) {
+  const { league, categories, teams, venues } = data;
+  const [expandedIds, setExpandedIds]       = useState(new Set());
+  const [teamsExpanded, setTeamsExpanded]   = useState(false);
+  const [venuesExpanded, setVenuesExpanded] = useState(false);
 
   function toggleCategory(id) {
     setExpandedIds((prev) => {
@@ -281,6 +318,47 @@ function LeaguePanel({ data, onEditLeague, onAddCategory, onEditCategory, onDele
                 <div className="row-actions">
                   <button className="btn btn-outline btn-sm" onClick={() => onEditTeam(team)}>Editar</button>
                   <button className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => onDeleteTeam(team)}>Eliminar</button>
+                </div>
+              </div>
+            ))
+          )
+        )}
+      </div>
+
+      <div className="category-block">
+        <div className="category-block-head" onClick={() => setVenuesExpanded((prev) => !prev)} style={{ cursor: 'pointer' }}>
+          <h4>
+            <span style={{ display: 'inline-block', transition: 'transform 0.15s ease', transform: venuesExpanded ? 'rotate(90deg)' : 'rotate(0deg)', marginRight: 8 }}>▸</span>
+            Sedes
+            <span style={{ color: 'var(--ink-dim)', fontSize: 12, fontWeight: 400, marginLeft: 8 }}>
+              {venues.length === 0 ? 'sin sedes' : `${venues.length} sede${venues.length === 1 ? '' : 's'}`}
+            </span>
+          </h4>
+          <div onClick={(e) => e.stopPropagation()}>
+            <button className="btn btn-ghost btn-sm" onClick={onAddVenue}>+ Sede</button>
+          </div>
+        </div>
+
+        {venuesExpanded && (
+          venues.length === 0 ? (
+            <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>Sin sedes. Agrega la primera.</p>
+          ) : (
+            venues.map((venue) => (
+              <div key={venue.id} className="admin-match-row">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {venue.cover_url && (
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
+                      <img src={venue.cover_url} alt={venue.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                  )}
+                  <div>
+                    <div className="who">{venue.name}</div>
+                    <div className="info">{venue.institution || 'Sin institución'}</div>
+                  </div>
+                </div>
+                <div className="row-actions">
+                  <button className="btn btn-outline btn-sm" onClick={() => onEditVenue(venue)}>Editar</button>
+                  <button className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => onDeleteVenue(venue)}>Eliminar</button>
                 </div>
               </div>
             ))

@@ -3,6 +3,8 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import TeamCard from '../components/TeamCard.jsx';
 import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
+import VenueCard from '../components/VenueCard.jsx';
+import VenueInfoPanel from '../components/VenueInfoPanel.jsx';
 import Loading from '../components/Loading.jsx';
 import SubscribeButton from '../components/SubscribeButton.jsx';
 
@@ -101,11 +103,13 @@ export default function LeaguePage() {
   const { slug } = useParams();
   const [league, setLeague]                 = useState(null);
   const [teams,  setTeams]                  = useState(null);
+  const [venues, setVenues]                 = useState(null);
   const [error,  setError]                  = useState('');
   const [tab,    setTab]                    = useState('categorias');
   const [copied, setCopied]                 = useState(false);
   const [showLeagueInfo, setShowLeagueInfo] = useState(false);
   const [selectedTeam,   setSelectedTeam]   = useState(null);
+  const [selectedVenue,  setSelectedVenue]  = useState(null);
   const navigate = useNavigate();
 
   function copyLink() {
@@ -119,11 +123,16 @@ export default function LeaguePage() {
     setSelectedTeam((prev) => (prev?.id === team.id ? null : team));
   }
 
+  function handleVenueClick(venue) {
+    setSelectedVenue((prev) => (prev?.id === venue.id ? null : venue));
+  }
+
   useEffect(() => {
-    setLeague(null); setTeams(null); setError('');
-    setTab('categorias'); setSelectedTeam(null); setShowLeagueInfo(false);
+    setLeague(null); setTeams(null); setVenues(null); setError('');
+    setTab('categorias'); setSelectedTeam(null); setSelectedVenue(null); setShowLeagueInfo(false);
     api.getLeague(slug).then(setLeague).catch((e) => setError(e.message));
     api.getTeams(slug).then(setTeams).catch(() => setTeams([]));
+    api.getVenues(slug).then(setVenues).catch(() => setVenues([]));
   }, [slug]);
 
   if (error) {
@@ -172,6 +181,7 @@ export default function LeaguePage() {
       <div className="tab-bar">
         <button className={`tab-btn ${tab === 'categorias' ? 'active' : ''}`} onClick={() => setTab('categorias')}>Categorías</button>
         <button className={`tab-btn ${tab === 'equipos'    ? 'active' : ''}`} onClick={() => setTab('equipos')}>Equipos</button>
+        <button className={`tab-btn ${tab === 'sedes'      ? 'active' : ''}`} onClick={() => setTab('sedes')}>Sedes</button>
       </div>
 
       {tab === 'categorias' && (
@@ -230,6 +240,42 @@ export default function LeaguePage() {
                 <TeamInfoPanel
                   team={selectedTeam}
                   onClose={() => setSelectedTeam(null)}
+                />
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      {tab === 'sedes' && (
+        <>
+          <div className="section-head">
+            <h2>Sedes</h2>
+            <span className="count">{venues ? venues.length : ''}</span>
+          </div>
+          {!venues ? (
+            <div className="loading">Cargando…</div>
+          ) : venues.length === 0 ? (
+            <div className="empty-state">
+              <h3>Sin sedes todavía</h3>
+              <p>Esta liga aún no ha publicado sus sedes.</p>
+            </div>
+          ) : (
+            <>
+              <div className="team-grid">
+                {venues.map((venue) => (
+                  <VenueCard
+                    key={venue.id}
+                    venue={venue}
+                    isSelected={selectedVenue?.id === venue.id}
+                    onClick={() => handleVenueClick(venue)}
+                  />
+                ))}
+              </div>
+              {selectedVenue && (
+                <VenueInfoPanel
+                  venue={selectedVenue}
+                  onClose={() => setSelectedVenue(null)}
                 />
               )}
             </>

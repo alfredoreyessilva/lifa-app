@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
+import { api } from '../api/client.js';
 import { required, differentFrom, validUrl, minValue, runValidations } from '../utils/validation.js';
-import CharField from './CharField.jsx';
+import Modal from './Modal.jsx';
+import VenueForm from './VenueForm.jsx';
 import TimezoneSelect from './TimezoneSelect.jsx';
 import { getMatchStatus } from '../utils/matchStatus.js';
 
@@ -117,14 +119,17 @@ function parseWeekNumber(val) {
   return match ? match[1] : '';
 }
 
-export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, teams, leagueTimezone }) {
+export default function MatchForm({
+  initial, onSubmit, onCancel, submitLabel, teams, venues,
+  leagueTimezone, token, leagueId, onVenueCreated,
+}) {
   const defaultTimezone = initial?.timezone || leagueTimezone || 'America/Mexico_City';
 
   const [form, setForm] = useState({
     home_team:   initial?.home_team   || '',
     away_team:   initial?.away_team   || '',
     match_date:  toLocalInputValue(initial?.match_date) || '',
-    venue:       initial?.venue       || '',
+    venue_id:    initial?.venue_id    || null,
     stream_url:  initial?.stream_url  || '',
     tickets_url: initial?.tickets_url || '',
     week_label:  parseWeekNumber(initial?.week_label),
@@ -134,6 +139,14 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
   });
   const [error,   setError]   = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Copia local de las sedes disponibles: empieza igual a la prop `venues`,
+  // pero cuando se crea una sede nueva desde aquí se agrega de inmediato,
+  // sin depender de que el componente padre vuelva a cargar sus datos.
+  const [localVenues, setLocalVenues] = useState(venues || []);
+  useEffect(() => { setLocalVenues(venues || []); }, [venues]);
+  const [showVenueModal, setShowVenueModal] = useState(false);
+  const [venueError, setVenueError] = useState('');
 
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -155,6 +168,20 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
   const matchIsFinished = currentStatus === 'finished';
   const matchIsLive     = currentStatus === 'live';
   const matchIsPast     = currentStatus === 'live' || currentStatus === 'finished';
+
+  async function handleCreateVenue(payload) {
+    setVenueError('');
+    try {
+      const venue = await api.createVenue(leagueId, payload, token);
+      setLocalVenues((prev) => [...prev, venue]);
+      update('venue_id', venue.id);
+      setShowVenueModal(false);
+      if (onVenueCreated) onVenueCreated();
+    } catch (e) {
+      setVenueError(e.message);
+      throw e;
+    }
+  }
 
   async function submit(e) {
     e.preventDefault();
@@ -187,7 +214,7 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
         ...form,
         home_team:   form.home_team.trim(),
         away_team:   form.away_team.trim(),
-        venue:       form.venue.trim(),
+        venue_id:    form.venue_id || null,
         stream_url:  form.stream_url.trim(),
         tickets_url: form.tickets_url.trim(),
         week_label:  form.week_label.trim(),
@@ -253,7 +280,26 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
 
       <div className="field">
         <label>Sede (opcional)</label>
-        <CharField max={40} uppercase value={form.venue} onChange={(e) => update('venue', e.target.value)} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <select
+            value={form.venue_id || ''}
+            onChange={(e) => update('venue_id', e.target.value ? Number(e.target.value) : null)}
+            style={{ flex: 1 }}
+          >
+            <option value="">— Sin sede —</option>
+            {localVenues.map((v) => (
+              <option key={v.id} value={v.id}>{v.name}</option>
+            ))}
+          </select>
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => setShowVenueModal(true)}>
+            + Crear sede
+          </button>
+        </div>
+        {initial?.venue && !form.venue_id && (
+          <small style={{ color: 'var(--flag)', display: 'block', marginTop: 4 }}>
+            Este partido tenía la sede escrita como texto: “{initial.venue}”. Selecciona arriba la sede correspondiente (o créala) para migrarlo.
+          </small>
+        )}
       </div>
 
       <div className="field">
@@ -323,6 +369,17 @@ export default function MatchForm({ initial, onSubmit, onCancel, submitLabel, te
           {loading ? 'Guardando…' : submitLabel}
         </button>
       </div>
+
+      {showVenueModal && (
+        <Modal title="Nueva sede" onClose={() => setShowVenueModal(false)}>
+          {venueError && <div className="form-error">{venueError}</div>}
+          <VenueForm
+            submitLabel="Crear sede"
+            onCancel={() => setShowVenueModal(false)}
+            onSubmit={handleCreateVenue}
+          />
+        </Modal>
+      )}
     </form>
   );
 }

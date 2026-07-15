@@ -86,6 +86,15 @@ export const api = {
   deleteTeam: (teamId, token) =>
     request(`/manage/teams/${teamId}`, { method: 'DELETE', token }),
 
+  // Sedes
+  getVenues: (slug) => request(`/leagues/${slug}/venues`),
+  createVenue: (leagueId, payload, token) =>
+    request(`/manage/leagues/${leagueId}/venues`, { method: 'POST', body: payload, token }),
+  updateVenue: (venueId, payload, token) =>
+    request(`/manage/venues/${venueId}`, { method: 'PUT', body: payload, token }),
+  deleteVenue: (venueId, token) =>
+    request(`/manage/venues/${venueId}`, { method: 'DELETE', token }),
+
   // Panel de administración de liga
   getManageLeague: (leagueId, token) =>
     request(`/manage/leagues/${leagueId}/manage`, { token }),
