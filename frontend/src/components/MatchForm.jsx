@@ -231,6 +231,7 @@ export default function MatchForm({
   }
 
   return (
+    <>
     <form onSubmit={submit}>
       {error && <div className="form-error">{error}</div>}
 
@@ -369,17 +370,18 @@ export default function MatchForm({
           {loading ? 'Guardando…' : submitLabel}
         </button>
       </div>
-
-      {showVenueModal && (
-        <Modal title="Nueva sede" onClose={() => setShowVenueModal(false)}>
-          {venueError && <div className="form-error">{venueError}</div>}
-          <VenueForm
-            submitLabel="Crear sede"
-            onCancel={() => setShowVenueModal(false)}
-            onSubmit={handleCreateVenue}
-          />
-        </Modal>
-      )}
     </form>
+
+    {showVenueModal && (
+      <Modal title="Nueva sede" onClose={() => setShowVenueModal(false)}>
+        {venueError && <div className="form-error">{venueError}</div>}
+        <VenueForm
+          submitLabel="Crear sede"
+          onCancel={() => setShowVenueModal(false)}
+          onSubmit={handleCreateVenue}
+        />
+      </Modal>
+    )}
+    </>
   );
 }
