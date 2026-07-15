@@ -100,6 +100,19 @@ CREATE TABLE IF NOT EXISTS teams (
   sort_order INTEGER DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS venues (
+  id SERIAL PRIMARY KEY,
+  league_id INTEGER NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  institution TEXT,
+  cover_url TEXT,
+  address TEXT,
+  contact_phone TEXT,
+  contact_email TEXT,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS matches (
   id SERIAL PRIMARY KEY,
   category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
@@ -139,6 +152,7 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 CREATE INDEX IF NOT EXISTS idx_categories_league ON categories(league_id);
 CREATE INDEX IF NOT EXISTS idx_matches_category ON matches(category_id);
 CREATE INDEX IF NOT EXISTS idx_matches_date ON matches(match_date);
+CREATE INDEX IF NOT EXISTS idx_venues_league ON venues(league_id);
 CREATE INDEX IF NOT EXISTS idx_push_league ON push_subscriptions(league_id);
 CREATE INDEX IF NOT EXISTS idx_push_match  ON push_subscriptions(match_id);
 `;
@@ -170,6 +184,12 @@ export async function initSchema() {
   // Control de notificaciones ya enviadas por partido (evita reenvíos repetidos del cronjob)
   await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_upcoming BOOLEAN NOT NULL DEFAULT FALSE`).catch(() => {});
   await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_live BOOLEAN NOT NULL DEFAULT FALSE`).catch(() => {});
+
+  // Relación de un partido con una sede registrada (tabla venues). Se deja la
+  // columna vieja "venue" (texto libre) intacta para no perder los datos que
+  // ya existen; los partidos nuevos usarán venue_id en vez de texto libre.
+  await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS venue_id INTEGER REFERENCES venues(id) ON DELETE SET NULL`).catch(() => {});
+  await exec(`CREATE INDEX IF NOT EXISTS idx_matches_venue ON matches(venue_id)`).catch(() => {});
 
   const newLeagueColumns = [
     'cover_url TEXT',

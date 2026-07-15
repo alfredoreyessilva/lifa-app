@@ -42,12 +42,16 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
       l.logo_url AS league_logo_url,
       l.timezone AS league_timezone,
       th.logo_url AS home_logo_url,
-      ta.logo_url AS away_logo_url
+      ta.logo_url AS away_logo_url,
+      v.name        AS venue_name,
+      v.institution AS venue_institution,
+      v.address     AS venue_address
     FROM matches m
     LEFT JOIN categories c ON c.id = m.category_id
     LEFT JOIN leagues l    ON l.id = c.league_id
     LEFT JOIN teams th     ON th.league_id = l.id AND UPPER(th.name) = UPPER(m.home_team)
     LEFT JOIN teams ta     ON ta.league_id = l.id AND UPPER(ta.name) = UPPER(m.away_team)
+    LEFT JOIN venues v     ON v.id = m.venue_id
     WHERE m.id = ?
   `).get(req.params.matchId);
 
@@ -93,6 +97,21 @@ router.get('/:slug/teams', asyncHandler(async (req, res) => {
   res.json(teams);
 }));
 
+router.get('/:slug/venues', asyncHandler(async (req, res) => {
+  const league = await db.prepare(`
+    SELECT * FROM leagues WHERE slug = ? AND status = 'approved'
+  `).get(req.params.slug);
+  if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
+
+  const venues = await db.prepare(`
+    SELECT id, name, institution, cover_url, address, contact_phone, contact_email
+    FROM venues WHERE league_id = ?
+    ORDER BY sort_order ASC, name ASC
+  `).all(league.id);
+
+  res.json(venues);
+}));
+
 // Metadatos ligeros para compartir el calendario de una categoría (usado por el
 // middleware de Vercel para armar los meta tags Open Graph al compartir un link).
 // Si se pasa ?team=Nombre, además devuelve el logo de ese equipo específico.
@@ -136,13 +155,17 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
     SELECT
       m.*,
       th.logo_url AS home_logo_url,
-      ta.logo_url AS away_logo_url
+      ta.logo_url AS away_logo_url,
+      v.name        AS venue_name,
+      v.institution AS venue_institution,
+      v.address     AS venue_address
     FROM matches m
     LEFT JOIN categories c  ON c.id  = m.category_id
     LEFT JOIN teams th      ON th.league_id = c.league_id
                            AND UPPER(th.name) = UPPER(m.home_team)
     LEFT JOIN teams ta      ON ta.league_id = c.league_id
                            AND UPPER(ta.name) = UPPER(m.away_team)
+    LEFT JOIN venues v      ON v.id = m.venue_id
     WHERE m.category_id = ?
     ORDER BY m.match_date ASC
   `).all(category.id);

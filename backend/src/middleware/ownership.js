@@ -52,3 +52,16 @@ export const teamOwnerRequired = asyncHandler(async (req, res, next) => {
   }
   return res.status(403).json({ error: 'No tienes permiso sobre este equipo' });
 });
+
+export const venueOwnerRequired = asyncHandler(async (req, res, next) => {
+  const venueId = Number(req.params.id);
+  const venue = await db.prepare('SELECT * FROM venues WHERE id = ?').get(venueId);
+  if (!venue) return res.status(404).json({ error: 'Sede no encontrada' });
+  const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(venue.league_id);
+  if (req.user.role === 'admin' || league.owner_user_id === req.user.id) {
+    req.league = league;
+    req.venue = venue;
+    return next();
+  }
+  return res.status(403).json({ error: 'No tienes permiso sobre esta sede' });
+});

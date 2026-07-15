@@ -3,7 +3,7 @@ import multer from 'multer';
 import * as XLSX from 'xlsx';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
-import { categoryOwnerRequired, matchOwnerRequired, leagueOwnerRequired, teamOwnerRequired } from '../middleware/ownership.js';
+import { categoryOwnerRequired, matchOwnerRequired, leagueOwnerRequired, teamOwnerRequired, venueOwnerRequired } from '../middleware/ownership.js';
 import { isValidEmail, isValidUrl, isNonEmptyString } from '../utils/validation.js';
 import { isValidTimezone } from '../utils/timezones.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -82,7 +82,7 @@ function validateMatchFields({ home_team, away_team, stream_url, tickets_url, st
 }
 
 router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequired, asyncHandler(async (req, res) => {
-  const { home_team, away_team, match_date, venue, stream_url, tickets_url, week_label, status, home_score, away_score, timezone } = req.body;
+  const { home_team, away_team, match_date, venue_id, stream_url, tickets_url, week_label, status, home_score, away_score, timezone } = req.body;
   if (!isNonEmptyString(home_team) || !isNonEmptyString(away_team) || !match_date) {
     return res.status(400).json({ error: 'Se requieren equipo local, visitante y fecha' });
   }
@@ -92,14 +92,14 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
   if (validationError) return res.status(400).json({ error: validationError });
 
   const result = await db.prepare(`
-    INSERT INTO matches (category_id, home_team, away_team, match_date, venue, stream_url, tickets_url, week_label, status, home_score, away_score, timezone)
+    INSERT INTO matches (category_id, home_team, away_team, match_date, venue_id, stream_url, tickets_url, week_label, status, home_score, away_score, timezone)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.category.id,
     home_team.trim().toUpperCase(),
     away_team.trim().toUpperCase(),
     match_date,
-    venue       ? venue.trim().toUpperCase()      : null,
+    venue_id  || null,
     stream_url  || null,
     tickets_url || null,
     week_label  ? week_label.trim().toUpperCase() : null,
@@ -186,9 +186,9 @@ router.post(
           }
           if (parsedDate && !isNaN(parsedDate)) {
             if (horaRaw) {
-              const hmMatch = /^(\d{1,2}):(\d{2})/.exec(horaRaw);
-              if (hmMatch) {
-                parsedDate.setHours(Number(hmMatch[1]), Number(hmMatch[2]), 0, 0);
+              const timeMatch = /^(\d{1,2}):(\d{2})/.exec(horaRaw);
+              if (timeMatch) {
+                parsedDate.setHours(Number(timeMatch[1]), Number(timeMatch[2]), 0, 0);
               }
             }
             matchDate = parsedDate.toISOString();
@@ -198,9 +198,11 @@ router.post(
         let validStream = '';
         if (streamUrl) {
           try {
-            const u = new URL(streamUrl);
-            if (u.protocol === 'http:' || u.protocol === 'https:') validStream = streamUrl;
-          } catch { /* URL inválida */ }
+            new URL(streamUrl);
+            validStream = streamUrl;
+          } catch {
+            validStream = '';
+          }
         }
 
         const result = await db.prepare(`
@@ -234,7 +236,7 @@ router.post(
 );
 
 router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
-  const { home_team, away_team, match_date, venue, stream_url, tickets_url, week_label, status, home_score, away_score, timezone } = req.body;
+  const { home_team, away_team, match_date, venue_id, stream_url, tickets_url, week_label, status, home_score, away_score, timezone } = req.body;
   const m = req.match;
 
   const resolved = {
@@ -257,7 +259,7 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
       home_team   = COALESCE(?, home_team),
       away_team   = COALESCE(?, away_team),
       match_date  = COALESCE(?, match_date),
-      venue       = COALESCE(?, venue),
+      venue_id    = ?,
       stream_url  = COALESCE(?, stream_url),
       tickets_url = COALESCE(?, tickets_url),
       week_label  = COALESCE(?, week_label),
@@ -267,7 +269,8 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
       timezone    = COALESCE(?, timezone)
     WHERE id = ?
   `).run(
-    toNull(home_team), toNull(away_team), toNull(match_date), toNull(venue),
+    toNull(home_team), toNull(away_team), toNull(match_date),
+    venue_id !== undefined ? (venue_id || null) : m.venue_id,
     toNull(stream_url), toNull(tickets_url), toNull(week_label), toNull(status),
     toNull(home_score), toNull(away_score), toNull(timezone), m.id
   );
@@ -372,6 +375,78 @@ router.delete('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async 
   res.json({ ok: true });
 }));
 
+/* ===================== SEDES ===================== */
+
+function validateVenueFields({ contact_email, cover_url }) {
+  if (contact_email && !isValidEmail(contact_email)) return 'El correo de contacto no tiene un formato válido';
+  if (cover_url      && !isValidUrl(cover_url))       return 'La imagen de portada no es una dirección web válida';
+  return null;
+}
+
+router.post('/leagues/:leagueId/venues', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+  const {
+    name, institution, cover_url, address, contact_phone, contact_email, sort_order,
+  } = req.body;
+
+  if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre de la sede es obligatorio' });
+
+  const validationError = validateVenueFields({ contact_email, cover_url });
+  if (validationError) return res.status(400).json({ error: validationError });
+
+  const result = await db.prepare(`
+    INSERT INTO venues (league_id, name, institution, cover_url, address, contact_phone, contact_email, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    req.league.id,
+    name.trim().toUpperCase(),
+    institution   ? institution.trim().toUpperCase()   : null,
+    cover_url     || null,
+    address       ? address.trim()                     : null,
+    contact_phone ? contact_phone.trim().toUpperCase() : null,
+    contact_email || null,
+    sort_order    || 0,
+  );
+
+  res.status(201).json(await db.prepare('SELECT * FROM venues WHERE id = ?').get(result.lastInsertRowid));
+}));
+
+router.put('/venues/:id', authRequired, venueOwnerRequired, asyncHandler(async (req, res) => {
+  const {
+    name, institution, cover_url, address, contact_phone, contact_email, sort_order,
+  } = req.body;
+  const v = req.venue;
+
+  const resolved = {
+    contact_email: contact_email ?? v.contact_email,
+    cover_url:     cover_url     ?? v.cover_url,
+  };
+  const validationError = validateVenueFields(resolved);
+  if (validationError) return res.status(400).json({ error: validationError });
+
+  await db.prepare(`
+    UPDATE venues SET
+      name          = COALESCE(?, name),
+      institution   = COALESCE(?, institution),
+      cover_url     = COALESCE(?, cover_url),
+      address       = COALESCE(?, address),
+      contact_phone = COALESCE(?, contact_phone),
+      contact_email = COALESCE(?, contact_email),
+      sort_order    = COALESCE(?, sort_order)
+    WHERE id = ?
+  `).run(
+    toNull(name),        toNull(institution),   toNull(cover_url),
+    toNull(address),     toNull(contact_phone), toNull(contact_email),
+    toNull(sort_order),  v.id,
+  );
+
+  res.json(await db.prepare('SELECT * FROM venues WHERE id = ?').get(v.id));
+}));
+
+router.delete('/venues/:id', authRequired, venueOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare('DELETE FROM venues WHERE id = ?').run(req.venue.id);
+  res.json({ ok: true });
+}));
+
 /* ===================== PANEL DE LIGA ===================== */
 
 router.get('/leagues/:leagueId/manage', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
@@ -383,8 +458,9 @@ router.get('/leagues/:leagueId/manage', authRequired, leagueOwnerRequired, async
       matches: await db.prepare('SELECT * FROM matches WHERE category_id = ? ORDER BY match_date ASC').all(cat.id),
     }))
   );
-  const teams = await db.prepare('SELECT * FROM teams WHERE league_id = ? ORDER BY sort_order ASC, name ASC').all(league.id);
-  res.json({ league, categories: categoriesWithMatches, teams });
+  const teams  = await db.prepare('SELECT * FROM teams WHERE league_id = ? ORDER BY sort_order ASC, name ASC').all(league.id);
+  const venues = await db.prepare('SELECT * FROM venues WHERE league_id = ? ORDER BY sort_order ASC, name ASC').all(league.id);
+  res.json({ league, categories: categoriesWithMatches, teams, venues });
 }));
 
 export default router;
