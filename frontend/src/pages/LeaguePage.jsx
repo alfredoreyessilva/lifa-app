@@ -239,6 +239,7 @@ export default function LeaguePage() {
               {selectedTeam && (
                 <TeamInfoPanel
                   team={selectedTeam}
+                  leagueId={league.id}
                   onClose={() => setSelectedTeam(null)}
                 />
               )}

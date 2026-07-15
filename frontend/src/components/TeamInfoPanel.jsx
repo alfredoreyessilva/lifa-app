@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import SubscribeButton from './SubscribeButton.jsx';
 
-export default function TeamInfoPanel({ team, onClose }) {
+export default function TeamInfoPanel({ team, leagueId, onClose }) {
   useEffect(() => {
     function onKey(e) {
       if (e.key === 'Escape') onClose();
@@ -87,9 +87,12 @@ export default function TeamInfoPanel({ team, onClose }) {
             </p>
           )}
 
-          {/* Botón de notificaciones por equipo */}
+          {/* Botón de notificaciones por equipo — se le pasa leagueId para que la
+              suscripción quede amarrada a este equipo DE ESTA LIGA específica,
+              y no se cruce con un equipo del mismo nombre en otra liga. */}
           <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>
             <SubscribeButton
+              leagueId={leagueId}
               teamName={team.name}
               label={`Notificarme de partidos de ${team.name}`}
             />

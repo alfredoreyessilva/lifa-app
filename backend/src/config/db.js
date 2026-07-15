@@ -215,6 +215,27 @@ export async function initSchema() {
     ALTER TABLE push_subscriptions ADD CONSTRAINT push_subscriptions_unique
     UNIQUE (endpoint, league_id, match_id, team_name)
   `).catch(() => {});
+
+  // Corrige retroactivamente el bug de notificaciones por equipo cruzadas entre
+  // ligas: antes una suscripción a "team_name" no guardaba a qué liga pertenecía,
+  // así que si dos ligas tenían un equipo con el mismo nombre, sus suscriptores
+  // se mezclaban. Aquí les asignamos su league_id cuando el nombre del equipo es
+  // único en toda la plataforma (sin ambigüedad). Si hay más de una liga con un
+  // equipo de ese nombre, se deja sin resolver automáticamente — se corrige solo
+  // en cuanto la persona se vuelva a suscribir, ya con el nuevo flujo.
+  await exec(`
+    UPDATE push_subscriptions ps
+    SET league_id = sub.league_id
+    FROM (
+      SELECT UPPER(name) AS uname, MIN(league_id) AS league_id, COUNT(DISTINCT league_id) AS league_count
+      FROM teams
+      GROUP BY UPPER(name)
+    ) sub
+    WHERE ps.team_name IS NOT NULL
+      AND ps.league_id IS NULL
+      AND UPPER(ps.team_name) = sub.uname
+      AND sub.league_count = 1
+  `).catch(() => {});
 }
 
 export default db;

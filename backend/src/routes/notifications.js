@@ -189,11 +189,14 @@ router.post('/trigger', asyncHandler(async (req, res) => {
       WHERE match_id = ? AND team_name IS NULL
     `).all(match.id);
 
-    // 3. Suscriptores del equipo local o visitante
+    // 3. Suscriptores del equipo local o visitante — solo de ESTA liga.
+    // (league_id = ? cubre las suscripciones nuevas, ya correctamente scoped;
+    // league_id IS NULL cubre suscripciones viejas que no se pudieron migrar
+    // automáticamente por ser ambiguas — mismo comportamiento que ya tenían.)
     const teamSubs = await db.prepare(`
       SELECT * FROM push_subscriptions
-      WHERE team_name IN (?, ?) AND league_id IS NULL AND match_id IS NULL
-    `).all(match.home_team, match.away_team);
+      WHERE team_name IN (?, ?) AND match_id IS NULL AND (league_id = ? OR league_id IS NULL)
+    `).all(match.home_team, match.away_team, match.league_id);
 
     // Unir y deduplicar por endpoint
     const allSubs = [...leagueSubs, ...matchSubs, ...teamSubs].filter(
