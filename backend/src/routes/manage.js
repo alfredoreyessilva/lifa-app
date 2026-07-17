@@ -14,6 +14,20 @@ function toNull(value) {
   return value === undefined ? null : value;
 }
 
+// Misma lógica que frontend/src/utils/matchStatus.js: el estado depende
+// exclusivamente del horario (fecha + ventana de 3h) — el marcador NUNCA
+// determina el estado, solo es un dato que se guarda aparte.
+const LIVE_WINDOW_MS = 3 * 60 * 60 * 1000;
+function computeMatchStatus(matchDateIso) {
+  if (!matchDateIso) return 'scheduled';
+  const now       = Date.now();
+  const matchTime = new Date(matchDateIso).getTime();
+  const endTime   = matchTime + LIVE_WINDOW_MS;
+  if (now < matchTime) return 'scheduled';
+  if (now < endTime)   return 'live';
+  return 'finished';
+}
+
 const xlsxUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -129,8 +143,22 @@ router.post(
       return res.status(400).json({ error: 'El archivo está vacío o no tiene filas de datos' });
     }
 
+    // Equipos y sedes reales de esta liga, para intentar hacer coincidir el
+    // texto del Excel contra ellos (sin importar mayúsculas/minúsculas) y así
+    // no reintroducir duplicados por texto libre mal escrito.
+    const registeredTeams  = await db.prepare('SELECT id, name FROM teams WHERE league_id = ?').all(req.league.id);
+    const registeredVenues = await db.prepare('SELECT id, name FROM venues WHERE league_id = ?').all(req.league.id);
+
+    function findTeam(name) {
+      return registeredTeams.find((t) => t.name.toLowerCase() === name.toLowerCase());
+    }
+    function findVenue(name) {
+      return registeredVenues.find((v) => v.name.toLowerCase() === name.toLowerCase());
+    }
+
     const imported = [];
     const skipped  = [];
+    const warnings = [];
 
     for (let i = 0; i < rows.length; i++) {
       const row  = rows[i];
@@ -147,22 +175,81 @@ router.post(
           return '';
         };
 
-        const fechaRaw  = get(['Fecha', 'fecha', 'FECHA']);
-        const horaRaw   = get(['Hora', 'hora', 'HORA']);
-        const homeTeam  = get(['Equipo Local', 'equipo local', 'local', 'home']);
-        const awayTeam  = get(['Equipo Visitante', 'equipo visitante', 'visitante', 'away']);
-        const venue     = get(['Sede', 'sede', 'SEDE']);
-        const weekLabel = get(['Jornada', 'jornada', 'JORNADA', 'Week', 'week']);
-        const streamUrl = get(['Link de transmisión', 'link de transmision', 'stream', 'url', 'transmision']);
+        const fechaRaw     = get(['Fecha', 'fecha', 'FECHA']);
+        const horaRaw      = get(['Hora', 'hora', 'HORA']);
+        const homeTeamRaw  = get(['Equipo Local', 'equipo local', 'local', 'home']);
+        const awayTeamRaw  = get(['Equipo Visitante', 'equipo visitante', 'visitante', 'away']);
+        const venueRaw     = get(['Sede', 'sede', 'SEDE']);
+        const weekLabel    = get(['Jornada', 'jornada', 'JORNADA', 'Week', 'week']);
+        const streamUrl    = get(['Link de transmisión', 'link de transmision', 'stream', 'url', 'transmision']);
+        const ticketsUrl   = get(['Link de boletos', 'link de boletos', 'boletos', 'tickets']);
+        const timezoneRaw  = get(['Zona horaria', 'zona horaria', 'zona horaria (código)', 'timezone']);
+        const homeScoreRaw = get(['Marcador Local', 'marcador local', 'home score']);
+        const awayScoreRaw = get(['Marcador Visitante', 'marcador visitante', 'away score']);
 
-        if (!homeTeam || !awayTeam) {
+        if (!homeTeamRaw || !awayTeamRaw) {
           skipped.push({ row: rowN, reason: 'Faltan equipos local o visitante' });
           continue;
         }
 
-        if (homeTeam.toLowerCase() === awayTeam.toLowerCase()) {
+        if (homeTeamRaw.toLowerCase() === awayTeamRaw.toLowerCase()) {
           skipped.push({ row: rowN, reason: 'El equipo local y visitante son iguales' });
           continue;
+        }
+
+        // Equipos: si coincide con uno registrado se usa su nombre exacto;
+        // si no, se importa igual con el texto tal cual y se avisa.
+        const homeTeamMatch = findTeam(homeTeamRaw);
+        const awayTeamMatch = findTeam(awayTeamRaw);
+        const homeTeam = homeTeamMatch ? homeTeamMatch.name : homeTeamRaw.toUpperCase();
+        const awayTeam = awayTeamMatch ? awayTeamMatch.name : awayTeamRaw.toUpperCase();
+        if (!homeTeamMatch) warnings.push({ row: rowN, reason: `El equipo local "${homeTeamRaw}" no coincide con ningún equipo registrado — se importó tal cual escrito` });
+        if (!awayTeamMatch) warnings.push({ row: rowN, reason: `El equipo visitante "${awayTeamRaw}" no coincide con ningún equipo registrado — se importó tal cual escrito` });
+
+        // Sede: si coincide con una registrada, el partido queda conectado a
+        // ella (venue_id); si no, se guarda solo el texto como respaldo.
+        let venueId = null;
+        if (venueRaw) {
+          const venueMatch = findVenue(venueRaw);
+          if (venueMatch) {
+            venueId = venueMatch.id;
+          } else {
+            warnings.push({ row: rowN, reason: `La sede "${venueRaw}" no coincide con ninguna sede registrada — se guardó como texto sin conectar` });
+          }
+        }
+
+        // Zona horaria: solo se usa si es un código válido; si no, el partido
+        // usa la zona de la liga por defecto (igual que si se dejara vacía).
+        let timezone = null;
+        if (timezoneRaw) {
+          if (isValidTimezone(timezoneRaw)) {
+            timezone = timezoneRaw;
+          } else {
+            warnings.push({ row: rowN, reason: `La zona horaria "${timezoneRaw}" no es válida — se usó la zona de la liga por defecto` });
+          }
+        }
+
+        // Link de boletos: se ignora si no es una URL válida (no bloquea la fila).
+        let validTicketsUrl = '';
+        if (ticketsUrl) {
+          try { new URL(ticketsUrl); validTicketsUrl = ticketsUrl; }
+          catch { warnings.push({ row: rowN, reason: `El link de boletos "${ticketsUrl}" no es una dirección web válida — se dejó vacío` }); }
+        }
+
+        // Marcador: solo se guarda si ambos vienen y son números válidos —
+        // es solo un dato, NO determina el estado del partido (eso lo decide
+        // exclusivamente el horario, ver computeMatchStatus más abajo).
+        let homeScore = null;
+        let awayScore = null;
+        if (homeScoreRaw !== '' && awayScoreRaw !== '') {
+          const hs = Number(homeScoreRaw);
+          const as = Number(awayScoreRaw);
+          if (Number.isInteger(hs) && hs >= 0 && Number.isInteger(as) && as >= 0) {
+            homeScore = hs;
+            awayScore = as;
+          } else {
+            warnings.push({ row: rowN, reason: 'El marcador no son números válidos — se importó el partido sin marcador' });
+          }
         }
 
         let matchDate = null;
@@ -205,20 +292,25 @@ router.post(
           }
         }
 
+        const status = computeMatchStatus(matchDate);
+
         const result = await db.prepare(`
-          INSERT INTO matches (category_id, home_team, away_team, match_date, venue, stream_url, week_label, status, home_score, away_score)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO matches (category_id, home_team, away_team, match_date, venue, venue_id, stream_url, tickets_url, week_label, status, home_score, away_score, timezone)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           req.category.id,
-          homeTeam.toUpperCase(),
-          awayTeam.toUpperCase(),
-          matchDate   || null,
-          venue       ? venue.toUpperCase()     : null,
-          validStream || null,
-          weekLabel   ? weekLabel.toUpperCase() : null,
-          'scheduled',
-          null,
-          null,
+          homeTeam,
+          awayTeam,
+          matchDate     || null,
+          venueRaw      ? venueRaw.toUpperCase() : null,
+          venueId,
+          validStream   || null,
+          validTicketsUrl || null,
+          weekLabel     ? weekLabel.toUpperCase() : null,
+          status,
+          homeScore,
+          awayScore,
+          timezone,
         );
 
         imported.push(result.lastInsertRowid);
@@ -231,6 +323,8 @@ router.post(
       imported:    imported.length,
       skipped:     skipped.length,
       skippedRows: skipped,
+      warnings:    warnings.length,
+      warningRows: warnings,
     });
   })
 );

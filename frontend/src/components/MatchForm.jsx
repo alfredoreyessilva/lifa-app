@@ -126,11 +126,18 @@ export default function MatchForm({
     });
   }
 
-  // El marcador solo se pide cuando el partido ya terminó (no cuando está en vivo)
+  // El marcador solo se pide cuando el partido ya terminó según el horario
+  // (nunca al revés: tener marcador no adelanta el estado). Si el partido ya
+  // tenía marcador capturado de antes, lo seguimos mostrando aunque el
+  // horario recalculado diga que todavía está en vivo, para no "esconder"
+  // un dato que ya existía y que el representante podría necesitar corregir.
   const currentStatus   = getCurrentStatus();
   const matchIsFinished = currentStatus === 'finished';
   const matchIsLive     = currentStatus === 'live';
   const matchIsPast     = currentStatus === 'live' || currentStatus === 'finished';
+  const hadScoreAlready = initial?.home_score !== null && initial?.home_score !== undefined
+                       && initial?.away_score !== null && initial?.away_score !== undefined;
+  const showScoreFields = matchIsFinished || hadScoreAlready;
 
   async function handleCreateVenue(payload) {
     setVenueError('');
@@ -329,8 +336,9 @@ export default function MatchForm({
         />
       </div>
 
-      {/* Marcador — solo cuando el partido ya terminó, NO cuando está en vivo */}
-      {matchIsFinished && (
+      {/* Marcador — se pide cuando el horario dice que el partido ya terminó,
+          o si ya tenía un marcador capturado de antes (para poder editarlo). */}
+      {showScoreFields && (
         <div className="field-row">
           <div className="field">
             <label>Marcador local</label>

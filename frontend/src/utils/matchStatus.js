@@ -9,12 +9,9 @@ export function getMatchStatus(match) {
   const matchTime = new Date(match.match_date).getTime();
   const endTime   = matchTime + LIVE_WINDOW_MS;
 
-  // Si ya tiene marcador capturado, siempre es finalizado
-  if (match.home_score !== null && match.home_score !== undefined &&
-      match.away_score !== null && match.away_score !== undefined) {
-    return 'finished';
-  }
-
+  // El estado depende exclusivamente del horario (fecha + ventana de 3h).
+  // Tener marcador capturado NO significa que el partido ya terminó — el
+  // marcador es solo un dato, no debe adelantar ni forzar el estado.
   if (now < matchTime)  return 'scheduled'; // aún no empieza
   if (now < endTime)    return 'live';      // dentro de la ventana de 3h
   return 'finished';                         // ya pasaron las 3h

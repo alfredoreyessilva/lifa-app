@@ -180,7 +180,7 @@ export default function Dashboard() {
 
       {modal?.type === 'import-matches' && (
         <Modal title={`Subir calendario — ${modal.category.name}`} onClose={() => setModal(null)}>
-          <ExcelImport categoryId={modal.category.id} categoryName={modal.category.name}
+          <ExcelImport categoryId={modal.category.id} categoryName={modal.category.name} teams={currentTeams} venues={currentVenues}
             onCancel={() => setModal(null)} onDone={() => { refresh(); setModal(null); }} />
         </Modal>
       )}
