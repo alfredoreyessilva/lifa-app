@@ -21,15 +21,13 @@ export default function Home() {
         <p>Encuentra los calendarios, categorías y transmisiones de las ligas de fútbol americano de todo el país.</p>
         <div className="hero-actions">
           <a href="#ligas" className="btn btn-flag">Ver ligas</a>
-          {token ? (
+          {token && (
             <Link
               to={myLeagues?.[0] ? `/ligas/${myLeagues[0].slug}` : '/panel'}
               className="btn btn-outline"
             >
               Ver mi página pública
             </Link>
-          ) : (
-            <Link to="/crear-cuenta" className="btn btn-outline">Registrar el calendario de mi liga</Link>
           )}
         </div>
       </section>
@@ -46,10 +44,7 @@ export default function Home() {
       {leagues && leagues.length === 0 && (
         <div className="empty-state">
           <h3>Todavía no hay ligas registradas</h3>
-          <p>Sé la primera liga en publicar su calendario.</p>
-          <div style={{ marginTop: 16 }}>
-            <Link to="/crear-cuenta" className="btn btn-flag">Registrar mi liga</Link>
-          </div>
+          <p>Muy pronto vas a encontrar aquí los calendarios de las ligas de fútbol americano de México.</p>
         </div>
       )}
 

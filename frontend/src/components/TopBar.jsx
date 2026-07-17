@@ -26,7 +26,6 @@ export default function TopBar() {
         ) : (
           <div style={{ display: 'flex', gap: 8 }}>
             <Link to="/iniciar-sesion" className="btn btn-ghost btn-sm">Iniciar sesión</Link>
-            <Link to="/crear-cuenta" className="btn btn-outline btn-sm">Registrar mi liga</Link>
           </div>
         )}
       </div>
