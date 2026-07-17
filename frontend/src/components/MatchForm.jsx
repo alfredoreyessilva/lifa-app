@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../api/client.js';
 import { required, differentFrom, validUrl, minValue, runValidations } from '../utils/validation.js';
 import Modal from './Modal.jsx';
 import VenueForm from './VenueForm.jsx';
+import TeamForm from './TeamForm.jsx';
 import TimezoneSelect from './TimezoneSelect.jsx';
 import { getMatchStatus } from '../utils/matchStatus.js';
 
@@ -32,43 +33,16 @@ function initials(name) {
     .toUpperCase();
 }
 
-function TeamCombobox({ label, value, onChange, teams }) {
-  const [open, setOpen]   = useState(false);
-  const [query, setQuery] = useState(value);
-  const wrapRef           = useRef(null);
-
-  useEffect(() => { setQuery(value); }, [value]);
-
-  useEffect(() => {
-    function handleClick(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
-
-  const filtered = (teams || []).filter((t) =>
-    t.name.toLowerCase().includes((query || '').toLowerCase())
-  );
-
-  function handleInput(e) {
-    setQuery(e.target.value);
-    onChange(e.target.value);
-    setOpen(true);
-  }
-
-  function select(team) {
-    setQuery(team.name);
-    onChange(team.name);
-    setOpen(false);
-  }
-
+// Selector de equipo (obligatorio, de la lista ya registrada) + botón para
+// crear uno nuevo sin salir del formulario del partido — mismo patrón que el
+// selector de sedes.
+function TeamSelect({ label, value, onChange, teams, onCreateNew }) {
   const selectedTeam = (teams || []).find(
-    (t) => t.name.toLowerCase() === (query || '').toLowerCase()
+    (t) => t.name.toLowerCase() === (value || '').toLowerCase()
   );
 
   return (
-    <div className="field team-combobox-wrap" ref={wrapRef}>
+    <div className="field">
       <label>{label}</label>
       <div className="team-combobox-input-row">
         {selectedTeam?.logo_url && (
@@ -81,34 +55,16 @@ function TeamCombobox({ label, value, onChange, teams }) {
             {initials(selectedTeam.name)}
           </div>
         )}
-        <input
-          required
-          value={query}
-          onChange={(e) => { e.target.value = e.target.value.toUpperCase(); handleInput(e); }}
-          onFocus={() => setOpen(true)}
-          autoComplete="off"
-          placeholder="Nombre del equipo"
-        />
-      </div>
-
-      {open && filtered.length > 0 && (
-        <ul className="team-combobox-list">
-          {filtered.map((team) => (
-            <li
-              key={team.id}
-              className="team-combobox-item"
-              onMouseDown={(e) => { e.preventDefault(); select(team); }}
-            >
-              <div className="team-combobox-item-logo">
-                {team.logo_url
-                  ? <img src={team.logo_url} alt={team.name} />
-                  : <span>{initials(team.name)}</span>}
-              </div>
-              <span>{team.name}</span>
-            </li>
+        <select required value={value || ''} onChange={(e) => onChange(e.target.value)} style={{ flex: 1 }}>
+          <option value="">— Selecciona un equipo —</option>
+          {(teams || []).map((t) => (
+            <option key={t.id} value={t.name}>{t.name}</option>
           ))}
-        </ul>
-      )}
+        </select>
+      </div>
+      <button type="button" className="btn btn-outline btn-sm" style={{ marginTop: 6 }} onClick={onCreateNew}>
+        + Crear equipo
+      </button>
     </div>
   );
 }
@@ -121,7 +77,7 @@ function parseWeekNumber(val) {
 
 export default function MatchForm({
   initial, onSubmit, onCancel, submitLabel, teams, venues,
-  leagueTimezone, token, leagueId, onVenueCreated,
+  leagueTimezone, token, leagueId, onVenueCreated, onTeamCreated,
 }) {
   const defaultTimezone = initial?.timezone || leagueTimezone || 'America/Mexico_City';
 
@@ -147,6 +103,13 @@ export default function MatchForm({
   useEffect(() => { setLocalVenues(venues || []); }, [venues]);
   const [showVenueModal, setShowVenueModal] = useState(false);
   const [venueError, setVenueError] = useState('');
+
+  // Mismo patrón para equipos: copia local + saber si se está creando el
+  // equipo local o el visitante (para saber a cuál campo asignar el resultado).
+  const [localTeams, setLocalTeams] = useState(teams || []);
+  useEffect(() => { setLocalTeams(teams || []); }, [teams]);
+  const [creatingTeamFor, setCreatingTeamFor] = useState(null); // 'home' | 'away' | null
+  const [teamError, setTeamError] = useState('');
 
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -179,6 +142,21 @@ export default function MatchForm({
       if (onVenueCreated) onVenueCreated();
     } catch (e) {
       setVenueError(e.message);
+      throw e;
+    }
+  }
+
+  async function handleCreateTeam(payload) {
+    setTeamError('');
+    try {
+      const team = await api.createTeam(leagueId, payload, token);
+      setLocalTeams((prev) => [...prev, team]);
+      if (creatingTeamFor === 'home') update('home_team', team.name);
+      if (creatingTeamFor === 'away') update('away_team', team.name);
+      setCreatingTeamFor(null);
+      if (onTeamCreated) onTeamCreated();
+    } catch (e) {
+      setTeamError(e.message);
       throw e;
     }
   }
@@ -236,19 +214,32 @@ export default function MatchForm({
       {error && <div className="form-error">{error}</div>}
 
       <div className="field-row">
-        <TeamCombobox
+        <TeamSelect
           label="Equipo local"
           value={form.home_team}
           onChange={(v) => update('home_team', v)}
-          teams={teams}
+          teams={localTeams}
+          onCreateNew={() => setCreatingTeamFor('home')}
         />
-        <TeamCombobox
+        <TeamSelect
           label="Equipo visitante"
           value={form.away_team}
           onChange={(v) => update('away_team', v)}
-          teams={teams}
+          teams={localTeams}
+          onCreateNew={() => setCreatingTeamFor('away')}
         />
       </div>
+      {teamError && <div className="form-error">{teamError}</div>}
+      {initial?.home_team && !localTeams.some((t) => t.name.toLowerCase() === initial.home_team.toLowerCase()) && (
+        <small style={{ color: 'var(--flag)', display: 'block', marginTop: -8, marginBottom: 12 }}>
+          El equipo local “{initial.home_team}” ya no coincide con ningún equipo registrado. Selecciónalo de nuevo arriba (o créalo).
+        </small>
+      )}
+      {initial?.away_team && !localTeams.some((t) => t.name.toLowerCase() === initial.away_team.toLowerCase()) && (
+        <small style={{ color: 'var(--flag)', display: 'block', marginTop: -8, marginBottom: 12 }}>
+          El equipo visitante “{initial.away_team}” ya no coincide con ningún equipo registrado. Selecciónalo de nuevo arriba (o créalo).
+        </small>
+      )}
 
       <div className="field">
         <label>Fecha y hora</label>
@@ -379,6 +370,16 @@ export default function MatchForm({
           submitLabel="Crear sede"
           onCancel={() => setShowVenueModal(false)}
           onSubmit={handleCreateVenue}
+        />
+      </Modal>
+    )}
+
+    {creatingTeamFor && (
+      <Modal title="Nuevo equipo" onClose={() => setCreatingTeamFor(null)}>
+        <TeamForm
+          submitLabel="Crear equipo"
+          onCancel={() => setCreatingTeamFor(null)}
+          onSubmit={handleCreateTeam}
         />
       </Modal>
     )}

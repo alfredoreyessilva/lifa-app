@@ -155,7 +155,7 @@ export default function Dashboard() {
       {modal?.type === 'add-match' && (
         <Modal title={`Nuevo partido — ${modal.category.name}`} onClose={() => setModal(null)}>
           <MatchForm submitLabel="Crear partido" teams={currentTeams} venues={currentVenues} leagueTimezone={leagueTimezone}
-            token={token} leagueId={leagueData.league.id} onVenueCreated={refresh} onCancel={() => setModal(null)}
+            token={token} leagueId={leagueData.league.id} onVenueCreated={refresh} onTeamCreated={refresh} onCancel={() => setModal(null)}
             onSubmit={async (payload) => { await api.createMatch(modal.category.id, payload, token); refresh(); setModal(null); }} />
         </Modal>
       )}
@@ -163,7 +163,7 @@ export default function Dashboard() {
       {modal?.type === 'edit-match' && (
         <Modal title={`Editar partido — ${modal.category.name}`} onClose={() => setModal(null)}>
           <MatchForm initial={modal.match} submitLabel="Guardar cambios" teams={currentTeams} venues={currentVenues} leagueTimezone={leagueTimezone}
-            token={token} leagueId={leagueData.league.id} onVenueCreated={refresh} onCancel={() => setModal(null)}
+            token={token} leagueId={leagueData.league.id} onVenueCreated={refresh} onTeamCreated={refresh} onCancel={() => setModal(null)}
             onSubmit={async (payload) => { await api.updateMatch(modal.match.id, payload, token); refresh(); setModal(null); }} />
         </Modal>
       )}
