@@ -8,6 +8,7 @@ import MatchForm from '../components/MatchForm.jsx';
 import LogoField from '../components/LogoField.jsx';
 import TeamForm from '../components/TeamForm.jsx';
 import VenueForm from '../components/VenueForm.jsx';
+import GroupForm from '../components/GroupForm.jsx';
 import ExcelImport from '../components/ExcelImport.jsx';
 import CharField from '../components/CharField.jsx';
 import TimezoneSelect from '../components/TimezoneSelect.jsx';
@@ -110,6 +111,9 @@ export default function Dashboard() {
           onAddVenue={() => setModal({ type: 'add-venue' })}
           onEditVenue={(venue) => setModal({ type: 'edit-venue', venue })}
           onDeleteVenue={(venue) => setModal({ type: 'delete-venue', venue })}
+          onAddGroup={(cat) => setModal({ type: 'add-group', category: cat })}
+          onEditGroup={(cat, group) => setModal({ type: 'edit-group', category: cat, group })}
+          onDeleteGroup={(cat, group) => setModal({ type: 'delete-group', category: cat, group })}
         />
       )}
 
@@ -154,16 +158,16 @@ export default function Dashboard() {
 
       {modal?.type === 'add-match' && (
         <Modal title={`Nuevo partido — ${modal.category.name}`} onClose={() => setModal(null)}>
-          <MatchForm submitLabel="Crear partido" teams={currentTeams} venues={currentVenues} leagueTimezone={leagueTimezone}
-            token={token} leagueId={leagueData.league.id} onVenueCreated={refresh} onTeamCreated={refresh} onCancel={() => setModal(null)}
+          <MatchForm submitLabel="Crear partido" teams={currentTeams} venues={currentVenues} groups={modal.category.groups} leagueTimezone={leagueTimezone}
+            token={token} leagueId={leagueData.league.id} categoryId={modal.category.id} onVenueCreated={refresh} onTeamCreated={refresh} onGroupCreated={refresh} onCancel={() => setModal(null)}
             onSubmit={async (payload) => { await api.createMatch(modal.category.id, payload, token); refresh(); setModal(null); }} />
         </Modal>
       )}
 
       {modal?.type === 'edit-match' && (
         <Modal title={`Editar partido — ${modal.category.name}`} onClose={() => setModal(null)}>
-          <MatchForm initial={modal.match} submitLabel="Guardar cambios" teams={currentTeams} venues={currentVenues} leagueTimezone={leagueTimezone}
-            token={token} leagueId={leagueData.league.id} onVenueCreated={refresh} onTeamCreated={refresh} onCancel={() => setModal(null)}
+          <MatchForm initial={modal.match} submitLabel="Guardar cambios" teams={currentTeams} venues={currentVenues} groups={modal.category.groups} leagueTimezone={leagueTimezone}
+            token={token} leagueId={leagueData.league.id} categoryId={modal.category.id} onVenueCreated={refresh} onTeamCreated={refresh} onGroupCreated={refresh} onCancel={() => setModal(null)}
             onSubmit={async (payload) => { await api.updateMatch(modal.match.id, payload, token); refresh(); setModal(null); }} />
         </Modal>
       )}
@@ -180,7 +184,7 @@ export default function Dashboard() {
 
       {modal?.type === 'import-matches' && (
         <Modal title={`Subir calendario — ${modal.category.name}`} onClose={() => setModal(null)}>
-          <ExcelImport categoryId={modal.category.id} categoryName={modal.category.name} teams={currentTeams} venues={currentVenues}
+          <ExcelImport categoryId={modal.category.id} categoryName={modal.category.name} teams={currentTeams} venues={currentVenues} groups={modal.category.groups}
             onCancel={() => setModal(null)} onDone={() => { refresh(); setModal(null); }} />
         </Modal>
       )}
@@ -232,6 +236,30 @@ export default function Dashboard() {
           </div>
         </Modal>
       )}
+
+      {modal?.type === 'add-group' && (
+        <Modal title={`Nuevo grupo — ${modal.category.name}`} onClose={() => setModal(null)}>
+          <GroupForm submitLabel="Crear grupo" onCancel={() => setModal(null)}
+            onSubmit={async (payload) => { await api.createGroup(modal.category.id, payload, token); refresh(); setModal(null); }} />
+        </Modal>
+      )}
+
+      {modal?.type === 'edit-group' && (
+        <Modal title="Editar grupo" onClose={() => setModal(null)}>
+          <GroupForm initial={modal.group} submitLabel="Guardar cambios" onCancel={() => setModal(null)}
+            onSubmit={async (payload) => { await api.updateGroup(modal.group.id, payload, token); refresh(); setModal(null); }} />
+        </Modal>
+      )}
+
+      {modal?.type === 'delete-group' && (
+        <Modal title="Eliminar grupo" onClose={() => setModal(null)}>
+          <p>¿Seguro que quieres eliminar <strong>{modal.group.name}</strong>? Los partidos que lo tengan asignado se quedan sin grupo, no se eliminan.</p>
+          <div className="modal-actions">
+            <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
+            <button className="btn btn-danger" onClick={async () => { await api.deleteGroup(modal.group.id, token); refresh(); setModal(null); }}>Eliminar</button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -241,6 +269,7 @@ function LeaguePanel({
   onAddMatch, onEditMatch, onDeleteMatch, onImportMatches,
   onAddTeam, onEditTeam, onDeleteTeam,
   onAddVenue, onEditVenue, onDeleteVenue,
+  onAddGroup, onEditGroup, onDeleteGroup,
 }) {
   const { league, categories, teams, venues } = data;
   const [expandedIds, setExpandedIds]       = useState(new Set());
@@ -387,6 +416,32 @@ function LeaguePanel({
             </div>
 
             {isOpen && (
+              <div className="admin-match-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8, background: 'transparent', border: 'none', padding: '0 0 12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: 'var(--ink-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--font-eyebrow)' }}>
+                    Grupos {cat.groups.length > 0 ? `(${cat.groups.length})` : ''}
+                  </span>
+                  <button className="btn btn-ghost btn-sm" onClick={() => onAddGroup(cat)}>+ Grupo</button>
+                </div>
+                {cat.groups.length === 0 ? (
+                  <p style={{ color: 'var(--ink-dim)', fontSize: 12, margin: 0 }}>
+                    Sin grupos — solo hace falta si esta categoría se divide en conferencias/grupos (ej. "Conferencia 14 Grandes").
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {cat.groups.map((g) => (
+                      <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 4, padding: '4px 8px', fontSize: 12 }}>
+                        <span>{g.name}</span>
+                        <button className="btn btn-ghost btn-sm" style={{ padding: '0 4px' }} onClick={() => onEditGroup(cat, g)}>✎</button>
+                        <button className="btn btn-ghost btn-sm" style={{ padding: '0 4px', color: 'var(--flag)' }} onClick={() => onDeleteGroup(cat, g)}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isOpen && (
               cat.matches.length === 0 ? (
                 <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>Sin partidos. Agrega el primero.</p>
               ) : (
@@ -399,6 +454,7 @@ function LeaguePanel({
                         {m.week_label ? ` · ${/^\d+$/.test(m.week_label) ? 'Jornada ' + m.week_label : m.week_label}` : ''}
                         {' · '}{m.stream_url ? 'Con transmisión' : 'Sin transmisión'}
                         {m.status === 'live' ? ' · En vivo' : m.status === 'finished' ? ' · Finalizado' : ''}
+                        {m.group_id ? ` · ${cat.groups.find((g) => g.id === m.group_id)?.name || 'Grupo'}` : ''}
                       </div>
                     </div>
                     <div className="row-actions">

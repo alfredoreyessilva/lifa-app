@@ -45,13 +45,15 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
       ta.logo_url AS away_logo_url,
       v.name        AS venue_name,
       v.institution AS venue_institution,
-      v.address     AS venue_address
+      v.address     AS venue_address,
+      g.name        AS group_name
     FROM matches m
     LEFT JOIN categories c ON c.id = m.category_id
     LEFT JOIN leagues l    ON l.id = c.league_id
     LEFT JOIN teams th     ON th.league_id = l.id AND UPPER(th.name) = UPPER(m.home_team)
     LEFT JOIN teams ta     ON ta.league_id = l.id AND UPPER(ta.name) = UPPER(m.away_team)
     LEFT JOIN venues v     ON v.id = m.venue_id
+    LEFT JOIN groups g     ON g.id = m.group_id
     WHERE m.id = ?
   `).get(req.params.matchId);
 
@@ -158,7 +160,8 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
       ta.logo_url AS away_logo_url,
       v.name        AS venue_name,
       v.institution AS venue_institution,
-      v.address     AS venue_address
+      v.address     AS venue_address,
+      g.name        AS group_name
     FROM matches m
     LEFT JOIN categories c  ON c.id  = m.category_id
     LEFT JOIN teams th      ON th.league_id = c.league_id
@@ -166,6 +169,7 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
     LEFT JOIN teams ta      ON ta.league_id = c.league_id
                            AND UPPER(ta.name) = UPPER(m.away_team)
     LEFT JOIN venues v      ON v.id = m.venue_id
+    LEFT JOIN groups g      ON g.id = m.group_id
     WHERE m.category_id = ?
     ORDER BY m.match_date ASC
   `).all(category.id);

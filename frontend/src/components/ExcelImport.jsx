@@ -4,7 +4,7 @@ import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ALL_TIMEZONES } from '../utils/timezones.js';
 
-export default function ExcelImport({ categoryId, categoryName, teams, venues, onDone, onCancel }) {
+export default function ExcelImport({ categoryId, categoryName, teams, venues, groups, onDone, onCancel }) {
   const { token } = useAuth();
   const fileRef   = useRef(null);
   const [result,   setResult]   = useState(null); // { imported, skipped, skippedRows }
@@ -19,6 +19,7 @@ export default function ExcelImport({ categoryId, categoryName, teams, venues, o
       'Equipo Local',
       'Equipo Visitante',
       'Sede',
+      'Grupo',
       'Jornada',
       'Link de transmisión',
       'Link de boletos',
@@ -33,6 +34,7 @@ export default function ExcelImport({ categoryId, categoryName, teams, venues, o
       'Mayas CDMX',
       'Fundidores MTY',
       'Estadio Azteca',
+      '',
       '1',
       'https://youtube.com/...',
       'https://boletos.com/...',
@@ -55,26 +57,27 @@ export default function ExcelImport({ categoryId, categoryName, teams, venues, o
     // Anchos de columna
     ws['!cols'] = [
       { wch: 14, z: '@' }, { wch: 8, z: '@' }, { wch: 22 }, { wch: 22 },
-      { wch: 20 }, { wch: 14 }, { wch: 35 }, { wch: 35 }, { wch: 24 },
+      { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 35 }, { wch: 35 }, { wch: 24 },
       { wch: 14 }, { wch: 16 },
     ];
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Calendario');
 
-    // Hoja de referencia: equipos y sedes ya registrados (para copiar y pegar
-    // el nombre exacto) y los códigos de zona horaria válidos.
+    // Hoja de referencia: equipos, sedes y grupos ya registrados (para copiar
+    // y pegar el nombre exacto) y los códigos de zona horaria válidos.
     const teamNames  = (teams  || []).map((t) => t.name);
     const venueNames = (venues || []).map((v) => v.name);
+    const groupNames = (groups || []).map((g) => g.name);
     const tzOptions  = ALL_TIMEZONES.map((tz) => `${tz.value}  —  ${tz.label}`);
-    const maxLen     = Math.max(teamNames.length, venueNames.length, tzOptions.length, 1);
+    const maxLen     = Math.max(teamNames.length, venueNames.length, groupNames.length, tzOptions.length, 1);
 
-    const refRows = [['Equipos registrados', 'Sedes registradas', 'Zonas horarias válidas (copia solo el código antes del —)']];
+    const refRows = [['Equipos registrados', 'Sedes registradas', 'Grupos registrados (de esta categoría)', 'Zonas horarias válidas (copia solo el código antes del —)']];
     for (let i = 0; i < maxLen; i++) {
-      refRows.push([teamNames[i] || '', venueNames[i] || '', tzOptions[i] || '']);
+      refRows.push([teamNames[i] || '', venueNames[i] || '', groupNames[i] || '', tzOptions[i] || '']);
     }
     const refWs = XLSX.utils.aoa_to_sheet(refRows);
-    refWs['!cols'] = [{ wch: 24 }, { wch: 24 }, { wch: 50 }];
+    refWs['!cols'] = [{ wch: 24 }, { wch: 24 }, { wch: 28 }, { wch: 50 }];
     XLSX.utils.book_append_sheet(wb, refWs, 'Referencia');
 
     XLSX.writeFile(wb, `plantilla_calendario_${categoryName.replace(/\s+/g, '_')}.xlsx`);

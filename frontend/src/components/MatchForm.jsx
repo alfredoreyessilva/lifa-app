@@ -4,6 +4,7 @@ import { required, differentFrom, validUrl, minValue, runValidations } from '../
 import Modal from './Modal.jsx';
 import VenueForm from './VenueForm.jsx';
 import TeamForm from './TeamForm.jsx';
+import GroupForm from './GroupForm.jsx';
 import TimezoneSelect from './TimezoneSelect.jsx';
 import { getMatchStatus } from '../utils/matchStatus.js';
 
@@ -76,8 +77,8 @@ function parseWeekNumber(val) {
 }
 
 export default function MatchForm({
-  initial, onSubmit, onCancel, submitLabel, teams, venues,
-  leagueTimezone, token, leagueId, onVenueCreated, onTeamCreated,
+  initial, onSubmit, onCancel, submitLabel, teams, venues, groups,
+  leagueTimezone, token, leagueId, categoryId, onVenueCreated, onTeamCreated, onGroupCreated,
 }) {
   const defaultTimezone = initial?.timezone || leagueTimezone || 'America/Mexico_City';
 
@@ -86,6 +87,7 @@ export default function MatchForm({
     away_team:   initial?.away_team   || '',
     match_date:  toLocalInputValue(initial?.match_date) || '',
     venue_id:    initial?.venue_id    || null,
+    group_id:    initial?.group_id    || null,
     stream_url:  initial?.stream_url  || '',
     tickets_url: initial?.tickets_url || '',
     week_label:  parseWeekNumber(initial?.week_label),
@@ -110,6 +112,12 @@ export default function MatchForm({
   useEffect(() => { setLocalTeams(teams || []); }, [teams]);
   const [creatingTeamFor, setCreatingTeamFor] = useState(null); // 'home' | 'away' | null
   const [teamError, setTeamError] = useState('');
+
+  // Mismo patrón para grupos (opcional) — propios de esta categoría.
+  const [localGroups, setLocalGroups] = useState(groups || []);
+  useEffect(() => { setLocalGroups(groups || []); }, [groups]);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [groupError, setGroupError] = useState('');
 
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -168,6 +176,20 @@ export default function MatchForm({
     }
   }
 
+  async function handleCreateGroup(payload) {
+    setGroupError('');
+    try {
+      const group = await api.createGroup(categoryId, payload, token);
+      setLocalGroups((prev) => [...prev, group]);
+      update('group_id', group.id);
+      setShowGroupModal(false);
+      if (onGroupCreated) onGroupCreated();
+    } catch (e) {
+      setGroupError(e.message);
+      throw e;
+    }
+  }
+
   async function submit(e) {
     e.preventDefault();
     setError('');
@@ -200,6 +222,7 @@ export default function MatchForm({
         home_team:   form.home_team.trim(),
         away_team:   form.away_team.trim(),
         venue_id:    form.venue_id || null,
+        group_id:    form.group_id || null,
         stream_url:  form.stream_url.trim(),
         tickets_url: form.tickets_url.trim(),
         week_label:  form.week_label.trim(),
@@ -302,6 +325,28 @@ export default function MatchForm({
       </div>
 
       <div className="field">
+        <label>Grupo (opcional)</label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <select
+            value={form.group_id || ''}
+            onChange={(e) => update('group_id', e.target.value ? Number(e.target.value) : null)}
+            style={{ flex: 1 }}
+          >
+            <option value="">— Sin grupo —</option>
+            {localGroups.map((g) => (
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </select>
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => setShowGroupModal(true)}>
+            + Crear grupo
+          </button>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: 4 }}>
+          Solo úsalo si esta categoría se divide en conferencias/grupos (ej. "Conferencia 14 Grandes").
+        </div>
+      </div>
+
+      <div className="field">
         <label>Jornada (opcional)</label>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ color: 'var(--ink-dim)', fontSize: 14, whiteSpace: 'nowrap' }}>Jornada</span>
@@ -384,10 +429,22 @@ export default function MatchForm({
 
     {creatingTeamFor && (
       <Modal title="Nuevo equipo" onClose={() => setCreatingTeamFor(null)}>
+        {teamError && <div className="form-error">{teamError}</div>}
         <TeamForm
           submitLabel="Crear equipo"
           onCancel={() => setCreatingTeamFor(null)}
           onSubmit={handleCreateTeam}
+        />
+      </Modal>
+    )}
+
+    {showGroupModal && (
+      <Modal title="Nuevo grupo" onClose={() => setShowGroupModal(false)}>
+        {groupError && <div className="form-error">{groupError}</div>}
+        <GroupForm
+          submitLabel="Crear grupo"
+          onCancel={() => setShowGroupModal(false)}
+          onSubmit={handleCreateGroup}
         />
       </Modal>
     )}

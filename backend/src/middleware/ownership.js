@@ -65,3 +65,18 @@ export const venueOwnerRequired = asyncHandler(async (req, res, next) => {
   }
   return res.status(403).json({ error: 'No tienes permiso sobre esta sede' });
 });
+
+export const groupOwnerRequired = asyncHandler(async (req, res, next) => {
+  const groupId = Number(req.params.id);
+  const group = await db.prepare('SELECT * FROM groups WHERE id = ?').get(groupId);
+  if (!group) return res.status(404).json({ error: 'Grupo no encontrado' });
+  const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(group.category_id);
+  const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(category.league_id);
+  if (req.user.role === 'admin' || league.owner_user_id === req.user.id) {
+    req.league = league;
+    req.category = category;
+    req.group = group;
+    return next();
+  }
+  return res.status(403).json({ error: 'No tienes permiso sobre este grupo' });
+});

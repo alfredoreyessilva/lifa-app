@@ -3,7 +3,7 @@ import multer from 'multer';
 import * as XLSX from 'xlsx';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
-import { categoryOwnerRequired, matchOwnerRequired, leagueOwnerRequired, teamOwnerRequired, venueOwnerRequired } from '../middleware/ownership.js';
+import { categoryOwnerRequired, matchOwnerRequired, leagueOwnerRequired, teamOwnerRequired, venueOwnerRequired, groupOwnerRequired } from '../middleware/ownership.js';
 import { isValidEmail, isValidUrl, isNonEmptyString } from '../utils/validation.js';
 import { isValidTimezone } from '../utils/timezones.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -67,6 +67,55 @@ router.delete('/categories/:categoryId', authRequired, categoryOwnerRequired, as
   res.json({ ok: true });
 }));
 
+/* ===================== GRUPOS ===================== */
+// Un grupo pertenece a una categoría específica (ej. "Conferencia 14 Grandes"
+// dentro de "Varonil Mayor 2026") — a diferencia de equipos/sedes, que son de
+// toda la liga, cada categoría arma sus propios grupos.
+
+router.post('/categories/:categoryId/groups', authRequired, categoryOwnerRequired, asyncHandler(async (req, res) => {
+  const { name, description, sort_order } = req.body;
+  if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre del grupo es obligatorio' });
+
+  const result = await db.prepare(`
+    INSERT INTO groups (category_id, name, description, sort_order)
+    VALUES (?, ?, ?, ?)
+  `).run(
+    req.category.id,
+    name.trim().toUpperCase(),
+    description ? description.trim() : null,
+    sort_order || 0,
+  );
+
+  res.status(201).json(await db.prepare('SELECT * FROM groups WHERE id = ?').get(result.lastInsertRowid));
+}));
+
+router.put('/groups/:id', authRequired, groupOwnerRequired, asyncHandler(async (req, res) => {
+  const { name, description, sort_order } = req.body;
+  if (name !== undefined && !isNonEmptyString(name)) {
+    return res.status(400).json({ error: 'El nombre del grupo no puede estar vacío' });
+  }
+
+  await db.prepare(`
+    UPDATE groups SET
+      name        = COALESCE(?, name),
+      description = COALESCE(?, description),
+      sort_order  = COALESCE(?, sort_order)
+    WHERE id = ?
+  `).run(
+    toNull(name ? name.trim().toUpperCase() : name),
+    toNull(description),
+    toNull(sort_order),
+    req.group.id,
+  );
+
+  res.json(await db.prepare('SELECT * FROM groups WHERE id = ?').get(req.group.id));
+}));
+
+router.delete('/groups/:id', authRequired, groupOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare('DELETE FROM groups WHERE id = ?').run(req.group.id);
+  res.json({ ok: true });
+}));
+
 /* ===================== PARTIDOS ===================== */
 
 function validateMatchFields({ home_team, away_team, stream_url, tickets_url, status, home_score, away_score, timezone }) {
@@ -96,7 +145,7 @@ function validateMatchFields({ home_team, away_team, stream_url, tickets_url, st
 }
 
 router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequired, asyncHandler(async (req, res) => {
-  const { home_team, away_team, match_date, venue_id, stream_url, tickets_url, week_label, status, home_score, away_score, timezone } = req.body;
+  const { home_team, away_team, match_date, venue_id, group_id, stream_url, tickets_url, week_label, status, home_score, away_score, timezone } = req.body;
   if (!isNonEmptyString(home_team) || !isNonEmptyString(away_team) || !match_date) {
     return res.status(400).json({ error: 'Se requieren equipo local, visitante y fecha' });
   }
@@ -106,14 +155,15 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
   if (validationError) return res.status(400).json({ error: validationError });
 
   const result = await db.prepare(`
-    INSERT INTO matches (category_id, home_team, away_team, match_date, venue_id, stream_url, tickets_url, week_label, status, home_score, away_score, timezone)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO matches (category_id, home_team, away_team, match_date, venue_id, group_id, stream_url, tickets_url, week_label, status, home_score, away_score, timezone)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.category.id,
     home_team.trim().toUpperCase(),
     away_team.trim().toUpperCase(),
     match_date,
     venue_id  || null,
+    group_id  || null,
     stream_url  || null,
     tickets_url || null,
     week_label  ? week_label.trim().toUpperCase() : null,
@@ -143,17 +193,21 @@ router.post(
       return res.status(400).json({ error: 'El archivo está vacío o no tiene filas de datos' });
     }
 
-    // Equipos y sedes reales de esta liga, para intentar hacer coincidir el
-    // texto del Excel contra ellos (sin importar mayúsculas/minúsculas) y así
-    // no reintroducir duplicados por texto libre mal escrito.
+    // Equipos y sedes reales de esta liga, y grupos de esta categoría, para
+    // intentar hacer coincidir el texto del Excel contra ellos (sin importar
+    // mayúsculas/minúsculas) y así no reintroducir duplicados por texto libre.
     const registeredTeams  = await db.prepare('SELECT id, name FROM teams WHERE league_id = ?').all(req.league.id);
     const registeredVenues = await db.prepare('SELECT id, name FROM venues WHERE league_id = ?').all(req.league.id);
+    const registeredGroups = await db.prepare('SELECT id, name FROM groups WHERE category_id = ?').all(req.category.id);
 
     function findTeam(name) {
       return registeredTeams.find((t) => t.name.toLowerCase() === name.toLowerCase());
     }
     function findVenue(name) {
       return registeredVenues.find((v) => v.name.toLowerCase() === name.toLowerCase());
+    }
+    function findGroup(name) {
+      return registeredGroups.find((g) => g.name.toLowerCase() === name.toLowerCase());
     }
 
     const imported = [];
@@ -180,6 +234,7 @@ router.post(
         const homeTeamRaw  = get(['Equipo Local', 'equipo local', 'local', 'home']);
         const awayTeamRaw  = get(['Equipo Visitante', 'equipo visitante', 'visitante', 'away']);
         const venueRaw     = get(['Sede', 'sede', 'SEDE']);
+        const groupRaw     = get(['Grupo', 'grupo', 'GRUPO']);
         const weekLabel    = get(['Jornada', 'jornada', 'JORNADA', 'Week', 'week']);
         const streamUrl    = get(['Link de transmisión', 'link de transmision', 'stream', 'url', 'transmision']);
         const ticketsUrl   = get(['Link de boletos', 'link de boletos', 'boletos', 'tickets']);
@@ -215,6 +270,20 @@ router.post(
             venueId = venueMatch.id;
           } else {
             warnings.push({ row: rowN, reason: `La sede "${venueRaw}" no coincide con ninguna sede registrada — se guardó como texto sin conectar` });
+          }
+        }
+
+        // Grupo: si coincide con uno registrado en esta categoría, el
+        // partido queda conectado a él; si no, se importa sin grupo (el
+        // texto libre de grupo no se guarda en ningún lado, a diferencia de
+        // sede, porque grupo no tiene un campo de respaldo en texto).
+        let groupId = null;
+        if (groupRaw) {
+          const groupMatch = findGroup(groupRaw);
+          if (groupMatch) {
+            groupId = groupMatch.id;
+          } else {
+            warnings.push({ row: rowN, reason: `El grupo "${groupRaw}" no coincide con ningún grupo registrado en esta categoría — el partido se importó sin grupo` });
           }
         }
 
@@ -295,8 +364,8 @@ router.post(
         const status = computeMatchStatus(matchDate);
 
         const result = await db.prepare(`
-          INSERT INTO matches (category_id, home_team, away_team, match_date, venue, venue_id, stream_url, tickets_url, week_label, status, home_score, away_score, timezone)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO matches (category_id, home_team, away_team, match_date, venue, venue_id, group_id, stream_url, tickets_url, week_label, status, home_score, away_score, timezone)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           req.category.id,
           homeTeam,
@@ -304,6 +373,7 @@ router.post(
           matchDate     || null,
           venueRaw      ? venueRaw.toUpperCase() : null,
           venueId,
+          groupId,
           validStream   || null,
           validTicketsUrl || null,
           weekLabel     ? weekLabel.toUpperCase() : null,
@@ -330,7 +400,7 @@ router.post(
 );
 
 router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
-  const { home_team, away_team, match_date, venue_id, stream_url, tickets_url, week_label, status, home_score, away_score, timezone } = req.body;
+  const { home_team, away_team, match_date, venue_id, group_id, stream_url, tickets_url, week_label, status, home_score, away_score, timezone } = req.body;
   const m = req.match;
 
   const resolved = {
@@ -354,6 +424,7 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
       away_team   = COALESCE(?, away_team),
       match_date  = COALESCE(?, match_date),
       venue_id    = ?,
+      group_id    = ?,
       stream_url  = COALESCE(?, stream_url),
       tickets_url = COALESCE(?, tickets_url),
       week_label  = COALESCE(?, week_label),
@@ -364,7 +435,8 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
     WHERE id = ?
   `).run(
     toNull(home_team), toNull(away_team), toNull(match_date),
-    venue_id !== undefined ? (venue_id || null) : m.venue_id,
+    venue_id  !== undefined ? (venue_id  || null) : m.venue_id,
+    group_id  !== undefined ? (group_id  || null) : m.group_id,
     toNull(stream_url), toNull(tickets_url), toNull(week_label), toNull(status),
     toNull(home_score), toNull(away_score), toNull(timezone), m.id
   );
@@ -550,6 +622,7 @@ router.get('/leagues/:leagueId/manage', authRequired, leagueOwnerRequired, async
     categories.map(async (cat) => ({
       ...cat,
       matches: await db.prepare('SELECT * FROM matches WHERE category_id = ? ORDER BY match_date ASC').all(cat.id),
+      groups:  await db.prepare('SELECT * FROM groups WHERE category_id = ? ORDER BY sort_order ASC, name ASC').all(cat.id),
     }))
   );
   const teams  = await db.prepare('SELECT * FROM teams WHERE league_id = ? ORDER BY sort_order ASC, name ASC').all(league.id);

@@ -95,6 +95,14 @@ export const api = {
   deleteVenue: (venueId, token) =>
     request(`/manage/venues/${venueId}`, { method: 'DELETE', token }),
 
+  // Grupos (propios de cada categoría, ej. "Conferencia 14 Grandes")
+  createGroup: (categoryId, payload, token) =>
+    request(`/manage/categories/${categoryId}/groups`, { method: 'POST', body: payload, token }),
+  updateGroup: (groupId, payload, token) =>
+    request(`/manage/groups/${groupId}`, { method: 'PUT', body: payload, token }),
+  deleteGroup: (groupId, token) =>
+    request(`/manage/groups/${groupId}`, { method: 'DELETE', token }),
+
   // Panel de administración de liga
   getManageLeague: (leagueId, token) =>
     request(`/manage/leagues/${leagueId}/manage`, { token }),

@@ -52,6 +52,19 @@ function getSedes(matches) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// Grupos reales de la categoría (ej. "Conferencia 14 Grandes"), asignados
+// vía group_id — igual patrón que sedes.
+function getGrupos(matches) {
+  const seen = new Map();
+  for (const m of matches) {
+    if (m.group_id && !seen.has(m.group_id)) {
+      seen.set(m.group_id, m.group_name);
+    }
+  }
+  return Array.from(seen, ([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 // Texto del botón "Compartir" según la vista y selección actuales.
 // Devuelve null cuando el botón debe estar oculto.
 function getShareLabel(view, selected) {
@@ -63,11 +76,12 @@ function getShareLabel(view, selected) {
   }
   if (view === 'equipo') return `Compartir calendario de ${selected}`;
   if (view === 'sede')   return `Compartir calendario de ${selected}`;
+  if (view === 'grupo')  return `Compartir calendario de ${selected}`;
   return null;
 }
 
-const VIEWS       = ['completo', 'jornada', 'equipo', 'sede'];
-const VIEW_LABELS = { completo: 'Calendario completo', jornada: 'Jornada', equipo: 'Equipo', sede: 'Sede' };
+const ALL_VIEWS   = ['completo', 'jornada', 'equipo', 'sede', 'grupo'];
+const VIEW_LABELS = { completo: 'Calendario completo', jornada: 'Jornada', equipo: 'Equipo', sede: 'Sede', grupo: 'Grupo' };
 
 export default function CalendarPage() {
   const { categoryId } = useParams();
@@ -75,7 +89,7 @@ export default function CalendarPage() {
 
   // La vista y la selección se inicializan desde la URL, para que un link
   // compartido abra directamente en el mismo filtro que tenía quien lo compartió.
-  const initialView = VIEWS.includes(searchParams.get('view')) ? searchParams.get('view') : 'completo';
+  const initialView = ALL_VIEWS.includes(searchParams.get('view')) ? searchParams.get('view') : 'completo';
   const initialSel  = searchParams.get('sel') || null;
 
   const [data, setData]         = useState(null);
@@ -144,17 +158,27 @@ export default function CalendarPage() {
   if (view === 'jornada' && selected) filteredMatches = matches.filter((m) => m.week_label === selected);
   else if (view === 'equipo' && selected) filteredMatches = matches.filter((m) => m.home_team === selected || m.away_team === selected);
   else if (view === 'sede'   && selected) filteredMatches = matches.filter((m) => String(m.venue_id) === selected);
+  else if (view === 'grupo'  && selected) filteredMatches = matches.filter((m) => String(m.group_id) === selected);
 
   const jornadas = getJornadas(matches);
   const equipos  = getEquipos(matches);
   const sedes    = getSedes(matches);
+  const grupos   = getGrupos(matches);
 
-  // Para "sede" lo seleccionado en la URL es el id de la sede; buscamos su
+  // La pestaña "Grupo" solo se muestra si esta categoría realmente usa
+  // grupos — para no ensuciar el calendario de ligas que no los necesitan.
+  const VIEWS = grupos.length > 0 ? ALL_VIEWS : ALL_VIEWS.filter((v) => v !== 'grupo');
+
+  // Para "sede"/"grupo" lo seleccionado en la URL es el id; buscamos su
   // nombre real para mostrarlo en los títulos y en el botón de compartir.
   const selectedSedeName = view === 'sede' && selected
     ? (sedes.find((s) => String(s.id) === selected)?.name || null)
     : null;
-  const shareLabel = getShareLabel(view, view === 'sede' ? selectedSedeName : selected);
+  const selectedGrupoName = view === 'grupo' && selected
+    ? (grupos.find((g) => String(g.id) === selected)?.name || null)
+    : null;
+  const shareSelected = view === 'sede' ? selectedSedeName : view === 'grupo' ? selectedGrupoName : selected;
+  const shareLabel = getShareLabel(view, shareSelected);
 
   return (
     <div className="container">
@@ -263,6 +287,30 @@ export default function CalendarPage() {
               <MatchGrid matches={filteredMatches} nextMatch={nextMatch} now={now} />
             </>
           )}
+
+          {view === 'grupo' && !selected && (
+            <div className="filter-grid">
+              {grupos.length === 0
+                ? <div className="empty-state"><p>Ningún partido tiene un grupo asignado todavía.</p></div>
+                : grupos.map((grupo) => {
+                    const count = matches.filter((m) => m.group_id === grupo.id).length;
+                    return (
+                      <button key={grupo.id} className="filter-card" onClick={() => selectFilter(String(grupo.id))}>
+                        <div className="filter-card-icon">🏆</div>
+                        <div className="filter-card-label">{grupo.name}</div>
+                        <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
+                      </button>
+                    );
+                  })}
+            </div>
+          )}
+          {view === 'grupo' && selected && (
+            <>
+              <button className="filter-back" onClick={clearSelection}>← Todos los grupos</button>
+              <div className="filter-selected-title">🏆 {selectedGrupoName}</div>
+              <MatchGrid matches={filteredMatches} nextMatch={nextMatch} now={now} />
+            </>
+          )}
         </>
       )}
     </div>
@@ -341,9 +389,10 @@ function MatchCard({ match, isNext, now }) {
         <TeamBadge name={match.away_team} logoUrl={match.away_logo_url} />
       </div>
 
-      {(venueLabel || match.week_label) && (
+      {(venueLabel || match.week_label || match.group_name) && (
         <div className="match-card-meta">
           {match.week_label && <span>{/^\d+$/.test(match.week_label) ? `Jornada ${match.week_label}` : match.week_label}</span>}
+          {match.group_name && <span>{match.group_name}</span>}
           {venueLabel && <span>{venueLabel}</span>}
         </div>
       )}
