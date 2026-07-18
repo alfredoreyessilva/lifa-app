@@ -454,7 +454,7 @@ function LeaguePanel({
                         {m.week_label ? ` · ${/^\d+$/.test(m.week_label) ? 'Jornada ' + m.week_label : m.week_label}` : ''}
                         {' · '}{m.stream_url ? 'Con transmisión' : 'Sin transmisión'}
                         {m.status === 'live' ? ' · En vivo' : m.status === 'finished' ? ' · Finalizado' : ''}
-                        {m.group_id ? ` · ${cat.groups.find((g) => g.id === m.group_id)?.name || 'Grupo'}` : ''}
+                        {m.group_id ? ` · ${cat.groups.find((g) => g.id === m.group_id)?.name || 'Grupo'}${m.group_id_2 ? ` vs ${cat.groups.find((g) => g.id === m.group_id_2)?.name || 'Grupo'}` : ''}` : ''}
                       </div>
                     </div>
                     <div className="row-actions">

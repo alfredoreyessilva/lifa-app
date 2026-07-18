@@ -88,6 +88,7 @@ export default function MatchForm({
     match_date:  toLocalInputValue(initial?.match_date) || '',
     venue_id:    initial?.venue_id    || null,
     group_id:    initial?.group_id    || null,
+    group_id_2:  initial?.group_id_2  || null,
     stream_url:  initial?.stream_url  || '',
     tickets_url: initial?.tickets_url || '',
     week_label:  parseWeekNumber(initial?.week_label),
@@ -223,6 +224,7 @@ export default function MatchForm({
         away_team:   form.away_team.trim(),
         venue_id:    form.venue_id || null,
         group_id:    form.group_id || null,
+        group_id_2:  form.group_id_2 || null,
         stream_url:  form.stream_url.trim(),
         tickets_url: form.tickets_url.trim(),
         week_label:  form.week_label.trim(),
@@ -345,6 +347,24 @@ export default function MatchForm({
           Solo úsalo si esta categoría se divide en conferencias/grupos (ej. "Conferencia 14 Grandes").
         </div>
       </div>
+
+      {form.group_id && localGroups.length > 1 && (
+        <div className="field">
+          <label>Segundo grupo (opcional — solo para partidos interconferencia)</label>
+          <select
+            value={form.group_id_2 || ''}
+            onChange={(e) => update('group_id_2', e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">— Ninguno (partido normal dentro del grupo) —</option>
+            {localGroups.filter((g) => g.id !== form.group_id).map((g) => (
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </select>
+          <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: 4 }}>
+            Úsalo solo si este partido es un cruce entre dos conferencias distintas (ej. "14 Grandes" vs "Nacional-Norte").
+          </div>
+        </div>
+      )}
 
       <div className="field">
         <label>Jornada (opcional)</label>

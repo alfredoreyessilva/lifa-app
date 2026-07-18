@@ -20,6 +20,7 @@ export default function ExcelImport({ categoryId, categoryName, teams, venues, g
       'Equipo Visitante',
       'Sede',
       'Grupo',
+      'Grupo 2 (solo interconferencia)',
       'Jornada',
       'Link de transmisión',
       'Link de boletos',
@@ -34,6 +35,7 @@ export default function ExcelImport({ categoryId, categoryName, teams, venues, g
       'Mayas CDMX',
       'Fundidores MTY',
       'Estadio Azteca',
+      '',
       '',
       '1',
       'https://youtube.com/...',
@@ -57,7 +59,7 @@ export default function ExcelImport({ categoryId, categoryName, teams, venues, g
     // Anchos de columna
     ws['!cols'] = [
       { wch: 14, z: '@' }, { wch: 8, z: '@' }, { wch: 22 }, { wch: 22 },
-      { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 35 }, { wch: 35 }, { wch: 24 },
+      { wch: 20 }, { wch: 20 }, { wch: 26 }, { wch: 14 }, { wch: 35 }, { wch: 35 }, { wch: 24 },
       { wch: 14 }, { wch: 16 },
     ];
 

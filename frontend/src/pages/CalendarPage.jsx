@@ -53,12 +53,16 @@ function getSedes(matches) {
 }
 
 // Grupos reales de la categoría (ej. "Conferencia 14 Grandes"), asignados
-// vía group_id — igual patrón que sedes.
+// vía group_id — igual patrón que sedes. Incluye también group_id_2, para
+// que un partido interconferencia aparezca en las dos listas de grupo.
 function getGrupos(matches) {
   const seen = new Map();
   for (const m of matches) {
     if (m.group_id && !seen.has(m.group_id)) {
       seen.set(m.group_id, m.group_name);
+    }
+    if (m.group_id_2 && !seen.has(m.group_id_2)) {
+      seen.set(m.group_id_2, m.group_name_2);
     }
   }
   return Array.from(seen, ([id, name]) => ({ id, name }))
@@ -158,7 +162,7 @@ export default function CalendarPage() {
   if (view === 'jornada' && selected) filteredMatches = matches.filter((m) => m.week_label === selected);
   else if (view === 'equipo' && selected) filteredMatches = matches.filter((m) => m.home_team === selected || m.away_team === selected);
   else if (view === 'sede'   && selected) filteredMatches = matches.filter((m) => String(m.venue_id) === selected);
-  else if (view === 'grupo'  && selected) filteredMatches = matches.filter((m) => String(m.group_id) === selected);
+  else if (view === 'grupo'  && selected) filteredMatches = matches.filter((m) => String(m.group_id) === selected || String(m.group_id_2) === selected);
 
   const jornadas = getJornadas(matches);
   const equipos  = getEquipos(matches);
@@ -293,7 +297,7 @@ export default function CalendarPage() {
               {grupos.length === 0
                 ? <div className="empty-state"><p>Ningún partido tiene un grupo asignado todavía.</p></div>
                 : grupos.map((grupo) => {
-                    const count = matches.filter((m) => m.group_id === grupo.id).length;
+                    const count = matches.filter((m) => m.group_id === grupo.id || m.group_id_2 === grupo.id).length;
                     return (
                       <button key={grupo.id} className="filter-card" onClick={() => selectFilter(String(grupo.id))}>
                         <div className="filter-card-icon">🏆</div>
@@ -348,6 +352,7 @@ function MatchCard({ match, isNext, now }) {
   // Preferimos la sede real (registrada en el panel); si el partido es viejo
   // y todavía no se le ha asignado una, mostramos el texto libre de respaldo.
   const venueLabel = match.venue_name || match.venue;
+  const groupLabel = match.group_name_2 ? `${match.group_name} vs ${match.group_name_2}` : match.group_name;
 
   async function handleShare() {
     const url = `${window.location.origin}/partidos/${match.id}`;
@@ -389,10 +394,10 @@ function MatchCard({ match, isNext, now }) {
         <TeamBadge name={match.away_team} logoUrl={match.away_logo_url} />
       </div>
 
-      {(venueLabel || match.week_label || match.group_name) && (
+      {(venueLabel || match.week_label || groupLabel) && (
         <div className="match-card-meta">
           {match.week_label && <span>{/^\d+$/.test(match.week_label) ? `Jornada ${match.week_label}` : match.week_label}</span>}
-          {match.group_name && <span>{match.group_name}</span>}
+          {groupLabel && <span>{groupLabel}</span>}
           {venueLabel && <span>{venueLabel}</span>}
         </div>
       )}

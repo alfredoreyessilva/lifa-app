@@ -207,6 +207,12 @@ export async function initSchema() {
   await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES groups(id) ON DELETE SET NULL`).catch(() => {});
   await exec(`CREATE INDEX IF NOT EXISTS idx_matches_group ON matches(group_id)`).catch(() => {});
 
+  // Segundo grupo opcional, solo para partidos interconferencia (un partido
+  // cruzado entre dos grupos distintos, ej. "14 Grandes" vs "Nacional-Norte")
+  // — así no hace falta crear un grupo artificial para representar el cruce.
+  await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS group_id_2 INTEGER REFERENCES groups(id) ON DELETE SET NULL`).catch(() => {});
+  await exec(`CREATE INDEX IF NOT EXISTS idx_matches_group2 ON matches(group_id_2)`).catch(() => {});
+
   const newLeagueColumns = [
     'cover_url TEXT',
     'facebook_url TEXT',

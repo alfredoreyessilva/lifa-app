@@ -118,9 +118,12 @@ router.delete('/groups/:id', authRequired, groupOwnerRequired, asyncHandler(asyn
 
 /* ===================== PARTIDOS ===================== */
 
-function validateMatchFields({ home_team, away_team, stream_url, tickets_url, status, home_score, away_score, timezone }) {
+function validateMatchFields({ home_team, away_team, stream_url, tickets_url, status, home_score, away_score, timezone, group_id, group_id_2 }) {
   if (home_team && away_team && home_team.trim().toLowerCase() === away_team.trim().toLowerCase()) {
     return 'El equipo local y el equipo visitante no pueden ser el mismo';
+  }
+  if (group_id && group_id_2 && Number(group_id) === Number(group_id_2)) {
+    return 'El segundo grupo debe ser distinto del primero (o déjalo vacío si no es un partido interconferencia)';
   }
   if (stream_url  && !isValidUrl(stream_url))  return 'El link de transmisión no es una dirección web válida';
   if (tickets_url && !isValidUrl(tickets_url)) return 'El link de boletos no es una dirección web válida';
@@ -145,18 +148,18 @@ function validateMatchFields({ home_team, away_team, stream_url, tickets_url, st
 }
 
 router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequired, asyncHandler(async (req, res) => {
-  const { home_team, away_team, match_date, venue_id, group_id, stream_url, tickets_url, week_label, status, home_score, away_score, timezone } = req.body;
+  const { home_team, away_team, match_date, venue_id, group_id, group_id_2, stream_url, tickets_url, week_label, status, home_score, away_score, timezone } = req.body;
   if (!isNonEmptyString(home_team) || !isNonEmptyString(away_team) || !match_date) {
     return res.status(400).json({ error: 'Se requieren equipo local, visitante y fecha' });
   }
 
   const resolvedStatus = status || 'scheduled';
-  const validationError = validateMatchFields({ home_team, away_team, stream_url, tickets_url, status: resolvedStatus, home_score, away_score, timezone });
+  const validationError = validateMatchFields({ home_team, away_team, stream_url, tickets_url, status: resolvedStatus, home_score, away_score, timezone, group_id, group_id_2 });
   if (validationError) return res.status(400).json({ error: validationError });
 
   const result = await db.prepare(`
-    INSERT INTO matches (category_id, home_team, away_team, match_date, venue_id, group_id, stream_url, tickets_url, week_label, status, home_score, away_score, timezone)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO matches (category_id, home_team, away_team, match_date, venue_id, group_id, group_id_2, stream_url, tickets_url, week_label, status, home_score, away_score, timezone)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.category.id,
     home_team.trim().toUpperCase(),
@@ -164,6 +167,7 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
     match_date,
     venue_id  || null,
     group_id  || null,
+    group_id_2 || null,
     stream_url  || null,
     tickets_url || null,
     week_label  ? week_label.trim().toUpperCase() : null,
@@ -235,6 +239,7 @@ router.post(
         const awayTeamRaw  = get(['Equipo Visitante', 'equipo visitante', 'visitante', 'away']);
         const venueRaw     = get(['Sede', 'sede', 'SEDE']);
         const groupRaw     = get(['Grupo', 'grupo', 'GRUPO']);
+        const group2Raw    = get(['Grupo 2', 'grupo 2', 'GRUPO 2', 'grupo2']);
         const weekLabel    = get(['Jornada', 'jornada', 'JORNADA', 'Week', 'week']);
         const streamUrl    = get(['Link de transmisión', 'link de transmision', 'stream', 'url', 'transmision']);
         const ticketsUrl   = get(['Link de boletos', 'link de boletos', 'boletos', 'tickets']);
@@ -284,6 +289,20 @@ router.post(
             groupId = groupMatch.id;
           } else {
             warnings.push({ row: rowN, reason: `El grupo "${groupRaw}" no coincide con ningún grupo registrado en esta categoría — el partido se importó sin grupo` });
+          }
+        }
+
+        // Grupo 2: solo para partidos interconferencia (cruce entre dos
+        // grupos). Se ignora si coincide con el mismo grupo que "Grupo".
+        let groupId2 = null;
+        if (group2Raw) {
+          const group2Match = findGroup(group2Raw);
+          if (!group2Match) {
+            warnings.push({ row: rowN, reason: `El grupo 2 "${group2Raw}" no coincide con ningún grupo registrado en esta categoría — el partido se importó sin ese segundo grupo` });
+          } else if (groupId && group2Match.id === groupId) {
+            warnings.push({ row: rowN, reason: `El grupo 2 "${group2Raw}" es igual al grupo 1 — se ignoró (debe ser un grupo distinto)` });
+          } else {
+            groupId2 = group2Match.id;
           }
         }
 
@@ -364,8 +383,8 @@ router.post(
         const status = computeMatchStatus(matchDate);
 
         const result = await db.prepare(`
-          INSERT INTO matches (category_id, home_team, away_team, match_date, venue, venue_id, group_id, stream_url, tickets_url, week_label, status, home_score, away_score, timezone)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO matches (category_id, home_team, away_team, match_date, venue, venue_id, group_id, group_id_2, stream_url, tickets_url, week_label, status, home_score, away_score, timezone)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           req.category.id,
           homeTeam,
@@ -374,6 +393,7 @@ router.post(
           venueRaw      ? venueRaw.toUpperCase() : null,
           venueId,
           groupId,
+          groupId2,
           validStream   || null,
           validTicketsUrl || null,
           weekLabel     ? weekLabel.toUpperCase() : null,
@@ -400,7 +420,7 @@ router.post(
 );
 
 router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
-  const { home_team, away_team, match_date, venue_id, group_id, stream_url, tickets_url, week_label, status, home_score, away_score, timezone } = req.body;
+  const { home_team, away_team, match_date, venue_id, group_id, group_id_2, stream_url, tickets_url, week_label, status, home_score, away_score, timezone } = req.body;
   const m = req.match;
 
   const resolved = {
@@ -413,6 +433,8 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
     home_score:  home_score  !== undefined ? home_score : m.home_score,
     away_score:  away_score  !== undefined ? away_score : m.away_score,
     timezone:    timezone    ?? m.timezone,
+    group_id:    group_id    !== undefined ? group_id   : m.group_id,
+    group_id_2:  group_id_2  !== undefined ? group_id_2 : m.group_id_2,
   };
 
   const validationError = validateMatchFields(resolved);
@@ -425,6 +447,7 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
       match_date  = COALESCE(?, match_date),
       venue_id    = ?,
       group_id    = ?,
+      group_id_2  = ?,
       stream_url  = COALESCE(?, stream_url),
       tickets_url = COALESCE(?, tickets_url),
       week_label  = COALESCE(?, week_label),
@@ -437,6 +460,7 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
     toNull(home_team), toNull(away_team), toNull(match_date),
     venue_id  !== undefined ? (venue_id  || null) : m.venue_id,
     group_id  !== undefined ? (group_id  || null) : m.group_id,
+    group_id_2 !== undefined ? (group_id_2 || null) : m.group_id_2,
     toNull(stream_url), toNull(tickets_url), toNull(week_label), toNull(status),
     toNull(home_score), toNull(away_score), toNull(timezone), m.id
   );
