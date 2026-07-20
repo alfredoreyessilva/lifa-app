@@ -95,12 +95,16 @@ export default function CalendarPage() {
   // compartido abra directamente en el mismo filtro que tenía quien lo compartió.
   const initialView = ALL_VIEWS.includes(searchParams.get('view')) ? searchParams.get('view') : 'completo';
   const initialSel  = searchParams.get('sel') || null;
+  const initialSubJornada = searchParams.get('jornada') || null;
 
   const [data, setData]         = useState(null);
   const [error, setError]       = useState('');
   const [copied, setCopied]     = useState(false);
   const [view, setView]         = useState(initialView);
   const [selected, setSelected] = useState(initialSel);
+  // Sub-filtro de jornada dentro de "Ver por grupo" — permite compartir el
+  // link de una sola jornada de un solo grupo (ej. Jornada 1 de 14 Grandes).
+  const [subJornada, setSubJornada] = useState(initialSubJornada);
   const [now, setNow]           = useState(Date.now());
 
   useEffect(() => {
@@ -112,20 +116,21 @@ export default function CalendarPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Mantiene la URL sincronizada con el filtro activo (vista + selección),
-  // así el link que se comparte siempre refleja lo que se está viendo.
+  // Mantiene la URL sincronizada con el filtro activo (vista + selección +
+  // sub-jornada), así el link que se comparte siempre refleja lo que se ve.
   useEffect(() => {
     const params = {};
     if (view !== 'completo') params.view = view;
     if (selected) params.sel = selected;
+    if (view === 'grupo' && selected && subJornada) params.jornada = subJornada;
     setSearchParams(params, { replace: true });
-  }, [view, selected]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view, selected, subJornada]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function changeView(v) { setView(v); setSelected(null); setCopied(false); }
+  function changeView(v) { setView(v); setSelected(null); setSubJornada(null); setCopied(false); }
 
-  function selectFilter(value) { setSelected(value); setCopied(false); }
+  function selectFilter(value) { setSelected(value); setSubJornada(null); setCopied(false); }
 
-  function clearSelection() { setSelected(null); setCopied(false); }
+  function clearSelection() { setSelected(null); setSubJornada(null); setCopied(false); }
 
   // Usa la misma ventanita nativa de compartir (WhatsApp, Mensajes, etc.)
   // que ya usa el botón de compartir partido, en vez de solo copiar el link.
@@ -162,12 +167,22 @@ export default function CalendarPage() {
   if (view === 'jornada' && selected) filteredMatches = matches.filter((m) => m.week_label === selected);
   else if (view === 'equipo' && selected) filteredMatches = matches.filter((m) => m.home_team === selected || m.away_team === selected);
   else if (view === 'sede'   && selected) filteredMatches = matches.filter((m) => String(m.venue_id) === selected);
-  else if (view === 'grupo'  && selected) filteredMatches = matches.filter((m) => String(m.group_id) === selected || String(m.group_id_2) === selected);
+  else if (view === 'grupo'  && selected) {
+    filteredMatches = matches.filter((m) => String(m.group_id) === selected || String(m.group_id_2) === selected);
+    if (subJornada) filteredMatches = filteredMatches.filter((m) => m.week_label === subJornada);
+  }
 
   const jornadas = getJornadas(matches);
   const equipos  = getEquipos(matches);
   const sedes    = getSedes(matches);
   const grupos   = getGrupos(matches);
+
+  // Jornadas que existen DENTRO del grupo seleccionado (no todas las de la
+  // categoría), para que el sub-filtro solo muestre opciones que apliquen.
+  const matchesInSelectedGroup = view === 'grupo' && selected
+    ? matches.filter((m) => String(m.group_id) === selected || String(m.group_id_2) === selected)
+    : [];
+  const jornadasInGroup = getJornadas(matchesInSelectedGroup);
 
   // La pestaña "Grupo" solo se muestra si esta categoría realmente usa
   // grupos — para no ensuciar el calendario de ligas que no los necesitan.
@@ -182,7 +197,10 @@ export default function CalendarPage() {
     ? (grupos.find((g) => String(g.id) === selected)?.name || null)
     : null;
   const shareSelected = view === 'sede' ? selectedSedeName : view === 'grupo' ? selectedGrupoName : selected;
-  const shareLabel = getShareLabel(view, shareSelected);
+  const subJornadaLabel = subJornada ? (/^\d+$/.test(subJornada) ? `Jornada ${subJornada}` : subJornada) : null;
+  const shareLabel = view === 'grupo' && selected && subJornadaLabel
+    ? `Compartir calendario de ${shareSelected} — ${subJornadaLabel}`
+    : getShareLabel(view, shareSelected);
 
   return (
     <div className="container">
@@ -312,6 +330,19 @@ export default function CalendarPage() {
             <>
               <button className="filter-back" onClick={clearSelection}>← Todos los grupos</button>
               <div className="filter-selected-title">🏆 {selectedGrupoName}</div>
+
+              {jornadasInGroup.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+                  <span style={{ color: 'var(--ink-dim)', fontSize: 14 }}>Acotar por jornada:</span>
+                  <select value={subJornada || ''} onChange={(e) => setSubJornada(e.target.value || null)} style={{ width: 160 }}>
+                    <option value="">Todas las jornadas</option>
+                    {jornadasInGroup.map((j) => (
+                      <option key={j.key} value={j.key}>{j.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <MatchGrid matches={filteredMatches} nextMatch={nextMatch} now={now} />
             </>
           )}
