@@ -332,14 +332,16 @@ export default function CalendarPage() {
               <div className="filter-selected-title">🏆 {selectedGrupoName}</div>
 
               {jornadasInGroup.length > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-                  <span style={{ color: 'var(--ink-dim)', fontSize: 14 }}>Acotar por jornada:</span>
-                  <select value={subJornada || ''} onChange={(e) => setSubJornada(e.target.value || null)} style={{ width: 160 }}>
-                    <option value="">Todas las jornadas</option>
-                    {jornadasInGroup.map((j) => (
-                      <option key={j.key} value={j.key}>{j.label}</option>
-                    ))}
-                  </select>
+                <div className="field" style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ color: 'var(--ink-dim)', fontSize: 14, whiteSpace: 'nowrap' }}>Acotar por jornada:</span>
+                    <select value={subJornada || ''} onChange={(e) => setSubJornada(e.target.value || null)} style={{ width: 160 }}>
+                      <option value="">Todas las jornadas</option>
+                      {jornadasInGroup.map((j) => (
+                        <option key={j.key} value={j.key}>{j.label}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
 
