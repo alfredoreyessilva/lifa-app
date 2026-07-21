@@ -44,7 +44,7 @@ export default function App() {
         </main>
       </div>
       <footer className="footer">
-        <div className="container">CALENDARIO DE FOOTBALL AMERICANO MEXICO</div>
+        <div className="container">CALENDARIOS DE FOOTBALL AMERICANO MÉXICO</div>
       </footer>
     </>
   );
