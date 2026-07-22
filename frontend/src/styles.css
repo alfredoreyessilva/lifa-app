@@ -1376,8 +1376,8 @@ a { color: inherit; }
 }
 
 .match-card-logo {
-  width: 52px;
-  height: 52px;
+  width: 88px;
+  height: 88px;
   border-radius: 50%;
   background: var(--field);
   border: 2px solid var(--line-strong);
@@ -1385,10 +1385,46 @@ a { color: inherit; }
   align-items: center;
   justify-content: center;
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: 22px;
   color: var(--flag);
   overflow: hidden;
   flex-shrink: 0;
+}
+
+/* ---------- Pie de tarjeta nuevo: info a la izquierda, botones a la derecha ---------- */
+.match-card-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.match-card-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: left;
+}
+
+.match-card-info .match-card-datetime {
+  align-items: flex-start;
+}
+
+.match-card-info .match-card-meta {
+  border-top: none;
+  padding-top: 2px;
+  margin-top: 2px;
+  justify-content: flex-start;
+}
+
+.match-card-footer .match-card-actions {
+  justify-content: flex-end;
+  padding-top: 0;
 }
 
 .match-card-logo img {
@@ -1454,9 +1490,9 @@ a { color: inherit; }
   }
 
   .match-card-logo {
-    width: 44px;
-    height: 44px;
-    font-size: 12px;
+    width: 64px;
+    height: 64px;
+    font-size: 16px;
   }
 
   .match-card-score {
@@ -1466,6 +1502,15 @@ a { color: inherit; }
   .match-card-team-name {
     font-size: 11px;
     max-width: 90px;
+  }
+
+  .match-card-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .match-card-footer .match-card-actions {
+    justify-content: flex-start;
   }
 }
 

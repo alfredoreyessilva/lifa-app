@@ -402,19 +402,6 @@ function MatchCard({ match, isNext, now }) {
 
   return (
     <div className={`match-card-new${isNext ? ' match-card-new--next' : ''}${isLive ? ' match-card-new--live' : ''}`}>
-      <div className="match-card-header">
-        <div className="match-card-datetime">
-          <span className="match-card-date">{day} {month}</span>
-          <span className="match-card-time">{time}</span>
-          <span className="match-card-tz">{tzLabel}</span>
-        </div>
-        <div className="match-card-status">
-          {isNext && !isLive && <span className="tag" style={{ color: 'var(--flag)', borderColor: 'var(--flag)' }}>Próximo</span>}
-          {isLive     && <span className="tag live">🔴 En vivo</span>}
-          {isFinished && <span className="tag finished">Finalizado</span>}
-        </div>
-      </div>
-
       <div className="match-card-body">
         <TeamBadge name={match.home_team} logoUrl={match.home_logo_url} />
         <div className="match-card-score">
@@ -427,33 +414,47 @@ function MatchCard({ match, isNext, now }) {
         <TeamBadge name={match.away_team} logoUrl={match.away_logo_url} />
       </div>
 
-      {(venueLabel || match.week_label || groupLabel) && (
-        <div className="match-card-meta">
-          {match.week_label && <span>{/^\d+$/.test(match.week_label) ? `Jornada ${match.week_label}` : match.week_label}</span>}
-          {groupLabel && <span>{groupLabel}</span>}
-          {venueLabel && <span>{venueLabel}</span>}
+      <div className="match-card-footer">
+        <div className="match-card-info">
+          <div className="match-card-status">
+            {isNext && !isLive && <span className="tag" style={{ color: 'var(--flag)', borderColor: 'var(--flag)' }}>Próximo</span>}
+            {isLive     && <span className="tag live">🔴 En vivo</span>}
+            {isFinished && <span className="tag finished">Finalizado</span>}
+          </div>
+          <div className="match-card-datetime">
+            <span className="match-card-date">{day} {month}</span>
+            <span className="match-card-time">{time}</span>
+            <span className="match-card-tz">{tzLabel}</span>
+          </div>
+          {(venueLabel || match.week_label || groupLabel) && (
+            <div className="match-card-meta">
+              {match.week_label && <span>{/^\d+$/.test(match.week_label) ? `Jornada ${match.week_label}` : match.week_label}</span>}
+              {groupLabel && <span>{groupLabel}</span>}
+              {venueLabel && <span>{venueLabel}</span>}
+            </div>
+          )}
         </div>
-      )}
 
-      <div className="match-card-actions">
-        {match.stream_url && (
-          <a href={match.stream_url} target="_blank" rel="noopener noreferrer" className="btn btn-flag btn-sm">
-            {isLive ? '🔴 Ver en vivo' : 'Ver partido'}
-          </a>
-        )}
-        {match.tickets_url && (
-          <a href={match.tickets_url} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
-            Comprar boletos
-          </a>
-        )}
-        <button className="btn btn-outline btn-sm" type="button" onClick={handleShare}>
-          {shareState === 'copied' ? '✓ Link copiado' : '🔗 Compartir'}
-        </button>
+        <div className="match-card-actions">
+          {match.stream_url && (
+            <a href={match.stream_url} target="_blank" rel="noopener noreferrer" className="btn btn-flag btn-sm">
+              {isLive ? '🔴 Ver en vivo' : 'Ver partido'}
+            </a>
+          )}
+          {match.tickets_url && (
+            <a href={match.tickets_url} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
+              Comprar boletos
+            </a>
+          )}
+          <button className="btn btn-outline btn-sm" type="button" onClick={handleShare}>
+            {shareState === 'copied' ? '✓ Link copiado' : '🔗 Compartir'}
+          </button>
+        </div>
       </div>
 
       {/* Botón de notificación solo para partidos programados */}
       {isScheduled && (
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
           <SubscribeButton matchId={match.id} label="Avisarme de este partido" />
         </div>
       )}
