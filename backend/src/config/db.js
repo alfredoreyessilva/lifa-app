@@ -185,6 +185,41 @@ export async function initSchema() {
     await exec(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS ${col}`).catch(() => {});
   }
 
+  // Links predeterminados de transmisión/boletos por equipo — separados entre
+  // "en casa" y "de visita", porque un mismo equipo puede transmitir distinto
+  // según juegue de local o visitante. Cada uno es una LISTA (jsonb), porque un
+  // equipo puede compartir el mismo partido en varias plataformas a la vez.
+  const newTeamLinkColumns = [
+    "home_stream_links JSONB NOT NULL DEFAULT '[]'::jsonb",
+    "away_stream_links JSONB NOT NULL DEFAULT '[]'::jsonb",
+    "home_ticket_links JSONB NOT NULL DEFAULT '[]'::jsonb",
+    "away_ticket_links JSONB NOT NULL DEFAULT '[]'::jsonb",
+  ];
+  for (const col of newTeamLinkColumns) {
+    await exec(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS ${col}`).catch(() => {});
+  }
+
+  // Links de un partido específico — ahora son listas (varias plataformas a la
+  // vez), en vez de un solo texto. Se dejan las columnas viejas stream_url /
+  // tickets_url intactas (no se borran) para no perder datos históricos.
+  await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS stream_links JSONB NOT NULL DEFAULT '[]'::jsonb`).catch(() => {});
+  await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS ticket_links JSONB NOT NULL DEFAULT '[]'::jsonb`).catch(() => {});
+
+  // Migra automáticamente (en cada arranque del servidor) cualquier link viejo
+  // de un solo texto hacia la nueva lista, mientras esta siga vacía. Así los
+  // partidos ya creados (o importados por Excel, que sigue usando las columnas
+  // viejas) terminan mostrándose igual con el nuevo sistema de botones.
+  await exec(`
+    UPDATE matches
+    SET stream_links = jsonb_build_array(stream_url)
+    WHERE stream_url IS NOT NULL AND stream_url <> '' AND jsonb_array_length(stream_links) = 0
+  `).catch(() => {});
+  await exec(`
+    UPDATE matches
+    SET ticket_links = jsonb_build_array(tickets_url)
+    WHERE tickets_url IS NOT NULL AND tickets_url <> '' AND jsonb_array_length(ticket_links) = 0
+  `).catch(() => {});
+
   await exec(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/Mexico_City'`).catch(() => {});
   await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS timezone TEXT`).catch(() => {});
   await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS tickets_url TEXT`).catch(() => {});

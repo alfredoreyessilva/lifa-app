@@ -7,6 +7,16 @@ import { getMatchStatus } from '../utils/matchStatus.js';
 import { getMatchParts, initials } from '../utils/matchDisplay.js';
 import { shareLink } from '../utils/share.js';
 
+// Convierte una URL en una etiqueta corta y legible (ej. "youtube.com"),
+// para diferenciar los botones cuando hay más de un link del mismo tipo.
+function linkHost(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return 'link';
+  }
+}
+
 export default function MatchPage() {
   const { matchId } = useParams();
   const [match, setMatch]         = useState(null);
@@ -116,16 +126,18 @@ export default function MatchPage() {
         )}
 
         <div className="match-card-actions" style={{ marginTop: 16 }}>
-          {match.stream_url && (
-            <a href={match.stream_url} target="_blank" rel="noopener noreferrer" className="btn btn-flag btn-sm">
+          {(match.stream_links || []).map((url, i) => (
+            <a key={`stream-${i}`} href={url} target="_blank" rel="noopener noreferrer" className="btn btn-flag btn-sm">
               {isLive ? '🔴 Ver en vivo' : 'Ver partido'}
+              {match.stream_links.length > 1 ? ` — ${linkHost(url)}` : ''}
             </a>
-          )}
-          {match.tickets_url && (
-            <a href={match.tickets_url} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
+          ))}
+          {(match.ticket_links || []).map((url, i) => (
+            <a key={`tickets-${i}`} href={url} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
               Comprar boletos
+              {match.ticket_links.length > 1 ? ` — ${linkHost(url)}` : ''}
             </a>
-          )}
+          ))}
           <button className="btn btn-outline btn-sm" type="button" onClick={handleShare}>
             {shareState === 'copied' ? '✓ Link copiado' : '🔗 Compartir partido'}
           </button>

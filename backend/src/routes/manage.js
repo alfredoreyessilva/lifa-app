@@ -14,6 +14,24 @@ function toNull(value) {
   return value === undefined ? null : value;
 }
 
+// Convierte un array de URLs a texto JSON para guardarlo en una columna
+// jsonb — si el valor no vino en la petición, devuelve null (para que el
+// COALESCE en el UPDATE conserve el valor que ya existía).
+function toLinksJson(value) {
+  if (value === undefined) return null;
+  return JSON.stringify(Array.isArray(value) ? value.filter((u) => typeof u === 'string' && u.trim()) : []);
+}
+
+// Valida que cada elemento de una lista de links sea una URL válida.
+function validateLinksList(links, label) {
+  if (links === undefined) return null;
+  if (!Array.isArray(links)) return `${label} debe ser una lista de direcciones web`;
+  for (const url of links) {
+    if (url && !isValidUrl(url)) return `Uno de los links de ${label} no es una dirección web válida`;
+  }
+  return null;
+}
+
 // Misma lógica que frontend/src/utils/matchStatus.js: el estado depende
 // exclusivamente del horario (fecha + ventana de 3h) — el marcador NUNCA
 // determina el estado, solo es un dato que se guarda aparte.
@@ -118,15 +136,17 @@ router.delete('/groups/:id', authRequired, groupOwnerRequired, asyncHandler(asyn
 
 /* ===================== PARTIDOS ===================== */
 
-function validateMatchFields({ home_team, away_team, stream_url, tickets_url, status, home_score, away_score, timezone, group_id, group_id_2 }) {
+function validateMatchFields({ home_team, away_team, stream_links, ticket_links, status, home_score, away_score, timezone, group_id, group_id_2 }) {
   if (home_team && away_team && home_team.trim().toLowerCase() === away_team.trim().toLowerCase()) {
     return 'El equipo local y el equipo visitante no pueden ser el mismo';
   }
   if (group_id && group_id_2 && Number(group_id) === Number(group_id_2)) {
     return 'El segundo grupo debe ser distinto del primero (o déjalo vacío si no es un partido interconferencia)';
   }
-  if (stream_url  && !isValidUrl(stream_url))  return 'El link de transmisión no es una dirección web válida';
-  if (tickets_url && !isValidUrl(tickets_url)) return 'El link de boletos no es una dirección web válida';
+  const streamLinksError = validateLinksList(stream_links, 'transmisión');
+  if (streamLinksError) return streamLinksError;
+  const ticketLinksError = validateLinksList(ticket_links, 'boletos');
+  if (ticketLinksError) return ticketLinksError;
   if (timezone && !isValidTimezone(timezone))  return 'La zona horaria seleccionada no es válida';
 
   // Marcador obligatorio solo cuando el estado es finalizado
@@ -148,17 +168,17 @@ function validateMatchFields({ home_team, away_team, stream_url, tickets_url, st
 }
 
 router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequired, asyncHandler(async (req, res) => {
-  const { home_team, away_team, match_date, venue_id, group_id, group_id_2, stream_url, tickets_url, week_label, status, home_score, away_score, timezone } = req.body;
+  const { home_team, away_team, match_date, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone } = req.body;
   if (!isNonEmptyString(home_team) || !isNonEmptyString(away_team) || !match_date) {
     return res.status(400).json({ error: 'Se requieren equipo local, visitante y fecha' });
   }
 
   const resolvedStatus = status || 'scheduled';
-  const validationError = validateMatchFields({ home_team, away_team, stream_url, tickets_url, status: resolvedStatus, home_score, away_score, timezone, group_id, group_id_2 });
+  const validationError = validateMatchFields({ home_team, away_team, stream_links, ticket_links, status: resolvedStatus, home_score, away_score, timezone, group_id, group_id_2 });
   if (validationError) return res.status(400).json({ error: validationError });
 
   const result = await db.prepare(`
-    INSERT INTO matches (category_id, home_team, away_team, match_date, venue_id, group_id, group_id_2, stream_url, tickets_url, week_label, status, home_score, away_score, timezone)
+    INSERT INTO matches (category_id, home_team, away_team, match_date, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.category.id,
@@ -168,8 +188,8 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
     venue_id  || null,
     group_id  || null,
     group_id_2 || null,
-    stream_url  || null,
-    tickets_url || null,
+    JSON.stringify(Array.isArray(stream_links) ? stream_links.filter((u) => u && u.trim()) : []),
+    JSON.stringify(Array.isArray(ticket_links) ? ticket_links.filter((u) => u && u.trim()) : []),
     week_label  ? week_label.trim().toUpperCase() : null,
     resolvedStatus,
     home_score === '' || home_score === undefined ? null : home_score,
@@ -420,15 +440,15 @@ router.post(
 );
 
 router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
-  const { home_team, away_team, match_date, venue_id, group_id, group_id_2, stream_url, tickets_url, week_label, status, home_score, away_score, timezone } = req.body;
+  const { home_team, away_team, match_date, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone } = req.body;
   const m = req.match;
 
   const resolved = {
     home_team:   home_team   ?? m.home_team,
     away_team:   away_team   ?? m.away_team,
     match_date:  match_date  ?? m.match_date,
-    stream_url:  stream_url  ?? m.stream_url,
-    tickets_url: tickets_url ?? m.tickets_url,
+    stream_links: stream_links ?? m.stream_links,
+    ticket_links: ticket_links ?? m.ticket_links,
     status:      status      ?? m.status,
     home_score:  home_score  !== undefined ? home_score : m.home_score,
     away_score:  away_score  !== undefined ? away_score : m.away_score,
@@ -442,26 +462,26 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
 
   await db.prepare(`
     UPDATE matches SET
-      home_team   = COALESCE(?, home_team),
-      away_team   = COALESCE(?, away_team),
-      match_date  = COALESCE(?, match_date),
-      venue_id    = ?,
-      group_id    = ?,
-      group_id_2  = ?,
-      stream_url  = COALESCE(?, stream_url),
-      tickets_url = COALESCE(?, tickets_url),
-      week_label  = COALESCE(?, week_label),
-      status      = COALESCE(?, status),
-      home_score  = COALESCE(?, home_score),
-      away_score  = COALESCE(?, away_score),
-      timezone    = COALESCE(?, timezone)
+      home_team    = COALESCE(?, home_team),
+      away_team    = COALESCE(?, away_team),
+      match_date   = COALESCE(?, match_date),
+      venue_id     = ?,
+      group_id     = ?,
+      group_id_2   = ?,
+      stream_links = COALESCE(?, stream_links),
+      ticket_links = COALESCE(?, ticket_links),
+      week_label   = COALESCE(?, week_label),
+      status       = COALESCE(?, status),
+      home_score   = COALESCE(?, home_score),
+      away_score   = COALESCE(?, away_score),
+      timezone     = COALESCE(?, timezone)
     WHERE id = ?
   `).run(
     toNull(home_team), toNull(away_team), toNull(match_date),
     venue_id  !== undefined ? (venue_id  || null) : m.venue_id,
     group_id  !== undefined ? (group_id  || null) : m.group_id,
     group_id_2 !== undefined ? (group_id_2 || null) : m.group_id_2,
-    toNull(stream_url), toNull(tickets_url), toNull(week_label), toNull(status),
+    toLinksJson(stream_links), toLinksJson(ticket_links), toNull(week_label), toNull(status),
     toNull(home_score), toNull(away_score), toNull(timezone), m.id
   );
 
@@ -475,7 +495,7 @@ router.delete('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(asy
 
 /* ===================== EQUIPOS ===================== */
 
-function validateTeamFields({ contact_email, facebook_url, instagram_url, twitter_url, website_url, logo_url, cover_url }) {
+function validateTeamFields({ contact_email, facebook_url, instagram_url, twitter_url, website_url, logo_url, cover_url, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links }) {
   if (contact_email && !isValidEmail(contact_email)) return 'El correo de contacto no tiene un formato válido';
   if (facebook_url  && !isValidUrl(facebook_url))    return 'El enlace de Facebook no es una dirección web válida';
   if (instagram_url && !isValidUrl(instagram_url))   return 'El enlace de Instagram no es una dirección web válida';
@@ -483,6 +503,14 @@ function validateTeamFields({ contact_email, facebook_url, instagram_url, twitte
   if (website_url   && !isValidUrl(website_url))     return 'El sitio web no es una dirección web válida';
   if (logo_url      && !isValidUrl(logo_url))        return 'El logo no es una dirección web válida';
   if (cover_url     && !isValidUrl(cover_url))       return 'La imagen de portada no es una dirección web válida';
+  const homeStreamError = validateLinksList(home_stream_links, 'transmisión en casa');
+  if (homeStreamError) return homeStreamError;
+  const awayStreamError = validateLinksList(away_stream_links, 'transmisión de visita');
+  if (awayStreamError) return awayStreamError;
+  const homeTicketError = validateLinksList(home_ticket_links, 'boletos en casa');
+  if (homeTicketError) return homeTicketError;
+  const awayTicketError = validateLinksList(away_ticket_links, 'boletos de visita');
+  if (awayTicketError) return awayTicketError;
   return null;
 }
 
@@ -490,16 +518,17 @@ router.post('/leagues/:leagueId/teams', authRequired, leagueOwnerRequired, async
   const {
     name, logo_url, cover_url, location, contact_email, contact_phone,
     facebook_url, instagram_url, twitter_url, website_url, sort_order,
+    home_stream_links, away_stream_links, home_ticket_links, away_ticket_links,
   } = req.body;
 
   if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre del equipo es obligatorio' });
 
-  const validationError = validateTeamFields({ contact_email, facebook_url, instagram_url, twitter_url, website_url, logo_url, cover_url });
+  const validationError = validateTeamFields({ contact_email, facebook_url, instagram_url, twitter_url, website_url, logo_url, cover_url, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links });
   if (validationError) return res.status(400).json({ error: validationError });
 
   const result = await db.prepare(`
-    INSERT INTO teams (league_id, name, logo_url, cover_url, location, contact_email, contact_phone, facebook_url, instagram_url, twitter_url, website_url, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO teams (league_id, name, logo_url, cover_url, location, contact_email, contact_phone, facebook_url, instagram_url, twitter_url, website_url, sort_order, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.league.id, name.trim().toUpperCase(),
     logo_url      || null,
@@ -512,6 +541,10 @@ router.post('/leagues/:leagueId/teams', authRequired, leagueOwnerRequired, async
     twitter_url   || null,
     website_url   || null,
     sort_order    || 0,
+    JSON.stringify(Array.isArray(home_stream_links) ? home_stream_links.filter((u) => u && u.trim()) : []),
+    JSON.stringify(Array.isArray(away_stream_links) ? away_stream_links.filter((u) => u && u.trim()) : []),
+    JSON.stringify(Array.isArray(home_ticket_links) ? home_ticket_links.filter((u) => u && u.trim()) : []),
+    JSON.stringify(Array.isArray(away_ticket_links) ? away_ticket_links.filter((u) => u && u.trim()) : []),
   );
 
   res.status(201).json(await db.prepare('SELECT * FROM teams WHERE id = ?').get(result.lastInsertRowid));
@@ -521,6 +554,7 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
   const {
     name, logo_url, cover_url, location, contact_email, contact_phone,
     facebook_url, instagram_url, twitter_url, website_url, sort_order,
+    home_stream_links, away_stream_links, home_ticket_links, away_ticket_links,
   } = req.body;
   const t = req.team;
 
@@ -532,29 +566,37 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
     website_url:   website_url   ?? t.website_url,
     logo_url:      logo_url      ?? t.logo_url,
     cover_url:     cover_url     ?? t.cover_url,
+    home_stream_links, away_stream_links, home_ticket_links, away_ticket_links,
   };
   const validationError = validateTeamFields(resolved);
   if (validationError) return res.status(400).json({ error: validationError });
 
   await db.prepare(`
     UPDATE teams SET
-      name          = COALESCE(?, name),
-      logo_url      = COALESCE(?, logo_url),
-      cover_url     = COALESCE(?, cover_url),
-      location      = COALESCE(?, location),
-      contact_email = COALESCE(?, contact_email),
-      contact_phone = COALESCE(?, contact_phone),
-      facebook_url  = COALESCE(?, facebook_url),
-      instagram_url = COALESCE(?, instagram_url),
-      twitter_url   = COALESCE(?, twitter_url),
-      website_url   = COALESCE(?, website_url),
-      sort_order    = COALESCE(?, sort_order)
+      name              = COALESCE(?, name),
+      logo_url          = COALESCE(?, logo_url),
+      cover_url         = COALESCE(?, cover_url),
+      location          = COALESCE(?, location),
+      contact_email     = COALESCE(?, contact_email),
+      contact_phone     = COALESCE(?, contact_phone),
+      facebook_url      = COALESCE(?, facebook_url),
+      instagram_url     = COALESCE(?, instagram_url),
+      twitter_url       = COALESCE(?, twitter_url),
+      website_url       = COALESCE(?, website_url),
+      sort_order        = COALESCE(?, sort_order),
+      home_stream_links = COALESCE(?, home_stream_links),
+      away_stream_links = COALESCE(?, away_stream_links),
+      home_ticket_links = COALESCE(?, home_ticket_links),
+      away_ticket_links = COALESCE(?, away_ticket_links)
     WHERE id = ?
   `).run(
     toNull(name),          toNull(logo_url),      toNull(cover_url),
     toNull(location),      toNull(contact_email), toNull(contact_phone),
     toNull(facebook_url),  toNull(instagram_url), toNull(twitter_url),
-    toNull(website_url),   toNull(sort_order),    t.id,
+    toNull(website_url),   toNull(sort_order),
+    toLinksJson(home_stream_links), toLinksJson(away_stream_links),
+    toLinksJson(home_ticket_links), toLinksJson(away_ticket_links),
+    t.id,
   );
 
   res.json(await db.prepare('SELECT * FROM teams WHERE id = ?').get(t.id));

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../api/client.js';
 import { required, differentFrom, validUrl, minValue, runValidations } from '../utils/validation.js';
 import Modal from './Modal.jsx';
@@ -6,6 +6,7 @@ import VenueForm from './VenueForm.jsx';
 import TeamForm from './TeamForm.jsx';
 import GroupForm from './GroupForm.jsx';
 import TimezoneSelect from './TimezoneSelect.jsx';
+import LinkListField from './LinkListField.jsx';
 import { getMatchStatus } from '../utils/matchStatus.js';
 
 function toLocalInputValue(isoString) {
@@ -76,6 +77,15 @@ function parseWeekNumber(val) {
   return match ? match[1] : '';
 }
 
+// Valida cada URL de una lista reutilizando el validador de un solo link.
+function linksValid(links, label) {
+  for (const url of (links || [])) {
+    const error = validUrl(url, label);
+    if (error) return error;
+  }
+  return null;
+}
+
 export default function MatchForm({
   initial, onSubmit, onCancel, submitLabel, teams, venues, groups,
   leagueTimezone, token, leagueId, categoryId, onVenueCreated, onTeamCreated, onGroupCreated,
@@ -89,8 +99,8 @@ export default function MatchForm({
     venue_id:    initial?.venue_id    || null,
     group_id:    initial?.group_id    || null,
     group_id_2:  initial?.group_id_2  || null,
-    stream_url:  initial?.stream_url  || '',
-    tickets_url: initial?.tickets_url || '',
+    stream_links: initial?.stream_links || [],
+    ticket_links: initial?.ticket_links || [],
     week_label:  parseWeekNumber(initial?.week_label),
     home_score:  initial?.home_score  ?? '',
     away_score:  initial?.away_score  ?? '',
@@ -123,6 +133,46 @@ export default function MatchForm({
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
   }
+
+  // Junta sin repetir los links ya puestos con los nuevos que llegan del equipo.
+  function mergeLinks(existing, extra) {
+    const set = new Set(existing);
+    for (const url of (extra || [])) { if (url) set.add(url); }
+    return Array.from(set);
+  }
+
+  // Auto-relleno de links: solo al ARMAR un partido nuevo (no al editar uno ya
+  // existente, para no pisar lo que el representante ya haya guardado). Se
+  // dispara una sola vez por cada equipo elegido (no en cada letra que escriba
+  // el buscador), y el resultado queda editable de inmediato.
+  const appliedHomeTeamRef = useRef(null);
+  const appliedAwayTeamRef = useRef(null);
+
+  useEffect(() => {
+    if (initial) return;
+    if (!form.home_team || appliedHomeTeamRef.current === form.home_team) return;
+    appliedHomeTeamRef.current = form.home_team;
+    const team = (localTeams || []).find((t) => t.name.toLowerCase() === form.home_team.toLowerCase());
+    if (!team) return;
+    setForm((f) => ({
+      ...f,
+      stream_links: mergeLinks(f.stream_links, team.home_stream_links),
+      ticket_links: mergeLinks(f.ticket_links, team.home_ticket_links),
+    }));
+  }, [form.home_team, localTeams, initial]);
+
+  useEffect(() => {
+    if (initial) return;
+    if (!form.away_team || appliedAwayTeamRef.current === form.away_team) return;
+    appliedAwayTeamRef.current = form.away_team;
+    const team = (localTeams || []).find((t) => t.name.toLowerCase() === form.away_team.toLowerCase());
+    if (!team) return;
+    setForm((f) => ({
+      ...f,
+      stream_links: mergeLinks(f.stream_links, team.away_stream_links),
+      ticket_links: mergeLinks(f.ticket_links, team.away_ticket_links),
+    }));
+  }, [form.away_team, localTeams, initial]);
 
   // Construye un objeto temporal para calcular el estado actual del partido
   function getCurrentStatus() {
@@ -206,8 +256,8 @@ export default function MatchForm({
         form.away_team.trim().toLowerCase(),
         'El equipo local y el equipo visitante no pueden ser el mismo'
       ),
-      () => validUrl(form.stream_url,  'El link de transmisión'),
-      () => validUrl(form.tickets_url, 'El link de boletos'),
+      () => linksValid(form.stream_links, 'El link de transmisión'),
+      () => linksValid(form.ticket_links, 'El link de boletos'),
       // Marcador obligatorio solo cuando ya terminó (no en vivo)
       () => (matchIsFinished ? required(form.home_score, 'El marcador local')     : null),
       () => (matchIsFinished ? required(form.away_score, 'El marcador visitante') : null),
@@ -225,8 +275,8 @@ export default function MatchForm({
         venue_id:    form.venue_id || null,
         group_id:    form.group_id || null,
         group_id_2:  form.group_id_2 || null,
-        stream_url:  form.stream_url.trim(),
-        tickets_url: form.tickets_url.trim(),
+        stream_links: (form.stream_links || []).filter((u) => u && u.trim()),
+        ticket_links: (form.ticket_links || []).filter((u) => u && u.trim()),
         week_label:  form.week_label.trim(),
         match_date:  isoDate,
         home_score:  form.home_score === '' ? null : Number(form.home_score),
@@ -383,23 +433,18 @@ export default function MatchForm({
         </div>
       </div>
 
-      <div className="field">
-        <label>Link de transmisión (opcional)</label>
-        <input
-          value={form.stream_url}
-          onChange={(e) => update('stream_url', e.target.value)}
-          placeholder="https://…"
-        />
-      </div>
+      <LinkListField
+        label="Links de transmisión (opcional)"
+        links={form.stream_links}
+        onChange={(v) => update('stream_links', v)}
+        hint="Se sugieren solos según los equipos elegidos arriba — puedes agregar, quitar o editar los que quieras para este partido en específico."
+      />
 
-      <div className="field">
-        <label>Link de boletos (opcional)</label>
-        <input
-          value={form.tickets_url}
-          onChange={(e) => update('tickets_url', e.target.value)}
-          placeholder="https://…"
-        />
-      </div>
+      <LinkListField
+        label="Links de boletos (opcional)"
+        links={form.ticket_links}
+        onChange={(v) => update('ticket_links', v)}
+      />
 
       {/* Marcador — se pide cuando el horario dice que el partido ya terminó,
           o si ya tenía un marcador capturado de antes (para poder editarlo). */}

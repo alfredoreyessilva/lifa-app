@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { required, maxLength, validEmail, validUrl, runValidations } from '../utils/validation.js';
 import CharField from './CharField.jsx';
+import LinkListField from './LinkListField.jsx';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 function initials(name) {
@@ -69,6 +70,10 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel }) {
     instagram_url: initial?.instagram_url || '',
     twitter_url:   initial?.twitter_url   || '',
     website_url:   initial?.website_url   || '',
+    home_stream_links: initial?.home_stream_links || [],
+    away_stream_links: initial?.away_stream_links || [],
+    home_ticket_links: initial?.home_ticket_links || [],
+    away_ticket_links: initial?.away_ticket_links || [],
   });
   const [error, setError]   = useState('');
   const [loading, setLoading] = useState(false);
@@ -233,6 +238,37 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel }) {
               <label>Sitio web</label>
               <input value={form.website_url} onChange={(e) => update('website_url', e.target.value)} placeholder="https://…" />
             </div>
+          </div>
+
+          {/* Links predeterminados de transmisión y boletos */}
+          <div className="team-profile-section" style={{ textAlign: 'left', marginBottom: 16 }}>
+            <div style={{ fontSize: 11, letterSpacing: '0.15em', color: 'var(--flag)', textTransform: 'uppercase', marginBottom: 10, fontFamily: 'var(--font-eyebrow)' }}>
+              Links predeterminados
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 12 }}>
+              Estos links se van a sugerir automáticamente al armar un partido donde este equipo juegue de local o de visitante — se pueden editar en cada partido específico.
+            </div>
+
+            <LinkListField
+              label="Transmisión — cuando juega en casa"
+              links={form.home_stream_links}
+              onChange={(v) => update('home_stream_links', v)}
+            />
+            <LinkListField
+              label="Transmisión — cuando juega de visita"
+              links={form.away_stream_links}
+              onChange={(v) => update('away_stream_links', v)}
+            />
+            <LinkListField
+              label="Boletos — cuando juega en casa"
+              links={form.home_ticket_links}
+              onChange={(v) => update('home_ticket_links', v)}
+            />
+            <LinkListField
+              label="Boletos — cuando juega de visita"
+              links={form.away_ticket_links}
+              onChange={(v) => update('away_ticket_links', v)}
+            />
           </div>
 
           {/* Preview de cómo se verá en público */}
