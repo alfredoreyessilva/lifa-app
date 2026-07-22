@@ -1391,29 +1391,6 @@ a { color: inherit; }
   flex-shrink: 0;
 }
 
-/* ---------- Pie de tarjeta: info centrada arriba, botones centrados abajo ---------- */
-.match-card-footer {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding-top: 12px;
-  margin-top: 4px;
-  border-top: 1px solid var(--line);
-}
-
-.match-card-footer .match-card-meta {
-  border-top: none;
-  padding-top: 2px;
-  margin-top: 2px;
-  justify-content: center;
-}
-
-.match-card-footer .match-card-actions {
-  justify-content: center;
-  padding-top: 6px;
-}
-
 .match-card-logo img {
   width: 100%;
   height: 100%;
@@ -1491,9 +1468,6 @@ a { color: inherit; }
     max-width: 90px;
   }
 
-  .match-card-footer {
-    align-items: center;
-  }
 }
 
 /* ---------- Filtros de calendario ---------- */
