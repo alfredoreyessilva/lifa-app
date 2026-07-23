@@ -10,6 +10,7 @@ import Register from './pages/Register.jsx';
 import RegisterLeague from './pages/RegisterLeague.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import AdminPanel from './pages/AdminPanel.jsx';
+import InviteClaim from './pages/InviteClaim.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AdminRoute from './components/AdminRoute.jsx';
 
@@ -27,6 +28,7 @@ export default function App() {
             <Route path="/partidos/:matchId" element={<MatchPage />} />
             <Route path="/iniciar-sesion" element={<Login />} />
             <Route path="/crear-cuenta" element={<Register />} />
+            <Route path="/invitaciones/:token" element={<InviteClaim />} />
             <Route
               path="/registrar-liga"
               element={<ProtectedRoute><RegisterLeague /></ProtectedRoute>}

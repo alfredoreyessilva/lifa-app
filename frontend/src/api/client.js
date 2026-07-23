@@ -130,4 +130,13 @@ export const api = {
   adminGetUsers: (token) => request('/admin/users', { token }),
   adminDeleteUser: (id, token) =>
     request(`/admin/users/${id}`, { method: 'DELETE', token }),
+
+  // Invitaciones (entregar el perfil de un equipo a su representante)
+  createTeamInvite: (teamId, token) =>
+    request(`/invites/teams/${teamId}`, { method: 'POST', token }),
+  removeTeamOwner: (teamId, token) =>
+    request(`/invites/teams/${teamId}/owner`, { method: 'DELETE', token }),
+  getInvite: (inviteToken) => request(`/invites/${inviteToken}`),
+  claimInvite: (inviteToken, token) =>
+    request(`/invites/${inviteToken}/claim`, { method: 'POST', token }),
 };

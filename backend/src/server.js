@@ -10,6 +10,7 @@ import manageRoutes        from './routes/manage.js';
 import uploadRoutes        from './routes/upload.js';
 import adminRoutes         from './routes/admin.js';
 import notificationRoutes  from './routes/notifications.js';
+import inviteRoutes        from './routes/invites.js';
 
 const app = express();
 app.use(cors());
@@ -23,6 +24,7 @@ app.use('/api/manage',        manageRoutes);
 app.use('/api/upload',        uploadRoutes);
 app.use('/api/admin',         adminRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/invites',       inviteRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);

@@ -265,6 +265,30 @@ export async function initSchema() {
   await exec(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS team_name TEXT`).catch(() => {});
   await exec(`CREATE INDEX IF NOT EXISTS idx_push_team ON push_subscriptions(team_name)`).catch(() => {});
 
+  // Dueño directo de un equipo (representante de medios) — separado del dueño
+  // de la liga. Si es NULL, el equipo todavía solo lo administra el
+  // representante de la liga (o un admin).
+  await exec(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`).catch(() => {});
+  await exec(`CREATE INDEX IF NOT EXISTS idx_teams_owner ON teams(owner_user_id)`).catch(() => {});
+
+  // Invitaciones de un solo uso para "entregar" el perfil de un equipo (y más
+  // adelante, de una liga) a otra persona mediante un link que el
+  // representante genera y comparte por su cuenta.
+  await exec(`
+    CREATE TABLE IF NOT EXISTS invites (
+      id SERIAL PRIMARY KEY,
+      token TEXT UNIQUE NOT NULL,
+      type TEXT NOT NULL DEFAULT 'team',
+      team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+      league_id INTEGER REFERENCES leagues(id) ON DELETE CASCADE,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      used_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      used_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `).catch(() => {});
+  await exec(`CREATE INDEX IF NOT EXISTS idx_invites_team ON invites(team_id)`).catch(() => {});
+
   await exec(`
     ALTER TABLE push_subscriptions DROP CONSTRAINT IF EXISTS push_subscriptions_endpoint_league_id_match_id_key
   `).catch(() => {});

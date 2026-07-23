@@ -45,12 +45,31 @@ export const teamOwnerRequired = asyncHandler(async (req, res, next) => {
   const team = await db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId);
   if (!team) return res.status(404).json({ error: 'Equipo no encontrado' });
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(team.league_id);
-  if (req.user.role === 'admin' || league.owner_user_id === req.user.id) {
+  // El dueño directo del equipo (representante de medios) puede editar el
+  // perfil de SU equipo, igual que el dueño de la liga o un admin.
+  if (req.user.role === 'admin' || league.owner_user_id === req.user.id || team.owner_user_id === req.user.id) {
     req.league = league;
     req.team = team;
     return next();
   }
   return res.status(403).json({ error: 'No tienes permiso sobre este equipo' });
+});
+
+// Para gestionar invitaciones de un equipo (generar/revocar representante):
+// a propósito NO se le permite esto al representante del equipo mismo, solo
+// a quien administra la liga completa (o un admin) — para que nadie pueda
+// "regalar" su propio equipo a alguien más sin que la liga se entere.
+export const teamLeagueOwnerRequired = asyncHandler(async (req, res, next) => {
+  const teamId = Number(req.params.teamId || req.params.id);
+  const team = await db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId);
+  if (!team) return res.status(404).json({ error: 'Equipo no encontrado' });
+  const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(team.league_id);
+  if (req.user.role === 'admin' || league.owner_user_id === req.user.id) {
+    req.league = league;
+    req.team = team;
+    return next();
+  }
+  return res.status(403).json({ error: 'Solo el representante de la liga puede gestionar esto' });
 });
 
 export const venueOwnerRequired = asyncHandler(async (req, res, next) => {

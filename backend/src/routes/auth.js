@@ -43,7 +43,13 @@ router.get('/me', authRequired, asyncHandler(async (req, res) => {
   const user = await db.prepare('SELECT id, name, email, role FROM users WHERE id = ?').get(req.user.id);
   if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
   const leagues = await db.prepare('SELECT id, name, slug, logo_url, status FROM leagues WHERE owner_user_id = ?').all(user.id);
-  res.json({ user, leagues });
+  const teams = await db.prepare(`
+    SELECT t.*, l.name AS league_name, l.slug AS league_slug
+    FROM teams t
+    JOIN leagues l ON l.id = t.league_id
+    WHERE t.owner_user_id = ?
+  `).all(user.id);
+  res.json({ user, leagues, teams });
 }));
 
 export default router;

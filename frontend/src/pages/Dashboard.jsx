@@ -18,7 +18,7 @@ const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'O
 const DEFAULT_TZ = 'America/Mexico_City';
 
 export default function Dashboard() {
-  const { token, leagues, refreshLeagues } = useAuth();
+  const { token, leagues, teams, refreshLeagues } = useAuth();
   const [selectedLeagueId, setSelectedLeagueId] = useState(null);
   const [leagueData, setLeagueData] = useState(null);
   const [error, setError] = useState('');
@@ -47,6 +47,13 @@ export default function Dashboard() {
 
   function refresh() {
     if (selectedLeagueId) loadLeagueData(selectedLeagueId);
+  }
+
+  // Alguien puede no administrar ninguna liga, pero sí un equipo específico
+  // (le entregaron el perfil vía invitación) — le mostramos un panel reducido,
+  // en vez del mensaje de "registra tu liga".
+  if (leagues.length === 0 && teams.length > 0) {
+    return <TeamOnlyPanel teams={teams} token={token} onChange={refreshLeagues} />;
   }
 
   if (leagues.length === 0) {
@@ -108,6 +115,8 @@ export default function Dashboard() {
           onAddTeam={() => setModal({ type: 'add-team' })}
           onEditTeam={(team) => setModal({ type: 'edit-team', team })}
           onDeleteTeam={(team) => setModal({ type: 'delete-team', team })}
+          onInviteTeam={(team) => setModal({ type: 'invite-team', team })}
+          onRemoveTeamOwner={(team) => setModal({ type: 'remove-team-owner', team })}
           onAddVenue={() => setModal({ type: 'add-venue' })}
           onEditVenue={(venue) => setModal({ type: 'edit-venue', venue })}
           onDeleteVenue={(venue) => setModal({ type: 'delete-venue', venue })}
@@ -213,6 +222,30 @@ export default function Dashboard() {
         </Modal>
       )}
 
+      {modal?.type === 'invite-team' && (
+        <InviteTeamModal
+          team={modal.team}
+          token={token}
+          onClose={() => setModal(null)}
+          onDone={() => { refresh(); setModal(null); }}
+        />
+      )}
+
+      {modal?.type === 'remove-team-owner' && (
+        <Modal title="Quitar representante" onClose={() => setModal(null)}>
+          <p>
+            ¿Seguro que quieres quitarle el acceso a la persona que administra <strong>{modal.team.name}</strong>?
+            El equipo y todos sus datos se quedan igual — solo deja de tener acceso esa persona.
+          </p>
+          <div className="modal-actions">
+            <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
+            <button className="btn btn-danger" onClick={async () => { await api.removeTeamOwner(modal.team.id, token); refresh(); setModal(null); }}>
+              Quitar representante
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {modal?.type === 'add-venue' && (
         <Modal title="Nueva sede" onClose={() => setModal(null)}>
           <VenueForm submitLabel="Crear sede" onCancel={() => setModal(null)}
@@ -267,7 +300,7 @@ export default function Dashboard() {
 function LeaguePanel({
   data, onEditLeague, onAddCategory, onEditCategory, onDeleteCategory,
   onAddMatch, onEditMatch, onDeleteMatch, onImportMatches,
-  onAddTeam, onEditTeam, onDeleteTeam,
+  onAddTeam, onEditTeam, onDeleteTeam, onInviteTeam, onRemoveTeamOwner,
   onAddVenue, onEditVenue, onDeleteVenue,
   onAddGroup, onEditGroup, onDeleteGroup,
 }) {
@@ -341,11 +374,19 @@ function LeaguePanel({
                   )}
                   <div>
                     <div className="who">{team.name}</div>
-                    <div className="info">{team.location || 'Sin ubicación'} · {team.logo_url ? 'Con logo' : 'Sin logo'}</div>
+                    <div className="info">
+                      {team.location || 'Sin ubicación'} · {team.logo_url ? 'Con logo' : 'Sin logo'}
+                      {' · '}{team.owner_user_id ? '👤 Con representante' : 'Sin representante'}
+                    </div>
                   </div>
                 </div>
                 <div className="row-actions">
                   <button className="btn btn-outline btn-sm" onClick={() => onEditTeam(team)}>Editar</button>
+                  {team.owner_user_id ? (
+                    <button className="btn btn-ghost btn-sm" onClick={() => onRemoveTeamOwner(team)}>Quitar representante</button>
+                  ) : (
+                    <button className="btn btn-ghost btn-sm" onClick={() => onInviteTeam(team)}>Invitar representante</button>
+                  )}
                   <button className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => onDeleteTeam(team)}>Eliminar</button>
                 </div>
               </div>
@@ -564,6 +605,108 @@ function EditLeagueForm({ league, onSubmit, onCancel }) {
         <button className="btn btn-flag" disabled={loading}>{loading ? 'Guardando…' : 'Guardar cambios'}</button>
       </div>
     </form>
+  );
+}
+
+function InviteTeamModal({ team, token, onClose, onDone }) {
+  const [link, setLink] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    api.createTeamInvite(team.id, token)
+      .then(({ token: inviteToken }) => {
+        setLink(`${window.location.origin}/invitaciones/${inviteToken}`);
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [team.id]);
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Si el navegador no deja copiar solo, la persona puede seleccionar el texto a mano.
+    }
+  }
+
+  return (
+    <Modal title={`Invitar representante — ${team.name}`} onClose={onClose}>
+      {loading && <p>Generando link…</p>}
+      {error && <div className="form-error">{error}</div>}
+
+      {link && (
+        <>
+          <p style={{ fontSize: 13, color: 'var(--ink-dim)' }}>
+            Copia este link y mándaselo por tu cuenta (WhatsApp, correo, etc.) a la persona que va a administrar el equipo.
+            Al abrirlo, va a crear su cuenta o iniciar sesión, y quedará asignada de inmediato — el link deja de funcionar en cuanto se usa una vez.
+          </p>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <input readOnly value={link} onFocus={(e) => e.target.select()} style={{ flex: 1 }} />
+            <button type="button" className="btn btn-outline btn-sm" onClick={copyLink}>
+              {copied ? '✓ Copiado' : 'Copiar'}
+            </button>
+          </div>
+        </>
+      )}
+
+      <div className="modal-actions">
+        <button className="btn btn-flag" onClick={onDone}>Listo</button>
+      </div>
+    </Modal>
+  );
+}
+
+function TeamOnlyPanel({ teams, token, onChange }) {
+  const [editingId, setEditingId] = useState(teams[0]?.id ?? null);
+  const [error, setError] = useState('');
+  const team = teams.find((t) => t.id === editingId) || teams[0];
+
+  return (
+    <div className="container">
+      <div className="dash-header">
+        <div>
+          <span className="eyebrow">Panel de representante de equipo</span>
+          <h1>{team.name}</h1>
+          <span style={{ fontSize: 12, color: 'var(--ink-dim)' }}>{team.league_name}</span>
+        </div>
+        {teams.length > 1 && (
+          <select
+            value={editingId || ''}
+            onChange={(e) => setEditingId(Number(e.target.value))}
+            style={{ background: 'var(--card)', border: '1px solid var(--line)', color: 'var(--ink)', padding: '10px 12px', borderRadius: 4 }}
+          >
+            {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        )}
+      </div>
+
+      <p style={{ color: 'var(--ink-dim)', fontSize: 13, marginBottom: 20 }}>
+        Administras el perfil de este equipo: logo, contacto, redes sociales y los links de transmisión/boletos que se sugieren al armar sus partidos.
+      </p>
+
+      {error && <div className="form-error">{error}</div>}
+
+      <TeamForm
+        key={team.id}
+        initial={team}
+        submitLabel="Guardar cambios"
+        onCancel={() => {}}
+        onSubmit={async (payload) => {
+          setError('');
+          try {
+            await api.updateTeam(team.id, payload, token);
+            await onChange();
+          } catch (e) {
+            setError(e.message);
+            throw e;
+          }
+        }}
+      />
+    </div>
   );
 }
 
