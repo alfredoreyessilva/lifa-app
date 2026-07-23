@@ -661,9 +661,15 @@ function InviteTeamModal({ team, token, onClose, onDone }) {
 }
 
 function TeamOnlyPanel({ teams, token, onChange }) {
-  const [editingId, setEditingId] = useState(teams[0]?.id ?? null);
+  const [selectedTeamId, setSelectedTeamId] = useState(teams[0]?.id ?? null);
+  const [mode, setMode] = useState('view'); // 'view' | 'edit'
   const [error, setError] = useState('');
-  const team = teams.find((t) => t.id === editingId) || teams[0];
+  const team = teams.find((t) => t.id === selectedTeamId) || teams[0];
+
+  function selectTeam(id) {
+    setSelectedTeamId(id);
+    setMode('view');
+  }
 
   return (
     <div className="container">
@@ -675,8 +681,8 @@ function TeamOnlyPanel({ teams, token, onChange }) {
         </div>
         {teams.length > 1 && (
           <select
-            value={editingId || ''}
-            onChange={(e) => setEditingId(Number(e.target.value))}
+            value={selectedTeamId || ''}
+            onChange={(e) => selectTeam(Number(e.target.value))}
             style={{ background: 'var(--card)', border: '1px solid var(--line)', color: 'var(--ink)', padding: '10px 12px', borderRadius: 4 }}
           >
             {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -684,30 +690,124 @@ function TeamOnlyPanel({ teams, token, onChange }) {
         )}
       </div>
 
-      <p style={{ color: 'var(--ink-dim)', fontSize: 13, marginBottom: 20 }}>
-        Administras el perfil de este equipo: logo, contacto, redes sociales y los links de transmisión/boletos que se sugieren al armar sus partidos.
-      </p>
-
       {error && <div className="form-error">{error}</div>}
 
-      <TeamForm
-        key={team.id}
-        initial={team}
-        submitLabel="Guardar cambios"
-        onCancel={() => {}}
-        onSubmit={async (payload) => {
-          setError('');
-          try {
-            await api.updateTeam(team.id, payload, token);
-            await onChange();
-          } catch (e) {
-            setError(e.message);
-            throw e;
-          }
-        }}
-      />
+      {mode === 'view' ? (
+        <TeamProfileView team={team} onEdit={() => setMode('edit')} />
+      ) : (
+        <TeamForm
+          key={team.id}
+          initial={team}
+          submitLabel="Guardar cambios"
+          onCancel={() => setMode('view')}
+          onSubmit={async (payload) => {
+            setError('');
+            try {
+              await api.updateTeam(team.id, payload, token);
+              await onChange();
+              setMode('view');
+            } catch (e) {
+              setError(e.message);
+              throw e;
+            }
+          }}
+        />
+      )}
     </div>
   );
+}
+
+// Vista de solo lectura del equipo — lo que ve el representante por defecto,
+// antes de entrar a editar. Reutiliza las mismas clases del preview de
+// TeamForm para que se vea igual de un lado y del otro.
+function TeamProfileView({ team, onEdit }) {
+  const hasContact = team.location || team.contact_email || team.contact_phone;
+  const hasLinks   = team.facebook_url || team.instagram_url || team.twitter_url || team.website_url;
+  const sectionLabelStyle = { fontSize: 11, letterSpacing: '0.15em', color: 'var(--flag)', textTransform: 'uppercase', marginBottom: 10, fontFamily: 'var(--font-eyebrow)' };
+
+  return (
+    <div>
+      <p style={{ color: 'var(--ink-dim)', fontSize: 13, marginBottom: 16 }}>
+        Así se ve el perfil de tu equipo. Dale clic a "Editar" para cambiar el logo, contacto, redes o los links de transmisión/boletos.
+      </p>
+
+      <div className="team-editor-preview">
+        <div className="team-profile-banner">
+          {team.cover_url && <img src={team.cover_url} alt="Portada" className="team-editor-cover-img" />}
+        </div>
+
+        <div className="team-profile-logo-wrap">
+          <div className="team-profile-logo">
+            {team.logo_url ? <img src={team.logo_url} alt={team.name} /> : <span>{initials(team.name)}</span>}
+          </div>
+        </div>
+
+        <div className="team-profile-body">
+          <h2 style={{ textAlign: 'center', fontFamily: 'var(--font-display)', marginBottom: 16 }}>{team.name}</h2>
+
+          {hasContact && (
+            <div className="team-profile-section" style={{ textAlign: 'left', marginBottom: 16 }}>
+              <div style={sectionLabelStyle}>Información de contacto</div>
+              {team.location      && <div className="team-info-row">📍 {team.location}</div>}
+              {team.contact_email && <div className="team-info-row">✉️ {team.contact_email}</div>}
+              {team.contact_phone && <div className="team-info-row">📞 {team.contact_phone}</div>}
+            </div>
+          )}
+
+          {hasLinks && (
+            <div className="team-profile-section" style={{ textAlign: 'left', marginBottom: 16 }}>
+              <div style={sectionLabelStyle}>Redes y sitio web</div>
+              <div className="team-info-links">
+                {team.facebook_url  && <a href={team.facebook_url}  target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">Facebook</a>}
+                {team.instagram_url && <a href={team.instagram_url} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">Instagram</a>}
+                {team.twitter_url   && <a href={team.twitter_url}   target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">X / Twitter</a>}
+                {team.website_url   && <a href={team.website_url}   target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">Sitio web</a>}
+              </div>
+            </div>
+          )}
+
+          <div className="team-profile-section" style={{ textAlign: 'left', marginBottom: 8 }}>
+            <div style={sectionLabelStyle}>Links predeterminados de transmisión y boletos</div>
+            <LinkGroupView label="Transmisión — en casa"  links={team.home_stream_links} />
+            <LinkGroupView label="Transmisión — de visita" links={team.away_stream_links} />
+            <LinkGroupView label="Boletos — en casa"       links={team.home_ticket_links} />
+            <LinkGroupView label="Boletos — de visita"     links={team.away_ticket_links} />
+            {!team.home_stream_links?.length && !team.away_stream_links?.length && !team.home_ticket_links?.length && !team.away_ticket_links?.length && (
+              <div style={{ fontSize: 12, color: 'var(--ink-dim)' }}>Todavía no has agregado ningún link.</div>
+            )}
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: 20 }}>
+            <button className="btn btn-flag" onClick={onEdit}>✏️ Editar perfil del equipo</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LinkGroupView({ label, links }) {
+  if (!links || links.length === 0) return null;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 4 }}>{label}</div>
+      {links.map((url, i) => (
+        <div key={i} style={{ fontSize: 13 }}>
+          <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--flag)' }}>{url}</a>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function initials(name) {
+  return (name || '')
+    .split(' ')
+    .filter((w) => w.length > 2 || /^[A-ZÁÉÍÓÚÑ]/.test(w))
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
 }
 
 function formatDate(iso, tz) {
