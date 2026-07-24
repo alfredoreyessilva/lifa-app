@@ -599,8 +599,50 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
     t.id,
   );
 
-  res.json(await db.prepare('SELECT * FROM teams WHERE id = ?').get(t.id));
+  const updatedTeam = await db.prepare('SELECT * FROM teams WHERE id = ?').get(t.id);
+  await syncTeamLinksToMatches(updatedTeam);
+  res.json(updatedTeam);
 }));
+
+// Convierte de nuevo el jsonb que regresa Postgres a un array de JS
+// (por si llega ya parseado o como texto, según el driver).
+function asArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') { try { return JSON.parse(value); } catch { return []; } }
+  return [];
+}
+
+function dedupe(arr) {
+  return Array.from(new Set(arr.filter(Boolean)));
+}
+
+// Después de guardar un equipo, sus links "en casa"/"de visita" actualizados
+// se reflejan de inmediato en TODOS sus partidos que aún no se hayan jugado
+// (programados o en vivo) — exacto, no solo agregando: si un link se quitó
+// del equipo, también desaparece de esos partidos. Los partidos ya
+// finalizados nunca se tocan, para no reescribir el historial.
+async function syncTeamLinksToMatches(team) {
+  const matches = await db.prepare(`
+    SELECT
+      m.id, m.home_team, m.away_team,
+      th.home_stream_links AS h_stream, th.home_ticket_links AS h_ticket,
+      ta.away_stream_links AS a_stream, ta.away_ticket_links AS a_ticket
+    FROM matches m
+    JOIN categories c ON c.id = m.category_id
+    LEFT JOIN teams th ON th.league_id = c.league_id AND UPPER(th.name) = UPPER(m.home_team)
+    LEFT JOIN teams ta ON ta.league_id = c.league_id AND UPPER(ta.name) = UPPER(m.away_team)
+    WHERE c.league_id = ?
+      AND m.status <> 'finished'
+      AND (UPPER(m.home_team) = UPPER(?) OR UPPER(m.away_team) = UPPER(?))
+  `).all(team.league_id, team.name, team.name);
+
+  for (const m of matches) {
+    const streamLinks = dedupe([...asArray(m.h_stream), ...asArray(m.a_stream)]);
+    const ticketLinks = dedupe([...asArray(m.h_ticket), ...asArray(m.a_ticket)]);
+    await db.prepare(`UPDATE matches SET stream_links = ?, ticket_links = ? WHERE id = ?`)
+      .run(JSON.stringify(streamLinks), JSON.stringify(ticketLinks), m.id);
+  }
+}
 
 router.delete('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
   await db.prepare('DELETE FROM teams WHERE id = ?').run(req.team.id);
