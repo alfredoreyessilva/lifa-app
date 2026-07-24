@@ -100,7 +100,8 @@ export default function RegisterLeague() {
           {/* Zona horaria */}
           <TimezoneSelect label="Zona horaria de la liga" value={form.timezone} onChange={(tz) => update('timezone', tz)} />
           <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: -8, marginBottom: 16 }}>
-            Se usará por defecto en todos los partidos de tu liga.
+            Se usará solo en los partidos donde no especifiques una zona horaria distinta al crearlos o importarlos —
+            útil si tu liga juega en varias sedes con horarios diferentes.
           </div>
 
           {/* Redes sociales */}

@@ -77,6 +77,64 @@ export function getTimezoneLabel(value) {
   return found ? found.label : value;
 }
 
+// ── Conversión zona-explícita, SOLO para vista previa en pantalla ─────────
+// Importante: estas funciones existen únicamente para que la interfaz pueda
+// (a) precargar el formulario de edición mostrando la hora correcta y (b)
+// calcular en vivo si un partido ya se ve "en vivo"/"finalizado" mientras el
+// usuario todavía está escribiendo, sin esperar una vuelta al servidor.
+// La conversión que de verdad se GUARDA nunca ocurre aquí: el frontend manda
+// la fecha/hora local cruda + la zona elegida, y el backend hace la única
+// conversión autoritativa (ver backend/src/utils/timezones.js). Usan el mismo
+// enfoque (Intl con zona explícita) para no reintroducir el bug de fondo,
+// pero viven en dos archivos porque son dos entornos de ejecución distintos.
+
+// Dado un instante UTC (ISO) ya guardado, arma el string "YYYY-MM-DDTHH:mm"
+// que espera un <input type="datetime-local">, mostrando la hora en la zona
+// del partido — no en la zona del navegador de quien está editando.
+export function utcIsoToLocalInputValue(isoString, timeZone) {
+  if (!isoString) return '';
+  const zone = timeZone || 'America/Mexico_City';
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: zone, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  });
+  const parts = dtf.formatToParts(new Date(isoString)).reduce((acc, p) => {
+    if (p.type !== 'literal') acc[p.type] = p.value;
+    return acc;
+  }, {});
+  const hour = parts.hour === '24' ? '00' : parts.hour;
+  return `${parts.year}-${parts.month}-${parts.day}T${hour}:${parts.minute}`;
+}
+
+// Dirección opuesta: string crudo de un <input type="datetime-local"> + zona
+// IANA -> milisegundos UTC. Se usa solo para la vista previa en vivo del
+// estado del partido (programado/en vivo/finalizado) mientras se llena el
+// formulario, antes de guardar.
+export function localDateTimeStringToUtcMs(localValue, timeZone) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(localValue || '');
+  if (!match) return null;
+  const [, y, mo, d, h, mi] = match.map(Number);
+  const zone = timeZone || 'America/Mexico_City';
+
+  const asUTC = Date.UTC(y, mo - 1, d, h, mi, 0, 0);
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: zone, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  const parts = dtf.formatToParts(new Date(asUTC)).reduce((acc, p) => {
+    if (p.type !== 'literal') acc[p.type] = p.value;
+    return acc;
+  }, {});
+  const formattedAsUTC = Date.UTC(
+    Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+    parts.hour === '24' ? 0 : Number(parts.hour), Number(parts.minute), Number(parts.second)
+  );
+  const offsetMs = formattedAsUTC - asUTC;
+  return asUTC - offsetMs;
+}
+
 // Da el offset actual (ej. "GMT-6") de una zona horaria, útil como ayuda visual
 export function getTimezoneOffset(tz) {
   try {

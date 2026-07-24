@@ -8,22 +8,7 @@ import GroupForm from './GroupForm.jsx';
 import TimezoneSelect from './TimezoneSelect.jsx';
 import LinkListField from './LinkListField.jsx';
 import { getMatchStatus } from '../utils/matchStatus.js';
-
-function toLocalInputValue(isoString) {
-  if (!isoString) return '';
-  const d = new Date(isoString);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function localInputToISO(value) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value || '');
-  if (!match) return null;
-  const [, year, month, day, hour, minute] = match.map(Number);
-  const d = new Date(year, month - 1, day, hour, minute);
-  if (isNaN(d.getTime())) return null;
-  return d.toISOString();
-}
+import { utcIsoToLocalInputValue, localDateTimeStringToUtcMs } from '../utils/timezones.js';
 
 function initials(name) {
   return (name || '')
@@ -95,7 +80,7 @@ export default function MatchForm({
   const [form, setForm] = useState({
     home_team:   initial?.home_team   || '',
     away_team:   initial?.away_team   || '',
-    match_date:  toLocalInputValue(initial?.match_date) || '',
+    match_date:  utcIsoToLocalInputValue(initial?.match_date, defaultTimezone) || '',
     venue_id:    initial?.venue_id    || null,
     group_id:    initial?.group_id    || null,
     group_id_2:  initial?.group_id_2  || null,
@@ -174,12 +159,14 @@ export default function MatchForm({
     }));
   }, [form.away_team, localTeams, initial]);
 
-  // Construye un objeto temporal para calcular el estado actual del partido
+  // Construye un objeto temporal para calcular el estado actual del partido.
+  // Solo es una vista previa en pantalla (para decidir si mostrar los campos
+  // de marcador) — no es la conversión que se guarda; esa la hace el backend.
   function getCurrentStatus() {
-    const isoDate = localInputToISO(form.match_date);
-    if (!isoDate) return 'scheduled';
+    const ms = localDateTimeStringToUtcMs(form.match_date, form.timezone);
+    if (ms === null) return 'scheduled';
     return getMatchStatus({
-      match_date: isoDate,
+      match_date: new Date(ms).toISOString(),
       home_score: form.home_score === '' ? null : form.home_score,
       away_score: form.away_score === '' ? null : form.away_score,
     });
@@ -245,8 +232,10 @@ export default function MatchForm({
     e.preventDefault();
     setError('');
 
-    const isoDate = localInputToISO(form.match_date);
-    if (!isoDate) { setError('Ingresa una fecha y hora válidas.'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(form.match_date || '')) {
+      setError('Ingresa una fecha y hora válidas.');
+      return;
+    }
 
     const validationError = runValidations([
       () => required(form.home_team, 'El equipo local'),
@@ -278,7 +267,7 @@ export default function MatchForm({
         stream_links: (form.stream_links || []).filter((u) => u && u.trim()),
         ticket_links: (form.ticket_links || []).filter((u) => u && u.trim()),
         week_label:  form.week_label.trim(),
-        match_date:  isoDate,
+        match_date_local: form.match_date,
         home_score:  form.home_score === '' ? null : Number(form.home_score),
         away_score:  form.away_score === '' ? null : Number(form.away_score),
         timezone:    form.timezone,

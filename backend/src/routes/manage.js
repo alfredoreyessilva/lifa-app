@@ -5,7 +5,13 @@ import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
 import { categoryOwnerRequired, matchOwnerRequired, leagueOwnerRequired, teamOwnerRequired, venueOwnerRequired, groupOwnerRequired } from '../middleware/ownership.js';
 import { isValidEmail, isValidUrl, isNonEmptyString } from '../utils/validation.js';
-import { isValidTimezone } from '../utils/timezones.js';
+import {
+  isValidTimezone,
+  zonedTimeToUtcISO,
+  localDateTimeStringToUtcISO,
+  getLocalPartsInZone,
+  parseLocalDateTimeString,
+} from '../utils/timezones.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = express.Router();
@@ -168,14 +174,25 @@ function validateMatchFields({ home_team, away_team, stream_links, ticket_links,
 }
 
 router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequired, asyncHandler(async (req, res) => {
-  const { home_team, away_team, match_date, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone } = req.body;
-  if (!isNonEmptyString(home_team) || !isNonEmptyString(away_team) || !match_date) {
+  // match_date_local: string crudo del input <datetime-local> del frontend
+  // ("YYYY-MM-DDTHH:mm"), SIN ninguna conversión de zona horaria hecha en el
+  // navegador. La única conversión a UTC autoritativa ocurre aquí, en el
+  // backend, usando la zona horaria explícita del partido (nunca la zona
+  // ambiente del servidor ni la del navegador de quien lo captura).
+  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone } = req.body;
+  if (!isNonEmptyString(home_team) || !isNonEmptyString(away_team) || !match_date_local) {
     return res.status(400).json({ error: 'Se requieren equipo local, visitante y fecha' });
   }
 
   const resolvedStatus = status || 'scheduled';
   const validationError = validateMatchFields({ home_team, away_team, stream_links, ticket_links, status: resolvedStatus, home_score, away_score, timezone, group_id, group_id_2 });
   if (validationError) return res.status(400).json({ error: validationError });
+
+  // Cadena de respaldo de zona horaria: la del partido -> la de la liga
+  // (siempre tiene un valor por el DEFAULT de la columna) -> México Centro.
+  const effectiveTimezone = timezone || req.league.timezone || 'America/Mexico_City';
+  const matchDateUtc = localDateTimeStringToUtcISO(match_date_local, effectiveTimezone);
+  if (!matchDateUtc) return res.status(400).json({ error: 'La fecha y hora no son válidas' });
 
   const result = await db.prepare(`
     INSERT INTO matches (category_id, home_team, away_team, match_date, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone)
@@ -184,7 +201,7 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
     req.category.id,
     home_team.trim().toUpperCase(),
     away_team.trim().toUpperCase(),
-    match_date,
+    matchDateUtc,
     venue_id  || null,
     group_id  || null,
     group_id_2 || null,
@@ -194,7 +211,9 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
     resolvedStatus,
     home_score === '' || home_score === undefined ? null : home_score,
     away_score === '' || away_score === undefined ? null : away_score,
-    timezone || null
+    // Se guarda SIEMPRE la zona ya resuelta (nunca null), para que el
+    // partido nunca quede con una zona horaria ambigua en la base de datos.
+    effectiveTimezone
   );
 
   res.status(201).json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(result.lastInsertRowid));
@@ -362,31 +381,35 @@ router.post(
 
         let matchDate = null;
         if (fechaRaw) {
-          let parsedDate = null;
+          let y = null, mo = null, d = null;
+
           const rawFechaKey = Object.keys(row).find(k => k.trim().toLowerCase() === 'fecha');
           if (rawFechaKey && row[rawFechaKey] instanceof Date) {
-            parsedDate = new Date(row[rawFechaKey]);
+            const cellDate = row[rawFechaKey];
+            y = cellDate.getFullYear(); mo = cellDate.getMonth() + 1; d = cellDate.getDate();
           }
-          if (!parsedDate || isNaN(parsedDate)) {
+          if (y === null) {
             const dmyMatch = /^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/.exec(fechaRaw);
-            if (dmyMatch) {
-              parsedDate = new Date(Number(dmyMatch[3]), Number(dmyMatch[2]) - 1, Number(dmyMatch[1]));
-            }
+            if (dmyMatch) { d = Number(dmyMatch[1]); mo = Number(dmyMatch[2]); y = Number(dmyMatch[3]); }
           }
-          if (!parsedDate || isNaN(parsedDate)) {
+          if (y === null) {
             const ymdMatch = /^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/.exec(fechaRaw);
-            if (ymdMatch) {
-              parsedDate = new Date(Number(ymdMatch[1]), Number(ymdMatch[2]) - 1, Number(ymdMatch[3]));
-            }
+            if (ymdMatch) { y = Number(ymdMatch[1]); mo = Number(ymdMatch[2]); d = Number(ymdMatch[3]); }
           }
-          if (parsedDate && !isNaN(parsedDate)) {
+
+          if (y !== null) {
+            let hour = 0, minute = 0;
             if (horaRaw) {
               const timeMatch = /^(\d{1,2}):(\d{2})/.exec(horaRaw);
-              if (timeMatch) {
-                parsedDate.setHours(Number(timeMatch[1]), Number(timeMatch[2]), 0, 0);
-              }
+              if (timeMatch) { hour = Number(timeMatch[1]); minute = Number(timeMatch[2]); }
             }
-            matchDate = parsedDate.toISOString();
+            // Clave del fix: convertir usando la zona horaria de LA FILA (o la
+            // de la liga como respaldo) — nunca la zona del servidor. Antes,
+            // `new Date(y, m, d)` + `setHours` + `toISOString()` interpretaba
+            // la hora capturada como si ya fuera la hora del servidor (UTC en
+            // Render), ignorando por completo la columna "Zona horaria".
+            const effectiveTz = timezone || req.league.timezone || 'America/Mexico_City';
+            matchDate = zonedTimeToUtcISO(y, mo, d, hour, minute, effectiveTz);
           }
         }
 
@@ -440,13 +463,14 @@ router.post(
 );
 
 router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
-  const { home_team, away_team, match_date, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone } = req.body;
+  // match_date_local: igual que en creación, el string crudo del input
+  // <datetime-local> (o ausente, si esta edición no toca la fecha/hora).
+  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone } = req.body;
   const m = req.match;
 
   const resolved = {
     home_team:   home_team   ?? m.home_team,
     away_team:   away_team   ?? m.away_team,
-    match_date:  match_date  ?? m.match_date,
     stream_links: stream_links ?? m.stream_links,
     ticket_links: ticket_links ?? m.ticket_links,
     status:      status      ?? m.status,
@@ -459,6 +483,36 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
 
   const validationError = validateMatchFields(resolved);
   if (validationError) return res.status(400).json({ error: validationError });
+
+  // Solo se recalcula match_date si esta edición tocó la fecha/hora o la
+  // zona horaria (si no tocó ninguna de las dos, matchDateUtc queda en null
+  // y el COALESCE de abajo conserva el valor que ya existía).
+  let matchDateUtc = null;
+  if (match_date_local !== undefined || timezone !== undefined) {
+    const effectiveTimezone = (timezone !== undefined ? timezone : m.timezone) || req.league.timezone || 'America/Mexico_City';
+
+    let localParts;
+    if (match_date_local !== undefined) {
+      // Se editó la fecha/hora (con o sin cambio de zona también): se toma
+      // tal cual el string crudo del formulario.
+      localParts = parseLocalDateTimeString(match_date_local);
+      if (!localParts) return res.status(400).json({ error: 'La fecha y hora no son válidas' });
+    } else {
+      // Solo se cambió la zona horaria, sin tocar la fecha/hora: se
+      // RE-interpreta la misma hora de pared (la que ya estaba guardada, leída
+      // en su zona anterior) dentro de la nueva zona — en vez de dejar el
+      // instante UTC intacto, que dejaría la hora mostrada corrida.
+      localParts = getLocalPartsInZone(m.match_date, m.timezone || req.league.timezone || 'America/Mexico_City');
+    }
+
+    matchDateUtc = zonedTimeToUtcISO(localParts.year, localParts.month, localParts.day, localParts.hour, localParts.minute, effectiveTimezone);
+  }
+
+  // Se guarda siempre la zona ya resuelta cuando se tocó algo de fecha/hora,
+  // para que el partido nunca quede con una zona ambigua.
+  const resolvedTimezone = (match_date_local !== undefined || timezone !== undefined)
+    ? ((timezone !== undefined ? timezone : m.timezone) || req.league.timezone || 'America/Mexico_City')
+    : null; // null aquí = "no tocar" para el COALESCE de abajo
 
   await db.prepare(`
     UPDATE matches SET
@@ -477,12 +531,12 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
       timezone     = COALESCE(?, timezone)
     WHERE id = ?
   `).run(
-    toNull(home_team), toNull(away_team), toNull(match_date),
+    toNull(home_team), toNull(away_team), toNull(matchDateUtc),
     venue_id  !== undefined ? (venue_id  || null) : m.venue_id,
     group_id  !== undefined ? (group_id  || null) : m.group_id,
     group_id_2 !== undefined ? (group_id_2 || null) : m.group_id_2,
     toLinksJson(stream_links), toLinksJson(ticket_links), toNull(week_label), toNull(status),
-    toNull(home_score), toNull(away_score), toNull(timezone), m.id
+    toNull(home_score), toNull(away_score), toNull(resolvedTimezone), m.id
   );
 
   res.json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id));
