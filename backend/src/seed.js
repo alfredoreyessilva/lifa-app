@@ -46,10 +46,13 @@ async function seed() {
         for (let i = 0; i < matches.length; i++) {
           const m = matches[i];
           const date = new Date(now + m.daysFromNow * 86400000);
+          // Igual que en manage.js: se guarda en stream_links (arreglo JSONB),
+          // no en la columna vieja stream_url — si no, el link queda
+          // invisible para el resto de la app (ver botón en MatchPage).
           await db.prepare(`
-            INSERT INTO matches (category_id, home_team, away_team, match_date, venue, stream_url, week_label, status, home_score, away_score)
+            INSERT INTO matches (category_id, home_team, away_team, match_date, venue, stream_links, week_label, status, home_score, away_score)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(catId, m.home, m.away, date.toISOString(), 'Estadio Azteca', m.stream,
+          `).run(catId, m.home, m.away, date.toISOString(), 'Estadio Azteca', JSON.stringify(m.stream ? [m.stream] : []),
             `Jornada ${i + 1}`, m.daysFromNow < 0 ? 'finished' : 'scheduled',
             m.daysFromNow < 0 ? 21 : null, m.daysFromNow < 0 ? 14 : null);
         }

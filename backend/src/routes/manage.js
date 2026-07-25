@@ -425,8 +425,13 @@ router.post(
 
         const status = computeMatchStatus(matchDate);
 
+        // OJO: se guarda en stream_links/ticket_links (arreglos JSONB), NO en
+        // las columnas viejas stream_url/tickets_url. El resto de la app
+        // (botón "Ver partido", edición manual) solo lee las columnas nuevas
+        // — guardar aquí en las viejas dejaba el link invisible para todo lo
+        // demás, aunque sí quedara guardado en la base de datos.
         const result = await db.prepare(`
-          INSERT INTO matches (category_id, home_team, away_team, match_date, venue, venue_id, group_id, group_id_2, stream_url, tickets_url, week_label, status, home_score, away_score, timezone)
+          INSERT INTO matches (category_id, home_team, away_team, match_date, venue, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           req.category.id,
@@ -437,8 +442,8 @@ router.post(
           venueId,
           groupId,
           groupId2,
-          validStream   || null,
-          validTicketsUrl || null,
+          JSON.stringify(validStream ? [validStream] : []),
+          JSON.stringify(validTicketsUrl ? [validTicketsUrl] : []),
           weekLabel     ? weekLabel.toUpperCase() : null,
           status,
           homeScore,
