@@ -239,7 +239,10 @@ router.post(
     // Equipos y sedes reales de esta liga, y grupos de esta categoría, para
     // intentar hacer coincidir el texto del Excel contra ellos (sin importar
     // mayúsculas/minúsculas) y así no reintroducir duplicados por texto libre.
-    const registeredTeams  = await db.prepare('SELECT id, name FROM teams WHERE league_id = ?').all(req.league.id);
+    const registeredTeams  = await db.prepare(`
+      SELECT id, name, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links
+      FROM teams WHERE league_id = ?
+    `).all(req.league.id);
     const registeredVenues = await db.prepare('SELECT id, name FROM venues WHERE league_id = ?').all(req.league.id);
     const registeredGroups = await db.prepare('SELECT id, name FROM groups WHERE category_id = ?').all(req.category.id);
 
@@ -423,6 +426,22 @@ router.post(
           }
         }
 
+        // Se combina el link del Excel (si trae uno) con los links
+        // predeterminados del equipo local y del visitante — igual que ya
+        // pasa cuando se crea un partido a mano desde el panel y se
+        // selecciona el equipo. `dedupe` quita el link repetido si por
+        // ejemplo el Excel trae el mismo link que ya tenía el equipo.
+        const finalStreamLinks = dedupe([
+          validStream,
+          ...(homeTeamMatch ? asArray(homeTeamMatch.home_stream_links) : []),
+          ...(awayTeamMatch ? asArray(awayTeamMatch.away_stream_links) : []),
+        ]);
+        const finalTicketLinks = dedupe([
+          validTicketsUrl,
+          ...(homeTeamMatch ? asArray(homeTeamMatch.home_ticket_links) : []),
+          ...(awayTeamMatch ? asArray(awayTeamMatch.away_ticket_links) : []),
+        ]);
+
         const status = computeMatchStatus(matchDate);
 
         // OJO: se guarda en stream_links/ticket_links (arreglos JSONB), NO en
@@ -442,8 +461,8 @@ router.post(
           venueId,
           groupId,
           groupId2,
-          JSON.stringify(validStream ? [validStream] : []),
-          JSON.stringify(validTicketsUrl ? [validTicketsUrl] : []),
+          JSON.stringify(finalStreamLinks),
+          JSON.stringify(finalTicketLinks),
           weekLabel     ? weekLabel.toUpperCase() : null,
           status,
           homeScore,
