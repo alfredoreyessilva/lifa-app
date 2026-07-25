@@ -1312,6 +1312,15 @@ a { color: inherit; }
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
+/* La tarjeta del calendario es un <Link> (se renderiza como <a>), pero la de
+   MatchPage sigue siendo un <div> — este selector solo afecta a la primera,
+   quitándole el azul/subrayado por defecto del navegador. */
+a.match-card-new {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
 .match-card-new:hover {
   background: var(--card-hover);
   border-color: var(--line-strong);

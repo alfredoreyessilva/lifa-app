@@ -5,7 +5,6 @@ import Loading from '../components/Loading.jsx';
 import { getMatchStatus } from '../utils/matchStatus.js';
 import { getMatchParts, initials } from '../utils/matchDisplay.js';
 import { shareLink } from '../utils/share.js';
-import SubscribeButton from '../components/SubscribeButton.jsx';
 
 function getJornadas(matches) {
   const seen = new Set();
@@ -82,16 +81,6 @@ function getShareLabel(view, selected) {
   if (view === 'sede')   return `Compartir calendario de ${selected}`;
   if (view === 'grupo')  return `Compartir calendario de ${selected}`;
   return null;
-}
-
-// Convierte una URL en una etiqueta corta y legible (ej. "youtube.com"),
-// para diferenciar los botones cuando hay más de un link del mismo tipo.
-function linkHost(url) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return 'link';
-  }
 }
 
 const ALL_VIEWS   = ['completo', 'jornada', 'equipo', 'sede', 'grupo'];
@@ -389,29 +378,22 @@ function MatchCard({ match, isNext, now }) {
   const status      = getMatchStatus(match);
   const isFinished  = status === 'finished';
   const isLive      = status === 'live';
-  const isScheduled = status === 'scheduled';
-  const [shareState, setShareState] = useState('idle');
 
   // Preferimos la sede real (registrada en el panel); si el partido es viejo
   // y todavía no se le ha asignado una, mostramos el texto libre de respaldo.
   const venueLabel = match.venue_name || match.venue;
   const groupLabel = match.group_name_2 ? `${match.group_name} vs ${match.group_name_2}` : match.group_name;
 
-  async function handleShare() {
-    const url = `${window.location.origin}/partidos/${match.id}`;
-    const result = await shareLink(
-      url,
-      `${match.home_team} vs ${match.away_team}`,
-      'Mira este partido en LIFA'
-    );
-    if (result === 'copied') {
-      setShareState('copied');
-      setTimeout(() => setShareState('idle'), 2000);
-    }
-  }
-
+  // La tarjeta completa es un solo link hacia la página del partido
+  // (/partidos/:id), que ya trae todo junto: links de transmisión, boletos,
+  // ubicación, notificaciones y compartir. Antes cada uno de esos vivía como
+  // un botón suelto aquí en la tarjeta — se quitaron de aquí para no
+  // duplicar y para que la tarjeta sea un solo punto de entrada claro.
   return (
-    <div className={`match-card-new${isNext ? ' match-card-new--next' : ''}${isLive ? ' match-card-new--live' : ''}`}>
+    <Link
+      to={`/partidos/${match.id}`}
+      className={`match-card-new${isNext ? ' match-card-new--next' : ''}${isLive ? ' match-card-new--live' : ''}`}
+    >
       <div className="match-card-header">
         <div className="match-card-datetime">
           <span className="match-card-date">{day} {month}</span>
@@ -444,31 +426,6 @@ function MatchCard({ match, isNext, now }) {
           {venueLabel && <span>{venueLabel}</span>}
         </div>
       )}
-
-      <div className="match-card-actions">
-        {(match.stream_links || []).map((url, i) => (
-          <a key={`stream-${i}`} href={url} target="_blank" rel="noopener noreferrer" className="btn btn-flag btn-sm">
-            {isLive ? '🔴 Ver en vivo' : 'Ver partido'}
-            {match.stream_links.length > 1 ? ` — ${linkHost(url)}` : ''}
-          </a>
-        ))}
-        {(match.ticket_links || []).map((url, i) => (
-          <a key={`tickets-${i}`} href={url} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
-            Comprar boletos
-            {match.ticket_links.length > 1 ? ` — ${linkHost(url)}` : ''}
-          </a>
-        ))}
-        <button className="btn btn-outline btn-sm" type="button" onClick={handleShare}>
-          {shareState === 'copied' ? '✓ Link copiado' : '🔗 Compartir'}
-        </button>
-      </div>
-
-      {/* Botón de notificación solo para partidos programados */}
-      {isScheduled && (
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
-          <SubscribeButton matchId={match.id} label="Avisarme de este partido" />
-        </div>
-      )}
-    </div>
+    </Link>
   );
 }
