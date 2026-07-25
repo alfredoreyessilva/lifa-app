@@ -168,155 +168,189 @@ CREATE INDEX IF NOT EXISTS idx_push_match  ON push_subscriptions(match_id);
 `;
 
 export async function initSchema() {
-  await exec(schemaSql);
+  // Candado a nivel de base de datos (no necesita Redis ni nada externo):
+  // si el día de mañana corren dos instancias del servidor a la vez (Render
+  // escalando por tráfico, o un redeploy donde la vieja y la nueva coinciden
+  // un instante), la segunda instancia se ESPERA aquí hasta que la primera
+  // termine todas las migraciones, en vez de correrlas ambas al mismo tiempo.
+  // Es "advisory" porque no bloquea ninguna tabla real, solo actúa como una
+  // bandera compartida que todas las instancias respetan.
+  //
+  // OJO: el candado vive en la SESIÓN de una sola conexión — por eso se pide
+  // un cliente dedicado del pool (`client`) en vez de usar `exec()`/`db`, que
+  // toman una conexión distinta del pool en cada llamada. Todas las
+  // instrucciones de esta función corren sobre ese mismo `client`.
+  const MIGRATION_LOCK_KEY = 727272; // número arbitrario, solo debe ser el mismo en todas las instancias
 
-  const newTeamColumns = [
-    'location TEXT',
-    'contact_email TEXT',
-    'contact_phone TEXT',
-    'facebook_url TEXT',
-    'instagram_url TEXT',
-    'twitter_url TEXT',
-    'website_url TEXT',
-    'sort_order INTEGER DEFAULT 0',
-    'cover_url TEXT',
-  ];
-  for (const col of newTeamColumns) {
-    await exec(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS ${col}`).catch(() => {});
+  const client = await getPool().connect();
+  async function run(sql) {
+    try {
+      await client.query(sql);
+    } catch {
+      // mismo comportamiento de antes: si una migración puntual falla
+      // (ej. ya existía), no se detiene el resto del arranque.
+    }
   }
 
-  // Links predeterminados de transmisión/boletos por equipo — separados entre
-  // "en casa" y "de visita", porque un mismo equipo puede transmitir distinto
-  // según juegue de local o visitante. Cada uno es una LISTA (jsonb), porque un
-  // equipo puede compartir el mismo partido en varias plataformas a la vez.
-  const newTeamLinkColumns = [
-    "home_stream_links JSONB NOT NULL DEFAULT '[]'::jsonb",
-    "away_stream_links JSONB NOT NULL DEFAULT '[]'::jsonb",
-    "home_ticket_links JSONB NOT NULL DEFAULT '[]'::jsonb",
-    "away_ticket_links JSONB NOT NULL DEFAULT '[]'::jsonb",
-  ];
-  for (const col of newTeamLinkColumns) {
-    await exec(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS ${col}`).catch(() => {});
+  try {
+    await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_KEY]);
+
+    await run(schemaSql);
+
+    const newTeamColumns = [
+      'location TEXT',
+      'contact_email TEXT',
+      'contact_phone TEXT',
+      'facebook_url TEXT',
+      'instagram_url TEXT',
+      'twitter_url TEXT',
+      'website_url TEXT',
+      'sort_order INTEGER DEFAULT 0',
+      'cover_url TEXT',
+    ];
+    for (const col of newTeamColumns) {
+      await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS ${col}`);
+    }
+
+    // Links predeterminados de transmisión/boletos por equipo — separados entre
+    // "en casa" y "de visita", porque un mismo equipo puede transmitir distinto
+    // según juegue de local o visitante. Cada uno es una LISTA (jsonb), porque un
+    // equipo puede compartir el mismo partido en varias plataformas a la vez.
+    const newTeamLinkColumns = [
+      "home_stream_links JSONB NOT NULL DEFAULT '[]'::jsonb",
+      "away_stream_links JSONB NOT NULL DEFAULT '[]'::jsonb",
+      "home_ticket_links JSONB NOT NULL DEFAULT '[]'::jsonb",
+      "away_ticket_links JSONB NOT NULL DEFAULT '[]'::jsonb",
+    ];
+    for (const col of newTeamLinkColumns) {
+      await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS ${col}`);
+    }
+
+    // Links de un partido específico — ahora son listas (varias plataformas a la
+    // vez), en vez de un solo texto. Se dejan las columnas viejas stream_url /
+    // tickets_url intactas (no se borran) para no perder datos históricos.
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS stream_links JSONB NOT NULL DEFAULT '[]'::jsonb`);
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS ticket_links JSONB NOT NULL DEFAULT '[]'::jsonb`);
+
+    // Migra automáticamente (en cada arranque del servidor) cualquier link viejo
+    // de un solo texto hacia la nueva lista, mientras esta siga vacía. Así los
+    // partidos ya creados (o importados por Excel, que sigue usando las columnas
+    // viejas) terminan mostrándose igual con el nuevo sistema de botones.
+    await run(`
+      UPDATE matches
+      SET stream_links = jsonb_build_array(stream_url)
+      WHERE stream_url IS NOT NULL AND stream_url <> '' AND jsonb_array_length(stream_links) = 0
+    `);
+    await run(`
+      UPDATE matches
+      SET ticket_links = jsonb_build_array(tickets_url)
+      WHERE tickets_url IS NOT NULL AND tickets_url <> '' AND jsonb_array_length(ticket_links) = 0
+    `);
+
+    await run(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/Mexico_City'`);
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS timezone TEXT`);
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS tickets_url TEXT`);
+    await run(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS season TEXT`);
+    await run(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS year INTEGER`);
+
+    // Control de notificaciones ya enviadas por partido (evita reenvíos repetidos del cronjob)
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_upcoming BOOLEAN NOT NULL DEFAULT FALSE`);
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_live BOOLEAN NOT NULL DEFAULT FALSE`);
+
+    // Relación de un partido con una sede registrada (tabla venues). Se deja la
+    // columna vieja "venue" (texto libre) intacta para no perder los datos que
+    // ya existen; los partidos nuevos usarán venue_id en vez de texto libre.
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS venue_id INTEGER REFERENCES venues(id) ON DELETE SET NULL`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_matches_venue ON matches(venue_id)`);
+
+    // Relación de un partido con un grupo (tabla groups, propio de cada
+    // categoría) — ej. "Conferencia 14 Grandes" vs "Conferencia Nacional-Norte".
+    // Es una función nueva, no hay texto libre viejo que preservar aquí.
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES groups(id) ON DELETE SET NULL`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_matches_group ON matches(group_id)`);
+
+    // Segundo grupo opcional, solo para partidos interconferencia (un partido
+    // cruzado entre dos grupos distintos, ej. "14 Grandes" vs "Nacional-Norte")
+    // — así no hace falta crear un grupo artificial para representar el cruce.
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS group_id_2 INTEGER REFERENCES groups(id) ON DELETE SET NULL`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_matches_group2 ON matches(group_id_2)`);
+
+    const newLeagueColumns = [
+      'cover_url TEXT',
+      'facebook_url TEXT',
+      'instagram_url TEXT',
+      'twitter_url TEXT',
+      'youtube_url TEXT',
+      'tiktok_url TEXT',
+      'website_url TEXT',
+      'whatsapp TEXT',
+    ];
+    for (const col of newLeagueColumns) {
+      await run(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS ${col}`);
+    }
+
+    await run(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS team_name TEXT`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_push_team ON push_subscriptions(team_name)`);
+
+    // Dueño directo de un equipo (representante de medios) — separado del dueño
+    // de la liga. Si es NULL, el equipo todavía solo lo administra el
+    // representante de la liga (o un admin).
+    await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_teams_owner ON teams(owner_user_id)`);
+
+    // Invitaciones de un solo uso para "entregar" el perfil de un equipo (y más
+    // adelante, de una liga) a otra persona mediante un link que el
+    // representante genera y comparte por su cuenta.
+    await run(`
+      CREATE TABLE IF NOT EXISTS invites (
+        id SERIAL PRIMARY KEY,
+        token TEXT UNIQUE NOT NULL,
+        type TEXT NOT NULL DEFAULT 'team',
+        team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+        league_id INTEGER REFERENCES leagues(id) ON DELETE CASCADE,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        used_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_invites_team ON invites(team_id)`);
+
+    await run(`
+      ALTER TABLE push_subscriptions DROP CONSTRAINT IF EXISTS push_subscriptions_endpoint_league_id_match_id_key
+    `);
+    await run(`
+      ALTER TABLE push_subscriptions ADD CONSTRAINT push_subscriptions_unique
+      UNIQUE (endpoint, league_id, match_id, team_name)
+    `);
+
+    // Corrige retroactivamente el bug de notificaciones por equipo cruzadas entre
+    // ligas: antes una suscripción a "team_name" no guardaba a qué liga pertenecía,
+    // así que si dos ligas tenían un equipo con el mismo nombre, sus suscriptores
+    // se mezclaban. Aquí les asignamos su league_id cuando el nombre del equipo es
+    // único en toda la plataforma (sin ambigüedad). Si hay más de una liga con un
+    // equipo de ese nombre, se deja sin resolver automáticamente — se corrige solo
+    // en cuanto la persona se vuelva a suscribir, ya con el nuevo flujo.
+    await run(`
+      UPDATE push_subscriptions ps
+      SET league_id = sub.league_id
+      FROM (
+        SELECT UPPER(name) AS uname, MIN(league_id) AS league_id, COUNT(DISTINCT league_id) AS league_count
+        FROM teams
+        GROUP BY UPPER(name)
+      ) sub
+      WHERE ps.team_name IS NOT NULL
+        AND ps.league_id IS NULL
+        AND UPPER(ps.team_name) = sub.uname
+        AND sub.league_count = 1
+    `);
+  } finally {
+    // Se suelta el candado y se libera la conexión pase lo que pase (incluso
+    // si algo de arriba lanzó un error), para que nunca se quede otra
+    // instancia esperando un candado que ya nadie va a soltar.
+    await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY]).catch(() => {});
+    client.release();
   }
-
-  // Links de un partido específico — ahora son listas (varias plataformas a la
-  // vez), en vez de un solo texto. Se dejan las columnas viejas stream_url /
-  // tickets_url intactas (no se borran) para no perder datos históricos.
-  await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS stream_links JSONB NOT NULL DEFAULT '[]'::jsonb`).catch(() => {});
-  await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS ticket_links JSONB NOT NULL DEFAULT '[]'::jsonb`).catch(() => {});
-
-  // Migra automáticamente (en cada arranque del servidor) cualquier link viejo
-  // de un solo texto hacia la nueva lista, mientras esta siga vacía. Así los
-  // partidos ya creados (o importados por Excel, que sigue usando las columnas
-  // viejas) terminan mostrándose igual con el nuevo sistema de botones.
-  await exec(`
-    UPDATE matches
-    SET stream_links = jsonb_build_array(stream_url)
-    WHERE stream_url IS NOT NULL AND stream_url <> '' AND jsonb_array_length(stream_links) = 0
-  `).catch(() => {});
-  await exec(`
-    UPDATE matches
-    SET ticket_links = jsonb_build_array(tickets_url)
-    WHERE tickets_url IS NOT NULL AND tickets_url <> '' AND jsonb_array_length(ticket_links) = 0
-  `).catch(() => {});
-
-  await exec(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'America/Mexico_City'`).catch(() => {});
-  await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS timezone TEXT`).catch(() => {});
-  await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS tickets_url TEXT`).catch(() => {});
-  await exec(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS season TEXT`).catch(() => {});
-  await exec(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS year INTEGER`).catch(() => {});
-
-  // Control de notificaciones ya enviadas por partido (evita reenvíos repetidos del cronjob)
-  await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_upcoming BOOLEAN NOT NULL DEFAULT FALSE`).catch(() => {});
-  await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_live BOOLEAN NOT NULL DEFAULT FALSE`).catch(() => {});
-
-  // Relación de un partido con una sede registrada (tabla venues). Se deja la
-  // columna vieja "venue" (texto libre) intacta para no perder los datos que
-  // ya existen; los partidos nuevos usarán venue_id en vez de texto libre.
-  await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS venue_id INTEGER REFERENCES venues(id) ON DELETE SET NULL`).catch(() => {});
-  await exec(`CREATE INDEX IF NOT EXISTS idx_matches_venue ON matches(venue_id)`).catch(() => {});
-
-  // Relación de un partido con un grupo (tabla groups, propio de cada
-  // categoría) — ej. "Conferencia 14 Grandes" vs "Conferencia Nacional-Norte".
-  // Es una función nueva, no hay texto libre viejo que preservar aquí.
-  await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES groups(id) ON DELETE SET NULL`).catch(() => {});
-  await exec(`CREATE INDEX IF NOT EXISTS idx_matches_group ON matches(group_id)`).catch(() => {});
-
-  // Segundo grupo opcional, solo para partidos interconferencia (un partido
-  // cruzado entre dos grupos distintos, ej. "14 Grandes" vs "Nacional-Norte")
-  // — así no hace falta crear un grupo artificial para representar el cruce.
-  await exec(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS group_id_2 INTEGER REFERENCES groups(id) ON DELETE SET NULL`).catch(() => {});
-  await exec(`CREATE INDEX IF NOT EXISTS idx_matches_group2 ON matches(group_id_2)`).catch(() => {});
-
-  const newLeagueColumns = [
-    'cover_url TEXT',
-    'facebook_url TEXT',
-    'instagram_url TEXT',
-    'twitter_url TEXT',
-    'youtube_url TEXT',
-    'tiktok_url TEXT',
-    'website_url TEXT',
-    'whatsapp TEXT',
-  ];
-  for (const col of newLeagueColumns) {
-    await exec(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS ${col}`).catch(() => {});
-  }
-
-  await exec(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS team_name TEXT`).catch(() => {});
-  await exec(`CREATE INDEX IF NOT EXISTS idx_push_team ON push_subscriptions(team_name)`).catch(() => {});
-
-  // Dueño directo de un equipo (representante de medios) — separado del dueño
-  // de la liga. Si es NULL, el equipo todavía solo lo administra el
-  // representante de la liga (o un admin).
-  await exec(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`).catch(() => {});
-  await exec(`CREATE INDEX IF NOT EXISTS idx_teams_owner ON teams(owner_user_id)`).catch(() => {});
-
-  // Invitaciones de un solo uso para "entregar" el perfil de un equipo (y más
-  // adelante, de una liga) a otra persona mediante un link que el
-  // representante genera y comparte por su cuenta.
-  await exec(`
-    CREATE TABLE IF NOT EXISTS invites (
-      id SERIAL PRIMARY KEY,
-      token TEXT UNIQUE NOT NULL,
-      type TEXT NOT NULL DEFAULT 'team',
-      team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
-      league_id INTEGER REFERENCES leagues(id) ON DELETE CASCADE,
-      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-      used_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-      used_at TIMESTAMP,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `).catch(() => {});
-  await exec(`CREATE INDEX IF NOT EXISTS idx_invites_team ON invites(team_id)`).catch(() => {});
-
-  await exec(`
-    ALTER TABLE push_subscriptions DROP CONSTRAINT IF EXISTS push_subscriptions_endpoint_league_id_match_id_key
-  `).catch(() => {});
-  await exec(`
-    ALTER TABLE push_subscriptions ADD CONSTRAINT push_subscriptions_unique
-    UNIQUE (endpoint, league_id, match_id, team_name)
-  `).catch(() => {});
-
-  // Corrige retroactivamente el bug de notificaciones por equipo cruzadas entre
-  // ligas: antes una suscripción a "team_name" no guardaba a qué liga pertenecía,
-  // así que si dos ligas tenían un equipo con el mismo nombre, sus suscriptores
-  // se mezclaban. Aquí les asignamos su league_id cuando el nombre del equipo es
-  // único en toda la plataforma (sin ambigüedad). Si hay más de una liga con un
-  // equipo de ese nombre, se deja sin resolver automáticamente — se corrige solo
-  // en cuanto la persona se vuelva a suscribir, ya con el nuevo flujo.
-  await exec(`
-    UPDATE push_subscriptions ps
-    SET league_id = sub.league_id
-    FROM (
-      SELECT UPPER(name) AS uname, MIN(league_id) AS league_id, COUNT(DISTINCT league_id) AS league_count
-      FROM teams
-      GROUP BY UPPER(name)
-    ) sub
-    WHERE ps.team_name IS NOT NULL
-      AND ps.league_id IS NULL
-      AND UPPER(ps.team_name) = sub.uname
-      AND sub.league_count = 1
-  `).catch(() => {});
 }
 
 export default db;
