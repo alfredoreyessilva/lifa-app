@@ -3,10 +3,11 @@ import bcrypt from 'bcryptjs';
 import db from '../config/db.js';
 import { signToken, authRequired } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { authLimiter } from '../middleware/rateLimit.js';
 
 const router = express.Router();
 
-router.post('/register', asyncHandler(async (req, res) => {
+router.post('/register', authLimiter, asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Faltan campos: nombre, email, contraseña' });
@@ -26,7 +27,7 @@ router.post('/register', asyncHandler(async (req, res) => {
   res.status(201).json({ token: signToken(user), user });
 }));
 
-router.post('/login', asyncHandler(async (req, res) => {
+router.post('/login', authLimiter, asyncHandler(async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: 'Faltan email o contraseña' });

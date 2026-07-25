@@ -36,6 +36,15 @@ if (configuredOrigins.length === 0 && process.env.NODE_ENV === 'production') {
 }
 
 const app = express();
+
+// Render (y la mayoría de las plataformas de hosting) ponen tu app detrás de
+// un proxy. Sin esta línea, Express vería la IP del proxy de Render como si
+// fuera la de TODOS los visitantes, y el limitador de intentos de login
+// (authLimiter) terminaría bloqueando a todo mundo por igual en vez de a
+// cada IP real por separado. El valor 1 significa "confía en un solo salto
+// de proxy", que es el caso típico de Render/Vercel.
+app.set('trust proxy', 1);
+
 app.use(cors({
   origin(origin, callback) {
     // Sin header "Origin" = petición servidor-a-servidor, curl, el cronjob, etc.
