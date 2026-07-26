@@ -206,7 +206,7 @@ router.post('/', authRequired, asyncHandler(async (req, res) => {
   const result = await db.prepare(`
     INSERT INTO leagues (name, slug, logo_url, cover_url, state, description, owner_user_id, status, timezone,
       facebook_url, instagram_url, twitter_url, youtube_url, tiktok_url, website_url, whatsapp)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     name.trim(), slug, logo_url || null, cover_url || null,
     state || null, description || null, req.user.id,
