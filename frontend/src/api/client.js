@@ -123,6 +123,8 @@ export const api = {
 
   // Admin — ligas
   adminGetLeagues: (token) => request('/admin/leagues', { token }),
+  adminApproveLeague: (id, token) =>
+    request(`/admin/leagues/${id}/approve`, { method: 'PUT', token }),
   adminDeleteLeague: (id, token) =>
     request(`/admin/leagues/${id}`, { method: 'DELETE', token }),
 

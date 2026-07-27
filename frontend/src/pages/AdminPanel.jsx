@@ -276,11 +276,18 @@ function LeaguesTab({ token }) {
   const [leagues, setLeagues] = useState([]);
   const [error, setError]     = useState('');
   const [modal, setModal]     = useState(null);
+  const [approvingId, setApprovingId] = useState(null);
 
   async function load() {
     try {
       const data = await api.adminGetLeagues(token);
-      setLeagues(data);
+      // Pendientes primero, para que salten a la vista sin tener que buscarlas
+      const sorted = [...data].sort((a, b) => {
+        if (a.status === 'pending' && b.status !== 'pending') return -1;
+        if (a.status !== 'pending' && b.status === 'pending') return 1;
+        return 0;
+      });
+      setLeagues(sorted);
     } catch (e) {
       setError(e.message);
     }
@@ -288,10 +295,31 @@ function LeaguesTab({ token }) {
 
   useEffect(() => { load(); }, []);
 
+  const pendingCount = leagues.filter((lg) => lg.status === 'pending').length;
+
+  async function approve(id) {
+    setApprovingId(id);
+    try {
+      await api.adminApproveLeague(id, token);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setApprovingId(null);
+    }
+  }
+
   return (
     <div>
       <div className="section-head">
-        <h2>Ligas <span className="count">{leagues.length}</span></h2>
+        <h2>
+          Ligas <span className="count">{leagues.length}</span>
+          {pendingCount > 0 && (
+            <span className="tag" style={{ marginLeft: 8, color: 'var(--live)', borderColor: 'var(--live)' }}>
+              {pendingCount} pendiente{pendingCount !== 1 ? 's' : ''}
+            </span>
+          )}
+        </h2>
       </div>
 
       {error && <div className="form-error">{error}</div>}
@@ -308,7 +336,14 @@ function LeaguesTab({ token }) {
                 </div>
               )}
               <div>
-                <div className="who">{lg.name}</div>
+                <div className="who">
+                  {lg.name}
+                  {lg.status === 'pending' && (
+                    <span className="tag" style={{ marginLeft: 8, color: 'var(--live)', borderColor: 'var(--live)' }}>
+                      Pendiente
+                    </span>
+                  )}
+                </div>
                 <div className="info">
                   {lg.state && `${lg.state} · `}
                   {lg.owner_name ? `${lg.owner_name} (${lg.owner_email})` : 'Sin propietario'}
@@ -316,6 +351,15 @@ function LeaguesTab({ token }) {
               </div>
             </div>
             <div className="row-actions">
+              {lg.status === 'pending' && (
+                <button
+                  className="btn btn-flag btn-sm"
+                  disabled={approvingId === lg.id}
+                  onClick={() => approve(lg.id)}
+                >
+                  {approvingId === lg.id ? 'Aprobando…' : '✓ Aprobar'}
+                </button>
+              )}
               <a href={`/ligas/${lg.slug}`} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
                 Ver
               </a>
