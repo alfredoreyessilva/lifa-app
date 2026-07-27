@@ -32,7 +32,7 @@ export default function Register() {
     try {
       const data = await api.register({ name: name.trim(), email: email.trim(), password });
       login(data.token, data.user);
-      navigate('/registrar-liga');
+      navigate('/panel');
     } catch (e) {
       setError(e.message);
     } finally {
