@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
-import { useAuth } from '../context/AuthContext.jsx';
 import Loading from '../components/Loading.jsx';
 
 export default function Home() {
   const [leagues, setLeagues] = useState(null);
   const [error, setError] = useState('');
-  const { token, leagues: myLeagues } = useAuth();
 
   useEffect(() => {
     api.getLeagues().then(setLeagues).catch((e) => setError(e.message));
@@ -15,23 +13,6 @@ export default function Home() {
 
   return (
     <div className="container">
-      <section className="hero">
-        <span className="eyebrow">Temporada en curso</span>
-        <h1>Conectando al Football<br />Americano de México</h1>
-        <p>Encuentra los calendarios, categorías y transmisiones de las ligas de fútbol americano de todo el país.</p>
-        <div className="hero-actions">
-          <a href="#ligas" className="btn btn-flag">Ver ligas</a>
-          {token && (
-            <Link
-              to={myLeagues?.[0] ? `/ligas/${myLeagues[0].slug}` : '/panel'}
-              className="btn btn-outline"
-            >
-              Ver mi página pública
-            </Link>
-          )}
-        </div>
-      </section>
-
       <div className="section-head" id="ligas">
         <h2>Ligas</h2>
         {leagues && <span className="count">{leagues.length} registradas</span>}
@@ -63,6 +44,15 @@ export default function Home() {
           ))}
         </div>
       )}
+
+      <section className="hero">
+        <span className="eyebrow">Temporada en curso</span>
+        <h1>Conectando al Football<br />Americano de México</h1>
+        <p>Encuentra los calendarios, categorías y transmisiones de las ligas de fútbol americano de todo el país.</p>
+        <div className="hero-actions">
+          <a href="#ligas" className="btn btn-flag">Ir al inicio</a>
+        </div>
+      </section>
     </div>
   );
 }

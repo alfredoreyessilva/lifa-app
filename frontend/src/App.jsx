@@ -9,6 +9,7 @@ import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import RegisterLeague from './pages/RegisterLeague.jsx';
 import Dashboard from './pages/Dashboard.jsx';
+import RegisterOrganization from './pages/RegisterOrganization.jsx';
 import AdminPanel from './pages/AdminPanel.jsx';
 import InviteClaim from './pages/InviteClaim.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
@@ -36,6 +37,10 @@ export default function App() {
             <Route
               path="/panel"
               element={<ProtectedRoute><Dashboard /></ProtectedRoute>}
+            />
+            <Route
+              path="/panel/registrar-organizacion"
+              element={<ProtectedRoute><RegisterOrganization /></ProtectedRoute>}
             />
             <Route
               path="/admin"

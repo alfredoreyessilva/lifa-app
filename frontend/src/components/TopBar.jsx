@@ -16,10 +16,14 @@ export default function TopBar() {
             {user.role === 'admin' ? (
               <>
                 <Link to="/panel" className="btn btn-outline btn-sm">Mi panel</Link>
+                <Link to="/panel/registrar-organizacion" className="btn btn-outline btn-sm">Registrar Organización</Link>
                 <Link to="/admin" className="btn btn-outline btn-sm">Panel Admin</Link>
               </>
             ) : (
-              <Link to="/panel" className="btn btn-outline btn-sm">Mi panel</Link>
+              <>
+                <Link to="/panel" className="btn btn-outline btn-sm">Mi panel</Link>
+                <Link to="/panel/registrar-organizacion" className="btn btn-outline btn-sm">Registrar Organización</Link>
+              </>
             )}
             <button onClick={logout} className="btn btn-ghost btn-sm">Cerrar sesión</button>
           </div>

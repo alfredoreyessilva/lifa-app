@@ -57,17 +57,7 @@ export default function Dashboard() {
   }
 
   if (leagues.length === 0) {
-    return (
-      <div className="container">
-        <div className="empty-state">
-          <h3>Aún no tienes ligas registradas</h3>
-          <p>Registra tu liga para comenzar a publicar su calendario.</p>
-          <div style={{ marginTop: 16 }}>
-            <Link to="/registrar-liga" className="btn btn-flag">Registrar mi liga</Link>
-          </div>
-        </div>
-      </div>
-    );
+    return <div className="container"></div>;
   }
 
   const currentTeams    = leagueData?.teams  || [];
@@ -96,6 +86,18 @@ export default function Dashboard() {
       </div>
 
       {error && <div className="form-error">{error}</div>}
+
+      {leagueData?.league?.status === 'pending' && (
+        <div className="form-error" style={{ background: 'rgba(255,210,63,0.12)', borderColor: 'var(--flag)', color: 'var(--ink)' }}>
+          ⏳ Tu liga está pendiente de aprobación. Ya puedes configurar equipos, sedes y partidos con normalidad — en cuanto un administrador la apruebe, aparecerá en la página pública.
+        </div>
+      )}
+
+      {leagueData?.league?.status === 'rejected' && (
+        <div className="form-error">
+          ⚠ Tu liga no fue aprobada por un administrador, así que no aparece en la página pública. Si crees que fue un error, contáctanos para revisarlo.
+        </div>
+      )}
 
       {!leagueData ? (
         <div className="loading">Cargando…</div>
