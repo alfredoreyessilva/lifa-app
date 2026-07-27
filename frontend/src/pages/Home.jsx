@@ -17,7 +17,7 @@ export default function Home() {
     <div className="container">
       <section className="hero">
         <span className="eyebrow">Temporada en curso</span>
-        <h1>Conectando al football<br />americano de México</h1>
+        <h1>Conectando al Football<br />Americano de México</h1>
         <p>Encuentra los calendarios, categorías y transmisiones de las ligas de fútbol americano de todo el país.</p>
         <div className="hero-actions">
           <a href="#ligas" className="btn btn-flag">Ver ligas</a>
