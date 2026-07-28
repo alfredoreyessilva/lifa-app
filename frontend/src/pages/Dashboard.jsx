@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
@@ -17,18 +17,62 @@ import { getTimezoneLabel } from '../utils/timezones.js';
 const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 const DEFAULT_TZ = 'America/Mexico_City';
 
-export default function Dashboard() {
-  const { token, leagues, teams, refreshLeagues } = useAuth();
-  const [selectedLeagueId, setSelectedLeagueId] = useState(null);
+export default function Dashboard({ kind }) {
+  const { leagues, teams, token, refreshLeagues } = useAuth();
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const orgs = [
+    ...leagues.map((lg) => ({ ...lg, kind: 'liga' })),
+    ...teams.map((tm) => ({ ...tm, kind: 'equipo' })),
+  ];
+  const selected = orgs.find((org) => org.kind === kind && String(org.id) === id);
+
+  function handleLogoClick(e, org) {
+    if (org === selected) {
+      e.preventDefault();
+      navigate('/panel');
+    }
+  }
+
+  return (
+    <div className="container">
+      <div className="section-head">
+        <h2>Organizaciones administradas</h2>
+      </div>
+      <div className="org-logo-grid">
+        {orgs.map((org) => (
+          <Link
+            key={`${org.kind}-${org.id}`}
+            to={`/panel/${org.kind}/${org.id}`}
+            onClick={(e) => handleLogoClick(e, org)}
+            className={`league-logo-btn${org === selected ? ' league-logo-btn--active' : ''}`}
+            style={{ width: 72, height: 72 }}
+          >
+            <div className="league-logo" style={{ width: '100%', height: '100%', fontSize: 22 }}>
+              {org.logo_url ? <img src={org.logo_url} alt={org.name} /> : initials(org.name)}
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      {selected?.kind === 'liga' && <LeagueWorkPanel leagueId={selected.id} />}
+      {selected?.kind === 'equipo' && (
+        <TeamOnlyPanel teams={[selected]} token={token} onChange={refreshLeagues} />
+      )}
+    </div>
+  );
+}
+
+function LeagueWorkPanel({ leagueId }) {
+  const { token, refreshLeagues } = useAuth();
+  const [selectedLeagueId, setSelectedLeagueId] = useState(Number(leagueId));
   const [leagueData, setLeagueData] = useState(null);
   const [error, setError] = useState('');
   const [modal, setModal] = useState(null);
 
   useEffect(() => {
-    if (leagues.length > 0 && !selectedLeagueId) {
-      setSelectedLeagueId(leagues[0].id);
-    }
-  }, [leagues, selectedLeagueId]);
+    setSelectedLeagueId(Number(leagueId));
+  }, [leagueId]);
 
   useEffect(() => {
     if (!selectedLeagueId) return;
@@ -49,17 +93,6 @@ export default function Dashboard() {
     if (selectedLeagueId) loadLeagueData(selectedLeagueId);
   }
 
-  // Alguien puede no administrar ninguna liga, pero sí un equipo específico
-  // (le entregaron el perfil vía invitación) — le mostramos un panel reducido,
-  // en vez del mensaje de "registra tu liga".
-  if (leagues.length === 0 && teams.length > 0) {
-    return <TeamOnlyPanel teams={teams} token={token} onChange={refreshLeagues} />;
-  }
-
-  if (leagues.length === 0) {
-    return <div className="container"></div>;
-  }
-
   const currentTeams    = leagueData?.teams  || [];
   const currentVenues   = leagueData?.venues || [];
   const leagueTimezone  = leagueData?.league?.timezone || DEFAULT_TZ;
@@ -70,18 +103,6 @@ export default function Dashboard() {
         <div>
           <span className="eyebrow">Panel de representante</span>
           <h1>Administrar calendario</h1>
-        </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          {leagues.length > 1 && (
-            <select
-              value={selectedLeagueId || ''}
-              onChange={(e) => setSelectedLeagueId(Number(e.target.value))}
-              style={{ background: 'var(--card)', border: '1px solid var(--line)', color: 'var(--ink)', padding: '10px 12px', borderRadius: 4 }}
-            >
-              {leagues.map((lg) => <option key={lg.id} value={lg.id}>{lg.name}</option>)}
-            </select>
-          )}
-          <Link to="/registrar-liga" className="btn btn-outline btn-sm">+ Nueva liga</Link>
         </div>
       </div>
 

@@ -39,6 +39,14 @@ export default function App() {
               element={<ProtectedRoute><Dashboard /></ProtectedRoute>}
             />
             <Route
+              path="/panel/liga/:id"
+              element={<ProtectedRoute><Dashboard kind="liga" /></ProtectedRoute>}
+            />
+            <Route
+              path="/panel/equipo/:id"
+              element={<ProtectedRoute><Dashboard kind="equipo" /></ProtectedRoute>}
+            />
+            <Route
               path="/panel/registrar-organizacion"
               element={<ProtectedRoute><RegisterOrganization /></ProtectedRoute>}
             />
