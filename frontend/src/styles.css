@@ -1811,8 +1811,25 @@ a.match-card-new {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: 12px;
+}
+
+.league-header-panel {
+  background: #000;
+  border-radius: 16px;
+  overflow: hidden;
   margin-top: 16px;
+}
+.league-header-panel-body {
+  padding: 32px 20px 12px;
+  text-align: center;
+}
+.league-header-panel-body--content {
+  padding: 20px 20px 28px;
+  text-align: left;
+}
+.tab-bar--panel {
+  margin: 20px 20px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .league-info-logo-wrap {

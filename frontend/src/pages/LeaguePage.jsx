@@ -155,38 +155,41 @@ export default function LeaguePage() {
     <div className="container">
       <div className="crumb"><Link to="/">Inicio</Link> / {league.name}</div>
 
-      {league.cover_url && (
-        <img src={league.cover_url} alt="" className="league-page-cover-img" />
-      )}
+      <div className="league-header-panel">
+        {league.cover_url && (
+          <img src={league.cover_url} alt="" className="league-page-cover-img" />
+        )}
 
-      <section className="hero" style={{ paddingTop: 40, paddingBottom: 24 }}>
-        <button
-          className="league-logo-btn"
-          onClick={() => setShowLeagueInfo(true)}
-          title="Ver información de la liga"
-          style={{ width: 96, height: 96, margin: '0 auto 20px', fontSize: 30 }}
-        >
-          <div className="league-logo" style={{ width: '100%', height: '100%', fontSize: 30 }}>
-            {league.logo_url ? <img src={league.logo_url} alt={league.name} /> : initials(league.name)}
-          </div>
-        </button>
-
-        <h1 style={{ fontSize: 'clamp(32px, 6vw, 56px)' }}>{league.name}</h1>
-        {league.description && <p>{league.description}</p>}
-
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginTop: 12 }}>
-          <button className="btn btn-outline btn-sm" onClick={copyLink}>
-            {copied ? '✓ Link copiado' : 'Compartir esta liga'}
+        <div className="league-header-panel-body">
+          <button
+            className="league-logo-btn"
+            onClick={() => setShowLeagueInfo(true)}
+            title="Ver información de la liga"
+            style={{ width: 96, height: 96, margin: '0 auto 20px', fontSize: 30 }}
+          >
+            <div className="league-logo" style={{ width: '100%', height: '100%', fontSize: 30 }}>
+              {league.logo_url ? <img src={league.logo_url} alt={league.name} /> : initials(league.name)}
+            </div>
           </button>
-          <SubscribeButton leagueId={league.id} label="Notificarme de partidos" />
-        </div>
-      </section>
 
-      <div className="tab-bar">
-        <button className={`tab-btn ${tab === 'categorias' ? 'active' : ''}`} onClick={() => setTab('categorias')}>Categorías</button>
-        <button className={`tab-btn ${tab === 'equipos'    ? 'active' : ''}`} onClick={() => setTab('equipos')}>Equipos</button>
-        <button className={`tab-btn ${tab === 'sedes'      ? 'active' : ''}`} onClick={() => setTab('sedes')}>Sedes</button>
-      </div>
+          <h1 style={{ fontSize: 'clamp(32px, 6vw, 56px)' }}>{league.name}</h1>
+          {league.description && <p>{league.description}</p>}
+
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginTop: 12 }}>
+            <button className="btn btn-outline btn-sm" onClick={copyLink}>
+              {copied ? '✓ Link copiado' : 'Compartir esta liga'}
+            </button>
+            <SubscribeButton leagueId={league.id} label="Notificarme de partidos" />
+          </div>
+        </div>
+
+        <div className="tab-bar tab-bar--panel">
+          <button className={`tab-btn ${tab === 'categorias' ? 'active' : ''}`} onClick={() => setTab('categorias')}>Categorías</button>
+          <button className={`tab-btn ${tab === 'equipos'    ? 'active' : ''}`} onClick={() => setTab('equipos')}>Equipos</button>
+          <button className={`tab-btn ${tab === 'sedes'      ? 'active' : ''}`} onClick={() => setTab('sedes')}>Sedes</button>
+        </div>
+
+        <div className="league-header-panel-body league-header-panel-body--content">
 
       {tab === 'categorias' && (
         <>
@@ -252,41 +255,43 @@ export default function LeaguePage() {
         </>
       )}
 
-      {tab === 'sedes' && (
-        <>
-          <div className="section-head">
-            <h2>Sedes</h2>
-            <span className="count">{venues ? venues.length : ''}</span>
-          </div>
-          {!venues ? (
-            <div className="loading">Cargando…</div>
-          ) : venues.length === 0 ? (
-            <div className="empty-state">
-              <h3>Sin sedes todavía</h3>
-              <p>Esta liga aún no ha publicado sus sedes.</p>
-            </div>
-          ) : (
+          {tab === 'sedes' && (
             <>
-              <div className="team-grid">
-                {venues.map((venue) => (
-                  <VenueCard
-                    key={venue.id}
-                    venue={venue}
-                    isSelected={selectedVenue?.id === venue.id}
-                    onClick={() => handleVenueClick(venue)}
-                  />
-                ))}
+              <div className="section-head">
+                <h2>Sedes</h2>
+                <span className="count">{venues ? venues.length : ''}</span>
               </div>
-              {selectedVenue && (
-                <VenueInfoPanel
-                  venue={selectedVenue}
-                  onClose={() => setSelectedVenue(null)}
-                />
+              {!venues ? (
+                <div className="loading">Cargando…</div>
+              ) : venues.length === 0 ? (
+                <div className="empty-state">
+                  <h3>Sin sedes todavía</h3>
+                  <p>Esta liga aún no ha publicado sus sedes.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="team-grid">
+                    {venues.map((venue) => (
+                      <VenueCard
+                        key={venue.id}
+                        venue={venue}
+                        isSelected={selectedVenue?.id === venue.id}
+                        onClick={() => handleVenueClick(venue)}
+                      />
+                    ))}
+                  </div>
+                  {selectedVenue && (
+                    <VenueInfoPanel
+                      venue={selectedVenue}
+                      onClose={() => setSelectedVenue(null)}
+                    />
+                  )}
+                </>
               )}
             </>
           )}
-        </>
-      )}
+        </div>
+      </div>
 
       {showLeagueInfo && (
         <LeagueInfoPanel league={leagueWithTeams} onClose={() => setShowLeagueInfo(false)} />
