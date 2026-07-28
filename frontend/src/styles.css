@@ -1797,12 +1797,28 @@ a.match-card-new {
   position: relative;
   flex-shrink: 0;
 }
+.league-info-banner--full {
+  height: auto;
+}
+.league-info-banner-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 16px 16px 0 0;
+}
+
+.league-page-cover-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  margin-top: 16px;
+}
 
 .league-info-logo-wrap {
   display: flex;
   justify-content: flex-start;
-  padding: 0 20px;
-  margin-top: -36px;
+  padding: 20px 20px 0;
   position: relative;
   z-index: 1;
 }

@@ -39,16 +39,16 @@ function LeagueInfoPanel({ league, onClose }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="league-info-panel" onClick={(e) => e.stopPropagation()}>
-        <div
-          className="league-info-banner"
-          style={league.cover_url ? {
-            backgroundImage: `url(${league.cover_url})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          } : {}}
-        >
-          <button className="team-profile-close" onClick={onClose}>✕</button>
-        </div>
+        {league.cover_url ? (
+          <div className="league-info-banner league-info-banner--full">
+            <img src={league.cover_url} alt="" className="league-info-banner-img" />
+            <button className="team-profile-close" onClick={onClose}>✕</button>
+          </div>
+        ) : (
+          <div className="league-info-banner">
+            <button className="team-profile-close" onClick={onClose}>✕</button>
+          </div>
+        )}
 
         <div className="league-info-logo-wrap">
           <div className="league-logo" style={{ width: 72, height: 72, fontSize: 22, border: '3px solid var(--field)', flexShrink: 0 }}>
@@ -154,6 +154,10 @@ export default function LeaguePage() {
   return (
     <div className="container">
       <div className="crumb"><Link to="/">Inicio</Link> / {league.name}</div>
+
+      {league.cover_url && (
+        <img src={league.cover_url} alt="" className="league-page-cover-img" />
+      )}
 
       <section className="hero" style={{ paddingTop: 40, paddingBottom: 24 }}>
         <button

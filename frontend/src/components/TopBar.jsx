@@ -13,6 +13,9 @@ export default function TopBar() {
 
         {user ? (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Link to="/notificaciones" className="btn btn-outline btn-sm" aria-label="Notificaciones" title="Notificaciones" style={{ display: 'flex', alignItems: 'center', padding: '6px 10px' }}>
+              <img src="/favicon.svg" alt="" style={{ width: 18, height: 18 }} />
+            </Link>
             {user.role === 'admin' ? (
               <>
                 <Link to="/panel" className="btn btn-outline btn-sm">Mi panel</Link>
