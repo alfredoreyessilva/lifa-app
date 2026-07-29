@@ -32,6 +32,9 @@ export const api = {
   // Crear / editar liga
   createLeague: (payload, token) => request('/leagues', { method: 'POST', body: payload, token }),
   updateLeague: (id, payload, token) => request(`/leagues/${id}`, { method: 'PUT', body: payload, token }),
+  requestPublishLeague: (id, token) => request(`/leagues/${id}/request-publish`, { method: 'PUT', token }),
+  cancelPublishRequest: (id, token) => request(`/leagues/${id}/cancel-request`, { method: 'PUT', token }),
+  unpublishOwnLeague: (id, token) => request(`/leagues/${id}/unpublish`, { method: 'PUT', token }),
 
   // Categorías
   createCategory: (leagueId, payload, token) =>
@@ -123,8 +126,10 @@ export const api = {
 
   // Admin — ligas
   adminGetLeagues: (token) => request('/admin/leagues', { token }),
-  adminApproveLeague: (id, token) =>
-    request(`/admin/leagues/${id}/approve`, { method: 'PUT', token }),
+  adminPublishLeague: (id, token) =>
+    request(`/admin/leagues/${id}/publish`, { method: 'PUT', token }),
+  adminUnpublishLeague: (id, token) =>
+    request(`/admin/leagues/${id}/unpublish`, { method: 'PUT', token }),
   adminDeleteLeague: (id, token) =>
     request(`/admin/leagues/${id}`, { method: 'DELETE', token }),
 

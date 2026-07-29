@@ -49,10 +49,17 @@ router.delete('/leagues/:id', authRequired, adminRequired, asyncHandler(async (r
   res.json({ ok: true });
 }));
 
-router.put('/leagues/:id/approve', authRequired, adminRequired, asyncHandler(async (req, res) => {
+router.put('/leagues/:id/publish', authRequired, adminRequired, asyncHandler(async (req, res) => {
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id);
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
-  await db.prepare("UPDATE leagues SET status = 'approved' WHERE id = ?").run(req.params.id);
+  await db.prepare('UPDATE leagues SET is_public = TRUE WHERE id = ?').run(req.params.id);
+  res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id));
+}));
+
+router.put('/leagues/:id/unpublish', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id);
+  if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
+  await db.prepare('UPDATE leagues SET is_public = FALSE WHERE id = ?').run(req.params.id);
   res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id));
 }));
 

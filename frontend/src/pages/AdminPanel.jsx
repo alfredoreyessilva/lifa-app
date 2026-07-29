@@ -276,15 +276,15 @@ function LeaguesTab({ token }) {
   const [leagues, setLeagues] = useState([]);
   const [error, setError]     = useState('');
   const [modal, setModal]     = useState(null);
-  const [approvingId, setApprovingId] = useState(null);
+  const [busyId, setBusyId]   = useState(null);
 
   async function load() {
     try {
       const data = await api.adminGetLeagues(token);
-      // Pendientes primero, para que salten a la vista sin tener que buscarlas
+      // Las que solicitaron publicación van primero, para atenderlas sin buscarlas
       const sorted = [...data].sort((a, b) => {
-        if (a.status === 'pending' && b.status !== 'pending') return -1;
-        if (a.status !== 'pending' && b.status === 'pending') return 1;
+        if (a.publish_requested && !b.publish_requested) return -1;
+        if (!a.publish_requested && b.publish_requested) return 1;
         return 0;
       });
       setLeagues(sorted);
@@ -295,17 +295,21 @@ function LeaguesTab({ token }) {
 
   useEffect(() => { load(); }, []);
 
-  const pendingCount = leagues.filter((lg) => lg.status === 'pending').length;
+  const requestedCount = leagues.filter((lg) => lg.publish_requested && !lg.is_public).length;
 
-  async function approve(id) {
-    setApprovingId(id);
+  async function togglePublic(lg) {
+    setBusyId(lg.id);
     try {
-      await api.adminApproveLeague(id, token);
+      if (lg.is_public) {
+        await api.adminUnpublishLeague(lg.id, token);
+      } else {
+        await api.adminPublishLeague(lg.id, token);
+      }
       await load();
     } catch (e) {
       setError(e.message);
     } finally {
-      setApprovingId(null);
+      setBusyId(null);
     }
   }
 
@@ -314,9 +318,9 @@ function LeaguesTab({ token }) {
       <div className="section-head">
         <h2>
           Ligas <span className="count">{leagues.length}</span>
-          {pendingCount > 0 && (
+          {requestedCount > 0 && (
             <span className="tag" style={{ marginLeft: 8, color: 'var(--live)', borderColor: 'var(--live)' }}>
-              {pendingCount} pendiente{pendingCount !== 1 ? 's' : ''}
+              {requestedCount} solicitud{requestedCount !== 1 ? 'es' : ''} de publicación
             </span>
           )}
         </h2>
@@ -338,9 +342,12 @@ function LeaguesTab({ token }) {
               <div>
                 <div className="who">
                   {lg.name}
-                  {lg.status === 'pending' && (
+                  <span className="tag" style={{ marginLeft: 8, color: lg.is_public ? 'var(--field)' : 'var(--ink-dim)', borderColor: lg.is_public ? 'var(--field)' : 'var(--line-strong)' }}>
+                    {lg.is_public ? 'Pública' : 'Privada'}
+                  </span>
+                  {!lg.is_public && lg.publish_requested && (
                     <span className="tag" style={{ marginLeft: 8, color: 'var(--live)', borderColor: 'var(--live)' }}>
-                      Pendiente
+                      Solicitó publicarse
                     </span>
                   )}
                 </div>
@@ -351,15 +358,13 @@ function LeaguesTab({ token }) {
               </div>
             </div>
             <div className="row-actions">
-              {lg.status === 'pending' && (
-                <button
-                  className="btn btn-flag btn-sm"
-                  disabled={approvingId === lg.id}
-                  onClick={() => approve(lg.id)}
-                >
-                  {approvingId === lg.id ? 'Aprobando…' : '✓ Aprobar'}
-                </button>
-              )}
+              <button
+                className={`btn btn-sm ${lg.is_public ? 'btn-outline' : 'btn-flag'}`}
+                disabled={busyId === lg.id}
+                onClick={() => togglePublic(lg)}
+              >
+                {busyId === lg.id ? 'Un momento…' : lg.is_public ? 'Ocultar liga' : 'Publicar liga'}
+              </button>
               <a href={`/ligas/${lg.slug}`} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
                 Ver
               </a>

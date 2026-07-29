@@ -19,7 +19,7 @@ function slugify(str) {
 router.get('/', asyncHandler(async (req, res) => {
   const leagues = await db.prepare(`
     SELECT id, name, slug, logo_url, state, description
-    FROM leagues WHERE status = 'approved'
+    FROM leagues WHERE is_public = TRUE
     ORDER BY name ASC
   `).all();
   res.json(leagues);
@@ -66,7 +66,7 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
 
 router.get('/:slug', asyncHandler(async (req, res) => {
   const league = await db.prepare(`
-    SELECT * FROM leagues WHERE slug = ? AND status = 'approved'
+    SELECT * FROM leagues WHERE slug = ? AND is_public = TRUE
   `).get(req.params.slug);
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
 
@@ -87,7 +87,7 @@ router.get('/:slug', asyncHandler(async (req, res) => {
 
 router.get('/:slug/teams', asyncHandler(async (req, res) => {
   const league = await db.prepare(`
-    SELECT * FROM leagues WHERE slug = ? AND status = 'approved'
+    SELECT * FROM leagues WHERE slug = ? AND is_public = TRUE
   `).get(req.params.slug);
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
 
@@ -103,7 +103,7 @@ router.get('/:slug/teams', asyncHandler(async (req, res) => {
 
 router.get('/:slug/venues', asyncHandler(async (req, res) => {
   const league = await db.prepare(`
-    SELECT * FROM leagues WHERE slug = ? AND status = 'approved'
+    SELECT * FROM leagues WHERE slug = ? AND is_public = TRUE
   `).get(req.params.slug);
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
 
@@ -204,9 +204,9 @@ router.post('/', authRequired, asyncHandler(async (req, res) => {
   if (existing) slug = `${slug}-${Date.now().toString().slice(-5)}`;
 
   const result = await db.prepare(`
-    INSERT INTO leagues (name, slug, logo_url, cover_url, state, description, owner_user_id, status, timezone,
+    INSERT INTO leagues (name, slug, logo_url, cover_url, state, description, owner_user_id, timezone,
       facebook_url, instagram_url, twitter_url, youtube_url, tiktok_url, website_url, whatsapp)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     name.trim(), slug, logo_url || null, cover_url || null,
     state || null, description || null, req.user.id,
@@ -267,6 +267,27 @@ router.put('/:id', authRequired, leagueOwnerRequired, asyncHandler(async (req, r
   );
 
   res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(league.id));
+}));
+
+// El dueño de la liga solicita aparecer en el panel público. Es solo una señal
+// para el admin ("quiero promoción") — nunca publica la liga por sí sola.
+router.put('/:id/request-publish', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare('UPDATE leagues SET publish_requested = TRUE WHERE id = ?').run(req.league.id);
+  res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.league.id));
+}));
+
+// El dueño se arrepiente antes de que el admin la atienda.
+router.put('/:id/cancel-request', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare('UPDATE leagues SET publish_requested = FALSE WHERE id = ?').run(req.league.id);
+  res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.league.id));
+}));
+
+// El dueño puede ocultar su propia liga en cualquier momento, sin pedirle
+// permiso a nadie. Al ocultarla, se resetea también la solicitud: si más
+// adelante la quiere pública de nuevo, tiene que volver a pedirlo.
+router.put('/:id/unpublish', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare('UPDATE leagues SET is_public = FALSE, publish_requested = FALSE WHERE id = ?').run(req.league.id);
+  res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.league.id));
 }));
 
 router.post('/:leagueId/categories', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {

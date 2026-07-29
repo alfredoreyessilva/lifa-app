@@ -96,6 +96,28 @@ function LeagueWorkPanel({ leagueId }) {
   const currentTeams    = leagueData?.teams  || [];
   const currentVenues   = leagueData?.venues || [];
   const leagueTimezone  = leagueData?.league?.timezone || DEFAULT_TZ;
+  const isPublic        = leagueData?.league?.is_public;
+  const publishRequested = leagueData?.league?.publish_requested;
+  const [visibilityBusy, setVisibilityBusy] = useState(false);
+
+  async function requestPublish() {
+    setVisibilityBusy(true);
+    try { await api.requestPublishLeague(selectedLeagueId, token); refresh(); }
+    catch (e) { setError(e.message); }
+    finally { setVisibilityBusy(false); }
+  }
+  async function cancelRequest() {
+    setVisibilityBusy(true);
+    try { await api.cancelPublishRequest(selectedLeagueId, token); refresh(); }
+    catch (e) { setError(e.message); }
+    finally { setVisibilityBusy(false); }
+  }
+  async function unpublish() {
+    setVisibilityBusy(true);
+    try { await api.unpublishOwnLeague(selectedLeagueId, token); refresh(); }
+    catch (e) { setError(e.message); }
+    finally { setVisibilityBusy(false); }
+  }
 
   return (
     <div className="container">
@@ -108,15 +130,32 @@ function LeagueWorkPanel({ leagueId }) {
 
       {error && <div className="form-error">{error}</div>}
 
-      {leagueData?.league?.status === 'pending' && (
-        <div className="form-error" style={{ background: 'rgba(255,210,63,0.12)', borderColor: 'var(--flag)', color: 'var(--ink)' }}>
-          ⏳ Tu liga está pendiente de aprobación. Ya puedes configurar equipos, sedes y partidos con normalidad — en cuanto un administrador la apruebe, aparecerá en la página pública.
-        </div>
-      )}
-
-      {leagueData?.league?.status === 'rejected' && (
-        <div className="form-error">
-          ⚠ Tu liga no fue aprobada por un administrador, así que no aparece en la página pública. Si crees que fue un error, contáctanos para revisarlo.
+      {leagueData?.league && (
+        <div className="form-error" style={{ background: isPublic ? 'rgba(58,141,63,0.12)' : 'rgba(255,210,63,0.12)', borderColor: isPublic ? 'var(--field)' : 'var(--flag)', color: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <span>
+            {isPublic
+              ? '✓ Tu liga es pública — cualquiera puede verla en el sitio.'
+              : publishRequested
+                ? '⏳ Ya solicitaste aparecer en el panel de ligas. Un administrador va a revisarlo.'
+                : 'Tu liga es privada por ahora — puedes usar todas las herramientas sin que nadie más la vea.'}
+          </span>
+          <span style={{ display: 'flex', gap: 8 }}>
+            {isPublic && (
+              <button className="btn btn-ghost btn-sm" disabled={visibilityBusy} onClick={unpublish}>
+                Ocultar mi liga
+              </button>
+            )}
+            {!isPublic && !publishRequested && (
+              <button className="btn btn-flag btn-sm" disabled={visibilityBusy} onClick={requestPublish}>
+                Solicitar aparecer en el panel de ligas
+              </button>
+            )}
+            {!isPublic && publishRequested && (
+              <button className="btn btn-ghost btn-sm" disabled={visibilityBusy} onClick={cancelRequest}>
+                Cancelar solicitud
+              </button>
+            )}
+          </span>
         </div>
       )}
 
@@ -523,6 +562,7 @@ function LeaguePanel({
                     </div>
                     <div className="row-actions">
                       <button className="btn btn-outline btn-sm" onClick={() => onEditMatch(cat, m)}>Editar</button>
+                      <button className="btn btn-outline btn-sm">Subir datos estadísticos</button>
                       <button className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => onDeleteMatch(cat, m)}>Eliminar</button>
                     </div>
                   </div>

@@ -257,6 +257,17 @@ export async function initSchema() {
     await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_upcoming BOOLEAN NOT NULL DEFAULT FALSE`);
     await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_live BOOLEAN NOT NULL DEFAULT FALSE`);
 
+    // Visibilidad pública de una liga: reemplaza el viejo `status` (pending/approved).
+    // Son dos controles independientes:
+    //   - is_public: lo decide el admin, controla si la liga aparece en el sitio público.
+    //   - publish_requested: lo decide el dueño de la liga, es solo una señal para el
+    //     admin ("quiero promoción"), nunca obliga a publicar ni a mantener publicado.
+    await run(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT FALSE`);
+    await run(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS publish_requested BOOLEAN NOT NULL DEFAULT FALSE`);
+    // Las ligas que ya estaban aprobadas bajo el sistema viejo se migran a públicas,
+    // para no ocultarle de golpe su liga a nadie que ya la tenía visible.
+    await run(`UPDATE leagues SET is_public = TRUE WHERE status = 'approved' AND is_public IS NOT TRUE`);
+
     // Relación de un partido con una sede registrada (tabla venues). Se deja la
     // columna vieja "venue" (texto libre) intacta para no perder los datos que
     // ya existen; los partidos nuevos usarán venue_id en vez de texto libre.
