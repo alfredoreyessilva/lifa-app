@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
 import { categoryOwnerRequired, matchOwnerRequired, leagueOwnerRequired, teamOwnerRequired, venueOwnerRequired, groupOwnerRequired } from '../middleware/ownership.js';
-import { isValidEmail, isValidUrl, isNonEmptyString } from '../utils/validation.js';
+import { isValidEmail, isValidUrl, isValidGoogleMapsUrl, isNonEmptyString } from '../utils/validation.js';
 import {
   isValidTimezone,
   zonedTimeToUtcISO,
@@ -729,9 +729,10 @@ router.delete('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async 
 
 /* ===================== SEDES ===================== */
 
-function validateVenueFields({ contact_email, cover_url }) {
+function validateVenueFields({ contact_email, cover_url, address }) {
   if (contact_email && !isValidEmail(contact_email)) return 'El correo de contacto no tiene un formato válido';
   if (cover_url      && !isValidUrl(cover_url))       return 'La imagen de portada no es una dirección web válida';
+  if (address        && !isValidGoogleMapsUrl(address)) return 'El link de Google Maps no es válido (debe ser un link como https://maps.app.goo.gl/… o https://www.google.com/maps/…)';
   return null;
 }
 
@@ -742,7 +743,7 @@ router.post('/leagues/:leagueId/venues', authRequired, leagueOwnerRequired, asyn
 
   if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre de la sede es obligatorio' });
 
-  const validationError = validateVenueFields({ contact_email, cover_url });
+  const validationError = validateVenueFields({ contact_email, cover_url, address });
   if (validationError) return res.status(400).json({ error: validationError });
 
   const result = await db.prepare(`
@@ -771,6 +772,7 @@ router.put('/venues/:id', authRequired, venueOwnerRequired, asyncHandler(async (
   const resolved = {
     contact_email: contact_email ?? v.contact_email,
     cover_url:     cover_url     ?? v.cover_url,
+    address:       address       ?? v.address,
   };
   const validationError = validateVenueFields(resolved);
   if (validationError) return res.status(400).json({ error: validationError });

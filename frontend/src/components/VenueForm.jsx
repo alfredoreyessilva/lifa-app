@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import { required, maxLength, validEmail, validUrl, runValidations } from '../utils/validation.js';
+import { required, maxLength, validEmail, validUrl, validGoogleMapsUrl, runValidations } from '../utils/validation.js';
 import CharField from './CharField.jsx';
 
 // Botón de subida de imagen reutilizable dentro del formulario (idéntico al de TeamForm)
@@ -70,6 +70,7 @@ export default function VenueForm({ initial, onSubmit, onCancel, submitLabel }) 
       () => maxLength(form.name, 80, 'El nombre de la sede'),
       () => validEmail(form.contact_email),
       () => validUrl(form.cover_url, 'La imagen de portada'),
+      () => validGoogleMapsUrl(form.address, 'El link de Google Maps'),
     ]);
     if (validationError) { setError(validationError); return; }
 
@@ -148,8 +149,8 @@ export default function VenueForm({ initial, onSubmit, onCancel, submitLabel }) 
             </div>
 
             <div className="field">
-              <label>📍 Dirección o link de Google Maps</label>
-              <input value={form.address} onChange={(e) => update('address', e.target.value)} placeholder="Dirección o https://maps.app.goo.gl/…" />
+              <label>📍 Link de Google Maps</label>
+              <input type="url" value={form.address} onChange={(e) => update('address', e.target.value)} placeholder="https://maps.app.goo.gl/…" />
             </div>
             <div className="field-row" style={{ marginTop: 8 }}>
               <div className="field">

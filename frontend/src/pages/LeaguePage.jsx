@@ -6,7 +6,6 @@ import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
 import VenueCard from '../components/VenueCard.jsx';
 import VenueInfoPanel from '../components/VenueInfoPanel.jsx';
 import Loading from '../components/Loading.jsx';
-import SubscribeButton from '../components/SubscribeButton.jsx';
 
 function initials(name) {
   return (name || '')
@@ -179,7 +178,6 @@ export default function LeaguePage() {
             <button className="btn btn-outline btn-sm" onClick={copyLink}>
               {copied ? '✓ Link copiado' : 'Compartir esta liga'}
             </button>
-            <SubscribeButton leagueId={league.id} label="Notificarme de partidos" />
           </div>
         </div>
 

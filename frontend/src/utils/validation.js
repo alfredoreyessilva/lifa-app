@@ -43,6 +43,28 @@ export function validUrl(value, fieldLabel = 'El enlace') {
   }
 }
 
+const GOOGLE_MAPS_HOSTS = ['google.com', 'maps.app.goo.gl', 'goo.gl'];
+
+export function validGoogleMapsUrl(value, fieldLabel = 'El link') {
+  if (!value || value.trim() === '') return null; // usar required() aparte si es obligatorio
+  let url;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    return `${fieldLabel} debe ser un link de Google Maps (debe empezar con http:// o https://)`;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return `${fieldLabel} debe ser un link de Google Maps (debe empezar con http:// o https://)`;
+  }
+  const host = url.hostname.replace(/^www\./, '');
+  const isGoogleHost = GOOGLE_MAPS_HOSTS.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
+  const looksLikeMaps = host.includes('google') ? url.pathname.startsWith('/maps') : true;
+  if (!isGoogleHost || !looksLikeMaps) {
+    return `${fieldLabel} debe ser un link de Google Maps (ej. https://maps.app.goo.gl/… o https://www.google.com/maps/…)`;
+  }
+  return null;
+}
+
 export function notFutureLessThan(value, minDate, fieldLabel) {
   // No usado actualmente, reservado por si se necesita una fecha mínima distinta a "hoy".
   if (!value) return null;

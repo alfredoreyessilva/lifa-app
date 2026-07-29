@@ -381,7 +381,7 @@ function MatchCard({ match, isNext, now }) {
 
   // Preferimos la sede real (registrada en el panel); si el partido es viejo
   // y todavía no se le ha asignado una, mostramos el texto libre de respaldo.
-  const venueLabel = match.venue_name || match.venue;
+  const venueLabel = match.venue_name;
   const groupLabel = match.group_name_2 ? `${match.group_name} vs ${match.group_name_2}` : match.group_name;
 
   // La tarjeta completa es un solo link hacia la página del partido

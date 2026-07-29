@@ -117,10 +117,10 @@ export default function MatchPage() {
           </div>
         </div>
 
-        {(match.venue || match.week_label || categoryLabel) && (
+        {(match.venue_name || match.week_label || categoryLabel) && (
           <div className="match-card-meta">
             {match.week_label && <span>{/^\d+$/.test(match.week_label) ? `Jornada ${match.week_label}` : match.week_label}</span>}
-            {match.venue && <span>{match.venue}</span>}
+            {match.venue_name && <span>{match.venue_name}</span>}
             {categoryLabel && <span>{categoryLabel}</span>}
           </div>
         )}
@@ -138,6 +138,11 @@ export default function MatchPage() {
               {match.ticket_links.length > 1 ? ` — ${linkHost(url)}` : ''}
             </a>
           ))}
+          {match.venue_address && (
+            <a href={match.venue_address} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
+              Maps
+            </a>
+          )}
           <button className="btn btn-outline btn-sm" type="button" onClick={handleShare}>
             {shareState === 'copied' ? '✓ Link copiado' : '🔗 Compartir partido'}
           </button>

@@ -20,6 +20,23 @@ export function isValidUrl(value) {
   }
 }
 
+const GOOGLE_MAPS_HOSTS = ['google.com', 'maps.app.goo.gl', 'goo.gl'];
+
+export function isValidGoogleMapsUrl(value) {
+  if (!value) return true; // opcional por defecto
+  let url;
+  try {
+    url = new URL(String(value).trim());
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+  const host = url.hostname.replace(/^www\./, '');
+  const isGoogleHost = GOOGLE_MAPS_HOSTS.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
+  const looksLikeMaps = host.includes('google') ? url.pathname.startsWith('/maps') : true;
+  return isGoogleHost && looksLikeMaps;
+}
+
 export function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
