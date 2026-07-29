@@ -264,9 +264,11 @@ export async function initSchema() {
     //     admin ("quiero promoción"), nunca obliga a publicar ni a mantener publicado.
     await run(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT FALSE`);
     await run(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS publish_requested BOOLEAN NOT NULL DEFAULT FALSE`);
-    // Las ligas que ya estaban aprobadas bajo el sistema viejo se migran a públicas,
-    // para no ocultarle de golpe su liga a nadie que ya la tenía visible.
-    await run(`UPDATE leagues SET is_public = TRUE WHERE status = 'approved' AND is_public IS NOT TRUE`);
+    // Nota: la migración de datos que traducía el viejo `status = 'approved'` a `is_public = TRUE`
+    // ya se ejecutó una sola vez cuando se lanzó este cambio. Se quitó de aquí a propósito —
+    // dejarla como un UPDATE que corre en cada arranque volvía a publicar cualquier liga que
+    // alguien hubiera ocultado manualmente después, cada vez que Render dormía y despertaba
+    // el servidor. Si hace falta repetir ese backfill alguna vez, correrlo a mano, no aquí.
 
     // Relación de un partido con una sede registrada (tabla venues). Se deja la
     // columna vieja "venue" (texto libre) intacta para no perder los datos que
