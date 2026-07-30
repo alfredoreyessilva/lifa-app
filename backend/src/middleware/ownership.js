@@ -12,6 +12,34 @@ export const leagueOwnerRequired = asyncHandler(async (req, res, next) => {
   return res.status(403).json({ error: 'No tienes permiso sobre esta liga' });
 });
 
+export const tournamentOwnerRequired = asyncHandler(async (req, res, next) => {
+  const tournamentId = Number(req.params.tournamentId);
+  const tournament = await db.prepare('SELECT * FROM tournaments WHERE id = ?').get(tournamentId);
+  if (!tournament) return res.status(404).json({ error: 'Torneo no encontrado' });
+  const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(tournament.league_id);
+  if (req.user.role === 'admin' || league.owner_user_id === req.user.id) {
+    req.league = league;
+    req.tournament = tournament;
+    return next();
+  }
+  return res.status(403).json({ error: 'No tienes permiso sobre este torneo' });
+});
+
+export const branchOwnerRequired = asyncHandler(async (req, res, next) => {
+  const branchId = Number(req.params.branchId);
+  const branch = await db.prepare('SELECT * FROM branches WHERE id = ?').get(branchId);
+  if (!branch) return res.status(404).json({ error: 'Rama no encontrada' });
+  const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(branch.category_id);
+  const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(category.league_id);
+  if (req.user.role === 'admin' || league.owner_user_id === req.user.id) {
+    req.league = league;
+    req.category = category;
+    req.branch = branch;
+    return next();
+  }
+  return res.status(403).json({ error: 'No tienes permiso sobre esta rama' });
+});
+
 export const categoryOwnerRequired = asyncHandler(async (req, res, next) => {
   const categoryId = Number(req.params.categoryId);
   const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(categoryId);

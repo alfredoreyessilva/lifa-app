@@ -3,7 +3,7 @@ import multer from 'multer';
 import * as XLSX from 'xlsx';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
-import { categoryOwnerRequired, matchOwnerRequired, leagueOwnerRequired, teamOwnerRequired, venueOwnerRequired, groupOwnerRequired } from '../middleware/ownership.js';
+import { categoryOwnerRequired, matchOwnerRequired, leagueOwnerRequired, teamOwnerRequired, venueOwnerRequired, groupOwnerRequired, branchOwnerRequired } from '../middleware/ownership.js';
 import { isValidEmail, isValidUrl, isValidGoogleMapsUrl, isNonEmptyString } from '../utils/validation.js';
 import {
   isValidTimezone,
@@ -111,6 +111,69 @@ router.post('/categories/:categoryId/groups', authRequired, categoryOwnerRequire
   );
 
   res.status(201).json(await db.prepare('SELECT * FROM groups WHERE id = ?').get(result.lastInsertRowid));
+}));
+
+// --- Pruebas de la nueva jerarquía (Categoría -> Rama) ---
+// Igual que con torneos, todavía no la usa ninguna pantalla real, solo
+// pantallas de prueba, mientras terminamos de construir el modelo nuevo.
+
+router.post('/categories/:categoryId/branches', authRequired, categoryOwnerRequired, asyncHandler(async (req, res) => {
+  const { name, sort_order } = req.body;
+  if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre de la rama es obligatorio' });
+
+  const result = await db.prepare(`
+    INSERT INTO branches (category_id, name, sort_order)
+    VALUES (?, ?, ?)
+  `).run(
+    req.category.id,
+    name.trim(),
+    sort_order || 0,
+  );
+
+  res.status(201).json(await db.prepare('SELECT * FROM branches WHERE id = ?').get(result.lastInsertRowid));
+}));
+
+router.get('/categories/:categoryId/branches', authRequired, categoryOwnerRequired, asyncHandler(async (req, res) => {
+  const branches = await db.prepare(`
+    SELECT * FROM branches WHERE category_id = ?
+    ORDER BY sort_order ASC, name ASC
+  `).all(req.category.id);
+  res.json(branches);
+}));
+
+// --- Pruebas de la nueva jerarquía (Rama -> Partido) ---
+// A propósito NO reutiliza el formulario/ruta real de partidos (que maneja
+// zonas horarias, sedes, grupos, etc.) — aquí solo lo mínimo indispensable
+// (equipos + fecha) para comprobar que un partido puede colgar de branch_id.
+// El estado nace siempre "scheduled"; el botón de iniciar/finalizar es el
+// siguiente paso pendiente, el motivo original de esta conversación.
+
+router.post('/branches/:branchId/matches-test', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  const { home_team, away_team, match_date } = req.body;
+  if (!isNonEmptyString(home_team) || !isNonEmptyString(away_team) || !isNonEmptyString(match_date)) {
+    return res.status(400).json({ error: 'Se requieren equipo local, visitante y fecha' });
+  }
+
+  const result = await db.prepare(`
+    INSERT INTO matches (category_id, branch_id, home_team, away_team, match_date, status)
+    VALUES (?, ?, ?, ?, ?, 'scheduled')
+  `).run(
+    req.branch.category_id,
+    req.branch.id,
+    home_team.trim(),
+    away_team.trim(),
+    match_date,
+  );
+
+  res.status(201).json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(result.lastInsertRowid));
+}));
+
+router.get('/branches/:branchId/matches-test', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  const matches = await db.prepare(`
+    SELECT * FROM matches WHERE branch_id = ?
+    ORDER BY match_date ASC
+  `).all(req.branch.id);
+  res.json(matches);
 }));
 
 router.put('/groups/:id', authRequired, groupOwnerRequired, asyncHandler(async (req, res) => {

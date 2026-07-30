@@ -1,7 +1,7 @@
 import express from 'express';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
-import { leagueOwnerRequired } from '../middleware/ownership.js';
+import { leagueOwnerRequired, tournamentOwnerRequired } from '../middleware/ownership.js';
 import { isValidUrl, isNonEmptyString } from '../utils/validation.js';
 import { isValidTimezone } from '../utils/timezones.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -306,6 +306,75 @@ router.post('/:leagueId/categories', authRequired, leagueOwnerRequired, asyncHan
   );
 
   res.status(201).json(await db.prepare('SELECT * FROM categories WHERE id = ?').get(result.lastInsertRowid));
+}));
+
+// Crea un torneo dentro de una liga. El año llega ya elegido desde la
+// pantalla de selección de año (no se vuelve a pedir aquí, ver TournamentForm.jsx).
+router.post('/:leagueId/tournaments', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+  const { name, year, logo_url, sort_order } = req.body;
+  if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre del torneo es obligatorio' });
+  if (!year || isNaN(Number(year))) return res.status(400).json({ error: 'El año del torneo es obligatorio' });
+
+  const result = await db.prepare(`
+    INSERT INTO tournaments (league_id, name, year, logo_url, sort_order)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    req.league.id,
+    name.trim(),
+    parseInt(year),
+    logo_url ? logo_url.trim() : null,
+    sort_order || 0
+  );
+
+  res.status(201).json(await db.prepare('SELECT * FROM tournaments WHERE id = ?').get(result.lastInsertRowid));
+}));
+
+// Lista los torneos de una liga. Si se manda ?year=2026, solo los de ese año
+// (así es como se va a usar desde la pantalla "Año -> Torneos de ese año").
+router.get('/:leagueId/tournaments', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+  const { year } = req.query;
+
+  const tournaments = year
+    ? await db.prepare(`
+        SELECT * FROM tournaments WHERE league_id = ? AND year = ?
+        ORDER BY sort_order ASC, name ASC
+      `).all(req.league.id, parseInt(year))
+    : await db.prepare(`
+        SELECT * FROM tournaments WHERE league_id = ?
+        ORDER BY year DESC, sort_order ASC, name ASC
+      `).all(req.league.id);
+
+  res.json(tournaments);
+}));
+
+// --- Pruebas de la nueva jerarquía (Torneo -> Categoría) ---
+// Estas dos rutas son análogas a "categorías bajo liga", pero cuelgan de
+// tournament_id. Todavía no las usa ninguna pantalla real, solo pantallas
+// de prueba, mientras se termina de construir el modelo nuevo.
+
+router.post('/tournaments/:tournamentId/categories', authRequired, tournamentOwnerRequired, asyncHandler(async (req, res) => {
+  const { name, sort_order } = req.body;
+  if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre de la categoría es obligatorio' });
+
+  const result = await db.prepare(`
+    INSERT INTO categories (league_id, tournament_id, name, sort_order)
+    VALUES (?, ?, ?, ?)
+  `).run(
+    req.tournament.league_id,
+    req.tournament.id,
+    name.trim().toUpperCase(),
+    sort_order || 0
+  );
+
+  res.status(201).json(await db.prepare('SELECT * FROM categories WHERE id = ?').get(result.lastInsertRowid));
+}));
+
+router.get('/tournaments/:tournamentId/categories', authRequired, tournamentOwnerRequired, asyncHandler(async (req, res) => {
+  const categories = await db.prepare(`
+    SELECT * FROM categories WHERE tournament_id = ?
+    ORDER BY sort_order ASC, name ASC
+  `).all(req.tournament.id);
+  res.json(categories);
 }));
 
 export default router;

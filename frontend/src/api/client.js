@@ -44,6 +44,30 @@ export const api = {
   deleteCategory: (categoryId, token) =>
     request(`/manage/categories/${categoryId}`, { method: 'DELETE', token }),
 
+  // Torneos
+  createTournament: (leagueId, payload, token) =>
+    request(`/leagues/${leagueId}/tournaments`, { method: 'POST', body: payload, token }),
+  getTournaments: (leagueId, year, token) =>
+    request(`/leagues/${leagueId}/tournaments${year ? `?year=${year}` : ''}`, { token }),
+
+  // Pruebas de la nueva jerarquía (Torneo -> Categoría)
+  createCategoryForTournament: (tournamentId, payload, token) =>
+    request(`/leagues/tournaments/${tournamentId}/categories`, { method: 'POST', body: payload, token }),
+  getCategoriesForTournament: (tournamentId, token) =>
+    request(`/leagues/tournaments/${tournamentId}/categories`, { token }),
+
+  // Pruebas de la nueva jerarquía (Categoría -> Rama)
+  createBranch: (categoryId, payload, token) =>
+    request(`/manage/categories/${categoryId}/branches`, { method: 'POST', body: payload, token }),
+  getBranches: (categoryId, token) =>
+    request(`/manage/categories/${categoryId}/branches`, { token }),
+
+  // Pruebas de la nueva jerarquía (Rama -> Partido)
+  createTestMatch: (branchId, payload, token) =>
+    request(`/manage/branches/${branchId}/matches-test`, { method: 'POST', body: payload, token }),
+  getTestMatches: (branchId, token) =>
+    request(`/manage/branches/${branchId}/matches-test`, { token }),
+
   // Partidos
   createMatch: (categoryId, payload, token) =>
     request(`/manage/categories/${categoryId}/matches`, { method: 'POST', body: payload, token }),

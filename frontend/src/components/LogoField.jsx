@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
-export default function LogoField({ value, onChange }) {
+export default function LogoField({ value, onChange, label = 'Logo de la liga' }) {
   const { token } = useAuth();
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
@@ -26,7 +26,7 @@ export default function LogoField({ value, onChange }) {
 
   return (
     <div className="field">
-      <label>Logo de la liga</label>
+      <label>{label}</label>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         {value && (

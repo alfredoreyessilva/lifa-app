@@ -2,6 +2,8 @@ import { Routes, Route, Link } from 'react-router-dom';
 import TopBar from './components/TopBar.jsx';
 import SponsorBar from './components/SponsorBar.jsx';
 import Home from './pages/Home.jsx';
+import YearSelectPage from './pages/YearSelectPage.jsx';
+import TournamentFormTestPage from './pages/TournamentFormTestPage.jsx';
 import LeaguePage from './pages/LeaguePage.jsx';
 import CalendarPage from './pages/CalendarPage.jsx';
 import MatchPage from './pages/MatchPage.jsx';
@@ -25,6 +27,8 @@ export default function App() {
         <main className="app-main">
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/anios" element={<YearSelectPage />} />
+            <Route path="/torneo-test" element={<TournamentFormTestPage />} />
             <Route path="/ligas/:slug" element={<LeaguePage />} />
             <Route path="/categorias/:categoryId/calendario" element={<CalendarPage />} />
             <Route path="/partidos/:matchId" element={<MatchPage />} />

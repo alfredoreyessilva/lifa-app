@@ -248,6 +248,103 @@ a { color: inherit; }
   color: var(--ink-dim);
 }
 
+/* ---------- Year select (Home) ---------- */
+.year-current {
+  font: inherit;
+  width: 100%;
+  background: linear-gradient(135deg, var(--field-deep) 0%, var(--field) 100%);
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  padding: 56px 20px;
+  margin-bottom: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.year-current:hover {
+  border-color: var(--flag);
+  transform: translateY(-2px);
+}
+.year-current-label {
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--flag);
+}
+.year-current-number {
+  font-family: var(--font-display);
+  font-size: clamp(64px, 14vw, 140px);
+  line-height: 1;
+  color: var(--paper);
+  letter-spacing: 0.02em;
+}
+.year-past-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+  padding-bottom: 64px;
+}
+.year-past-card {
+  font: inherit;
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 24px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.year-past-card:hover {
+  background: var(--card-hover);
+  border-color: var(--flag);
+  transform: translateY(-2px);
+}
+
+/* ---------- Pill select group (ej. Ramas de la categoría) ---------- */
+.pill-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pill-btn {
+  font: inherit;
+  background: transparent;
+  color: var(--ink-dim);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.pill-btn:hover {
+  border-color: var(--flag);
+  color: var(--ink);
+}
+.pill-btn--active {
+  background: var(--flag);
+  border-color: var(--flag);
+  color: #1a1300;
+}
+.year-past-number {
+  font-family: var(--font-display);
+  font-size: 32px;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+}
+
 /* ---------- Category pills ---------- */
 .category-list {
   display: flex;

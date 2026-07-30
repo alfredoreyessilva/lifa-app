@@ -113,11 +113,29 @@ CREATE TABLE IF NOT EXISTS venues (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS tournaments (
+  id SERIAL PRIMARY KEY,
+  league_id INTEGER NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  year INTEGER NOT NULL,
+  logo_url TEXT,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS groups (
   id SERIAL PRIMARY KEY,
   category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS branches (
+  id SERIAL PRIMARY KEY,
+  category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
   sort_order INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -253,6 +271,11 @@ export async function initSchema() {
     await run(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS season TEXT`);
     await run(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS year INTEGER`);
 
+    // Nueva jerarquía en construcción: categoría empieza a poder colgar de un
+    // torneo. Se deja opcional (nullable) para no afectar las categorías reales
+    // que hoy siguen viviendo directo bajo la liga (league_id).
+    await run(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS tournament_id INTEGER REFERENCES tournaments(id) ON DELETE CASCADE`);
+
     // Control de notificaciones ya enviadas por partido (evita reenvíos repetidos del cronjob)
     await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_upcoming BOOLEAN NOT NULL DEFAULT FALSE`);
     await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_live BOOLEAN NOT NULL DEFAULT FALSE`);
@@ -287,6 +310,13 @@ export async function initSchema() {
     // — así no hace falta crear un grupo artificial para representar el cruce.
     await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS group_id_2 INTEGER REFERENCES groups(id) ON DELETE SET NULL`);
     await run(`CREATE INDEX IF NOT EXISTS idx_matches_group2 ON matches(group_id_2)`);
+
+    // Nueva jerarquía en construcción: el partido empieza a poder colgar de
+    // una rama (branch_id), que es donde de verdad vive su calendario según
+    // el modelo nuevo. Se deja opcional (nullable) para no afectar los
+    // partidos reales que hoy siguen viviendo directo bajo category_id.
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id) ON DELETE CASCADE`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_matches_branch ON matches(branch_id)`);
 
     const newLeagueColumns = [
       'cover_url TEXT',

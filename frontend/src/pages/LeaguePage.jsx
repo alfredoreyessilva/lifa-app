@@ -183,7 +183,6 @@ export default function LeaguePage() {
 
         <div className="tab-bar tab-bar--panel">
           <button className={`tab-btn ${tab === 'categorias' ? 'active' : ''}`} onClick={() => setTab('categorias')}>Categorías</button>
-          <button className={`tab-btn ${tab === 'equipos'    ? 'active' : ''}`} onClick={() => setTab('equipos')}>Equipos</button>
           <button className={`tab-btn ${tab === 'sedes'      ? 'active' : ''}`} onClick={() => setTab('sedes')}>Sedes</button>
         </div>
 
@@ -212,43 +211,6 @@ export default function LeaguePage() {
                 </button>
               ))}
             </div>
-          )}
-        </>
-      )}
-
-      {tab === 'equipos' && (
-        <>
-          <div className="section-head">
-            <h2>Equipos</h2>
-            <span className="count">{teams ? teams.length : ''}</span>
-          </div>
-          {!teams ? (
-            <div className="loading">Cargando…</div>
-          ) : teams.length === 0 ? (
-            <div className="empty-state">
-              <h3>Sin equipos todavía</h3>
-              <p>Esta liga aún no ha publicado sus equipos.</p>
-            </div>
-          ) : (
-            <>
-              <div className="team-grid">
-                {teams.map((team) => (
-                  <TeamCard
-                    key={team.id}
-                    team={team}
-                    isSelected={selectedTeam?.id === team.id}
-                    onClick={() => handleTeamClick(team)}
-                  />
-                ))}
-              </div>
-              {selectedTeam && (
-                <TeamInfoPanel
-                  team={selectedTeam}
-                  leagueId={league.id}
-                  onClose={() => setSelectedTeam(null)}
-                />
-              )}
-            </>
           )}
         </>
       )}
@@ -285,6 +247,38 @@ export default function LeaguePage() {
                     />
                   )}
                 </>
+              )}
+            </>
+          )}
+          <div className="section-head" style={{ marginTop: 28 }}>
+            <h2>Equipos</h2>
+            <span className="count">{teams ? teams.length : ''}</span>
+          </div>
+          {!teams ? (
+            <div className="loading">Cargando…</div>
+          ) : teams.length === 0 ? (
+            <div className="empty-state">
+              <h3>Sin equipos todavía</h3>
+              <p>Esta liga aún no ha publicado sus equipos.</p>
+            </div>
+          ) : (
+            <>
+              <div className="team-grid">
+                {teams.map((team) => (
+                  <TeamCard
+                    key={team.id}
+                    team={team}
+                    isSelected={selectedTeam?.id === team.id}
+                    onClick={() => handleTeamClick(team)}
+                  />
+                ))}
+              </div>
+              {selectedTeam && (
+                <TeamInfoPanel
+                  team={selectedTeam}
+                  leagueId={league.id}
+                  onClose={() => setSelectedTeam(null)}
+                />
               )}
             </>
           )}
