@@ -40,6 +40,23 @@ export const branchOwnerRequired = asyncHandler(async (req, res, next) => {
   return res.status(403).json({ error: 'No tienes permiso sobre esta rama' });
 });
 
+export const conferenceOwnerRequired = asyncHandler(async (req, res, next) => {
+  const conferenceId = Number(req.params.conferenceId);
+  const conference = await db.prepare('SELECT * FROM conferences WHERE id = ?').get(conferenceId);
+  if (!conference) return res.status(404).json({ error: 'Conferencia no encontrada' });
+  const branch = await db.prepare('SELECT * FROM branches WHERE id = ?').get(conference.branch_id);
+  const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(branch.category_id);
+  const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(category.league_id);
+  if (req.user.role === 'admin' || league.owner_user_id === req.user.id) {
+    req.league = league;
+    req.category = category;
+    req.branch = branch;
+    req.conference = conference;
+    return next();
+  }
+  return res.status(403).json({ error: 'No tienes permiso sobre esta conferencia' });
+});
+
 export const categoryOwnerRequired = asyncHandler(async (req, res, next) => {
   const categoryId = Number(req.params.categoryId);
   const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(categoryId);

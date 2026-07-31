@@ -62,6 +62,18 @@ export const api = {
   getBranches: (categoryId, token) =>
     request(`/manage/categories/${categoryId}/branches`, { token }),
 
+  // Pruebas de la nueva jerarquía (Rama -> Conferencia)
+  createConference: (branchId, payload, token) =>
+    request(`/manage/branches/${branchId}/conferences`, { method: 'POST', body: payload, token }),
+  getConferences: (branchId, token) =>
+    request(`/manage/branches/${branchId}/conferences`, { token }),
+
+  // Pruebas de la nueva jerarquía (Conferencia -> Grupo)
+  createTestGroup: (conferenceId, payload, token) =>
+    request(`/manage/conferences/${conferenceId}/groups-test`, { method: 'POST', body: payload, token }),
+  getTestGroups: (conferenceId, token) =>
+    request(`/manage/conferences/${conferenceId}/groups-test`, { token }),
+
   // Pruebas de la nueva jerarquía (Rama -> Partido)
   createTestMatch: (branchId, payload, token) =>
     request(`/manage/branches/${branchId}/matches-test`, { method: 'POST', body: payload, token }),

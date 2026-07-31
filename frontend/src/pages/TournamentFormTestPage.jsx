@@ -21,11 +21,23 @@ export default function TournamentFormTestPage() {
   const [branchKey, setBranchKey] = useState(0);
 
   const [selectedBranchId, setSelectedBranchId] = useState('');
+  const [conferenceList, setConferenceList] = useState(null);
+  const [conferenceKey, setConferenceKey] = useState(0);
+  const [newConferenceName, setNewConferenceName] = useState('');
+
+  const [selectedConferenceId, setSelectedConferenceId] = useState(''); // '' = sin conferencia
+  const [groupList, setGroupList] = useState(null);
+  const [groupKey, setGroupKey] = useState(0);
+  const [newGroupName, setNewGroupName] = useState('');
+
+  const [selectedGroupId, setSelectedGroupId] = useState(''); // '' = sin grupo
+
   const [matchList, setMatchList] = useState(null);
   const [homeTeam, setHomeTeam] = useState('');
   const [awayTeam, setAwayTeam] = useState('');
   const [matchDate, setMatchDate] = useState('');
   const [matchError, setMatchError] = useState('');
+  const [matchKey, setMatchKey] = useState(0);
 
   const BRANCH_OPTIONS = ['Varonil', 'Femenil', 'Mixto'];
 
@@ -74,7 +86,26 @@ export default function TournamentFormTestPage() {
     }
   }, [branchList]);
 
-  const [matchKey, setMatchKey] = useState(0);
+  // Conferencias de la rama elegida (opcional: puede no haber ninguna)
+  useEffect(() => {
+    if (!selectedBranchId || !token) { setConferenceList(null); return; }
+    api.getConferences(selectedBranchId, token).then(setConferenceList).catch(() => setConferenceList([]));
+  }, [selectedBranchId, token, conferenceKey]);
+
+  useEffect(() => {
+    setSelectedConferenceId(''); // al cambiar de rama, reinicia a "sin conferencia"
+  }, [selectedBranchId]);
+
+  // Grupos de la conferencia elegida (solo si se eligió alguna)
+  useEffect(() => {
+    if (!selectedConferenceId || !token) { setGroupList(null); return; }
+    api.getTestGroups(selectedConferenceId, token).then(setGroupList).catch(() => setGroupList([]));
+  }, [selectedConferenceId, token, groupKey]);
+
+  useEffect(() => {
+    setSelectedGroupId(''); // al cambiar de conferencia, reinicia a "sin grupo"
+  }, [selectedConferenceId]);
+
   useEffect(() => {
     if (!selectedBranchId || !token) { setMatchList(null); return; }
     api.getTestMatches(selectedBranchId, token).then(setMatchList).catch(() => setMatchList([]));
@@ -246,17 +277,97 @@ export default function TournamentFormTestPage() {
       {branchList && branchList.length > 0 && (
         <>
           <div className="section-head" style={{ marginTop: 40 }}>
-            <h2>Prueba: Partidos dentro de una rama</h2>
+            <h2>Prueba: Conferencias dentro de una rama (opcional)</h2>
           </div>
 
           <div className="field">
-            <label>Rama sobre la que vamos a probar los partidos</label>
+            <label>Rama sobre la que vamos a probar conferencias/grupos/partidos</label>
             <select value={selectedBranchId} onChange={(e) => setSelectedBranchId(e.target.value)}>
               {branchList.map((b) => (
                 <option key={b.id} value={b.id}>#{b.id} — {b.name}</option>
               ))}
             </select>
           </div>
+
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!newConferenceName.trim()) return;
+              await api.createConference(selectedBranchId, { name: newConferenceName.trim() }, token);
+              setNewConferenceName('');
+              setConferenceKey((k) => k + 1);
+            }}
+          >
+            <div className="field">
+              <label>Nombre de la conferencia (ej. Americana, Nacional)</label>
+              <input type="text" value={newConferenceName} onChange={(e) => setNewConferenceName(e.target.value)} placeholder="Ej. Conferencia Norte" />
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-flag">Agregar conferencia</button>
+            </div>
+          </form>
+
+          <div className="field" style={{ marginTop: 16 }}>
+            <label>Conferencia a usar (opcional — puedes dejarla en "ninguna")</label>
+            <select value={selectedConferenceId} onChange={(e) => setSelectedConferenceId(e.target.value)}>
+              <option value="">— Sin conferencia —</option>
+              {conferenceList?.map((c) => (
+                <option key={c.id} value={c.id}>#{c.id} — {c.name}</option>
+              ))}
+            </select>
+          </div>
+          {conferenceList === null && <p>Cargando…</p>}
+          {conferenceList && conferenceList.length === 0 && <p>Esta rama todavía no tiene conferencias (está bien, son opcionales).</p>}
+        </>
+      )}
+
+      {selectedConferenceId && (
+        <>
+          <div className="section-head" style={{ marginTop: 40 }}>
+            <h2>Prueba: Grupos dentro de una conferencia (opcional)</h2>
+          </div>
+
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!newGroupName.trim()) return;
+              await api.createTestGroup(selectedConferenceId, { name: newGroupName.trim() }, token);
+              setNewGroupName('');
+              setGroupKey((k) => k + 1);
+            }}
+          >
+            <div className="field">
+              <label>Nombre del grupo (ej. Grupo A)</label>
+              <input type="text" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="Ej. Grupo A" />
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-flag">Agregar grupo</button>
+            </div>
+          </form>
+
+          <div className="field" style={{ marginTop: 16 }}>
+            <label>Grupo a usar (opcional — puedes dejarlo en "ninguno")</label>
+            <select value={selectedGroupId} onChange={(e) => setSelectedGroupId(e.target.value)}>
+              <option value="">— Sin grupo —</option>
+              {groupList?.map((g) => (
+                <option key={g.id} value={g.id}>#{g.id} — {g.name}</option>
+              ))}
+            </select>
+          </div>
+          {groupList === null && <p>Cargando…</p>}
+          {groupList && groupList.length === 0 && <p>Esta conferencia todavía no tiene grupos (está bien, son opcionales).</p>}
+        </>
+      )}
+
+      {selectedBranchId && (
+        <>
+          <div className="section-head" style={{ marginTop: 40 }}>
+            <h2>Prueba: Crear partido</h2>
+          </div>
+          <p style={{ opacity: 0.8, fontSize: 14 }}>
+            Este partido va a colgar del nivel más profundo que hayas elegido arriba:
+            {selectedGroupId ? ' el grupo seleccionado.' : selectedConferenceId ? ' la conferencia (sin grupo).' : ' la rama directamente (sin conferencia ni grupo).'}
+          </p>
 
           {matchError && <div className="form-error">{matchError}</div>}
 
@@ -273,6 +384,7 @@ export default function TournamentFormTestPage() {
                   home_team: homeTeam.trim(),
                   away_team: awayTeam.trim(),
                   match_date: matchDate,
+                  group_id: selectedGroupId || null,
                 }, token);
                 setHomeTeam('');
                 setAwayTeam('');
@@ -301,7 +413,7 @@ export default function TournamentFormTestPage() {
           </form>
 
           <div className="section-head" style={{ marginTop: 24 }}>
-            <h2>Partidos de esta rama</h2>
+            <h2>Partidos de esta rama (todos, sin importar grupo)</h2>
           </div>
           {matchList === null && <p>Cargando…</p>}
           {matchList && matchList.length === 0 && <p>Esta rama todavía no tiene partidos.</p>}
@@ -310,6 +422,7 @@ export default function TournamentFormTestPage() {
               {matchList.map((m) => (
                 <li key={m.id}>
                   #{m.id} — {m.home_team} vs {m.away_team} — {m.match_date} — estado: {m.status}
+                  {m.group_id ? ` — grupo #${m.group_id}` : ''}
                 </li>
               ))}
             </ul>

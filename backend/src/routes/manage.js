@@ -3,7 +3,7 @@ import multer from 'multer';
 import * as XLSX from 'xlsx';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
-import { categoryOwnerRequired, matchOwnerRequired, leagueOwnerRequired, teamOwnerRequired, venueOwnerRequired, groupOwnerRequired, branchOwnerRequired } from '../middleware/ownership.js';
+import { categoryOwnerRequired, matchOwnerRequired, leagueOwnerRequired, teamOwnerRequired, venueOwnerRequired, groupOwnerRequired, branchOwnerRequired, conferenceOwnerRequired } from '../middleware/ownership.js';
 import { isValidEmail, isValidUrl, isValidGoogleMapsUrl, isNonEmptyString } from '../utils/validation.js';
 import {
   isValidTimezone,
@@ -141,6 +141,50 @@ router.get('/categories/:categoryId/branches', authRequired, categoryOwnerRequir
   res.json(branches);
 }));
 
+// --- Pruebas de la nueva jerarquía (Rama -> Conferencia) ---
+
+router.post('/branches/:branchId/conferences', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  const { name, sort_order } = req.body;
+  if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre de la conferencia es obligatorio' });
+
+  const result = await db.prepare(`
+    INSERT INTO conferences (branch_id, name, sort_order)
+    VALUES (?, ?, ?)
+  `).run(req.branch.id, name.trim(), sort_order || 0);
+
+  res.status(201).json(await db.prepare('SELECT * FROM conferences WHERE id = ?').get(result.lastInsertRowid));
+}));
+
+router.get('/branches/:branchId/conferences', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  const conferences = await db.prepare(`
+    SELECT * FROM conferences WHERE branch_id = ?
+    ORDER BY sort_order ASC, name ASC
+  `).all(req.branch.id);
+  res.json(conferences);
+}));
+
+// --- Pruebas de la nueva jerarquía (Conferencia -> Grupo) ---
+
+router.post('/conferences/:conferenceId/groups-test', authRequired, conferenceOwnerRequired, asyncHandler(async (req, res) => {
+  const { name, sort_order } = req.body;
+  if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre del grupo es obligatorio' });
+
+  const result = await db.prepare(`
+    INSERT INTO groups (category_id, conference_id, name, sort_order)
+    VALUES (?, ?, ?, ?)
+  `).run(req.category.id, req.conference.id, name.trim(), sort_order || 0);
+
+  res.status(201).json(await db.prepare('SELECT * FROM groups WHERE id = ?').get(result.lastInsertRowid));
+}));
+
+router.get('/conferences/:conferenceId/groups-test', authRequired, conferenceOwnerRequired, asyncHandler(async (req, res) => {
+  const groups = await db.prepare(`
+    SELECT * FROM groups WHERE conference_id = ?
+    ORDER BY sort_order ASC, name ASC
+  `).all(req.conference.id);
+  res.json(groups);
+}));
+
 // --- Pruebas de la nueva jerarquía (Rama -> Partido) ---
 // A propósito NO reutiliza el formulario/ruta real de partidos (que maneja
 // zonas horarias, sedes, grupos, etc.) — aquí solo lo mínimo indispensable
@@ -149,17 +193,18 @@ router.get('/categories/:categoryId/branches', authRequired, categoryOwnerRequir
 // siguiente paso pendiente, el motivo original de esta conversación.
 
 router.post('/branches/:branchId/matches-test', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
-  const { home_team, away_team, match_date } = req.body;
+  const { home_team, away_team, match_date, group_id } = req.body;
   if (!isNonEmptyString(home_team) || !isNonEmptyString(away_team) || !isNonEmptyString(match_date)) {
     return res.status(400).json({ error: 'Se requieren equipo local, visitante y fecha' });
   }
 
   const result = await db.prepare(`
-    INSERT INTO matches (category_id, branch_id, home_team, away_team, match_date, status)
-    VALUES (?, ?, ?, ?, ?, 'scheduled')
+    INSERT INTO matches (category_id, branch_id, group_id, home_team, away_team, match_date, status)
+    VALUES (?, ?, ?, ?, ?, ?, 'scheduled')
   `).run(
     req.branch.category_id,
     req.branch.id,
+    group_id || null,
     home_team.trim(),
     away_team.trim(),
     match_date,

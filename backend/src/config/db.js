@@ -140,6 +140,14 @@ CREATE TABLE IF NOT EXISTS branches (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS conferences (
+  id SERIAL PRIMARY KEY,
+  branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS matches (
   id SERIAL PRIMARY KEY,
   category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
@@ -317,6 +325,18 @@ export async function initSchema() {
     // partidos reales que hoy siguen viviendo directo bajo category_id.
     await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id) ON DELETE CASCADE`);
     await run(`CREATE INDEX IF NOT EXISTS idx_matches_branch ON matches(branch_id)`);
+
+    // Misma jerarquía en construcción: un grupo ahora puede colgar de una
+    // conferencia (conference_id) en vez de directo de category_id. Opcional,
+    // no afecta los grupos reales que hoy siguen usando category_id.
+    await run(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS conference_id INTEGER REFERENCES conferences(id) ON DELETE CASCADE`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_groups_conference ON groups(conference_id)`);
+
+    // Y el partido, en el modelo nuevo, puede colgar del nivel más profundo
+    // que la liga haya decidido usar: rama, conferencia, grupo, o combinación.
+    // group_id ya existe y ya se usa en el sistema real (categoría/grupo);
+    // aquí solo se deja disponible también para partidos que cuelgan de
+    // branch_id directamente, sin forzar a crear un grupo si no hace falta.
 
     const newLeagueColumns = [
       'cover_url TEXT',
