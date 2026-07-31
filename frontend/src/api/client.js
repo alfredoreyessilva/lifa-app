@@ -80,6 +80,10 @@ export const api = {
   getTestMatches: (branchId, token) =>
     request(`/manage/branches/${branchId}/matches-test`, { token }),
 
+  // Estado manual del partido (nuevo, aislado del PUT general)
+  updateMatchStatus: (matchId, status, token) =>
+    request(`/manage/matches/${matchId}/status`, { method: 'PATCH', body: { status }, token }),
+
   // Partidos
   createMatch: (categoryId, payload, token) =>
     request(`/manage/categories/${categoryId}/matches`, { method: 'POST', body: payload, token }),

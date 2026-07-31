@@ -36,6 +36,8 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
       c.name    AS category_name,
       c.season  AS season,
       c.year    AS year,
+      c.auto_status_enabled      AS auto_status_enabled,
+      c.auto_status_window_hours AS auto_status_window_hours,
       l.id      AS league_id,
       l.name    AS league_name,
       l.slug    AS league_slug,
@@ -158,6 +160,8 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
   const matches = await db.prepare(`
     SELECT
       m.*,
+      c.auto_status_enabled      AS auto_status_enabled,
+      c.auto_status_window_hours AS auto_status_window_hours,
       th.logo_url AS home_logo_url,
       ta.logo_url AS away_logo_url,
       v.name        AS venue_name,
@@ -291,18 +295,20 @@ router.put('/:id/unpublish', authRequired, leagueOwnerRequired, asyncHandler(asy
 }));
 
 router.post('/:leagueId/categories', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
-  const { name, sort_order, season, year } = req.body;
+  const { name, sort_order, season, year, auto_status_enabled, auto_status_window_hours } = req.body;
   if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre de la categoría es obligatorio' });
 
   const result = await db.prepare(`
-    INSERT INTO categories (league_id, name, sort_order, season, year)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO categories (league_id, name, sort_order, season, year, auto_status_enabled, auto_status_window_hours)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.league.id,
     name.trim().toUpperCase(),
     sort_order || 0,
     season ? season.trim().toUpperCase() : null,
-    year ? parseInt(year) : null
+    year ? parseInt(year) : null,
+    auto_status_enabled ? true : false,
+    auto_status_enabled ? parseInt(auto_status_window_hours) : null
   );
 
   res.status(201).json(await db.prepare('SELECT * FROM categories WHERE id = ?').get(result.lastInsertRowid));
@@ -353,17 +359,19 @@ router.get('/:leagueId/tournaments', authRequired, leagueOwnerRequired, asyncHan
 // de prueba, mientras se termina de construir el modelo nuevo.
 
 router.post('/tournaments/:tournamentId/categories', authRequired, tournamentOwnerRequired, asyncHandler(async (req, res) => {
-  const { name, sort_order } = req.body;
+  const { name, sort_order, auto_status_enabled, auto_status_window_hours } = req.body;
   if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre de la categoría es obligatorio' });
 
   const result = await db.prepare(`
-    INSERT INTO categories (league_id, tournament_id, name, sort_order)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO categories (league_id, tournament_id, name, sort_order, auto_status_enabled, auto_status_window_hours)
+    VALUES (?, ?, ?, ?, ?, ?)
   `).run(
     req.tournament.league_id,
     req.tournament.id,
     name.trim().toUpperCase(),
-    sort_order || 0
+    sort_order || 0,
+    auto_status_enabled ? true : false,
+    auto_status_enabled ? parseInt(auto_status_window_hours) : null
   );
 
   res.status(201).json(await db.prepare('SELECT * FROM categories WHERE id = ?').get(result.lastInsertRowid));

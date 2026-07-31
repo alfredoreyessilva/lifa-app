@@ -284,6 +284,14 @@ export async function initSchema() {
     // que hoy siguen viviendo directo bajo la liga (league_id).
     await run(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS tournament_id INTEGER REFERENCES tournaments(id) ON DELETE CASCADE`);
 
+    // Estado automático del partido (opcional, apagado por defecto). Si está
+    // apagado, el estado del partido lo controla el organizador a mano, sin
+    // límite de tiempo. Si se prende, hay que elegir entre 1 y 3 horas —
+    // nunca se activa "solo", nace apagado tanto para categorías nuevas como
+    // para las que ya existían antes de este sistema.
+    await run(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS auto_status_enabled BOOLEAN DEFAULT FALSE`);
+    await run(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS auto_status_window_hours INTEGER`);
+
     // Control de notificaciones ya enviadas por partido (evita reenvíos repetidos del cronjob)
     await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_upcoming BOOLEAN NOT NULL DEFAULT FALSE`);
     await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_live BOOLEAN NOT NULL DEFAULT FALSE`);

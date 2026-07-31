@@ -7,8 +7,7 @@ import TeamForm from './TeamForm.jsx';
 import GroupForm from './GroupForm.jsx';
 import TimezoneSelect from './TimezoneSelect.jsx';
 import LinkListField from './LinkListField.jsx';
-import { getMatchStatus } from '../utils/matchStatus.js';
-import { utcIsoToLocalInputValue, localDateTimeStringToUtcMs } from '../utils/timezones.js';
+import { utcIsoToLocalInputValue } from '../utils/timezones.js';
 
 function initials(name) {
   return (name || '')
@@ -159,31 +158,33 @@ export default function MatchForm({
     }));
   }, [form.away_team, localTeams, initial]);
 
-  // Construye un objeto temporal para calcular el estado actual del partido.
-  // Solo es una vista previa en pantalla (para decidir si mostrar los campos
-  // de marcador) — no es la conversión que se guarda; esa la hace el backend.
-  function getCurrentStatus() {
-    const ms = localDateTimeStringToUtcMs(form.match_date, form.timezone);
-    if (ms === null) return 'scheduled';
-    return getMatchStatus({
-      match_date: new Date(ms).toISOString(),
-      home_score: form.home_score === '' ? null : form.home_score,
-      away_score: form.away_score === '' ? null : form.away_score,
-    });
-  }
+  // Marcador: se puede capturar o corregir en cualquier momento, sin
+  // importar el estado del partido — estado y estadísticas son cosas
+  // separadas a propósito (ver ruta PATCH /matches/:id/status).
+  const showScoreFields = true;
 
-  // El marcador solo se pide cuando el partido ya terminó según el horario
-  // (nunca al revés: tener marcador no adelanta el estado). Si el partido ya
-  // tenía marcador capturado de antes, lo seguimos mostrando aunque el
-  // horario recalculado diga que todavía está en vivo, para no "esconder"
-  // un dato que ya existía y que el representante podría necesitar corregir.
-  const currentStatus   = getCurrentStatus();
-  const matchIsFinished = currentStatus === 'finished';
-  const matchIsLive     = currentStatus === 'live';
-  const matchIsPast     = currentStatus === 'live' || currentStatus === 'finished';
-  const hadScoreAlready = initial?.home_score !== null && initial?.home_score !== undefined
-                       && initial?.away_score !== null && initial?.away_score !== undefined;
-  const showScoreFields = matchIsFinished || hadScoreAlready;
+  // Estado manual (nuevo) — independiente del cálculo por reloj de arriba.
+  // Solo aplica a un partido que ya existe (uno nuevo todavía no tiene id
+  // para poder guardarle un estado antes de haberse creado). Los botones
+  // llaman directo a la ruta PATCH /matches/:id/status, sin pasar por el
+  // botón "Guardar" del resto del formulario — cambia al instante.
+  const [manualStatus, setManualStatus] = useState(initial?.status || 'scheduled');
+  const [manualStatusSaving, setManualStatusSaving] = useState(false);
+  const [manualStatusError, setManualStatusError] = useState('');
+
+  async function handleManualStatusChange(newStatus) {
+    if (!initial?.id) return;
+    setManualStatusError('');
+    setManualStatusSaving(true);
+    try {
+      await api.updateMatchStatus(initial.id, newStatus, token);
+      setManualStatus(newStatus);
+    } catch (e) {
+      setManualStatusError(e.message);
+    } finally {
+      setManualStatusSaving(false);
+    }
+  }
 
   async function handleCreateVenue(payload) {
     setVenueError('');
@@ -247,9 +248,6 @@ export default function MatchForm({
       ),
       () => linksValid(form.stream_links, 'El link de transmisión'),
       () => linksValid(form.ticket_links, 'El link de boletos'),
-      // Marcador obligatorio solo cuando ya terminó (no en vivo)
-      () => (matchIsFinished ? required(form.home_score, 'El marcador local')     : null),
-      () => (matchIsFinished ? required(form.away_score, 'El marcador visitante') : null),
       () => minValue(form.home_score, 0, 'El marcador local'),
       () => minValue(form.away_score, 0, 'El marcador visitante'),
     ]);
@@ -271,7 +269,6 @@ export default function MatchForm({
         home_score:  form.home_score === '' ? null : Number(form.home_score),
         away_score:  form.away_score === '' ? null : Number(form.away_score),
         timezone:    form.timezone,
-        status:      currentStatus,
       });
     } catch (e) {
       setError(e.message);
@@ -283,6 +280,30 @@ export default function MatchForm({
     <>
     <form onSubmit={submit}>
       {error && <div className="form-error">{error}</div>}
+
+      {initial?.id && (
+        <div className="field" style={{ background: 'rgba(255,255,255,0.06)', padding: '12px 16px', borderRadius: 10, marginBottom: 16 }}>
+          <label>Estado del partido (nuevo — independiente de "Guardar")</label>
+          {manualStatusError && <div className="form-error">{manualStatusError}</div>}
+          <div className="pill-group">
+            {[
+              { value: 'scheduled', label: 'Programado' },
+              { value: 'live',      label: 'Iniciado' },
+              { value: 'finished',  label: 'Finalizado' },
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className={`pill-btn${manualStatus === opt.value ? ' pill-btn--active' : ''}`}
+                disabled={manualStatusSaving || manualStatus === opt.value}
+                onClick={() => handleManualStatusChange(opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="field-row">
         <TeamSelect
@@ -320,16 +341,6 @@ export default function MatchForm({
           value={form.match_date}
           onChange={(e) => update('match_date', e.target.value)}
         />
-        {matchIsLive && (
-          <small style={{ color: 'var(--live)', display: 'block', marginTop: 4 }}>
-            🔴 Este partido está en vivo ahora. Podrás capturar el marcador cuando termine.
-          </small>
-        )}
-        {matchIsFinished && (
-          <small style={{ color: 'var(--ink-dim)', display: 'block', marginTop: 4 }}>
-            Este partido ya terminó — captura el marcador final.
-          </small>
-        )}
       </div>
 
       <TimezoneSelect
@@ -435,8 +446,8 @@ export default function MatchForm({
         onChange={(v) => update('ticket_links', v)}
       />
 
-      {/* Marcador — se pide cuando el horario dice que el partido ya terminó,
-          o si ya tenía un marcador capturado de antes (para poder editarlo). */}
+      {/* Marcador — se puede capturar o corregir en cualquier momento, sin
+          importar el estado del partido. No es obligatorio. */}
       {showScoreFields && (
         <div className="field-row">
           <div className="field">
@@ -444,7 +455,6 @@ export default function MatchForm({
             <input
               type="number"
               min="0"
-              required
               value={form.home_score}
               onChange={(e) => update('home_score', e.target.value)}
             />
@@ -454,7 +464,6 @@ export default function MatchForm({
             <input
               type="number"
               min="0"
-              required
               value={form.away_score}
               onChange={(e) => update('away_score', e.target.value)}
             />

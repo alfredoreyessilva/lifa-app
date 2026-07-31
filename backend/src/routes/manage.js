@@ -65,24 +65,40 @@ const xlsxUpload = multer({
 /* ===================== CATEGORÍAS ===================== */
 
 router.put('/categories/:categoryId', authRequired, categoryOwnerRequired, asyncHandler(async (req, res) => {
-  const { name, sort_order, season, year } = req.body;
+  const { name, sort_order, season, year, auto_status_enabled, auto_status_window_hours } = req.body;
   if (name !== undefined && !isNonEmptyString(name)) {
     return res.status(400).json({ error: 'El nombre de la categoría no puede estar vacío' });
   }
+
+  // auto_status_enabled y auto_status_window_hours viajan juntos: si no se
+  // menciona el interruptor en esta edición, no tocamos ninguno de los dos
+  // (para no borrar la configuración por accidente al editar solo el nombre).
+  const touchingAutoStatus = auto_status_enabled !== undefined;
+  const hoursSql = touchingAutoStatus ? '?' : 'auto_status_window_hours';
+
+  const params = [
+    toNull(name ? name.trim().toUpperCase() : name),
+    toNull(sort_order),
+    toNull(season ? season.trim().toUpperCase() : season),
+    toNull(year ? parseInt(year) : year),
+    toNull(auto_status_enabled),
+  ];
+  if (touchingAutoStatus) {
+    params.push(auto_status_enabled ? parseInt(auto_status_window_hours) : null);
+  }
+  params.push(req.category.id);
+
   await db.prepare(`
     UPDATE categories SET
       name       = COALESCE(?, name),
       sort_order = COALESCE(?, sort_order),
       season     = COALESCE(?, season),
-      year       = COALESCE(?, year)
+      year       = COALESCE(?, year),
+      auto_status_enabled      = COALESCE(?, auto_status_enabled),
+      auto_status_window_hours = ${hoursSql}
     WHERE id = ?
-  `).run(
-    toNull(name ? name.trim().toUpperCase() : name),
-    toNull(sort_order),
-    toNull(season ? season.trim().toUpperCase() : season),
-    toNull(year ? parseInt(year) : year),
-    req.category.id
-  );
+  `).run(...params);
+
   res.json(await db.prepare('SELECT * FROM categories WHERE id = ?').get(req.category.id));
 }));
 
@@ -263,15 +279,10 @@ function validateMatchFields({ home_team, away_team, stream_links, ticket_links,
   if (ticketLinksError) return ticketLinksError;
   if (timezone && !isValidTimezone(timezone))  return 'La zona horaria seleccionada no es válida';
 
-  // Marcador obligatorio solo cuando el estado es finalizado
-  if (status === 'finished') {
-    if (home_score === null || home_score === undefined || home_score === '') {
-      return 'El marcador local es obligatorio cuando el partido está finalizado';
-    }
-    if (away_score === null || away_score === undefined || away_score === '') {
-      return 'El marcador visitante es obligatorio cuando el partido está finalizado';
-    }
-  }
+  // El marcador nunca es obligatorio por el estado del partido — estado y
+  // estadísticas son cosas separadas a propósito. Se puede guardar un
+  // partido "finalizado" sin marcador (por capturarlo después) o con
+  // marcador sin estar "finalizado" (por capturarlo antes/durante).
   if (home_score !== null && home_score !== undefined && home_score !== '' && Number(home_score) < 0) {
     return 'El marcador local no puede ser negativo';
   }
@@ -672,6 +683,27 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
   );
 
   res.json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id));
+}));
+
+// --- Estado manual del partido (nuevo, aislado) ---
+// A propósito NO reutiliza el PUT general de arriba (que además exige
+// marcador cuando el estado es "finished"). Subir estadísticas nunca debe
+// depender de en qué estado esté el partido — son dos cosas separadas — así
+// que esta ruta SOLO toca la columna status, sin exigir ni tocar el marcador.
+// Los tres valores guardados en la base de datos siguen siendo los mismos de
+// siempre (scheduled/live/finished); "Iniciado" es solo el texto que ve el
+// organizador para el valor "live" — no se agrega ningún valor nuevo.
+
+router.patch('/matches/:id/status', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
+  const { status } = req.body;
+  const VALID_STATUSES = ['scheduled', 'live', 'finished'];
+  if (!VALID_STATUSES.includes(status)) {
+    return res.status(400).json({ error: 'Estado no válido. Debe ser scheduled, live o finished.' });
+  }
+
+  await db.prepare('UPDATE matches SET status = ? WHERE id = ?').run(status, req.match.id);
+
+  res.json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(req.match.id));
 }));
 
 router.delete('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {

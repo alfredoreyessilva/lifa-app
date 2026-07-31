@@ -420,9 +420,29 @@ export default function TournamentFormTestPage() {
           {matchList && matchList.length > 0 && (
             <ul>
               {matchList.map((m) => (
-                <li key={m.id}>
-                  #{m.id} — {m.home_team} vs {m.away_team} — {m.match_date} — estado: {m.status}
+                <li key={m.id} style={{ marginBottom: 10 }}>
+                  #{m.id} — {m.home_team} vs {m.away_team} — {m.match_date} — estado: <strong>{m.status}</strong>
                   {m.group_id ? ` — grupo #${m.group_id}` : ''}
+                  <div className="pill-group" style={{ marginTop: 4 }}>
+                    {[
+                      { value: 'scheduled', label: 'Programado' },
+                      { value: 'live',      label: 'Iniciado' },
+                      { value: 'finished',  label: 'Finalizado' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        className={`pill-btn${m.status === opt.value ? ' pill-btn--active' : ''}`}
+                        disabled={m.status === opt.value}
+                        onClick={async () => {
+                          await api.updateMatchStatus(m.id, opt.value, token);
+                          setMatchKey((k) => k + 1);
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </li>
               ))}
             </ul>
