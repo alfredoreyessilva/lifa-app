@@ -4,6 +4,7 @@ import SponsorBar from './components/SponsorBar.jsx';
 import Home from './pages/Home.jsx';
 import YearSelectPage from './pages/YearSelectPage.jsx';
 import TournamentFormTestPage from './pages/TournamentFormTestPage.jsx';
+import TournamentsYearPanel from './pages/TournamentsYearPanel.jsx';
 import LeaguePage from './pages/LeaguePage.jsx';
 import CalendarPage from './pages/CalendarPage.jsx';
 import MatchPage from './pages/MatchPage.jsx';
@@ -46,6 +47,10 @@ export default function App() {
             <Route
               path="/panel/liga/:id"
               element={<ProtectedRoute><Dashboard kind="liga" /></ProtectedRoute>}
+            />
+            <Route
+              path="/panel/liga/:id/:year"
+              element={<ProtectedRoute><TournamentsYearPanel /></ProtectedRoute>}
             />
             <Route
               path="/panel/equipo/:id"
