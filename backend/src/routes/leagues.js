@@ -58,7 +58,7 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
     LEFT JOIN venues v     ON v.id = m.venue_id
     LEFT JOIN groups g     ON g.id = m.group_id
     LEFT JOIN groups g2    ON g2.id = m.group_id_2
-    WHERE m.id = ?
+    WHERE m.id = ? AND m.is_draft = FALSE
   `).get(req.params.matchId);
 
   if (!match) return res.status(404).json({ error: 'Partido no encontrado' });
@@ -178,7 +178,7 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
     LEFT JOIN venues v      ON v.id = m.venue_id
     LEFT JOIN groups g      ON g.id = m.group_id
     LEFT JOIN groups g2     ON g2.id = m.group_id_2
-    WHERE m.category_id = ?
+    WHERE m.category_id = ? AND m.is_draft = FALSE
     ORDER BY m.match_date ASC
   `).all(category.id);
 
@@ -383,6 +383,49 @@ router.get('/tournaments/:tournamentId/categories', authRequired, tournamentOwne
     ORDER BY sort_order ASC, name ASC
   `).all(req.tournament.id);
   res.json(categories);
+}));
+
+// --- Inscripción: qué Equipos participan en un Torneo ---
+// A propósito, un equipo puede venir de CUALQUIER liga, no solo la dueña
+// del torneo — por eso el equipo se busca aparte (ver /manage/teams/search)
+// y aquí solo se guarda la conexión equipo↔torneo.
+
+router.get('/tournaments/:tournamentId/teams', authRequired, tournamentOwnerRequired, asyncHandler(async (req, res) => {
+  const teams = await db.prepare(`
+    SELECT t.*, tt.id AS inscription_id, tt.created_at AS inscribed_at, l.name AS home_league_name
+    FROM tournament_teams tt
+    JOIN teams t ON t.id = tt.team_id
+    LEFT JOIN leagues l ON l.id = t.league_id
+    WHERE tt.tournament_id = ?
+    ORDER BY t.name ASC
+  `).all(req.tournament.id);
+  res.json(teams);
+}));
+
+router.post('/tournaments/:tournamentId/teams', authRequired, tournamentOwnerRequired, asyncHandler(async (req, res) => {
+  const { team_id } = req.body;
+  if (!team_id) return res.status(400).json({ error: 'Falta el equipo a inscribir' });
+
+  const team = await db.prepare('SELECT * FROM teams WHERE id = ?').get(team_id);
+  if (!team) return res.status(404).json({ error: 'Ese equipo no existe' });
+
+  const existing = await db.prepare(
+    'SELECT * FROM tournament_teams WHERE tournament_id = ? AND team_id = ?'
+  ).get(req.tournament.id, team_id);
+  if (existing) return res.status(400).json({ error: 'Ese equipo ya está inscrito en este torneo' });
+
+  await db.prepare(
+    'INSERT INTO tournament_teams (tournament_id, team_id) VALUES (?, ?)'
+  ).run(req.tournament.id, team_id);
+
+  res.status(201).json(team);
+}));
+
+router.delete('/tournaments/:tournamentId/teams/:teamId', authRequired, tournamentOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare(
+    'DELETE FROM tournament_teams WHERE tournament_id = ? AND team_id = ?'
+  ).run(req.tournament.id, req.params.teamId);
+  res.json({ ok: true });
 }));
 
 export default router;

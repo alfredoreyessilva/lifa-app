@@ -145,6 +145,7 @@ router.post('/trigger', asyncHandler(async (req, res) => {
     JOIN categories c ON c.id = m.category_id
     JOIN leagues l    ON l.id = c.league_id
     WHERE m.match_date IS NOT NULL
+      AND m.is_draft = FALSE
       AND m.home_score IS NULL
       AND m.away_score IS NULL
       AND (m.notified_upcoming = FALSE OR m.notified_live = FALSE)

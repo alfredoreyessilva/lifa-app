@@ -123,6 +123,19 @@ CREATE TABLE IF NOT EXISTS tournaments (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Inscripción: qué Equipo participa en qué Torneo. Es la pieza que permite
+-- que un equipo (perfil independiente, con su propia liga "de origen")
+-- juegue en torneos de otras ligas, y que esa participación quede como
+-- registro histórico permanente aunque después el equipo cambie de liga
+-- o deje de pertenecer a la de origen.
+CREATE TABLE IF NOT EXISTS tournament_teams (
+  id SERIAL PRIMARY KEY,
+  tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+  team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (tournament_id, team_id)
+);
+
 CREATE TABLE IF NOT EXISTS groups (
   id SERIAL PRIMARY KEY,
   category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
@@ -292,6 +305,13 @@ export async function initSchema() {
     await run(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS auto_status_enabled BOOLEAN DEFAULT FALSE`);
     await run(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS auto_status_window_hours INTEGER`);
 
+    // Marca la categoría/rama automática "Sin clasificar" que se crea sola
+    // cuando un partido del Excel no coincide con nada real — para poder
+    // bloquear su publicación hasta que alguien lo corrija, sin tener que
+    // adivinar por el nombre (que el organizador podría cambiar).
+    await run(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS is_placeholder BOOLEAN NOT NULL DEFAULT FALSE`);
+    await run(`ALTER TABLE branches   ADD COLUMN IF NOT EXISTS is_placeholder BOOLEAN NOT NULL DEFAULT FALSE`);
+
     // Control de notificaciones ya enviadas por partido (evita reenvíos repetidos del cronjob)
     await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_upcoming BOOLEAN NOT NULL DEFAULT FALSE`);
     await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_live BOOLEAN NOT NULL DEFAULT FALSE`);
@@ -333,6 +353,23 @@ export async function initSchema() {
     // partidos reales que hoy siguen viviendo directo bajo category_id.
     await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id) ON DELETE CASCADE`);
     await run(`CREATE INDEX IF NOT EXISTS idx_matches_branch ON matches(branch_id)`);
+
+    // Borrador: partidos que llegaron de una importación de Excel (o que el
+    // organizador está preparando) pero que todavía no se publican — no
+    // deben aparecer en ningún calendario ni cálculo público. Nace en FALSO
+    // para todo lo que ya existe (nada cambia para los partidos de hoy).
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS is_draft BOOLEAN NOT NULL DEFAULT FALSE`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_matches_is_draft ON matches(is_draft)`);
+
+    // Conexión real (por id) del partido con el perfil del equipo — además
+    // de home_team/away_team (el nombre en texto, que se queda igual para
+    // no romper nada). Con esto, el historial de un equipo sobrevive
+    // aunque después cambie de nombre o de liga: el partido sigue
+    // apuntando al mismo perfil real, no solo a un texto suelto.
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS home_team_id INTEGER REFERENCES teams(id) ON DELETE SET NULL`);
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS away_team_id INTEGER REFERENCES teams(id) ON DELETE SET NULL`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_matches_home_team_id ON matches(home_team_id)`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_matches_away_team_id ON matches(away_team_id)`);
 
     // Misma jerarquía en construcción: un grupo ahora puede colgar de una
     // conferencia (conference_id) en vez de directo de category_id. Opcional,

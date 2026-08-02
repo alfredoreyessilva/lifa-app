@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 import TournamentForm from '../components/TournamentForm.jsx';
@@ -58,10 +58,10 @@ export default function TournamentsYearPanel() {
       {tournaments && tournaments.length > 0 && (
         <div className="league-grid">
           {tournaments.map((t) => (
-            <div key={t.id} className="league-card">
+            <Link key={t.id} to={`/panel/liga/${id}/${year}/torneo/${t.id}`} className="league-card">
               <h3>{t.name}</h3>
               <span className="state">{t.year}</span>
-            </div>
+            </Link>
           ))}
         </div>
       )}

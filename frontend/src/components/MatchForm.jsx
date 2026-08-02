@@ -73,8 +73,37 @@ function linksValid(links, label) {
 export default function MatchForm({
   initial, onSubmit, onCancel, submitLabel, teams, venues, groups,
   leagueTimezone, token, leagueId, categoryId, onVenueCreated, onTeamCreated, onGroupCreated,
+  // Nuevo: cuando el formulario NO recibe una Categoría/Rama ya decidida
+  // (como pasa en la pantalla "Partidos del Torneo"), se le puede pasar
+  // tournamentId + pickCategoryAndBranch=true para que el propio formulario
+  // muestre los selects y decida a dónde va el partido. Cuando se usa así,
+  // category_id y branch_id viajan DENTRO del payload que recibe onSubmit
+  // (en vez de que el componente padre ya los conozca de antemano).
+  tournamentId, pickCategoryAndBranch,
 }) {
   const defaultTimezone = initial?.timezone || leagueTimezone || 'America/Mexico_City';
+
+  // Selector de Categoría/Rama (solo cuando pickCategoryAndBranch=true).
+  const [pickedCategoryId, setPickedCategoryId] = useState(initial?.category_id || '');
+  const [pickedBranchId,   setPickedBranchId]   = useState(initial?.branch_id   || '');
+  const [pickerCategories, setPickerCategories] = useState(null);
+  const [pickerBranches,   setPickerBranches]   = useState(null);
+
+  useEffect(() => {
+    if (!pickCategoryAndBranch || !tournamentId) return;
+    api.getCategoriesForTournament(tournamentId, token).then(setPickerCategories).catch(() => setPickerCategories([]));
+  }, [pickCategoryAndBranch, tournamentId, token]);
+
+  useEffect(() => {
+    if (!pickCategoryAndBranch || !pickedCategoryId) { setPickerBranches(null); return; }
+    api.getBranches(pickedCategoryId, token).then(setPickerBranches).catch(() => setPickerBranches([]));
+  }, [pickCategoryAndBranch, pickedCategoryId, token]);
+
+  const skipFirstCategoryReset = useRef(true);
+  useEffect(() => {
+    if (skipFirstCategoryReset.current) { skipFirstCategoryReset.current = false; return; }
+    setPickedBranchId('');
+  }, [pickedCategoryId]);
 
   const [form, setForm] = useState({
     home_team:   initial?.home_team   || '',
@@ -250,6 +279,8 @@ export default function MatchForm({
       () => linksValid(form.ticket_links, 'El link de boletos'),
       () => minValue(form.home_score, 0, 'El marcador local'),
       () => minValue(form.away_score, 0, 'El marcador visitante'),
+      () => (pickCategoryAndBranch && !pickedCategoryId ? 'Elige a qué categoría pertenece este partido' : null),
+      () => (pickCategoryAndBranch && !pickedBranchId   ? 'Elige a qué rama pertenece este partido'      : null),
     ]);
     if (validationError) { setError(validationError); return; }
 
@@ -269,6 +300,7 @@ export default function MatchForm({
         home_score:  form.home_score === '' ? null : Number(form.home_score),
         away_score:  form.away_score === '' ? null : Number(form.away_score),
         timezone:    form.timezone,
+        ...(pickCategoryAndBranch ? { category_id: pickedCategoryId, branch_id: pickedBranchId } : {}),
       });
     } catch (e) {
       setError(e.message);
@@ -301,6 +333,40 @@ export default function MatchForm({
                 {opt.label}
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {pickCategoryAndBranch && (
+        <div className="field-row">
+          <div className="field">
+            <label>Categoría</label>
+            <select
+              required
+              value={pickedCategoryId}
+              onChange={(e) => setPickedCategoryId(e.target.value)}
+            >
+              <option value="">— Elige una categoría —</option>
+              {(pickerCategories || []).map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Rama</label>
+            <select
+              required
+              value={pickedBranchId}
+              onChange={(e) => setPickedBranchId(e.target.value)}
+              disabled={!pickedCategoryId}
+            >
+              <option value="">
+                {pickedCategoryId ? '— Elige una rama —' : 'Primero elige una categoría'}
+              </option>
+              {(pickerBranches || []).map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
           </div>
         </div>
       )}

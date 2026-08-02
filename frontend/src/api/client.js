@@ -56,6 +56,16 @@ export const api = {
   getCategoriesForTournament: (tournamentId, token) =>
     request(`/leagues/tournaments/${tournamentId}/categories`, { token }),
 
+  // Inscripción: equipos de un torneo (de cualquier liga)
+  searchTeams: (q, token) =>
+    request(`/manage/teams/search?q=${encodeURIComponent(q)}`, { token }),
+  getTournamentTeams: (tournamentId, token) =>
+    request(`/leagues/tournaments/${tournamentId}/teams`, { token }),
+  inscribeTeam: (tournamentId, teamId, token) =>
+    request(`/leagues/tournaments/${tournamentId}/teams`, { method: 'POST', body: { team_id: teamId }, token }),
+  removeTeamFromTournament: (tournamentId, teamId, token) =>
+    request(`/leagues/tournaments/${tournamentId}/teams/${teamId}`, { method: 'DELETE', token }),
+
   // Pruebas de la nueva jerarquía (Categoría -> Rama)
   createBranch: (categoryId, payload, token) =>
     request(`/manage/categories/${categoryId}/branches`, { method: 'POST', body: payload, token }),
@@ -80,9 +90,19 @@ export const api = {
   getTestMatches: (branchId, token) =>
     request(`/manage/branches/${branchId}/matches-test`, { token }),
 
+  // Partidos reales de una rama (todos los campos)
+  getBranchMatches: (branchId, token) =>
+    request(`/manage/branches/${branchId}/matches`, { token }),
+
+  // Todos los partidos de un torneo completo (para "Partidos del Torneo")
+  getTournamentMatches: (tournamentId, token) =>
+    request(`/manage/tournaments/${tournamentId}/matches`, { token }),
+
   // Estado manual del partido (nuevo, aislado del PUT general)
   updateMatchStatus: (matchId, status, token) =>
     request(`/manage/matches/${matchId}/status`, { method: 'PATCH', body: { status }, token }),
+  publishMatch: (matchId, token) =>
+    request(`/manage/matches/${matchId}/publish`, { method: 'PATCH', token }),
 
   // Partidos
   createMatch: (categoryId, payload, token) =>
@@ -97,6 +117,21 @@ export const api = {
     const formData = new FormData();
     formData.append('file', file);
     const res = await fetch(`${BASE}/manage/categories/${categoryId}/matches/import`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'No se pudo importar el archivo');
+    return data;
+  },
+
+  // Importación a nivel torneo (cada fila trae su propia Categoría/Rama;
+  // todo lo que entra queda como borrador, sin publicarse).
+  importTournamentMatches: async (tournamentId, file, token) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${BASE}/manage/tournaments/${tournamentId}/matches/import`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: formData,

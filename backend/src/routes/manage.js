@@ -3,7 +3,7 @@ import multer from 'multer';
 import * as XLSX from 'xlsx';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
-import { categoryOwnerRequired, matchOwnerRequired, leagueOwnerRequired, teamOwnerRequired, venueOwnerRequired, groupOwnerRequired, branchOwnerRequired, conferenceOwnerRequired } from '../middleware/ownership.js';
+import { categoryOwnerRequired, matchOwnerRequired, leagueOwnerRequired, teamOwnerRequired, venueOwnerRequired, groupOwnerRequired, branchOwnerRequired, conferenceOwnerRequired, tournamentOwnerRequired } from '../middleware/ownership.js';
 import { isValidEmail, isValidUrl, isValidGoogleMapsUrl, isNonEmptyString } from '../utils/validation.js';
 import {
   isValidTimezone,
@@ -42,6 +42,32 @@ function validateLinksList(links, label) {
 // exclusivamente del horario (fecha + ventana de 3h) — el marcador NUNCA
 // determina el estado, solo es un dato que se guarda aparte.
 const LIVE_WINDOW_MS = 3 * 60 * 60 * 1000;
+// Busca si el nombre de equipo (texto libre) coincide con un equipo real
+// inscrito en el torneo de esa categoría (de cualquier liga) — o, si esa
+// categoría no pertenece a ningún torneo todavía (modelo viejo), con el
+// roster de la liga, como se hacía antes. Se usa al guardar un partido
+// para conectar home_team_id/away_team_id de verdad, sin que el
+// organizador tenga que hacer nada distinto a escribir el nombre.
+async function resolveTeamId(category, teamNameRaw) {
+  if (!teamNameRaw) return null;
+  const name = teamNameRaw.trim();
+  if (!name) return null;
+
+  if (category.tournament_id) {
+    const inscribed = await db.prepare(`
+      SELECT t.id FROM tournament_teams tt
+      JOIN teams t ON t.id = tt.team_id
+      WHERE tt.tournament_id = ? AND t.name ILIKE ?
+    `).get(category.tournament_id, name);
+    if (inscribed) return inscribed.id;
+  }
+
+  const leagueTeam = await db.prepare(
+    'SELECT id FROM teams WHERE league_id = ? AND name ILIKE ?'
+  ).get(category.league_id, name);
+  return leagueTeam ? leagueTeam.id : null;
+}
+
 function computeMatchStatus(matchDateIso) {
   if (!matchDateIso) return 'scheduled';
   const now       = Date.now();
@@ -50,6 +76,41 @@ function computeMatchStatus(matchDateIso) {
   if (now < matchTime) return 'scheduled';
   if (now < endTime)   return 'live';
   return 'finished';
+}
+
+// Busca (o crea, la primera vez) la categoría "Sin clasificar" de un
+// torneo — donde caen los partidos del Excel cuya Categoría no coincidió
+// con nada real. Se crea junto con su propia rama "Sin clasificar", para
+// que el partido siempre tenga a dónde caer sin inventar datos sueltos.
+async function getOrCreatePlaceholderCategory(tournamentId, leagueId) {
+  const existing = await db.prepare(
+    'SELECT * FROM categories WHERE tournament_id = ? AND is_placeholder = TRUE'
+  ).get(tournamentId);
+  if (existing) return existing;
+
+  const result = await db.prepare(`
+    INSERT INTO categories (league_id, tournament_id, name, is_placeholder)
+    VALUES (?, ?, 'Sin clasificar', TRUE)
+  `).run(leagueId, tournamentId);
+  const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(result.lastInsertRowid);
+  await getOrCreatePlaceholderBranch(category.id);
+  return category;
+}
+
+// Busca (o crea) la rama "Sin clasificar" DENTRO de una categoría
+// específica — se usa tanto para la categoría "Sin clasificar" general
+// como para una rama que no coincidió dentro de una categoría real.
+async function getOrCreatePlaceholderBranch(categoryId) {
+  const existing = await db.prepare(
+    'SELECT * FROM branches WHERE category_id = ? AND is_placeholder = TRUE'
+  ).get(categoryId);
+  if (existing) return existing;
+
+  const result = await db.prepare(`
+    INSERT INTO branches (category_id, name, is_placeholder)
+    VALUES (?, 'Sin clasificar', TRUE)
+  `).run(categoryId);
+  return db.prepare('SELECT * FROM branches WHERE id = ?').get(result.lastInsertRowid);
 }
 
 const xlsxUpload = multer({
@@ -155,6 +216,41 @@ router.get('/categories/:categoryId/branches', authRequired, categoryOwnerRequir
     ORDER BY sort_order ASC, name ASC
   `).all(req.category.id);
   res.json(branches);
+}));
+
+// Partidos REALES (todos los campos) de una Rama — a diferencia de
+// /branches/:branchId/matches-test (que era solo para probar la jerarquía
+// con lo mínimo), esta ruta devuelve exactamente lo que MatchForm.jsx
+// necesita para crear/editar un partido de verdad: marcador, sede, links,
+// zona horaria, estado, etc.
+router.get('/branches/:branchId/matches', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  const matches = await db.prepare(`
+    SELECT * FROM matches WHERE branch_id = ?
+    ORDER BY match_date ASC
+  `).all(req.branch.id);
+  res.json(matches);
+}));
+
+// Todos los partidos de un Torneo completo, sin importar de qué Categoría o
+// Rama sean — para la pantalla "Partidos del Torneo" (donde también
+// aterrizan los que suba un Excel, como borrador). Trae el nombre de la
+// categoría y de la rama de cada uno, para poder mostrarlos identificados
+// aunque vengan mezclados.
+router.get('/tournaments/:tournamentId/matches', authRequired, tournamentOwnerRequired, asyncHandler(async (req, res) => {
+  const matches = await db.prepare(`
+    SELECT
+      m.*,
+      c.name AS category_name,
+      b.name AS branch_name,
+      c.is_placeholder AS category_needs_review,
+      b.is_placeholder AS branch_needs_review
+    FROM matches m
+    JOIN categories c ON c.id = m.category_id
+    LEFT JOIN branches b ON b.id = m.branch_id
+    WHERE c.tournament_id = ?
+    ORDER BY m.is_draft DESC, m.match_date ASC
+  `).all(req.tournament.id);
+  res.json(matches);
 }));
 
 // --- Pruebas de la nueva jerarquía (Rama -> Conferencia) ---
@@ -298,7 +394,7 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
   // navegador. La única conversión a UTC autoritativa ocurre aquí, en el
   // backend, usando la zona horaria explícita del partido (nunca la zona
   // ambiente del servidor ni la del navegador de quien lo captura).
-  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone } = req.body;
+  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, branch_id } = req.body;
   if (!isNonEmptyString(home_team) || !isNonEmptyString(away_team) || !match_date_local) {
     return res.status(400).json({ error: 'Se requieren equipo local, visitante y fecha' });
   }
@@ -313,13 +409,19 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
   const matchDateUtc = localDateTimeStringToUtcISO(match_date_local, effectiveTimezone);
   if (!matchDateUtc) return res.status(400).json({ error: 'La fecha y hora no son válidas' });
 
+  const homeTeamId = await resolveTeamId(req.category, home_team);
+  const awayTeamId = await resolveTeamId(req.category, away_team);
+
   const result = await db.prepare(`
-    INSERT INTO matches (category_id, home_team, away_team, match_date, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO matches (category_id, branch_id, home_team, away_team, home_team_id, away_team_id, match_date, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.category.id,
+    branch_id || null,
     home_team.trim().toUpperCase(),
     away_team.trim().toUpperCase(),
+    homeTeamId,
+    awayTeamId,
     matchDateUtc,
     venue_id  || null,
     group_id  || null,
@@ -333,6 +435,7 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
     // Se guarda SIEMPRE la zona ya resuelta (nunca null), para que el
     // partido nunca quede con una zona horaria ambigua en la base de datos.
     effectiveTimezone
+
   );
 
   res.status(201).json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(result.lastInsertRowid));
@@ -605,11 +708,276 @@ router.post(
   })
 );
 
+/* ── IMPORTACIÓN MASIVA DESDE EXCEL, A NIVEL TORNEO ──
+   A diferencia de la importación por categoría (de arriba), aquí cada fila
+   trae su propia Categoría y Rama — y las dos son OBLIGATORIAS: si no
+   coinciden con algo que ya exista en este torneo, la fila se rechaza (no
+   se "adivina" ni se crea nada solo). Todo lo que sí se importa nace como
+   BORRADOR (is_draft = true) — nada se hace público hasta que alguien lo
+   revise y publique desde "Partidos del Torneo".
+   Conferencia/Grupo, por ahora, no se resuelven aquí (quedan sin asignar,
+   igual que en la creación manual desde esta misma pantalla) — es una
+   limitación conocida, pendiente para más adelante. */
+router.post(
+  '/tournaments/:tournamentId/matches/import',
+  authRequired,
+  tournamentOwnerRequired,
+  xlsxUpload.single('file'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No se recibió ningún archivo' });
+
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
+    const sheet    = workbook.Sheets[workbook.SheetNames[0]];
+    const rows     = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'El archivo está vacío o no tiene filas de datos' });
+    }
+
+    const registeredCategories = await db.prepare(
+      'SELECT id, name FROM categories WHERE tournament_id = ?'
+    ).all(req.tournament.id);
+    const registeredBranches = await db.prepare(`
+      SELECT b.id, b.name, b.category_id
+      FROM branches b
+      JOIN categories c ON c.id = b.category_id
+      WHERE c.tournament_id = ?
+    `).all(req.tournament.id);
+    const registeredTeams  = await db.prepare(`
+      SELECT id, name, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links
+      FROM teams WHERE league_id = ?
+    `).all(req.league.id);
+    const registeredVenues = await db.prepare('SELECT id, name FROM venues WHERE league_id = ?').all(req.league.id);
+
+    function findCategory(name) {
+      return registeredCategories.find((c) => c.name.toLowerCase() === name.toLowerCase());
+    }
+    function findBranch(categoryId, name) {
+      return registeredBranches.find((b) => b.category_id === categoryId && b.name.toLowerCase() === name.toLowerCase());
+    }
+    function findTeam(name) {
+      return registeredTeams.find((t) => t.name.toLowerCase() === name.toLowerCase());
+    }
+    function findVenue(name) {
+      return registeredVenues.find((v) => v.name.toLowerCase() === name.toLowerCase());
+    }
+
+    const imported = [];
+    const skipped  = [];
+    const warnings = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row  = rows[i];
+      const rowN = i + 2;
+
+      try {
+        const get = (keys) => {
+          for (const k of keys) {
+            const found = Object.keys(row).find(
+              (rk) => rk.trim().toLowerCase() === k.toLowerCase()
+            );
+            if (found !== undefined) return String(row[found] ?? '').trim();
+          }
+          return '';
+        };
+
+        const categoriaRaw = get(['Categoría', 'categoria', 'CATEGORÍA', 'CATEGORIA']);
+        const ramaRaw      = get(['Rama', 'rama', 'RAMA']);
+        const fechaRaw     = get(['Fecha', 'fecha', 'FECHA']);
+        const horaRaw      = get(['Hora', 'hora', 'HORA']);
+        const homeTeamRaw  = get(['Equipo Local', 'equipo local', 'local', 'home']);
+        const awayTeamRaw  = get(['Equipo Visitante', 'equipo visitante', 'visitante', 'away']);
+        const venueRaw     = get(['Sede', 'sede', 'SEDE']);
+        const weekLabel    = get(['Jornada', 'jornada', 'JORNADA', 'Week', 'week']);
+        const streamUrl    = get(['Link de transmisión', 'link de transmision', 'stream', 'url', 'transmision']);
+        const ticketsUrl   = get(['Link de boletos', 'link de boletos', 'boletos', 'tickets']);
+        const timezoneRaw  = get(['Zona horaria', 'zona horaria', 'zona horaria (código)', 'timezone']);
+        const homeScoreRaw = get(['Marcador Local', 'marcador local', 'home score']);
+        const awayScoreRaw = get(['Marcador Visitante', 'marcador visitante', 'away score']);
+
+        // Categoría y Rama: si no coinciden con algo real, el partido cae
+        // en "Sin clasificar" (se crea sola la primera vez) — nunca se
+        // rechaza la fila. Ese partido simplemente no se podrá publicar
+        // hasta que alguien lo edite y le asigne una categoría/rama real.
+        let category = categoriaRaw ? findCategory(categoriaRaw) : null;
+        if (!category) {
+          if (categoriaRaw) {
+            warnings.push({ row: rowN, reason: `La categoría "${categoriaRaw}" no existe en este torneo — el partido se subió a "Sin clasificar"` });
+          } else {
+            warnings.push({ row: rowN, reason: 'Falta la columna Categoría — el partido se subió a "Sin clasificar"' });
+          }
+          category = await getOrCreatePlaceholderCategory(req.tournament.id, req.league.id);
+        }
+
+        let branch = (!category.is_placeholder && ramaRaw) ? findBranch(category.id, ramaRaw) : null;
+        if (!branch) {
+          if (!category.is_placeholder && ramaRaw) {
+            warnings.push({ row: rowN, reason: `La rama "${ramaRaw}" no existe dentro de la categoría "${categoriaRaw}" — el partido se subió a su "Sin clasificar"` });
+          } else if (!category.is_placeholder) {
+            warnings.push({ row: rowN, reason: 'Falta la columna Rama — el partido se subió a "Sin clasificar"' });
+          }
+          branch = await getOrCreatePlaceholderBranch(category.id);
+        }
+
+        if (!homeTeamRaw || !awayTeamRaw) {
+          skipped.push({ row: rowN, reason: 'Faltan equipos local o visitante' });
+          continue;
+        }
+        if (homeTeamRaw.toLowerCase() === awayTeamRaw.toLowerCase()) {
+          skipped.push({ row: rowN, reason: 'El equipo local y visitante son iguales' });
+          continue;
+        }
+
+        const homeTeamMatch = findTeam(homeTeamRaw);
+        const awayTeamMatch = findTeam(awayTeamRaw);
+        const homeTeam = homeTeamMatch ? homeTeamMatch.name : homeTeamRaw.toUpperCase();
+        const awayTeam = awayTeamMatch ? awayTeamMatch.name : awayTeamRaw.toUpperCase();
+        if (!homeTeamMatch) warnings.push({ row: rowN, reason: `El equipo local "${homeTeamRaw}" no coincide con ningún equipo registrado — se importó tal cual escrito` });
+        if (!awayTeamMatch) warnings.push({ row: rowN, reason: `El equipo visitante "${awayTeamRaw}" no coincide con ningún equipo registrado — se importó tal cual escrito` });
+
+        let venueId = null;
+        if (venueRaw) {
+          const venueMatch = findVenue(venueRaw);
+          if (venueMatch) {
+            venueId = venueMatch.id;
+          } else {
+            warnings.push({ row: rowN, reason: `La sede "${venueRaw}" no coincide con ninguna sede registrada — se guardó como texto sin conectar` });
+          }
+        }
+
+        let timezone = null;
+        if (timezoneRaw) {
+          if (isValidTimezone(timezoneRaw)) {
+            timezone = timezoneRaw;
+          } else {
+            warnings.push({ row: rowN, reason: `La zona horaria "${timezoneRaw}" no es válida — se usó la zona de la liga por defecto` });
+          }
+        }
+
+        let validTicketsUrl = '';
+        if (ticketsUrl) {
+          try { new URL(ticketsUrl); validTicketsUrl = ticketsUrl; }
+          catch { warnings.push({ row: rowN, reason: `El link de boletos "${ticketsUrl}" no es una dirección web válida — se dejó vacío` }); }
+        }
+
+        let homeScore = null;
+        let awayScore = null;
+        if (homeScoreRaw !== '' && awayScoreRaw !== '') {
+          const hs = Number(homeScoreRaw);
+          const as = Number(awayScoreRaw);
+          if (Number.isInteger(hs) && hs >= 0 && Number.isInteger(as) && as >= 0) {
+            homeScore = hs;
+            awayScore = as;
+          } else {
+            warnings.push({ row: rowN, reason: 'El marcador no son números válidos — se importó el partido sin marcador' });
+          }
+        }
+
+        let matchDate = null;
+        if (fechaRaw) {
+          let y = null, mo = null, d = null;
+
+          const rawFechaKey = Object.keys(row).find((k) => k.trim().toLowerCase() === 'fecha');
+          if (rawFechaKey && row[rawFechaKey] instanceof Date) {
+            const cellDate = row[rawFechaKey];
+            y = cellDate.getFullYear(); mo = cellDate.getMonth() + 1; d = cellDate.getDate();
+          }
+          if (y === null) {
+            const dmyMatch = /^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/.exec(fechaRaw);
+            if (dmyMatch) { d = Number(dmyMatch[1]); mo = Number(dmyMatch[2]); y = Number(dmyMatch[3]); }
+          }
+          if (y === null) {
+            const ymdMatch = /^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/.exec(fechaRaw);
+            if (ymdMatch) { y = Number(ymdMatch[1]); mo = Number(ymdMatch[2]); d = Number(ymdMatch[3]); }
+          }
+
+          if (y !== null) {
+            let hour = 0, minute = 0;
+            if (horaRaw) {
+              const timeMatch = /^(\d{1,2}):(\d{2})/.exec(horaRaw);
+              if (timeMatch) { hour = Number(timeMatch[1]); minute = Number(timeMatch[2]); }
+            }
+            const effectiveTz = timezone || req.league.timezone || 'America/Mexico_City';
+            matchDate = zonedTimeToUtcISO(y, mo, d, hour, minute, effectiveTz);
+          }
+        }
+
+        let validStream = '';
+        if (streamUrl) {
+          try { new URL(streamUrl); validStream = streamUrl; }
+          catch { /* se ignora si no es válido, sin bloquear la fila */ }
+        }
+
+        const finalStreamLinks = dedupe([
+          validStream,
+          ...(homeTeamMatch ? asArray(homeTeamMatch.home_stream_links) : []),
+          ...(awayTeamMatch ? asArray(awayTeamMatch.away_stream_links) : []),
+        ]);
+        const finalTicketLinks = dedupe([
+          validTicketsUrl,
+          ...(homeTeamMatch ? asArray(homeTeamMatch.home_ticket_links) : []),
+          ...(awayTeamMatch ? asArray(awayTeamMatch.away_ticket_links) : []),
+        ]);
+
+        // Nace siempre "scheduled" y como borrador — nunca se calcula
+        // live/finished al importar (ese cálculo ya no vive aquí, ver
+        // matchStatus.js del lado del organizador una vez publicado).
+        const result = await db.prepare(`
+          INSERT INTO matches (category_id, branch_id, home_team, away_team, match_date, venue, venue_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, is_draft)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, TRUE)
+        `).run(
+          category.id,
+          branch.id,
+          homeTeam,
+          awayTeam,
+          matchDate || null,
+          venueRaw ? venueRaw.toUpperCase() : null,
+          venueId,
+          JSON.stringify(finalStreamLinks),
+          JSON.stringify(finalTicketLinks),
+          weekLabel ? weekLabel.toUpperCase() : null,
+          homeScore,
+          awayScore,
+          timezone,
+        );
+
+        imported.push(result.lastInsertRowid);
+      } catch (err) {
+        skipped.push({ row: rowN, reason: err.message });
+      }
+    }
+
+    res.status(201).json({
+      imported:    imported.length,
+      skipped:     skipped.length,
+      skippedRows: skipped,
+      warnings:    warnings.length,
+      warningRows: warnings,
+    });
+  })
+);
+
 router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
   // match_date_local: igual que en creación, el string crudo del input
   // <datetime-local> (o ausente, si esta edición no toca la fecha/hora).
-  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone } = req.body;
+  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, branch_id, category_id, is_draft } = req.body;
   const m = req.match;
+
+  const effectiveCategoryId = category_id || m.category_id;
+  const effectiveCategory   = await db.prepare('SELECT * FROM categories WHERE id = ?').get(effectiveCategoryId);
+
+  // No se puede publicar (is_draft: false) un partido cuya Categoría o Rama
+  // efectiva (la nueva, si se está cambiando en esta misma edición, o si no,
+  // la que ya tenía) siga siendo la "Sin clasificar" automática.
+  if (is_draft === false) {
+    const effectiveBranchId = branch_id !== undefined ? branch_id : m.branch_id;
+    const br = effectiveBranchId
+      ? await db.prepare('SELECT is_placeholder FROM branches WHERE id = ?').get(effectiveBranchId)
+      : null;
+    if (effectiveCategory?.is_placeholder || br?.is_placeholder) {
+      return res.status(400).json({ error: 'Este partido sigue en "Sin clasificar" — asígnale una categoría y rama reales antes de publicarlo.' });
+    }
+  }
 
   const resolved = {
     home_team:   home_team   ?? m.home_team,
@@ -657,14 +1025,25 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
     ? ((timezone !== undefined ? timezone : m.timezone) || req.league.timezone || 'America/Mexico_City')
     : null; // null aquí = "no tocar" para el COALESCE de abajo
 
+  // Se re-resuelve en cada edición (no solo cuando cambia el nombre) — así,
+  // si un equipo se inscribe al torneo DESPUÉS de haberse creado el
+  // partido, la próxima vez que se edite el partido queda conectado solo.
+  const homeTeamId = await resolveTeamId(effectiveCategory, resolved.home_team);
+  const awayTeamId = await resolveTeamId(effectiveCategory, resolved.away_team);
+
   await db.prepare(`
     UPDATE matches SET
       home_team    = COALESCE(?, home_team),
       away_team    = COALESCE(?, away_team),
+      home_team_id = ?,
+      away_team_id = ?,
       match_date   = COALESCE(?, match_date),
       venue_id     = ?,
       group_id     = ?,
       group_id_2   = ?,
+      branch_id    = ?,
+      category_id  = COALESCE(?, category_id),
+      is_draft     = COALESCE(?, is_draft),
       stream_links = COALESCE(?, stream_links),
       ticket_links = COALESCE(?, ticket_links),
       week_label   = COALESCE(?, week_label),
@@ -674,10 +1053,15 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
       timezone     = COALESCE(?, timezone)
     WHERE id = ?
   `).run(
-    toNull(home_team), toNull(away_team), toNull(matchDateUtc),
+    toNull(home_team), toNull(away_team),
+    homeTeamId, awayTeamId,
+    toNull(matchDateUtc),
     venue_id  !== undefined ? (venue_id  || null) : m.venue_id,
     group_id  !== undefined ? (group_id  || null) : m.group_id,
     group_id_2 !== undefined ? (group_id_2 || null) : m.group_id_2,
+    branch_id !== undefined ? (branch_id || null) : m.branch_id,
+    toNull(category_id),
+    toNull(is_draft),
     toLinksJson(stream_links), toLinksJson(ticket_links), toNull(week_label), toNull(status),
     toNull(home_score), toNull(away_score), toNull(resolvedTimezone), m.id
   );
@@ -706,6 +1090,14 @@ router.patch('/matches/:id/status', authRequired, matchOwnerRequired, asyncHandl
   res.json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(req.match.id));
 }));
 
+// Publicar un partido borrador (ej. los que llegaron de un Excel recién
+// subido). Ruta aislada y mínima, igual que la de estado — solo toca
+// is_draft, sin exigir ni tocar ningún otro dato del partido.
+router.patch('/matches/:id/publish', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare('UPDATE matches SET is_draft = FALSE WHERE id = ?').run(req.match.id);
+  res.json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(req.match.id));
+}));
+
 router.delete('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
   await db.prepare('DELETE FROM matches WHERE id = ?').run(req.match.id);
   res.json({ ok: true });
@@ -731,6 +1123,23 @@ function validateTeamFields({ contact_email, facebook_url, instagram_url, twitte
   if (awayTicketError) return awayTicketError;
   return null;
 }
+
+// Busca equipos de CUALQUIER liga por nombre — para inscribir a un
+// torneo un equipo que no sea de la liga dueña de ese torneo.
+router.get('/teams/search', authRequired, asyncHandler(async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (q.length < 2) return res.json([]);
+
+  const teams = await db.prepare(`
+    SELECT t.*, l.name AS home_league_name
+    FROM teams t
+    LEFT JOIN leagues l ON l.id = t.league_id
+    WHERE t.name ILIKE ?
+    ORDER BY t.name ASC
+    LIMIT 20
+  `).all(`%${q}%`);
+  res.json(teams);
+}));
 
 router.post('/leagues/:leagueId/teams', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
   const {

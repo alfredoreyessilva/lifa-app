@@ -6,6 +6,12 @@ import YearSelectPage from './pages/YearSelectPage.jsx';
 import TournamentFormTestPage from './pages/TournamentFormTestPage.jsx';
 import TournamentsYearPanel from './pages/TournamentsYearPanel.jsx';
 import LeagueYearPicker from './components/LeagueYearPicker.jsx';
+import CategoriesPanel from './pages/CategoriesPanel.jsx';
+import TournamentMatchesPanel from './pages/TournamentMatchesPanel.jsx';
+import BranchesPanel from './pages/BranchesPanel.jsx';
+import RamaPanel from './pages/RamaPanel.jsx';
+import ConferencesPanel from './pages/ConferencesPanel.jsx';
+import GroupsPanel from './pages/GroupsPanel.jsx';
 import LeaguePage from './pages/LeaguePage.jsx';
 import CalendarPage from './pages/CalendarPage.jsx';
 import MatchPage from './pages/MatchPage.jsx';
@@ -56,6 +62,30 @@ export default function App() {
             <Route
               path="/panel/liga/:id/:year"
               element={<ProtectedRoute><TournamentsYearPanel /></ProtectedRoute>}
+            />
+            <Route
+              path="/panel/liga/:id/:year/torneo/:tournamentId"
+              element={<ProtectedRoute><CategoriesPanel /></ProtectedRoute>}
+            />
+            <Route
+              path="/panel/liga/:id/:year/torneo/:tournamentId/partidos"
+              element={<ProtectedRoute><TournamentMatchesPanel /></ProtectedRoute>}
+            />
+            <Route
+              path="/panel/liga/:id/:year/torneo/:tournamentId/categoria/:categoryId"
+              element={<ProtectedRoute><BranchesPanel /></ProtectedRoute>}
+            />
+            <Route
+              path="/panel/liga/:id/:year/torneo/:tournamentId/categoria/:categoryId/rama/:branchId"
+              element={<ProtectedRoute><RamaPanel /></ProtectedRoute>}
+            />
+            <Route
+              path="/panel/liga/:id/:year/torneo/:tournamentId/categoria/:categoryId/rama/:branchId/conferencias"
+              element={<ProtectedRoute><ConferencesPanel /></ProtectedRoute>}
+            />
+            <Route
+              path="/panel/liga/:id/:year/torneo/:tournamentId/categoria/:categoryId/rama/:branchId/conferencia/:conferenceId"
+              element={<ProtectedRoute><GroupsPanel /></ProtectedRoute>}
             />
             <Route
               path="/panel/equipo/:id"
