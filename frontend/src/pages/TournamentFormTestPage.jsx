@@ -217,7 +217,21 @@ export default function TournamentFormTestPage() {
           {categoryList && categoryList.length > 0 && (
             <ul>
               {categoryList.map((c) => (
-                <li key={c.id}>#{c.id} — {c.name}</li>
+                <li key={c.id}>
+                  #{c.id} — {c.name}
+                  {' '}
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={async () => {
+                      if (!window.confirm(`¿Eliminar la categoría "${c.name}"? Esto borra también sus ramas, grupos y partidos.`)) return;
+                      await api.deleteCategory(c.id, token);
+                      setCategoryKey((k) => k + 1);
+                    }}
+                  >
+                    Eliminar
+                  </button>
+                </li>
               ))}
             </ul>
           )}

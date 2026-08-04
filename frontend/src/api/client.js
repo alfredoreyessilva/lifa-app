@@ -66,6 +66,14 @@ export const api = {
   removeTeamFromTournament: (tournamentId, teamId, token) =>
     request(`/leagues/tournaments/${tournamentId}/teams/${teamId}`, { method: 'DELETE', token }),
 
+  // Membresía: equipos "de la casa" de una liga
+  getLeagueRoster: (leagueId, token) =>
+    request(`/leagues/${leagueId}/roster`, { token }),
+  addTeamToRoster: (leagueId, teamId, token) =>
+    request(`/leagues/${leagueId}/roster`, { method: 'POST', body: { team_id: teamId }, token }),
+  removeTeamFromRoster: (leagueId, teamId, token) =>
+    request(`/leagues/${leagueId}/roster/${teamId}`, { method: 'DELETE', token }),
+
   // Pruebas de la nueva jerarquía (Categoría -> Rama)
   createBranch: (categoryId, payload, token) =>
     request(`/manage/categories/${categoryId}/branches`, { method: 'POST', body: payload, token }),

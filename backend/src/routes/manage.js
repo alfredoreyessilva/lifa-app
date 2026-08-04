@@ -43,17 +43,29 @@ function validateLinksList(links, label) {
 // determina el estado, solo es un dato que se guarda aparte.
 const LIVE_WINDOW_MS = 3 * 60 * 60 * 1000;
 // Busca si el nombre de equipo (texto libre) coincide con un equipo real
-// inscrito en el torneo de esa categoría (de cualquier liga) — o, si esa
-// categoría no pertenece a ningún torneo todavía (modelo viejo), con el
-// roster de la liga, como se hacía antes. Se usa al guardar un partido
-// para conectar home_team_id/away_team_id de verdad, sin que el
-// organizador tenga que hacer nada distinto a escribir el nombre.
+// elegible para esa categoría — en este orden:
+//   1. Miembro de la liga dueña del torneo (elegible en cualquiera de sus
+//      torneos, presente o futuro, sin inscripción aparte).
+//   2. Invitado específicamente a ESTE torneo (tournament_teams), aunque
+//      sea de otra liga.
+//   3. Si la categoría no pertenece a ningún torneo todavía (modelo
+//      viejo), el roster de la liga, como se hacía antes.
+// Se usa al guardar un partido para conectar home_team_id/away_team_id de
+// verdad, sin que el organizador tenga que hacer nada distinto a escribir
+// el nombre.
 async function resolveTeamId(category, teamNameRaw) {
   if (!teamNameRaw) return null;
   const name = teamNameRaw.trim();
   if (!name) return null;
 
   if (category.tournament_id) {
+    const member = await db.prepare(`
+      SELECT t.id FROM league_teams lt
+      JOIN teams t ON t.id = lt.team_id
+      WHERE lt.league_id = ? AND t.name ILIKE ?
+    `).get(category.league_id, name);
+    if (member) return member.id;
+
     const inscribed = await db.prepare(`
       SELECT t.id FROM tournament_teams tt
       JOIN teams t ON t.id = tt.team_id

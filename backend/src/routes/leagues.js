@@ -428,4 +428,48 @@ router.delete('/tournaments/:tournamentId/teams/:teamId', authRequired, tourname
   res.json({ ok: true });
 }));
 
+// --- Membresía: qué Equipos son "de la casa" de una Liga ---
+// A diferencia de la inscripción a un torneo, ser miembro de la liga hace
+// al equipo elegible automáticamente para CUALQUIER torneo de esa liga,
+// presente o futuro (ver resolveTeamId en manage.js) — no requiere
+// inscripción aparte ni confirmación del equipo.
+
+router.get('/:leagueId/roster', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+  const teams = await db.prepare(`
+    SELECT t.*, lt.id AS membership_id, lt.created_at AS member_since, l.name AS home_league_name
+    FROM league_teams lt
+    JOIN teams t ON t.id = lt.team_id
+    LEFT JOIN leagues l ON l.id = t.league_id
+    WHERE lt.league_id = ?
+    ORDER BY t.name ASC
+  `).all(req.league.id);
+  res.json(teams);
+}));
+
+router.post('/:leagueId/roster', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+  const { team_id } = req.body;
+  if (!team_id) return res.status(400).json({ error: 'Falta el equipo a agregar' });
+
+  const team = await db.prepare('SELECT * FROM teams WHERE id = ?').get(team_id);
+  if (!team) return res.status(404).json({ error: 'Ese equipo no existe' });
+
+  const existing = await db.prepare(
+    'SELECT * FROM league_teams WHERE league_id = ? AND team_id = ?'
+  ).get(req.league.id, team_id);
+  if (existing) return res.status(400).json({ error: 'Ese equipo ya es miembro de esta liga' });
+
+  await db.prepare(
+    'INSERT INTO league_teams (league_id, team_id) VALUES (?, ?)'
+  ).run(req.league.id, team_id);
+
+  res.status(201).json(team);
+}));
+
+router.delete('/:leagueId/roster/:teamId', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare(
+    'DELETE FROM league_teams WHERE league_id = ? AND team_id = ?'
+  ).run(req.league.id, req.params.teamId);
+  res.json({ ok: true });
+}));
+
 export default router;

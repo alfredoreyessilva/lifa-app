@@ -136,6 +136,19 @@ CREATE TABLE IF NOT EXISTS tournament_teams (
   UNIQUE (tournament_id, team_id)
 );
 
+-- Membresía: "este equipo es de la casa" de esta liga. A diferencia de
+-- tournament_teams (un equipo invitado a UN torneo específico), ser
+-- miembro de la liga hace al equipo elegible automáticamente para
+-- CUALQUIER torneo de esa liga, presente o futuro, sin inscripción
+-- aparte ni confirmación del equipo.
+CREATE TABLE IF NOT EXISTS league_teams (
+  id SERIAL PRIMARY KEY,
+  league_id INTEGER NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
+  team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (league_id, team_id)
+);
+
 CREATE TABLE IF NOT EXISTS groups (
   id SERIAL PRIMARY KEY,
   category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
@@ -451,6 +464,15 @@ export async function initSchema() {
         AND ps.league_id IS NULL
         AND UPPER(ps.team_name) = sub.uname
         AND sub.league_count = 1
+    `);
+
+    // Todo equipo que ya existe hoy "vive" en su liga de origen (league_id)
+    // — se les da de alta como miembros de esa liga automáticamente, para
+    // que nadie quede huérfano al empezar a usar league_teams.
+    await run(`
+      INSERT INTO league_teams (league_id, team_id)
+      SELECT league_id, id FROM teams
+      ON CONFLICT (league_id, team_id) DO NOTHING
     `);
   } finally {
     // Se suelta el candado y se libera la conexión pase lo que pase (incluso
