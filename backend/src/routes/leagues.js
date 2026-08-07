@@ -102,11 +102,17 @@ router.get('/:slug/teams', asyncHandler(async (req, res) => {
   `).get(req.params.slug);
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
 
+  // Equipos "de la casa" de la liga = los que están en su roster
+  // (league_teams), no los que tienen teams.league_id apuntando aquí
+  // (ese es el modelo viejo, y un equipo puede ser miembro de varias
+  // ligas a la vez con el modelo nuevo).
   const teams = await db.prepare(`
-    SELECT id, name, logo_url, cover_url, location, contact_email, contact_phone,
-           facebook_url, instagram_url, twitter_url, website_url
-    FROM teams WHERE league_id = ?
-    ORDER BY sort_order ASC, name ASC
+    SELECT t.id, t.name, t.logo_url, t.cover_url, t.location, t.contact_email, t.contact_phone,
+           t.facebook_url, t.instagram_url, t.twitter_url, t.website_url
+    FROM league_teams lt
+    JOIN teams t ON t.id = lt.team_id
+    WHERE lt.league_id = ?
+    ORDER BY t.sort_order ASC, t.name ASC
   `).all(league.id);
 
   res.json(teams);
