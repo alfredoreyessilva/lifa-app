@@ -487,4 +487,70 @@ router.delete('/:leagueId/roster/:teamId', authRequired, leagueOwnerRequired, as
   res.json({ ok: true });
 }));
 
+// --- Lado público: pantalla de un Torneo específico ---
+//
+// Devuelve, en una sola llamada, todo lo que el frontend necesita para la
+// navegación "inteligente" (saltar el paso de elegir categoría/rama cuando
+// solo hay una opción) y para pintar el calendario público directamente:
+// el torneo, sus partidos PUBLICADOS (is_draft = FALSE) con el nombre de
+// categoría/rama/grupo/conferencia ya pegado, y los equipos que jugaron.
+//
+// La conferencia de un partido hoy solo se sabe indirectamente (partido ->
+// grupo -> conferencia); un partido colgado directo de una conferencia sin
+// grupos todavía no es posible de asignar desde MatchForm.jsx, así que ese
+// caso simplemente no aparece agrupado en "ver por conferencia" por ahora.
+router.get('/tournaments/:tournamentId/public', asyncHandler(async (req, res) => {
+  const tournament = await db.prepare(`
+    SELECT t.id, t.name, t.year, t.logo_url
+    FROM tournaments t
+    JOIN leagues l ON l.id = t.league_id
+    WHERE t.id = ? AND l.is_public = TRUE
+  `).get(req.params.tournamentId);
+  if (!tournament) return res.status(404).json({ error: 'Torneo no encontrado' });
+
+  const matches = await db.prepare(`
+    SELECT
+      m.*,
+      c.name        AS category_name,
+      b.name        AS branch_name,
+      th.logo_url   AS home_logo_url,
+      ta.logo_url   AS away_logo_url,
+      v.name        AS venue_name,
+      v.institution AS venue_institution,
+      v.address     AS venue_address,
+      g.name        AS group_name,
+      g2.name       AS group_name_2,
+      conf.id        AS conference_id,
+      conf.name      AS conference_name
+    FROM matches m
+    JOIN categories c       ON c.id = m.category_id
+    LEFT JOIN branches b    ON b.id = m.branch_id
+    LEFT JOIN teams th      ON th.id = m.home_team_id
+    LEFT JOIN teams ta      ON ta.id = m.away_team_id
+    LEFT JOIN venues v      ON v.id = m.venue_id
+    LEFT JOIN groups g      ON g.id = m.group_id
+    LEFT JOIN groups g2     ON g2.id = m.group_id_2
+    LEFT JOIN conferences conf ON conf.id = g.conference_id
+    WHERE c.tournament_id = ? AND m.is_draft = FALSE
+    ORDER BY m.match_date ASC
+  `).all(tournament.id);
+
+  const teams = await db.prepare(`
+    SELECT DISTINCT t.id, t.name, t.logo_url
+    FROM teams t
+    WHERE t.id IN (
+      SELECT m.home_team_id FROM matches m
+      JOIN categories c ON c.id = m.category_id
+      WHERE c.tournament_id = ? AND m.is_draft = FALSE AND m.home_team_id IS NOT NULL
+      UNION
+      SELECT m.away_team_id FROM matches m
+      JOIN categories c ON c.id = m.category_id
+      WHERE c.tournament_id = ? AND m.is_draft = FALSE AND m.away_team_id IS NOT NULL
+    )
+    ORDER BY t.name ASC
+  `).all(tournament.id, tournament.id);
+
+  res.json({ tournament, matches, teams });
+}));
+
 export default router;
