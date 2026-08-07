@@ -84,7 +84,16 @@ router.get('/:slug', asyncHandler(async (req, res) => {
     ORDER BY sort_order ASC, name ASC
   `).all(league.id);
 
-  res.json({ ...league, categories, teams });
+  // Torneos públicos de la liga, del más antiguo al más reciente. No hay
+  // bandera de "torneo borrador": un torneo es visible en cuanto existe,
+  // solo los PARTIDOS se ocultan individualmente con is_draft.
+  const tournaments = await db.prepare(`
+    SELECT id, name, year, logo_url
+    FROM tournaments WHERE league_id = ?
+    ORDER BY year ASC, sort_order ASC, id ASC
+  `).all(league.id);
+
+  res.json({ ...league, categories, teams, tournaments });
 }));
 
 router.get('/:slug/teams', asyncHandler(async (req, res) => {
