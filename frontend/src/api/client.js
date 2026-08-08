@@ -53,6 +53,15 @@ export const api = {
   deleteTournament: (tournamentId, token) =>
     request(`/manage/tournaments/${tournamentId}`, { method: 'DELETE', token }),
 
+  // Roster de liga: equipos "de la casa" (tabla league_teams). Elegibles
+  // automáticamente en cualquier torneo de esa liga, sin inscripción aparte.
+  getLeagueRoster: (leagueId, token) =>
+    request(`/leagues/${leagueId}/roster`, { token }),
+  addTeamToRoster: (leagueId, teamId, token) =>
+    request(`/leagues/${leagueId}/roster`, { method: 'POST', body: { team_id: teamId }, token }),
+  removeTeamFromRoster: (leagueId, teamId, token) =>
+    request(`/leagues/${leagueId}/roster/${teamId}`, { method: 'DELETE', token }),
+
   // Pruebas de la nueva jerarquía (Torneo -> Categoría)
   createCategoryForTournament: (tournamentId, payload, token) =>
     request(`/leagues/tournaments/${tournamentId}/categories`, { method: 'POST', body: payload, token }),
