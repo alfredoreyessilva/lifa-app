@@ -6,15 +6,18 @@ import TournamentForm from '../components/TournamentForm.jsx';
 import Modal from '../components/Modal.jsx';
 import LeagueRoster from '../components/LeagueRoster.jsx';
 
-// Lista y crea los Torneos de una liga para un año específico, y también
+// Lista y crea TODOS los Torneos de una liga (de cualquier año — el año se
+// captura en el formulario de creación, no se elige antes), y también
 // (pestaña aparte) el roster de equipos "de la casa" de la liga.
-// Ruta: /panel/liga/:id/:year
+// Ruta: /panel/liga/:id/torneos
 //
 // Se llega aquí navegando de forma real: clic en el logo de la liga en
-// /panel → selector de año (LeagueYearPicker, /panel/liga/:id/anio) →
-// se elige un año → aquí.
+// /panel. Antes existía un paso intermedio para elegir año primero
+// (LeagueYearPicker, /panel/liga/:id/anio) — se quitó porque no hacía
+// falta; el archivo sigue en el proyecto por si se vuelve a necesitar,
+// pero ya no tiene ruta que lo alcance.
 export default function TournamentsYearPanel() {
-  const { id, year } = useParams();
+  const { id } = useParams();
   const { token, leagues } = useAuth();
   const league = leagues.find((lg) => String(lg.id) === id);
 
@@ -25,12 +28,12 @@ export default function TournamentsYearPanel() {
   const [showCreate, setShowCreate] = useState(false);
 
   function refresh() {
-    api.getTournaments(id, year, token).then(setTournaments).catch((e) => setError(e.message));
+    api.getTournaments(id, undefined, token).then(setTournaments).catch((e) => setError(e.message));
   }
 
   useEffect(() => {
     if (token) refresh();
-  }, [id, year, token]);
+  }, [id, token]);
 
   if (!token) {
     return <div className="container"><p>Necesitas iniciar sesión para ver esto.</p></div>;
@@ -45,7 +48,7 @@ export default function TournamentsYearPanel() {
       <div className="dash-header">
         <div>
           <span className="eyebrow">{league.name}</span>
-          <h1>{tab === 'torneos' ? `Torneos ${year}` : 'Equipos de la liga'}</h1>
+          <h1>{tab === 'torneos' ? 'Torneos' : 'Equipos de la liga'}</h1>
         </div>
         {tab === 'torneos' && (
           <button className="btn btn-flag" onClick={() => setShowCreate(true)}>+ Crear torneo</button>
@@ -76,13 +79,13 @@ export default function TournamentsYearPanel() {
           {tournaments === null && <p>Cargando…</p>}
           {tournaments && tournaments.length === 0 && (
             <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>
-              Todavía no has creado ningún torneo para {year}. Crea el primero para empezar.
+              Todavía no has creado ningún torneo. Crea el primero para empezar.
             </p>
           )}
           {tournaments && tournaments.length > 0 && (
             <div className="league-grid">
               {tournaments.map((t) => (
-                <Link key={t.id} to={`/panel/liga/${id}/${year}/torneo/${t.id}`} className="league-card">
+                <Link key={t.id} to={`/panel/liga/${id}/${t.year}/torneo/${t.id}`} className="league-card">
                   <h3>{t.name}</h3>
                   <span className="state">{t.year}</span>
                 </Link>
@@ -96,7 +99,7 @@ export default function TournamentsYearPanel() {
                 submitLabel="Crear torneo"
                 onCancel={() => setShowCreate(false)}
                 onSubmit={async (data) => {
-                  await api.createTournament(id, { ...data, year }, token);
+                  await api.createTournament(id, data, token);
                   refresh();
                   setShowCreate(false);
                 }}

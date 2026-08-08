@@ -1,10 +1,11 @@
 import CharField from './CharField.jsx';
 import LogoField from './LogoField.jsx';
 import { useState } from 'react';
-import { required, maxLength, runValidations } from '../utils/validation.js';
+import { required, maxLength, minValue, runValidations } from '../utils/validation.js';
 
 export default function TournamentForm({ initial, onSubmit, onCancel, submitLabel }) {
   const [name,     setName]     = useState(initial?.name     || '');
+  const [year,     setYear]     = useState(initial?.year     || new Date().getFullYear());
   const [logoUrl,  setLogoUrl]  = useState(initial?.logo_url  || '');
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
@@ -16,6 +17,8 @@ export default function TournamentForm({ initial, onSubmit, onCancel, submitLabe
     const validationError = runValidations([
       () => required(name, 'El nombre del torneo'),
       () => maxLength(name, 80, 'El nombre del torneo'),
+      () => required(year, 'El año'),
+      () => minValue(year, 2000, 'El año'),
     ]);
     if (validationError) { setError(validationError); return; }
 
@@ -23,6 +26,7 @@ export default function TournamentForm({ initial, onSubmit, onCancel, submitLabe
     try {
       await onSubmit({
         name: name.trim(),
+        year: parseInt(year),
         logo_url: logoUrl.trim() || null,
       });
     } catch (e) {
@@ -43,6 +47,17 @@ export default function TournamentForm({ initial, onSubmit, onCancel, submitLabe
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Ej. Copa Fundadores 2026"
+        />
+      </div>
+
+      <div className="field">
+        <label>Año</label>
+        <input
+          type="number"
+          required
+          value={year}
+          onChange={(e) => setYear(e.target.value)}
+          placeholder={String(new Date().getFullYear())}
         />
       </div>
 

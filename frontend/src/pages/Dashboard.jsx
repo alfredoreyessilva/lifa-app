@@ -43,7 +43,7 @@ export default function Dashboard({ kind }) {
         {orgs.map((org) => (
           <Link
             key={`${org.kind}-${org.id}`}
-            to={org.kind === 'liga' ? `/panel/liga/${org.id}/anio` : `/panel/${org.kind}/${org.id}`}
+            to={org.kind === 'liga' ? `/panel/liga/${org.id}/torneos` : `/panel/${org.kind}/${org.id}`}
             onClick={(e) => handleLogoClick(e, org)}
             className={`league-logo-btn${org === selected ? ' league-logo-btn--active' : ''}`}
             style={{ width: 72, height: 72 }}
