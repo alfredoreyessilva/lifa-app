@@ -76,6 +76,21 @@ function getGrupos(matches) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// Conferencias reales de la rama (ej. "Conferencia Norte"). A diferencia de
+// grupo, hoy solo se conoce indirectamente: partido -> grupo -> conferencia
+// (no hay conference_id directo en partidos). Un partido cuyo grupo no
+// pertenece a ninguna conferencia simplemente no aparece aquí.
+function getConferencias(matches) {
+  const seen = new Map();
+  for (const m of matches) {
+    if (m.conference_id && !seen.has(m.conference_id)) {
+      seen.set(m.conference_id, m.conference_name);
+    }
+  }
+  return Array.from(seen, ([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 // Texto del botón "Compartir" según la vista y selección actuales.
 // Devuelve null cuando el botón debe estar oculto.
 function getShareLabel(view, selected) {
@@ -85,14 +100,15 @@ function getShareLabel(view, selected) {
     const label = /^\d+$/.test(selected) ? `Jornada ${selected}` : selected;
     return `Compartir calendario de la ${label}`;
   }
-  if (view === 'equipo') return `Compartir calendario de ${selected}`;
-  if (view === 'sede')   return `Compartir calendario de ${selected}`;
-  if (view === 'grupo')  return `Compartir calendario de ${selected}`;
+  if (view === 'equipo')      return `Compartir calendario de ${selected}`;
+  if (view === 'sede')        return `Compartir calendario de ${selected}`;
+  if (view === 'grupo')       return `Compartir calendario de ${selected}`;
+  if (view === 'conferencia') return `Compartir calendario de ${selected}`;
   return null;
 }
 
-const ALL_VIEWS   = ['completo', 'jornada', 'equipo', 'sede', 'grupo'];
-const VIEW_LABELS = { completo: 'Calendario completo', jornada: 'Jornada', equipo: 'Equipo', sede: 'Sede', grupo: 'Grupo' };
+const ALL_VIEWS   = ['completo', 'jornada', 'equipo', 'sede', 'grupo', 'conferencia'];
+const VIEW_LABELS = { completo: 'Calendario completo', jornada: 'Jornada', equipo: 'Equipo', sede: 'Sede', grupo: 'Grupo', conferencia: 'Conferencia' };
 
 export default function CalendarViewer({
   matches,
@@ -162,11 +178,13 @@ export default function CalendarViewer({
     filteredMatches = matches.filter((m) => String(m.group_id) === selected || String(m.group_id_2) === selected);
     if (subJornada) filteredMatches = filteredMatches.filter((m) => m.week_label === subJornada);
   }
+  else if (view === 'conferencia' && selected) filteredMatches = matches.filter((m) => String(m.conference_id) === selected);
 
-  const jornadas = getJornadas(matches);
-  const equipos  = getEquipos(matches);
-  const sedes    = getSedes(matches);
-  const grupos   = getGrupos(matches);
+  const jornadas     = getJornadas(matches);
+  const equipos       = getEquipos(matches);
+  const sedes         = getSedes(matches);
+  const grupos        = getGrupos(matches);
+  const conferencias  = getConferencias(matches);
 
   // Jornadas que existen DENTRO del grupo seleccionado (no todas las de la
   // categoría), para que el sub-filtro solo muestre opciones que apliquen.
@@ -175,19 +193,24 @@ export default function CalendarViewer({
     : [];
   const jornadasInGroup = getJornadas(matchesInSelectedGroup);
 
-  // La pestaña "Grupo" solo se muestra si esta selección realmente usa
-  // grupos — para no ensuciar el calendario de ligas que no los necesitan.
-  const VIEWS = grupos.length > 0 ? ALL_VIEWS : ALL_VIEWS.filter((v) => v !== 'grupo');
+  // "Grupo" y "Conferencia" solo se muestran si esta selección de verdad
+  // los usa — para no ensuciar el calendario de ligas que no los necesitan.
+  let VIEWS = ALL_VIEWS;
+  if (grupos.length === 0) VIEWS = VIEWS.filter((v) => v !== 'grupo');
+  if (conferencias.length === 0) VIEWS = VIEWS.filter((v) => v !== 'conferencia');
 
-  // Para "sede"/"grupo" lo seleccionado en la URL es el id; buscamos su
-  // nombre real para mostrarlo en los títulos y en el botón de compartir.
+  // Para "sede"/"grupo"/"conferencia" lo seleccionado en la URL es el id;
+  // buscamos su nombre real para mostrarlo en los títulos y en compartir.
   const selectedSedeName = view === 'sede' && selected
     ? (sedes.find((s) => String(s.id) === selected)?.name || null)
     : null;
   const selectedGrupoName = view === 'grupo' && selected
     ? (grupos.find((g) => String(g.id) === selected)?.name || null)
     : null;
-  const shareSelected = view === 'sede' ? selectedSedeName : view === 'grupo' ? selectedGrupoName : selected;
+  const selectedConferenciaName = view === 'conferencia' && selected
+    ? (conferencias.find((c) => String(c.id) === selected)?.name || null)
+    : null;
+  const shareSelected = view === 'sede' ? selectedSedeName : view === 'grupo' ? selectedGrupoName : view === 'conferencia' ? selectedConferenciaName : selected;
   const subJornadaLabel = subJornada ? (/^\d+$/.test(subJornada) ? `Jornada ${subJornada}` : subJornada) : null;
   const shareLabel = view === 'grupo' && selected && subJornadaLabel
     ? `Compartir calendario de ${shareSelected} — ${subJornadaLabel}`
@@ -334,6 +357,30 @@ export default function CalendarViewer({
                 </div>
               )}
 
+              <MatchGrid matches={filteredMatches} nextMatch={nextMatch} now={now} />
+            </>
+          )}
+
+          {view === 'conferencia' && !selected && (
+            <div className="filter-grid">
+              {conferencias.length === 0
+                ? <div className="empty-state"><p>Ningún partido tiene una conferencia asignada todavía.</p></div>
+                : conferencias.map((conf) => {
+                    const count = matches.filter((m) => m.conference_id === conf.id).length;
+                    return (
+                      <button key={conf.id} className="filter-card" onClick={() => selectFilter(String(conf.id))}>
+                        <div className="filter-card-icon">🏈</div>
+                        <div className="filter-card-label">{conf.name}</div>
+                        <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
+                      </button>
+                    );
+                  })}
+            </div>
+          )}
+          {view === 'conferencia' && selected && (
+            <>
+              <button className="filter-back" onClick={clearSelection}>← Todas las conferencias</button>
+              <div className="filter-selected-title">🏈 {selectedConferenciaName}</div>
               <MatchGrid matches={filteredMatches} nextMatch={nextMatch} now={now} />
             </>
           )}
