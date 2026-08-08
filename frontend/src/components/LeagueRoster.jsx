@@ -31,6 +31,23 @@ export default function LeagueRoster({ leagueId, token }) {
   const [editingTeam, setEditingTeam] = useState(null); // equipo a editar, o null
   const [inviteTeam,  setInviteTeam]  = useState(null); // equipo a invitar, o null
 
+  const [syncing, setSyncing] = useState(false);
+  const [syncReport, setSyncReport] = useState(null);
+
+  async function handleSyncMatches() {
+    setSyncing(true);
+    setSyncReport(null);
+    setError('');
+    try {
+      const report = await api.syncRosterMatches(leagueId, token);
+      setSyncReport(report);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   function refresh() {
     api.getLeagueRoster(leagueId, token).then(setRoster).catch((e) => setError(e.message));
   }
@@ -129,7 +146,21 @@ export default function LeagueRoster({ leagueId, token }) {
         <button type="button" className="btn btn-outline btn-sm" onClick={() => setShowCreate(true)}>
           + Crear equipo nuevo
         </button>
+        <button type="button" className="btn btn-outline btn-sm" disabled={syncing} onClick={handleSyncMatches}>
+          {syncing ? 'Conectando…' : 'Conectar equipos con sus partidos'}
+        </button>
       </div>
+
+      {syncReport && (
+        <div className="form-error" style={{ background: 'rgba(255,255,255,0.08)', color: 'inherit' }}>
+          <p>
+            {syncReport.connected > 0
+              ? <>Se conectaron <strong>{syncReport.connected}</strong> partido(s) que le faltaban a algún equipo.</>
+              : 'No se encontró ningún partido pendiente de conectar — todo estaba en orden.'}
+          </p>
+          <button type="button" className="btn btn-ghost" onClick={() => setSyncReport(null)}>Cerrar</button>
+        </div>
+      )}
 
       {query.trim().length >= 2 && (
         <div className="category-block" style={{ marginBottom: 16 }}>

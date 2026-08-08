@@ -61,6 +61,8 @@ export const api = {
     request(`/leagues/${leagueId}/roster`, { method: 'POST', body: { team_id: teamId }, token }),
   removeTeamFromRoster: (leagueId, teamId, token) =>
     request(`/leagues/${leagueId}/roster/${teamId}`, { method: 'DELETE', token }),
+  syncRosterMatches: (leagueId, token) =>
+    request(`/leagues/${leagueId}/roster/sync-matches`, { method: 'PATCH', token }),
 
   // Pruebas de la nueva jerarquía (Torneo -> Categoría)
   createCategoryForTournament: (tournamentId, payload, token) =>

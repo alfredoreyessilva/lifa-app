@@ -433,6 +433,21 @@ router.post('/tournaments/:tournamentId/teams', authRequired, tournamentOwnerReq
     'INSERT INTO tournament_teams (tournament_id, team_id) VALUES (?, ?)'
   ).run(req.tournament.id, team_id);
 
+  // Reconciliación: partidos de ESTE torneo ya guardados con el nombre de
+  // este equipo en texto, pero sin enlace real (porque el equipo aún no
+  // estaba inscrito cuando se crearon) — se conectan aquí de una vez, para
+  // siempre, en vez de depender de una búsqueda por texto en cada carga.
+  await db.prepare(`
+    UPDATE matches SET home_team_id = ?
+    WHERE home_team_id IS NULL AND UPPER(home_team) = UPPER(?)
+      AND category_id IN (SELECT id FROM categories WHERE tournament_id = ?)
+  `).run(team.id, team.name, req.tournament.id);
+  await db.prepare(`
+    UPDATE matches SET away_team_id = ?
+    WHERE away_team_id IS NULL AND UPPER(away_team) = UPPER(?)
+      AND category_id IN (SELECT id FROM categories WHERE tournament_id = ?)
+  `).run(team.id, team.name, req.tournament.id);
+
   res.status(201).json(team);
 }));
 
@@ -477,6 +492,29 @@ router.post('/:leagueId/roster', authRequired, leagueOwnerRequired, asyncHandler
     'INSERT INTO league_teams (league_id, team_id) VALUES (?, ?)'
   ).run(req.league.id, team_id);
 
+  // Reconciliación: partidos de CUALQUIER torneo de esta liga ya guardados
+  // con el nombre de este equipo en texto, pero sin enlace real (porque el
+  // equipo aún no era miembro del roster cuando se crearon) — se conectan
+  // aquí de una vez, para siempre.
+  await db.prepare(`
+    UPDATE matches SET home_team_id = ?
+    WHERE home_team_id IS NULL AND UPPER(home_team) = UPPER(?)
+      AND category_id IN (
+        SELECT id FROM categories WHERE tournament_id IN (
+          SELECT id FROM tournaments WHERE league_id = ?
+        )
+      )
+  `).run(team.id, team.name, req.league.id);
+  await db.prepare(`
+    UPDATE matches SET away_team_id = ?
+    WHERE away_team_id IS NULL AND UPPER(away_team) = UPPER(?)
+      AND category_id IN (
+        SELECT id FROM categories WHERE tournament_id IN (
+          SELECT id FROM tournaments WHERE league_id = ?
+        )
+      )
+  `).run(team.id, team.name, req.league.id);
+
   res.status(201).json(team);
 }));
 
@@ -485,6 +523,64 @@ router.delete('/:leagueId/roster/:teamId', authRequired, leagueOwnerRequired, as
     'DELETE FROM league_teams WHERE league_id = ? AND team_id = ?'
   ).run(req.league.id, req.params.teamId);
   res.json({ ok: true });
+}));
+
+// "Conectar equipos con sus partidos" (botón en la pantalla de roster).
+// Repara partidos que se guardaron con el nombre del equipo en texto pero
+// sin el enlace real (home_team_id/away_team_id), porque el equipo se
+// agregó al roster/torneo DESPUÉS de crear esos partidos — antes de que
+// existiera la reconciliación automática al agregar, o si el equipo ya
+// era miembro desde antes de que esa reconciliación se construyera.
+// Revisa TODO el roster de la liga y TODAS las inscripciones a sus
+// torneos de una sola vez, no solo un equipo.
+router.patch('/:leagueId/roster/sync-matches', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+  let connected = 0;
+
+  const rosterTeams = await db.prepare(`
+    SELECT t.id, t.name FROM league_teams lt JOIN teams t ON t.id = lt.team_id WHERE lt.league_id = ?
+  `).all(req.league.id);
+
+  for (const team of rosterTeams) {
+    const h = await db.prepare(`
+      UPDATE matches SET home_team_id = ?
+      WHERE home_team_id IS NULL AND UPPER(home_team) = UPPER(?)
+        AND category_id IN (SELECT id FROM categories WHERE tournament_id IN (SELECT id FROM tournaments WHERE league_id = ?))
+      RETURNING id
+    `).all(team.id, team.name, req.league.id);
+    const a = await db.prepare(`
+      UPDATE matches SET away_team_id = ?
+      WHERE away_team_id IS NULL AND UPPER(away_team) = UPPER(?)
+        AND category_id IN (SELECT id FROM categories WHERE tournament_id IN (SELECT id FROM tournaments WHERE league_id = ?))
+      RETURNING id
+    `).all(team.id, team.name, req.league.id);
+    connected += h.length + a.length;
+  }
+
+  const invitedTeams = await db.prepare(`
+    SELECT t.id, t.name, tt.tournament_id
+    FROM tournament_teams tt
+    JOIN teams t        ON t.id = tt.team_id
+    JOIN tournaments tr ON tr.id = tt.tournament_id
+    WHERE tr.league_id = ?
+  `).all(req.league.id);
+
+  for (const team of invitedTeams) {
+    const h = await db.prepare(`
+      UPDATE matches SET home_team_id = ?
+      WHERE home_team_id IS NULL AND UPPER(home_team) = UPPER(?)
+        AND category_id IN (SELECT id FROM categories WHERE tournament_id = ?)
+      RETURNING id
+    `).all(team.id, team.name, team.tournament_id);
+    const a = await db.prepare(`
+      UPDATE matches SET away_team_id = ?
+      WHERE away_team_id IS NULL AND UPPER(away_team) = UPPER(?)
+        AND category_id IN (SELECT id FROM categories WHERE tournament_id = ?)
+      RETURNING id
+    `).all(team.id, team.name, team.tournament_id);
+    connected += h.length + a.length;
+  }
+
+  res.json({ connected });
 }));
 
 // --- Lado público: pantalla de un Torneo específico ---
@@ -501,7 +597,8 @@ router.delete('/:leagueId/roster/:teamId', authRequired, leagueOwnerRequired, as
 // caso simplemente no aparece agrupado en "ver por conferencia" por ahora.
 router.get('/tournaments/:tournamentId/public', asyncHandler(async (req, res) => {
   const tournament = await db.prepare(`
-    SELECT t.id, t.name, t.year, t.logo_url
+    SELECT t.id, t.name, t.year, t.logo_url,
+           l.id AS league_id, l.name AS league_name, l.slug AS league_slug
     FROM tournaments t
     JOIN leagues l ON l.id = t.league_id
     WHERE t.id = ? AND l.is_public = TRUE
