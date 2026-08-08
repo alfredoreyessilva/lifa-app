@@ -274,6 +274,29 @@ router.get('/tournaments/:tournamentId/matches', authRequired, tournamentOwnerRe
   res.json(matches);
 }));
 
+// Publica de un jalón todos los borradores del torneo que YA se pueden
+// publicar (su categoría y su rama, si tiene, no son "Sin clasificar").
+// Los que sí necesitan revisión se quedan como borrador — igual que ya
+// pasa con el botón "Publicar" individual, aquí nomás en lote.
+router.patch('/tournaments/:tournamentId/publish-drafts', authRequired, tournamentOwnerRequired, asyncHandler(async (req, res) => {
+  const published = await db.prepare(`
+    UPDATE matches
+    SET is_draft = FALSE
+    WHERE is_draft = TRUE
+      AND category_id IN (SELECT id FROM categories WHERE tournament_id = ? AND is_placeholder = FALSE)
+      AND (branch_id IS NULL OR branch_id IN (SELECT id FROM branches WHERE is_placeholder = FALSE))
+    RETURNING id
+  `).all(req.tournament.id);
+
+  const stillDraft = await db.prepare(`
+    SELECT id FROM matches
+    WHERE is_draft = TRUE
+      AND category_id IN (SELECT id FROM categories WHERE tournament_id = ?)
+  `).all(req.tournament.id);
+
+  res.json({ published: published.length, skipped: stillDraft.length });
+}));
+
 // --- Pruebas de la nueva jerarquía (Rama -> Conferencia) ---
 
 router.post('/branches/:branchId/conferences', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {

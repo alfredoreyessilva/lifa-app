@@ -23,6 +23,8 @@ export default function TournamentMatchesPanel() {
   const [modal, setModal] = useState(null); // { type: 'create'|'edit'|'delete', match? }
   const [importing, setImporting] = useState(false);
   const [importReport, setImportReport] = useState(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishReport, setPublishReport] = useState(null);
 
   useEffect(() => {
     if (!token) return;
@@ -52,6 +54,21 @@ export default function TournamentMatchesPanel() {
     } finally {
       setImporting(false);
       e.target.value = '';
+    }
+  }
+
+  async function handlePublishAll() {
+    setPublishing(true);
+    setPublishReport(null);
+    setError('');
+    try {
+      const report = await api.publishAllDrafts(tournamentId, token);
+      setPublishReport(report);
+      refreshMatches();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setPublishing(false);
     }
   }
 
@@ -135,10 +152,25 @@ export default function TournamentMatchesPanel() {
         <button type="button" className={`pill-btn${filter === 'draft' ? ' pill-btn--active' : ''}`} onClick={() => setFilter('draft')}>
           Borradores {draftCount > 0 ? `(${draftCount})` : ''}
         </button>
+        <button type="button" className="btn btn-flag btn-sm" disabled={publishing || draftCount === 0} onClick={handlePublishAll}>
+          {publishing ? 'Publicando…' : 'Publicar todos'}
+        </button>
         <button type="button" className={`pill-btn${filter === 'published' ? ' pill-btn--active' : ''}`} onClick={() => setFilter('published')}>
           Publicados
         </button>
       </div>
+
+      {publishReport && (
+        <div className="form-error" style={{ background: 'rgba(255,255,255,0.08)', color: 'inherit' }}>
+          <p>
+            <strong>{publishReport.published}</strong> partido(s) publicado(s).
+            {publishReport.skipped > 0 && (
+              <> <strong>{publishReport.skipped}</strong> se quedaron como borrador por necesitar revisión (categoría/rama "Sin clasificar").</>
+            )}
+          </p>
+          <button type="button" className="btn btn-ghost" onClick={() => setPublishReport(null)}>Cerrar</button>
+        </div>
+      )}
 
       {matches === null && <p>Cargando…</p>}
       {matches && visibleMatches.length === 0 && (

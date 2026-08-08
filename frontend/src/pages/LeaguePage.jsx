@@ -182,7 +182,7 @@ export default function LeaguePage() {
         </div>
 
         <div className="tab-bar tab-bar--panel">
-          <button className={`tab-btn ${tab === 'torneos' ? 'active' : ''}`} onClick={() => setTab((t) => (t === 'torneos' ? null : 'torneos'))}>Competencias</button>
+          <button className={`tab-btn ${tab === 'torneos' ? 'active' : ''}`} onClick={() => setTab((t) => (t === 'torneos' ? null : 'torneos'))}>CALENDARIOS</button>
           <button className={`tab-btn ${tab === 'sedes'      ? 'active' : ''}`} onClick={() => setTab((t) => (t === 'sedes' ? null : 'sedes'))}>Sedes</button>
         </div>
 

@@ -100,6 +100,8 @@ export const api = {
   // Todos los partidos de un torneo completo (para "Partidos del Torneo")
   getTournamentMatches: (tournamentId, token) =>
     request(`/manage/tournaments/${tournamentId}/matches`, { token }),
+  publishAllDrafts: (tournamentId, token) =>
+    request(`/manage/tournaments/${tournamentId}/publish-drafts`, { method: 'PATCH', token }),
 
   // Estado manual del partido (nuevo, aislado del PUT general)
   updateMatchStatus: (matchId, status, token) =>
