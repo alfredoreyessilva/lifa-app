@@ -13,6 +13,7 @@ import RamaPanel from './pages/RamaPanel.jsx';
 import ConferencesPanel from './pages/ConferencesPanel.jsx';
 import GroupsPanel from './pages/GroupsPanel.jsx';
 import LeaguePage from './pages/LeaguePage.jsx';
+import TournamentPage from './pages/TournamentPage.jsx';
 import CalendarPage from './pages/CalendarPage.jsx';
 import MatchPage from './pages/MatchPage.jsx';
 import Login from './pages/Login.jsx';
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="/anios" element={<YearSelectPage />} />
             <Route path="/torneo-test" element={<TournamentFormTestPage />} />
             <Route path="/ligas/:slug" element={<LeaguePage />} />
+            <Route path="/torneos/:tournamentId" element={<TournamentPage />} />
             <Route path="/categorias/:categoryId/calendario" element={<CalendarPage />} />
             <Route path="/partidos/:matchId" element={<MatchPage />} />
             <Route path="/iniciar-sesion" element={<Login />} />
