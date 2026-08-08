@@ -2,11 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import TeamForm from './TeamForm.jsx';
 import Modal from './Modal.jsx';
+import InviteTeamModal from './InviteTeamModal.jsx';
 
 // Roster de liga: equipos "de la casa" de una liga (tabla league_teams).
 // Un equipo aquí queda elegible automáticamente para cualquier torneo de
 // esta liga, presente o futuro, sin inscripción aparte (ver resolveTeamId
 // en manage.js). Un mismo equipo puede ser miembro de varias ligas a la vez.
+//
+// Editar el perfil de un equipo e invitar/quitar su representante son
+// acciones que el backend SOLO permite a la liga DUEÑA original del equipo
+// (team.league_id), no a cualquier liga que lo tenga en su roster — por
+// eso esos botones solo aparecen cuando isHomeLeague es cierto; si no, se
+// muestra de qué liga es en vez de botones que fallarían.
 //
 // Se usa como pestaña dentro de TournamentsYearPanel.jsx.
 export default function LeagueRoster({ leagueId, token }) {
@@ -20,6 +27,9 @@ export default function LeagueRoster({ leagueId, token }) {
 
   const [showCreate, setShowCreate] = useState(false);
   const [adding, setAdding] = useState(false);
+
+  const [editingTeam, setEditingTeam] = useState(null); // equipo a editar, o null
+  const [inviteTeam,  setInviteTeam]  = useState(null); // equipo a invitar, o null
 
   function refresh() {
     api.getLeagueRoster(leagueId, token).then(setRoster).catch((e) => setError(e.message));
@@ -87,6 +97,23 @@ export default function LeagueRoster({ leagueId, token }) {
     refresh();
   }
 
+  async function handleEditSubmit(data) {
+    await api.updateTeam(editingTeam.id, data, token);
+    setEditingTeam(null);
+    refresh();
+  }
+
+  async function handleRemoveOwner(team) {
+    if (!window.confirm(`¿Quitar a la persona que administra "${team.name}"? El equipo y sus datos se quedan igual, solo pierde acceso esa persona.`)) return;
+    setError('');
+    try {
+      await api.removeTeamOwner(team.id, token);
+      refresh();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
   return (
     <div>
       {error && <div className="form-error">{error}</div>}
@@ -136,26 +163,49 @@ export default function LeagueRoster({ leagueId, token }) {
           Todavía no hay equipos en el roster de esta liga. Búscalos arriba o crea uno nuevo.
         </p>
       )}
-      {roster && roster.length > 0 && roster.map((team) => (
-        <div key={team.id} className="admin-match-row">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {team.logo_url && (
-              <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
-                <img src={team.logo_url} alt={team.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      {roster && roster.length > 0 && roster.map((team) => {
+        const isHomeLeague = String(team.league_id) === String(leagueId);
+        return (
+          <div key={team.id} className="admin-match-row">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {team.logo_url && (
+                <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
+                  <img src={team.logo_url} alt={team.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+              )}
+              <div>
+                <div className="who">{team.name}</div>
+                <div className="info">
+                  {isHomeLeague
+                    ? (team.owner_user_id ? '👤 Con representante' : (team.location || 'Sin ubicación'))
+                    : `Equipo de ${team.home_league_name || 'otra liga'}`}
+                </div>
               </div>
-            )}
-            <div>
-              <div className="who">{team.name}</div>
-              <div className="info">{team.location || 'Sin ubicación'}</div>
+            </div>
+            <div className="row-actions">
+              {isHomeLeague && (
+                <>
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingTeam(team)}>
+                    Editar
+                  </button>
+                  {team.owner_user_id ? (
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRemoveOwner(team)}>
+                      Quitar representante
+                    </button>
+                  ) : (
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setInviteTeam(team)}>
+                      Invitar representante
+                    </button>
+                  )}
+                </>
+              )}
+              <button type="button" className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => handleRemove(team)}>
+                Quitar del roster
+              </button>
             </div>
           </div>
-          <div className="row-actions">
-            <button type="button" className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => handleRemove(team)}>
-              Quitar
-            </button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
 
       {showCreate && (
         <Modal title="Crear equipo nuevo" onClose={() => setShowCreate(false)}>
@@ -165,6 +215,26 @@ export default function LeagueRoster({ leagueId, token }) {
             onSubmit={handleCreate}
           />
         </Modal>
+      )}
+
+      {editingTeam && (
+        <Modal title="Editar equipo" onClose={() => setEditingTeam(null)}>
+          <TeamForm
+            initial={editingTeam}
+            submitLabel="Guardar cambios"
+            onCancel={() => setEditingTeam(null)}
+            onSubmit={handleEditSubmit}
+          />
+        </Modal>
+      )}
+
+      {inviteTeam && (
+        <InviteTeamModal
+          team={inviteTeam}
+          token={token}
+          onClose={() => setInviteTeam(null)}
+          onDone={() => { setInviteTeam(null); refresh(); }}
+        />
       )}
     </div>
   );
