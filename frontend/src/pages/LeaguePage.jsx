@@ -191,13 +191,13 @@ export default function LeaguePage() {
       {tab === 'torneos' && (
         <>
           <div className="section-head">
-            <h2>Competencias</h2>
+            <h2>Campeonatos</h2>
             <span className="count">{(league.tournaments || []).length}</span>
           </div>
           {(league.tournaments || []).length === 0 ? (
             <div className="empty-state">
-              <h3>Sin competencias todavía</h3>
-              <p>Esta liga aún no ha publicado sus competencias.</p>
+              <h3>Sin campeonatos todavía</h3>
+              <p>Esta liga aún no ha publicado sus campeonatos.</p>
             </div>
           ) : (
             <div className="category-grid">
