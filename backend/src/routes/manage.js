@@ -180,6 +180,15 @@ router.delete('/categories/:categoryId', authRequired, categoryOwnerRequired, as
   res.json({ ok: true });
 }));
 
+// Borra el torneo completo, y en cascada TODO lo que cuelga de él:
+// categorías, ramas, conferencias, grupos, y partidos. Es destructivo e
+// irreversible (por eso el frontend pide escribir el nombre del torneo
+// para confirmar antes de llamar esta ruta).
+router.delete('/tournaments/:tournamentId', authRequired, tournamentOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare('DELETE FROM tournaments WHERE id = ?').run(req.tournament.id);
+  res.json({ ok: true });
+}));
+
 /* ===================== GRUPOS ===================== */
 // Un grupo pertenece a una categoría específica (ej. "Conferencia 14 Grandes"
 // dentro de "Varonil Mayor 2026") — a diferencia de equipos/sedes, que son de

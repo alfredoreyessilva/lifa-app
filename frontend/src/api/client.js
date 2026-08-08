@@ -50,6 +50,8 @@ export const api = {
     request(`/leagues/${leagueId}/tournaments`, { method: 'POST', body: payload, token }),
   getTournaments: (leagueId, year, token) =>
     request(`/leagues/${leagueId}/tournaments${year ? `?year=${year}` : ''}`, { token }),
+  deleteTournament: (tournamentId, token) =>
+    request(`/manage/tournaments/${tournamentId}`, { method: 'DELETE', token }),
 
   // Pruebas de la nueva jerarquía (Torneo -> Categoría)
   createCategoryForTournament: (tournamentId, payload, token) =>

@@ -27,6 +27,14 @@ export default function TournamentsYearPanel() {
   const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
 
+  // Borrar torneo: destructivo e irreversible (borra en cascada categorías,
+  // ramas, y TODOS sus partidos), así que se pide escribir el nombre del
+  // torneo tal cual para confirmar, en vez de solo un "¿estás seguro?".
+  const [deleteTarget, setDeleteTarget] = useState(null); // torneo a borrar, o null
+  const [confirmInput, setConfirmInput] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
   function refresh() {
     api.getTournaments(id, undefined, token).then(setTournaments).catch((e) => setError(e.message));
   }
@@ -34,6 +42,28 @@ export default function TournamentsYearPanel() {
   useEffect(() => {
     if (token) refresh();
   }, [id, token]);
+
+  function openDelete(e, tournament) {
+    e.preventDefault(); // la tarjeta es un <Link>; no navegar al hacer clic en el bote de basura
+    e.stopPropagation();
+    setDeleteTarget(tournament);
+    setConfirmInput('');
+    setDeleteError('');
+  }
+
+  async function confirmDelete() {
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await api.deleteTournament(deleteTarget.id, token);
+      setDeleteTarget(null);
+      refresh();
+    } catch (e) {
+      setDeleteError(e.message);
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   if (!token) {
     return <div className="container"><p>Necesitas iniciar sesión para ver esto.</p></div>;
@@ -85,10 +115,25 @@ export default function TournamentsYearPanel() {
           {tournaments && tournaments.length > 0 && (
             <div className="league-grid">
               {tournaments.map((t) => (
-                <Link key={t.id} to={`/panel/liga/${id}/${t.year}/torneo/${t.id}`} className="league-card">
-                  <h3>{t.name}</h3>
-                  <span className="state">{t.year}</span>
-                </Link>
+                <div key={t.id} style={{ position: 'relative' }}>
+                  <Link to={`/panel/liga/${id}/${t.year}/torneo/${t.id}`} className="league-card">
+                    <h3>{t.name}</h3>
+                    <span className="state">{t.year}</span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={(e) => openDelete(e, t)}
+                    title="Eliminar torneo"
+                    style={{
+                      position: 'absolute', top: 8, right: 8,
+                      width: 28, height: 28, borderRadius: '50%',
+                      border: '1px solid var(--line)', background: 'var(--card)',
+                      color: 'var(--ink-dim)', cursor: 'pointer', fontSize: 14, lineHeight: 1,
+                    }}
+                  >
+                    🗑
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -104,6 +149,37 @@ export default function TournamentsYearPanel() {
                   setShowCreate(false);
                 }}
               />
+            </Modal>
+          )}
+
+          {deleteTarget && (
+            <Modal title={`Eliminar "${deleteTarget.name}"`} onClose={() => setDeleteTarget(null)}>
+              <p style={{ color: 'var(--ink-dim)', fontSize: 14, marginBottom: 16 }}>
+                Esto borra el torneo <strong>{deleteTarget.name}</strong> ({deleteTarget.year}) y, junto con él,
+                <strong> todas sus categorías, ramas y partidos</strong> — para siempre, sin poder deshacerlo.
+              </p>
+              {deleteError && <div className="form-error">{deleteError}</div>}
+              <div className="field">
+                <label>Escribe el nombre del torneo para confirmar: <strong>{deleteTarget.name}</strong></label>
+                <input
+                  type="text"
+                  value={confirmInput}
+                  onChange={(e) => setConfirmInput(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-ghost" onClick={() => setDeleteTarget(null)}>Cancelar</button>
+                <button
+                  type="button"
+                  className="btn btn-flag"
+                  style={{ background: 'var(--flag)' }}
+                  disabled={deleting || confirmInput !== deleteTarget.name}
+                  onClick={confirmDelete}
+                >
+                  {deleting ? 'Eliminando…' : 'Eliminar torneo para siempre'}
+                </button>
+              </div>
             </Modal>
           )}
         </>
