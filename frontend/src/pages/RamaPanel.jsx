@@ -20,7 +20,7 @@ export default function RamaPanel() {
   const [branch, setBranch] = useState(null);
   const [leagueData, setLeagueData] = useState(null);
   const [matches, setMatches] = useState(null);
-  const [flatGroups, setFlatGroups] = useState([]);
+  const [conferences, setConferences] = useState([]);
   const [error, setError] = useState('');
   const [modal, setModal] = useState(null); // { type: 'create' | 'edit' | 'delete', match? }
 
@@ -40,22 +40,22 @@ export default function RamaPanel() {
     if (token) refreshMatches();
   }, [branchId, token]);
 
-  // Lista de grupos "aplanada" (Conferencia — Grupo) para el selector del
-  // formulario de partido. Se arma consultando cada conferencia de esta
-  // rama y sus grupos — nada nuevo, reutiliza las rutas ya probadas.
-  function refreshFlatGroups() {
+  // Conferencias de esta rama, cada una con sus propios grupos anidados —
+  // para el selector de dos pasos del formulario de partido (Conferencia,
+  // y solo si esa conferencia tiene grupos, Grupo). Una conferencia sin
+  // grupos igual aparece en la lista, con groups: [] — así el partido
+  // puede colgar directo de ella.
+  function refreshConferences() {
     api.getConferences(branchId, token).then(async (confs) => {
       const withGroups = await Promise.all(
-        confs.map((c) => api.getTestGroups(c.id, token).then((groups) =>
-          groups.map((g) => ({ id: g.id, name: `${c.name} — ${g.name}` }))
-        ))
+        confs.map((c) => api.getTestGroups(c.id, token).then((groups) => ({ id: c.id, name: c.name, groups })))
       );
-      setFlatGroups(withGroups.flat());
-    }).catch(() => setFlatGroups([]));
+      setConferences(withGroups);
+    }).catch(() => setConferences([]));
   }
 
   useEffect(() => {
-    if (token) refreshFlatGroups();
+    if (token) refreshConferences();
   }, [branchId, token]);
 
   if (!token) {
@@ -171,14 +171,15 @@ export default function RamaPanel() {
             submitLabel="Crear partido"
             teams={teams}
             venues={venues}
-            groups={flatGroups}
+            groups={[]}
+            conferences={conferences}
             leagueTimezone={leagueTimezone}
             token={token}
             leagueId={id}
             categoryId={categoryId}
             onVenueCreated={() => api.getManageLeague(id, token).then(setLeagueData)}
             onTeamCreated={() => api.getManageLeague(id, token).then(setLeagueData)}
-            onGroupCreated={refreshFlatGroups}
+            onGroupCreated={refreshConferences}
             onCancel={() => setModal(null)}
             onSubmit={async (payload) => {
               await api.createMatch(categoryId, { ...payload, branch_id: branchId }, token);
@@ -196,14 +197,15 @@ export default function RamaPanel() {
             submitLabel="Guardar cambios"
             teams={teams}
             venues={venues}
-            groups={flatGroups}
+            groups={[]}
+            conferences={conferences}
             leagueTimezone={leagueTimezone}
             token={token}
             leagueId={id}
             categoryId={categoryId}
             onVenueCreated={() => api.getManageLeague(id, token).then(setLeagueData)}
             onTeamCreated={() => api.getManageLeague(id, token).then(setLeagueData)}
-            onGroupCreated={refreshFlatGroups}
+            onGroupCreated={refreshConferences}
             onCancel={() => setModal(null)}
             onSubmit={async (payload) => {
               await api.updateMatch(modal.match.id, { ...payload, branch_id: branchId }, token);

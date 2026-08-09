@@ -71,7 +71,7 @@ function linksValid(links, label) {
 }
 
 export default function MatchForm({
-  initial, onSubmit, onCancel, submitLabel, teams, venues, groups,
+  initial, onSubmit, onCancel, submitLabel, teams, venues, groups, conferences,
   leagueTimezone, token, leagueId, categoryId, onVenueCreated, onTeamCreated, onGroupCreated,
   // Nuevo: cuando el formulario NO recibe una Categoría/Rama ya decidida
   // (como pasa en la pantalla "Partidos del Torneo"), se le puede pasar
@@ -112,6 +112,7 @@ export default function MatchForm({
     venue_id:    initial?.venue_id    || null,
     group_id:    initial?.group_id    || null,
     group_id_2:  initial?.group_id_2  || null,
+    conference_id: initial?.conference_id || null,
     stream_links: initial?.stream_links || [],
     ticket_links: initial?.ticket_links || [],
     week_label:  parseWeekNumber(initial?.week_label),
@@ -142,6 +143,42 @@ export default function MatchForm({
   useEffect(() => { setLocalGroups(groups || []); }, [groups]);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupError, setGroupError] = useState('');
+
+  // Conferencias (opcional, solo la pantalla de Rama las pasa — el flujo
+  // viejo de categoría-directa-de-liga no manda esta prop y no se toca).
+  // Cada conferencia trae sus propios grupos anidados, para poder mostrar
+  // primero "elige conferencia" y luego, solo si esa conferencia tiene
+  // grupos, "elige grupo" — si no tiene, el partido cuelga directo de ella.
+  const [localConferences, setLocalConferences] = useState(conferences || []);
+  useEffect(() => { setLocalConferences(conferences || []); }, [conferences]);
+  // Distinto de "¿ya hay conferencias creadas?": esto es "¿esta pantalla
+  // TRABAJA con conferencias?" — RamaPanel siempre manda la prop `conferences`
+  // (aunque venga vacía), el Dashboard viejo nunca la manda. Así, una rama
+  // sin conferencias todavía no cae al bloque legacy por accidente.
+  const conferencesModeEnabled = conferences !== undefined;
+  const usingConferences = conferencesModeEnabled && localConferences.length > 0;
+
+  // Lista aplanada "Conferencia — Grupo" de TODAS las conferencias, para el
+  // selector de "segundo grupo" (partido interconferencia) — ese sí necesita
+  // poder cruzar entre conferencias distintas, así que no se limita a una sola.
+  const allGroupsFlat = conferencesModeEnabled
+    ? localConferences.flatMap((c) => (c.groups || []).map((g) => ({ id: g.id, name: `${c.name} — ${g.name}` })))
+    : localGroups;
+
+  const [primaryConferenceId, setPrimaryConferenceId] = useState(null);
+  useEffect(() => {
+    if (!conferencesModeEnabled) return;
+    if (form.group_id) {
+      const conf = localConferences.find((c) => (c.groups || []).some((g) => g.id === form.group_id));
+      if (conf) setPrimaryConferenceId(conf.id);
+    } else if (form.conference_id) {
+      setPrimaryConferenceId(form.conference_id);
+    }
+  }, [localConferences]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const groupsOfSelectedConference = conferencesModeEnabled
+    ? (localConferences.find((c) => c.id === primaryConferenceId)?.groups || [])
+    : [];
 
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -293,6 +330,7 @@ export default function MatchForm({
         venue_id:    form.venue_id || null,
         group_id:    form.group_id || null,
         group_id_2:  form.group_id_2 || null,
+        conference_id: form.conference_id || null,
         stream_links: (form.stream_links || []).filter((u) => u && u.trim()),
         ticket_links: (form.ticket_links || []).filter((u) => u && u.trim()),
         week_label:  form.week_label.trim(),
@@ -442,29 +480,75 @@ export default function MatchForm({
         )}
       </div>
 
-      <div className="field">
-        <label>Grupo (opcional)</label>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <select
-            value={form.group_id || ''}
-            onChange={(e) => update('group_id', e.target.value ? Number(e.target.value) : null)}
-            style={{ flex: 1 }}
-          >
-            <option value="">— Sin grupo —</option>
-            {localGroups.map((g) => (
-              <option key={g.id} value={g.id}>{g.name}</option>
-            ))}
-          </select>
-          <button type="button" className="btn btn-outline btn-sm" onClick={() => setShowGroupModal(true)}>
-            + Crear grupo
-          </button>
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: 4 }}>
-          Solo úsalo si esta categoría se divide en conferencias/grupos (ej. "Conferencia 14 Grandes").
-        </div>
-      </div>
+      {conferencesModeEnabled ? (
+        usingConferences && (
+        <>
+          <div className="field">
+            <label>Conferencia (opcional)</label>
+            <select
+              value={primaryConferenceId || ''}
+              onChange={(e) => {
+                const confId = e.target.value ? Number(e.target.value) : null;
+                setPrimaryConferenceId(confId);
+                update('group_id', null);
+                update('conference_id', confId);
+              }}
+            >
+              <option value="">— Sin conferencia —</option>
+              {localConferences.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: 4 }}>
+              Solo úsalo si esta rama se divide en conferencias (ej. "Conferencia Norte").
+            </div>
+          </div>
 
-      {form.group_id && localGroups.length > 1 && (
+          {primaryConferenceId && groupsOfSelectedConference.length > 0 && (
+            <div className="field">
+              <label>Grupo (opcional)</label>
+              <select
+                value={form.group_id || ''}
+                onChange={(e) => {
+                  const gId = e.target.value ? Number(e.target.value) : null;
+                  update('group_id', gId);
+                  update('conference_id', gId ? null : primaryConferenceId);
+                }}
+              >
+                <option value="">— Sin grupo (el partido cuelga directo de la conferencia) —</option>
+                {groupsOfSelectedConference.map((g) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </>
+        )
+      ) : (
+        <div className="field">
+          <label>Grupo (opcional)</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <select
+              value={form.group_id || ''}
+              onChange={(e) => update('group_id', e.target.value ? Number(e.target.value) : null)}
+              style={{ flex: 1 }}
+            >
+              <option value="">— Sin grupo —</option>
+              {localGroups.map((g) => (
+                <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+            </select>
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => setShowGroupModal(true)}>
+              + Crear grupo
+            </button>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: 4 }}>
+            Solo úsalo si esta categoría se divide en conferencias/grupos (ej. "Conferencia 14 Grandes").
+          </div>
+        </div>
+      )}
+
+      {form.group_id && allGroupsFlat.length > 1 && (
         <div className="field">
           <label>Segundo grupo (opcional — solo para partidos interconferencia)</label>
           <select
@@ -472,7 +556,7 @@ export default function MatchForm({
             onChange={(e) => update('group_id_2', e.target.value ? Number(e.target.value) : null)}
           >
             <option value="">— Ninguno (partido normal dentro del grupo) —</option>
-            {localGroups.filter((g) => g.id !== form.group_id).map((g) => (
+            {allGroupsFlat.filter((g) => g.id !== form.group_id).map((g) => (
               <option key={g.id} value={g.id}>{g.name}</option>
             ))}
           </select>

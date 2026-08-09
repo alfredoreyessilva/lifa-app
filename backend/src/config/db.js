@@ -360,6 +360,14 @@ export async function initSchema() {
     await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS group_id_2 INTEGER REFERENCES groups(id) ON DELETE SET NULL`);
     await run(`CREATE INDEX IF NOT EXISTS idx_matches_group2 ON matches(group_id_2)`);
 
+    // Relación DIRECTA de un partido con una conferencia, para el caso en
+    // que esa conferencia no tenga ningún grupo adentro (el partido cuelga
+    // directo de la conferencia). Cuando el partido SÍ tiene group_id, su
+    // conferencia se sabe indirectamente vía group.conference_id — esta
+    // columna solo se usa cuando no hay grupo que lo diga.
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS conference_id INTEGER REFERENCES conferences(id) ON DELETE SET NULL`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_matches_conference ON matches(conference_id)`);
+
     // Nueva jerarquía en construcción: el partido empieza a poder colgar de
     // una rama (branch_id), que es donde de verdad vive su calendario según
     // el modelo nuevo. Se deja opcional (nullable) para no afectar los

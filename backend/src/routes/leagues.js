@@ -617,8 +617,8 @@ router.get('/tournaments/:tournamentId/public', asyncHandler(async (req, res) =>
       v.address     AS venue_address,
       g.name        AS group_name,
       g2.name       AS group_name_2,
-      conf.id        AS conference_id,
-      conf.name      AS conference_name
+      COALESCE(confDirect.id, confViaGroup.id)     AS conference_id,
+      COALESCE(confDirect.name, confViaGroup.name) AS conference_name
     FROM matches m
     JOIN categories c       ON c.id = m.category_id
     LEFT JOIN branches b    ON b.id = m.branch_id
@@ -627,7 +627,8 @@ router.get('/tournaments/:tournamentId/public', asyncHandler(async (req, res) =>
     LEFT JOIN venues v      ON v.id = m.venue_id
     LEFT JOIN groups g      ON g.id = m.group_id
     LEFT JOIN groups g2     ON g2.id = m.group_id_2
-    LEFT JOIN conferences conf ON conf.id = g.conference_id
+    LEFT JOIN conferences confViaGroup ON confViaGroup.id = g.conference_id
+    LEFT JOIN conferences confDirect   ON confDirect.id = m.conference_id
     WHERE c.tournament_id = ? AND m.is_draft = FALSE
     ORDER BY m.match_date ASC
   `).all(tournament.id);

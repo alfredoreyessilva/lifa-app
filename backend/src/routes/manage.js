@@ -438,7 +438,7 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
   // navegador. La única conversión a UTC autoritativa ocurre aquí, en el
   // backend, usando la zona horaria explícita del partido (nunca la zona
   // ambiente del servidor ni la del navegador de quien lo captura).
-  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, branch_id } = req.body;
+  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, conference_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, branch_id } = req.body;
   if (!isNonEmptyString(home_team) || !isNonEmptyString(away_team) || !match_date_local) {
     return res.status(400).json({ error: 'Se requieren equipo local, visitante y fecha' });
   }
@@ -457,8 +457,8 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
   const awayTeamId = await resolveTeamId(req.category, away_team);
 
   const result = await db.prepare(`
-    INSERT INTO matches (category_id, branch_id, home_team, away_team, home_team_id, away_team_id, match_date, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO matches (category_id, branch_id, home_team, away_team, home_team_id, away_team_id, match_date, venue_id, group_id, group_id_2, conference_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.category.id,
     branch_id || null,
@@ -470,6 +470,9 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
     venue_id  || null,
     group_id  || null,
     group_id_2 || null,
+    // Si el partido sí tiene grupo, la conferencia se sabe por ahí — no se
+    // guardan las dos cosas a la vez, para no tener dos fuentes de verdad.
+    group_id ? null : (conference_id || null),
     JSON.stringify(Array.isArray(stream_links) ? stream_links.filter((u) => u && u.trim()) : []),
     JSON.stringify(Array.isArray(ticket_links) ? ticket_links.filter((u) => u && u.trim()) : []),
     week_label  ? week_label.trim().toUpperCase() : null,
@@ -1004,7 +1007,7 @@ router.post(
 router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
   // match_date_local: igual que en creación, el string crudo del input
   // <datetime-local> (o ausente, si esta edición no toca la fecha/hora).
-  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, branch_id, category_id, is_draft } = req.body;
+  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, conference_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, branch_id, category_id, is_draft } = req.body;
   const m = req.match;
 
   const effectiveCategoryId = category_id || m.category_id;
@@ -1038,6 +1041,13 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
 
   const validationError = validateMatchFields(resolved);
   if (validationError) return res.status(400).json({ error: validationError });
+
+  // Si el partido efectivo termina CON grupo, la conferencia se sabe por
+  // ahí (nunca se guardan las dos a la vez, para no tener dos fuentes de
+  // verdad) — igual que en creación.
+  const effectiveConferenceId = resolved.group_id
+    ? null
+    : (conference_id !== undefined ? (conference_id || null) : m.conference_id);
 
   // Solo se recalcula match_date si esta edición tocó la fecha/hora o la
   // zona horaria (si no tocó ninguna de las dos, matchDateUtc queda en null
@@ -1085,6 +1095,7 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
       venue_id     = ?,
       group_id     = ?,
       group_id_2   = ?,
+      conference_id = ?,
       branch_id    = ?,
       category_id  = COALESCE(?, category_id),
       is_draft     = COALESCE(?, is_draft),
@@ -1103,6 +1114,7 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
     venue_id  !== undefined ? (venue_id  || null) : m.venue_id,
     group_id  !== undefined ? (group_id  || null) : m.group_id,
     group_id_2 !== undefined ? (group_id_2 || null) : m.group_id_2,
+    effectiveConferenceId,
     branch_id !== undefined ? (branch_id || null) : m.branch_id,
     toNull(category_id),
     toNull(is_draft),
