@@ -98,6 +98,14 @@ export const api = {
   getTestGroups: (conferenceId, token) =>
     request(`/manage/conferences/${conferenceId}/groups-test`, { token }),
 
+  // Grupos colgados directo de una Rama (sin conferencia), y el listado
+  // combinado (directos + los de todas sus conferencias) para la pestaña
+  // "Grupos" del panel.
+  createBranchGroup: (branchId, payload, token) =>
+    request(`/manage/branches/${branchId}/groups`, { method: 'POST', body: payload, token }),
+  getBranchGroups: (branchId, token) =>
+    request(`/manage/branches/${branchId}/groups`, { token }),
+
   // Pruebas de la nueva jerarquía (Rama -> Partido)
   createTestMatch: (branchId, payload, token) =>
     request(`/manage/branches/${branchId}/matches-test`, { method: 'POST', body: payload, token }),

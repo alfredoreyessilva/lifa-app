@@ -319,6 +319,35 @@ router.get('/branches/:branchId/conferences', authRequired, branchOwnerRequired,
   res.json(conferences);
 }));
 
+// Grupo colgado DIRECTO de la rama, sin conferencia — ambos niveles son
+// opcionales e independientes (ver comentario en db.js sobre groups.branch_id).
+router.post('/branches/:branchId/groups', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  const { name, sort_order } = req.body;
+  if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre del grupo es obligatorio' });
+
+  const result = await db.prepare(`
+    INSERT INTO groups (category_id, branch_id, name, sort_order)
+    VALUES (?, ?, ?, ?)
+  `).run(req.category.id, req.branch.id, name.trim(), sort_order || 0);
+
+  res.status(201).json(await db.prepare('SELECT * FROM groups WHERE id = ?').get(result.lastInsertRowid));
+}));
+
+// Todos los grupos de la rama de una sola vez: los colgados directo de
+// ella + los que cuelgan de cualquiera de sus conferencias — para la
+// pestaña "Grupos" del panel, que los muestra juntos en una sola lista.
+router.get('/branches/:branchId/groups', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  const groups = await db.prepare(`
+    SELECT g.*, c.name AS conference_name
+    FROM groups g
+    LEFT JOIN conferences c ON c.id = g.conference_id
+    WHERE g.branch_id = ?
+       OR g.conference_id IN (SELECT id FROM conferences WHERE branch_id = ?)
+    ORDER BY c.name ASC NULLS FIRST, g.sort_order ASC, g.name ASC
+  `).all(req.branch.id, req.branch.id);
+  res.json(groups);
+}));
+
 // --- Pruebas de la nueva jerarquía (Conferencia -> Grupo) ---
 
 router.post('/conferences/:conferenceId/groups-test', authRequired, conferenceOwnerRequired, asyncHandler(async (req, res) => {

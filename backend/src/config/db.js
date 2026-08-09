@@ -398,6 +398,12 @@ export async function initSchema() {
     await run(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS conference_id INTEGER REFERENCES conferences(id) ON DELETE CASCADE`);
     await run(`CREATE INDEX IF NOT EXISTS idx_groups_conference ON groups(conference_id)`);
 
+    // Un grupo puede colgar directo de una Rama (sin Conferencia) — ambos
+    // niveles son opcionales e independientes entre sí. group_id en un
+    // partido apunta a esta misma tabla sin importar cuál de los dos usó.
+    await run(`ALTER TABLE groups ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id) ON DELETE CASCADE`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_groups_branch ON groups(branch_id)`);
+
     // Y el partido, en el modelo nuevo, puede colgar del nivel más profundo
     // que la liga haya decidido usar: rama, conferencia, grupo, o combinación.
     // group_id ya existe y ya se usa en el sistema real (categoría/grupo);
