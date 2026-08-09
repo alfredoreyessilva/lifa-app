@@ -26,6 +26,7 @@ export const api = {
   // Ligas públicas
   getLeagues: () => request('/leagues'),
   getLeague: (slug) => request(`/leagues/${slug}`),
+  getPublicTeams: () => request('/leagues/all-teams'),
   getMatches: (categoryId) => request(`/leagues/categories/${categoryId}/matches`),
   getTournamentPublic: (tournamentId) => request(`/leagues/tournaments/${tournamentId}/public`),
   getMatch: (matchId) => request(`/leagues/matches/${matchId}`),

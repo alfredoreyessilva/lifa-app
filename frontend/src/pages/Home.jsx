@@ -2,14 +2,25 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import Loading from '../components/Loading.jsx';
+import TeamCard from '../components/TeamCard.jsx';
+import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
 
 export default function Home() {
   const [leagues, setLeagues] = useState(null);
   const [error, setError] = useState('');
 
+  const [teams, setTeams] = useState(null);
+  const [teamsError, setTeamsError] = useState('');
+  const [selectedTeam, setSelectedTeam] = useState(null);
+
   useEffect(() => {
     api.getLeagues().then(setLeagues).catch((e) => setError(e.message));
+    api.getPublicTeams().then(setTeams).catch((e) => setTeamsError(e.message));
   }, []);
+
+  function handleTeamClick(team) {
+    setSelectedTeam((prev) => (prev?.id === team.id ? null : team));
+  }
 
   return (
     <div className="container">
@@ -43,6 +54,44 @@ export default function Home() {
             </Link>
           ))}
         </div>
+      )}
+
+      <div className="section-head" id="equipos" style={{ marginTop: 28 }}>
+        <h2>Equipos</h2>
+        {teams && <span className="count">{teams.length} registrados</span>}
+      </div>
+
+      {teamsError && <div className="form-error">{teamsError}</div>}
+
+      {!teams && !teamsError && <Loading message="Cargando equipos…" />}
+
+      {teams && teams.length === 0 && (
+        <div className="empty-state">
+          <h3>Todavía no hay equipos registrados</h3>
+          <p>En cuanto una liga publicada tenga equipos en su roster, van a aparecer aquí.</p>
+        </div>
+      )}
+
+      {teams && teams.length > 0 && (
+        <>
+          <div className="team-grid">
+            {teams.map((team) => (
+              <TeamCard
+                key={team.id}
+                team={team}
+                isSelected={selectedTeam?.id === team.id}
+                onClick={() => handleTeamClick(team)}
+              />
+            ))}
+          </div>
+          {selectedTeam && (
+            <TeamInfoPanel
+              team={selectedTeam}
+              leagueId={selectedTeam.league_id}
+              onClose={() => setSelectedTeam(null)}
+            />
+          )}
+        </>
       )}
 
       <section className="hero">

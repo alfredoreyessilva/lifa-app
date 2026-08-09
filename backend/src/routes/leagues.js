@@ -66,6 +66,25 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
   res.json(match);
 }));
 
+// Todos los equipos que son miembro del roster (league_teams) de AL MENOS
+// una liga publicada — para la sección "Equipos" de la página de inicio.
+// Un mismo equipo puede estar en el roster de varias ligas; se muestra una
+// sola vez (DISTINCT ON), usando la liga pública más antigua como contexto
+// para el botón de "Notificarme" de su ficha.
+router.get('/all-teams', asyncHandler(async (req, res) => {
+  const teams = await db.prepare(`
+    SELECT DISTINCT ON (t.id)
+      t.id, t.name, t.logo_url, t.cover_url, t.location, t.contact_email, t.contact_phone,
+      t.facebook_url, t.instagram_url, t.twitter_url, t.website_url,
+      l.id AS league_id
+    FROM teams t
+    JOIN league_teams lt ON lt.team_id = t.id
+    JOIN leagues l        ON l.id = lt.league_id AND l.is_public = TRUE
+    ORDER BY t.id, l.id ASC
+  `).all();
+  res.json(teams);
+}));
+
 router.get('/:slug', asyncHandler(async (req, res) => {
   const league = await db.prepare(`
     SELECT * FROM leagues WHERE slug = ? AND is_public = TRUE
