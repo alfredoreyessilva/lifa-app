@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 import MatchForm from '../components/MatchForm.jsx';
 import Modal from '../components/Modal.jsx';
+import OrgLogoBar from '../components/OrgLogoBar.jsx';
 
 // Todos los partidos de un Torneo, sin importar de qué Categoría/Rama sean.
 // Ruta: /panel/liga/:id/:year/torneo/:tournamentId/partidos
@@ -93,6 +94,7 @@ export default function TournamentMatchesPanel() {
 
   return (
     <div className="container">
+      <OrgLogoBar selectedKind="liga" selectedId={id} />
       <div className="crumb">
         <Link to={`/panel/liga/${id}/${year}/torneo/${tournamentId}`}>← Categorías</Link>
       </div>

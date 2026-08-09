@@ -5,6 +5,7 @@ import { api } from '../api/client.js';
 import TournamentForm from '../components/TournamentForm.jsx';
 import Modal from '../components/Modal.jsx';
 import LeagueRoster from '../components/LeagueRoster.jsx';
+import OrgLogoBar from '../components/OrgLogoBar.jsx';
 
 // Lista y crea TODOS los Torneos de una liga (de cualquier año — el año se
 // captura en el formulario de creación, no se elige antes), y también
@@ -75,6 +76,7 @@ export default function TournamentsYearPanel() {
 
   return (
     <div className="container">
+      <OrgLogoBar selectedKind="liga" selectedId={id} />
       <div className="dash-header">
         <div>
           <span className="eyebrow">{league.name}</span>

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 import MatchForm from '../components/MatchForm.jsx';
 import Modal from '../components/Modal.jsx';
+import OrgLogoBar from '../components/OrgLogoBar.jsx';
 
 // Pantalla real de una Rama: Calendario (partidos), Equipos, Sedes,
 // Conferencias y Grupos — las 5 al mismo nivel (antes "Conferencias y
@@ -104,6 +105,7 @@ export default function RamaPanel() {
 
   return (
     <div className="container">
+      <OrgLogoBar selectedKind="liga" selectedId={id} />
       <div className="crumb">
         <Link to={`/panel/liga/${id}/${year}/torneo/${tournamentId}/categoria/${categoryId}`}>← Ramas</Link>
       </div>

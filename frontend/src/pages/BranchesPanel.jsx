@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
+import OrgLogoBar from '../components/OrgLogoBar.jsx';
 
 const BRANCH_OPTIONS = ['Varonil', 'Femenil', 'Mixto'];
 
@@ -36,6 +37,7 @@ export default function BranchesPanel() {
 
   return (
     <div className="container">
+      <OrgLogoBar selectedKind="liga" selectedId={id} />
       <div className="crumb">
         <Link to={`/panel/liga/${id}/${year}/torneo/${tournamentId}`}>← Categorías</Link>
       </div>

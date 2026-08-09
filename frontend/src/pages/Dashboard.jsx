@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
@@ -13,6 +13,7 @@ import ExcelImport from '../components/ExcelImport.jsx';
 import CharField from '../components/CharField.jsx';
 import TimezoneSelect from '../components/TimezoneSelect.jsx';
 import InviteTeamModal from '../components/InviteTeamModal.jsx';
+import OrgLogoBar from '../components/OrgLogoBar.jsx';
 import { getTimezoneLabel } from '../utils/timezones.js';
 
 const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
@@ -21,40 +22,15 @@ const DEFAULT_TZ = 'America/Mexico_City';
 export default function Dashboard({ kind }) {
   const { leagues, teams, token, refreshLeagues } = useAuth();
   const { id } = useParams();
-  const navigate = useNavigate();
   const orgs = [
     ...leagues.map((lg) => ({ ...lg, kind: 'liga' })),
     ...teams.map((tm) => ({ ...tm, kind: 'equipo' })),
   ];
   const selected = orgs.find((org) => org.kind === kind && String(org.id) === id);
 
-  function handleLogoClick(e, org) {
-    if (org === selected) {
-      e.preventDefault();
-      navigate('/panel');
-    }
-  }
-
   return (
     <div className="container">
-      <div className="section-head">
-        <h2>Organizaciones administradas</h2>
-      </div>
-      <div className="org-logo-grid">
-        {orgs.map((org) => (
-          <Link
-            key={`${org.kind}-${org.id}`}
-            to={org.kind === 'liga' ? `/panel/liga/${org.id}/torneos` : `/panel/${org.kind}/${org.id}`}
-            onClick={(e) => handleLogoClick(e, org)}
-            className={`league-logo-btn${org === selected ? ' league-logo-btn--active' : ''}`}
-            style={{ width: 72, height: 72 }}
-          >
-            <div className="league-logo" style={{ width: '100%', height: '100%', fontSize: 22 }}>
-              {org.logo_url ? <img src={org.logo_url} alt={org.name} /> : initials(org.name)}
-            </div>
-          </Link>
-        ))}
-      </div>
+      <OrgLogoBar selectedKind={kind} selectedId={id} />
 
       {selected?.kind === 'liga' && <LeagueWorkPanel leagueId={selected.id} />}
       {selected?.kind === 'equipo' && (

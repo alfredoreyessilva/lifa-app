@@ -6,6 +6,7 @@ import { api } from '../api/client.js';
 import { ALL_TIMEZONES } from '../utils/timezones.js';
 import CategoryForm from '../components/CategoryForm.jsx';
 import Modal from '../components/Modal.jsx';
+import OrgLogoBar from '../components/OrgLogoBar.jsx';
 
 // Lista y crea las Categorías de un Torneo específico.
 // Ruta: /panel/liga/:id/:year/torneo/:tournamentId
@@ -150,6 +151,7 @@ export default function CategoriesPanel() {
 
   return (
     <div className="container">
+      <OrgLogoBar selectedKind="liga" selectedId={id} />
       <div className="crumb">
         <Link to={`/panel/liga/${id}/torneos`}>← Torneos</Link>
       </div>
