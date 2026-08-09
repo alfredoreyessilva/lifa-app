@@ -151,7 +151,7 @@ export default function CategoriesPanel() {
   return (
     <div className="container">
       <div className="crumb">
-        <Link to={`/panel/liga/${id}/${year}`}>← Torneos {year}</Link>
+        <Link to={`/panel/liga/${id}/torneos`}>← Torneos</Link>
       </div>
 
       <div className="dash-header">
