@@ -6,23 +6,22 @@ import TournamentForm from '../components/TournamentForm.jsx';
 import Modal from '../components/Modal.jsx';
 import LeagueRoster from '../components/LeagueRoster.jsx';
 import OrgLogoBar from '../components/OrgLogoBar.jsx';
+import EditLeagueForm from '../components/EditLeagueForm.jsx';
+import VenueForm from '../components/VenueForm.jsx';
 
 // Lista y crea TODOS los Torneos de una liga (de cualquier año — el año se
-// captura en el formulario de creación, no se elige antes), y también
-// (pestaña aparte) el roster de equipos "de la casa" de la liga.
+// captura en el formulario de creación, no se elige antes); también trae
+// (pestañas aparte) el roster de equipos "de la casa" de la liga, y la
+// pestaña "Liga" — todo lo que antes solo vivía en la pantalla vieja
+// (/panel/liga/:id, hoy sin ningún link que la alcance): solicitar
+// publicación, editar info de la liga, y sedes con todos sus datos.
 // Ruta: /panel/liga/:id/torneos
-//
-// Se llega aquí navegando de forma real: clic en el logo de la liga en
-// /panel. Antes existía un paso intermedio para elegir año primero
-// (LeagueYearPicker, /panel/liga/:id/anio) — se quitó porque no hacía
-// falta; el archivo sigue en el proyecto por si se vuelve a necesitar,
-// pero ya no tiene ruta que lo alcance.
 export default function TournamentsYearPanel() {
   const { id } = useParams();
-  const { token, leagues } = useAuth();
+  const { token, leagues, refreshLeagues } = useAuth();
   const league = leagues.find((lg) => String(lg.id) === id);
 
-  const [tab, setTab] = useState('torneos'); // 'torneos' | 'roster'
+  const [tab, setTab] = useState('torneos'); // 'torneos' | 'roster' | 'liga'
 
   const [tournaments, setTournaments] = useState(null);
   const [error, setError] = useState('');
@@ -36,12 +35,26 @@ export default function TournamentsYearPanel() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
 
+  // Pestaña "Liga": info completa (para publicar/editar) + sedes.
+  const [leagueData, setLeagueData] = useState(null);
+  const [leagueDataError, setLeagueDataError] = useState('');
+  const [visibilityBusy, setVisibilityBusy] = useState(false);
+  const [ligaModal, setLigaModal] = useState(null); // { type: 'edit-league' | 'add-venue' | 'edit-venue' | 'delete-venue', venue? }
+
   function refresh() {
     api.getTournaments(id, undefined, token).then(setTournaments).catch((e) => setError(e.message));
   }
 
   useEffect(() => {
     if (token) refresh();
+  }, [id, token]);
+
+  function refreshLeagueData() {
+    api.getManageLeague(id, token).then(setLeagueData).catch((e) => setLeagueDataError(e.message));
+  }
+
+  useEffect(() => {
+    if (token) refreshLeagueData();
   }, [id, token]);
 
   function openDelete(e, tournament) {
@@ -66,6 +79,25 @@ export default function TournamentsYearPanel() {
     }
   }
 
+  async function requestPublish() {
+    setVisibilityBusy(true);
+    try { await api.requestPublishLeague(id, token); refreshLeagueData(); }
+    catch (e) { setLeagueDataError(e.message); }
+    finally { setVisibilityBusy(false); }
+  }
+  async function cancelRequest() {
+    setVisibilityBusy(true);
+    try { await api.cancelPublishRequest(id, token); refreshLeagueData(); }
+    catch (e) { setLeagueDataError(e.message); }
+    finally { setVisibilityBusy(false); }
+  }
+  async function unpublish() {
+    setVisibilityBusy(true);
+    try { await api.unpublishOwnLeague(id, token); refreshLeagueData(); }
+    catch (e) { setLeagueDataError(e.message); }
+    finally { setVisibilityBusy(false); }
+  }
+
   if (!token) {
     return <div className="container"><p>Necesitas iniciar sesión para ver esto.</p></div>;
   }
@@ -74,13 +106,17 @@ export default function TournamentsYearPanel() {
     return <div className="container"><p>No administras ninguna liga con ese id.</p></div>;
   }
 
+  const isPublic = leagueData?.league?.is_public;
+  const publishRequested = leagueData?.league?.publish_requested;
+  const venues = leagueData?.venues || [];
+
   return (
     <div className="container">
       <OrgLogoBar selectedKind="liga" selectedId={id} />
       <div className="dash-header">
         <div>
           <span className="eyebrow">{league.name}</span>
-          <h1>{tab === 'torneos' ? 'Torneos' : 'Equipos de la liga'}</h1>
+          <h1>{tab === 'torneos' ? 'Torneos' : tab === 'roster' ? 'Equipos de la liga' : 'Liga'}</h1>
         </div>
         {tab === 'torneos' && (
           <button className="btn btn-flag" onClick={() => setShowCreate(true)}>+ Crear torneo</button>
@@ -101,6 +137,13 @@ export default function TournamentsYearPanel() {
           onClick={() => setTab('roster')}
         >
           Equipos de la liga
+        </button>
+        <button
+          type="button"
+          className={tab === 'liga' ? 'btn btn-flag btn-sm' : 'btn btn-outline btn-sm'}
+          onClick={() => setTab('liga')}
+        >
+          Liga
         </button>
       </div>
 
@@ -189,6 +232,151 @@ export default function TournamentsYearPanel() {
 
       {tab === 'roster' && (
         <LeagueRoster leagueId={id} token={token} />
+      )}
+
+      {tab === 'liga' && (
+        <>
+          {leagueDataError && <div className="form-error">{leagueDataError}</div>}
+
+          {!leagueData ? (
+            <p>Cargando…</p>
+          ) : (
+            <>
+              <div
+                className="form-error"
+                style={{
+                  background: isPublic ? 'rgba(58,141,63,0.12)' : 'rgba(255,210,63,0.12)',
+                  borderColor: isPublic ? 'var(--field)' : 'var(--flag)',
+                  color: 'var(--ink)', display: 'flex', alignItems: 'center',
+                  justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
+                }}
+              >
+                <span>
+                  {isPublic
+                    ? '✓ Tu liga es pública — cualquiera puede verla en el sitio.'
+                    : publishRequested
+                      ? '⏳ Ya solicitaste aparecer en el panel de ligas. Un administrador va a revisarlo.'
+                      : 'Tu liga es privada por ahora — puedes usar todas las herramientas sin que nadie más la vea.'}
+                </span>
+                <span style={{ display: 'flex', gap: 8 }}>
+                  {isPublic && (
+                    <button className="btn btn-ghost btn-sm" disabled={visibilityBusy} onClick={unpublish}>
+                      Ocultar mi liga
+                    </button>
+                  )}
+                  {!isPublic && !publishRequested && (
+                    <button className="btn btn-flag btn-sm" disabled={visibilityBusy} onClick={requestPublish}>
+                      Solicitar aparecer en el panel de ligas
+                    </button>
+                  )}
+                  {!isPublic && publishRequested && (
+                    <button className="btn btn-ghost btn-sm" disabled={visibilityBusy} onClick={cancelRequest}>
+                      Cancelar solicitud
+                    </button>
+                  )}
+                </span>
+              </div>
+
+              <div className="section-head" style={{ marginTop: 24 }}>
+                <h2>Información de la liga</h2>
+                <button className="btn btn-outline btn-sm" onClick={() => setLigaModal({ type: 'edit-league' })}>
+                  Editar
+                </button>
+              </div>
+              <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>
+                Nombre, logo, portada, descripción, zona horaria y redes sociales.
+              </p>
+
+              <div className="section-head" style={{ marginTop: 28 }}>
+                <h2>Sedes</h2>
+                <button className="btn btn-outline btn-sm" onClick={() => setLigaModal({ type: 'add-venue' })}>
+                  + Agregar sede
+                </button>
+              </div>
+              {venues.length === 0 ? (
+                <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>
+                  Todavía no tienes sedes registradas. Agrega la primera arriba.
+                </p>
+              ) : (
+                venues.map((v) => (
+                  <div key={v.id} className="admin-match-row">
+                    <div>
+                      <div className="who">{v.name}</div>
+                      <div className="info">{v.institution || v.address || 'Sin más detalles'}</div>
+                    </div>
+                    <div className="row-actions">
+                      <button className="btn btn-outline btn-sm" onClick={() => setLigaModal({ type: 'edit-venue', venue: v })}>Editar</button>
+                      <button className="btn btn-ghost btn-sm" style={{ color: 'var(--flag)' }} onClick={() => setLigaModal({ type: 'delete-venue', venue: v })}>Eliminar</button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </>
+          )}
+
+          {ligaModal?.type === 'edit-league' && (
+            <Modal title="Editar liga" onClose={() => setLigaModal(null)}>
+              <EditLeagueForm
+                league={leagueData.league}
+                onCancel={() => setLigaModal(null)}
+                onSubmit={async (payload) => {
+                  await api.updateLeague(id, payload, token);
+                  await refreshLeagues();
+                  refreshLeagueData();
+                  setLigaModal(null);
+                }}
+              />
+            </Modal>
+          )}
+
+          {ligaModal?.type === 'add-venue' && (
+            <Modal title="Nueva sede" onClose={() => setLigaModal(null)}>
+              <VenueForm
+                submitLabel="Crear sede"
+                onCancel={() => setLigaModal(null)}
+                onSubmit={async (payload) => {
+                  await api.createVenue(id, payload, token);
+                  refreshLeagueData();
+                  setLigaModal(null);
+                }}
+              />
+            </Modal>
+          )}
+
+          {ligaModal?.type === 'edit-venue' && (
+            <Modal title="Editar sede" onClose={() => setLigaModal(null)}>
+              <VenueForm
+                initial={ligaModal.venue}
+                submitLabel="Guardar cambios"
+                onCancel={() => setLigaModal(null)}
+                onSubmit={async (payload) => {
+                  await api.updateVenue(ligaModal.venue.id, payload, token);
+                  refreshLeagueData();
+                  setLigaModal(null);
+                }}
+              />
+            </Modal>
+          )}
+
+          {ligaModal?.type === 'delete-venue' && (
+            <Modal title="Eliminar sede" onClose={() => setLigaModal(null)}>
+              <p>¿Seguro que quieres eliminar <strong>{ligaModal.venue.name}</strong>?</p>
+              <div className="modal-actions">
+                <button className="btn btn-ghost" onClick={() => setLigaModal(null)}>Cancelar</button>
+                <button
+                  className="btn btn-danger"
+                  onClick={async () => {
+                    await api.deleteVenue(ligaModal.venue.id, token);
+                    refreshLeagueData();
+                    setLigaModal(null);
+                  }}
+                >
+                  Eliminar
+                </button>
+              </div>
+            </Modal>
+          )}
+        </>
       )}
     </div>
   );
