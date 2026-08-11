@@ -126,8 +126,6 @@ export const api = {
   // Estado manual del partido (nuevo, aislado del PUT general)
   updateMatchStatus: (matchId, status, token) =>
     request(`/manage/matches/${matchId}/status`, { method: 'PATCH', body: { status }, token }),
-  publishMatch: (matchId, token) =>
-    request(`/manage/matches/${matchId}/publish`, { method: 'PATCH', token }),
 
   // Partidos
   createMatch: (categoryId, payload, token) =>

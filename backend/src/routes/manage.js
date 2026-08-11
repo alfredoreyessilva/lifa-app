@@ -1175,14 +1175,6 @@ router.patch('/matches/:id/status', authRequired, matchOwnerRequired, asyncHandl
   res.json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(req.match.id));
 }));
 
-// Publicar un partido borrador (ej. los que llegaron de un Excel recién
-// subido). Ruta aislada y mínima, igual que la de estado — solo toca
-// is_draft, sin exigir ni tocar ningún otro dato del partido.
-router.patch('/matches/:id/publish', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
-  await db.prepare('UPDATE matches SET is_draft = FALSE WHERE id = ?').run(req.match.id);
-  res.json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(req.match.id));
-}));
-
 router.delete('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
   await db.prepare('DELETE FROM matches WHERE id = ?').run(req.match.id);
   res.json({ ok: true });

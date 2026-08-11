@@ -207,33 +207,37 @@ export default function TournamentPage() {
         </div>
       </div>
 
-      <div className="section-head" style={{ marginTop: 28 }}>
-        <h2>Equipos</h2>
-        <span className="count">{teams.length}</span>
-      </div>
-      {teams.length === 0 ? (
-        <div className="empty-state">
-          <h3>Sin equipos todavía</h3>
-          <p>Todavía no hay equipos conectados a los partidos de este torneo.</p>
-        </div>
-      ) : (
+      {mode !== 'calendar' && (
         <>
-          <div className="team-grid">
-            {teams.map((team) => (
-              <TeamCard
-                key={team.id}
-                team={team}
-                isSelected={selectedTeam?.id === team.id}
-                onClick={() => handleTeamClick(team)}
-              />
-            ))}
+          <div className="section-head" style={{ marginTop: 28 }}>
+            <h2>Equipos</h2>
+            <span className="count">{teams.length}</span>
           </div>
-          {selectedTeam && (
-            <TeamInfoPanel
-              team={selectedTeam}
-              leagueId={tournament.league_id}
-              onClose={() => setSelectedTeam(null)}
-            />
+          {teams.length === 0 ? (
+            <div className="empty-state">
+              <h3>Sin equipos todavía</h3>
+              <p>Todavía no hay equipos conectados a los partidos de este torneo.</p>
+            </div>
+          ) : (
+            <>
+              <div className="team-grid">
+                {teams.map((team) => (
+                  <TeamCard
+                    key={team.id}
+                    team={team}
+                    isSelected={selectedTeam?.id === team.id}
+                    onClick={() => handleTeamClick(team)}
+                  />
+                ))}
+              </div>
+              {selectedTeam && (
+                <TeamInfoPanel
+                  team={selectedTeam}
+                  leagueId={tournament.league_id}
+                  onClose={() => setSelectedTeam(null)}
+                />
+              )}
+            </>
           )}
         </>
       )}
