@@ -18,6 +18,12 @@ async function request(path, { method = 'GET', body, token } = {}) {
 }
 
 export const api = {
+  // Estadísticas de uso (visitas, clics) — no requiere login. Si falla (ej.
+  // sin internet un instante) no debe tronar la pantalla del visitante, así
+  // que quien la llama la debe envolver en try/catch y simplemente ignorar
+  // el error.
+  trackEvent: (eventType) => request('/track', { method: 'POST', body: { event_type: eventType } }),
+
   // Auth
   register: (payload) => request('/auth/register', { method: 'POST', body: payload }),
   login: (payload) => request('/auth/login', { method: 'POST', body: payload }),

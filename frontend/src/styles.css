@@ -1226,6 +1226,41 @@ a { color: inherit; }
   color: var(--ink-dim);
   letter-spacing: 0.05em;
 }
+
+.admin-bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 140px;
+  padding: 12px 8px 0;
+  margin-bottom: 32px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  overflow-x: auto;
+}
+
+.admin-bar-chart-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1 0 14px;
+  height: 100%;
+}
+
+.admin-bar-chart-bar {
+  width: 100%;
+  min-height: 2px;
+  background: var(--flag);
+  border-radius: 3px 3px 0 0;
+}
+
+.admin-bar-chart-value {
+  font-size: 10px;
+  color: var(--ink-dim);
+  margin-top: 4px;
+}
  
 .admin-sponsor-list {
   display: flex;

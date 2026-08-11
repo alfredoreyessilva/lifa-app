@@ -15,3 +15,15 @@ export const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Demasiados intentos. Espera unos minutos e intenta de nuevo.' },
 });
+
+// Límite para el registro de eventos (visitas, clics). Es tráfico normal de
+// cualquier visitante navegando la app, así que va mucho más holgado que el
+// de login — solo busca frenar un abuso obvio (un script mandando miles de
+// peticiones), no estorbar el uso real.
+export const trackLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas peticiones. Intenta de nuevo en un momento.' },
+});

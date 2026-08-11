@@ -60,18 +60,41 @@ function StatsTab({ token }) {
     { label: 'Usuarios',          value: stats.users,    icon: '👤' },
     { label: 'Partidos',          value: stats.matches,  icon: '🏈' },
     { label: 'Equipos',           value: stats.teams,    icon: '⛹️' },
+    { label: 'Visitas a Home',    value: stats.homeViews?.total ?? 0, icon: '👁️' },
   ];
 
+  const last30Days = stats.homeViews?.last30Days ?? [];
+  const maxDayCount = Math.max(1, ...last30Days.map((d) => d.count));
+
   return (
-    <div className="admin-stats-grid">
-      {items.map((item) => (
-        <div key={item.label} className="admin-stat-card">
-          <div className="admin-stat-icon">{item.icon}</div>
-          <div className="admin-stat-value">{item.value}</div>
-          <div className="admin-stat-label">{item.label}</div>
+    <>
+      <div className="admin-stats-grid">
+        {items.map((item) => (
+          <div key={item.label} className="admin-stat-card">
+            <div className="admin-stat-icon">{item.icon}</div>
+            <div className="admin-stat-value">{item.value}</div>
+            <div className="admin-stat-label">{item.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <h3>Visitas a Home — últimos 30 días</h3>
+      {last30Days.length === 0 ? (
+        <p className="admin-stat-label">Todavía no hay visitas registradas en este periodo.</p>
+      ) : (
+        <div className="admin-bar-chart">
+          {last30Days.map((d) => (
+            <div key={d.day} className="admin-bar-chart-col" title={`${d.day}: ${d.count} visitas`}>
+              <div
+                className="admin-bar-chart-bar"
+                style={{ height: `${(d.count / maxDayCount) * 100}%` }}
+              />
+              <div className="admin-bar-chart-value">{d.count}</div>
+            </div>
+          ))}
         </div>
-      ))}
-    </div>
+      )}
+    </>
   );
 }
 

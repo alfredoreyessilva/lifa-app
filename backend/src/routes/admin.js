@@ -16,17 +16,33 @@ function adminRequired(req, res, next) {
 /* ===================== ESTADÍSTICAS ===================== */
 
 router.get('/stats', authRequired, adminRequired, asyncHandler(async (req, res) => {
-  const [leagues, users, matches, teams] = await Promise.all([
+  const [leagues, users, matches, teams, homeViews, homeViewsByDay] = await Promise.all([
     db.prepare('SELECT COUNT(*) as count FROM leagues').get(),
     db.prepare('SELECT COUNT(*) as count FROM users').get(),
     db.prepare('SELECT COUNT(*) as count FROM matches').get(),
     db.prepare('SELECT COUNT(*) as count FROM teams').get(),
+    db.prepare(`SELECT COUNT(*) as count FROM page_views WHERE event_type = 'home_view'`).get(),
+    db.prepare(`
+      SELECT created_at::date as day, COUNT(*) as count
+      FROM page_views
+      WHERE event_type = 'home_view'
+        AND created_at >= CURRENT_DATE - INTERVAL '30 days'
+      GROUP BY day
+      ORDER BY day ASC
+    `).all(),
   ]);
   res.json({
     leagues: leagues.count,
     users:   users.count,
     matches: matches.count,
     teams:   teams.count,
+    homeViews: {
+      total: Number(homeViews.count),
+      last30Days: homeViewsByDay.map((row) => ({
+        day: row.day,
+        count: Number(row.count),
+      })),
+    },
   });
 }));
 

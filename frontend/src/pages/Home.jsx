@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import Loading from '../components/Loading.jsx';
@@ -13,9 +13,20 @@ export default function Home() {
   const [teamsError, setTeamsError] = useState('');
   const [selectedTeam, setSelectedTeam] = useState(null);
 
+  // Candado para que la visita se registre una sola vez. Sin esto, en
+  // desarrollo (npm run dev) React.StrictMode dispara este useEffect dos
+  // veces a propósito (para ayudar a detectar efectos mal hechos), y
+  // contaríamos cada visita como 2. El ref sobrevive ese doble-arranque
+  // porque StrictMode no destruye el componente, solo repite los efectos.
+  const trackedHomeView = useRef(false);
+
   useEffect(() => {
     api.getLeagues().then(setLeagues).catch((e) => setError(e.message));
     api.getPublicTeams().then(setTeams).catch((e) => setTeamsError(e.message));
+    if (!trackedHomeView.current) {
+      trackedHomeView.current = true;
+      api.trackEvent('home_view').catch(() => {});
+    }
   }, []);
 
   function handleTeamClick(team) {

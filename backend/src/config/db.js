@@ -210,6 +210,12 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   UNIQUE(endpoint, league_id, match_id, team_name)
 );
 
+CREATE TABLE IF NOT EXISTS page_views (
+  id SERIAL PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_categories_league ON categories(league_id);
 CREATE INDEX IF NOT EXISTS idx_matches_category ON matches(category_id);
 CREATE INDEX IF NOT EXISTS idx_matches_date ON matches(match_date);
@@ -217,6 +223,7 @@ CREATE INDEX IF NOT EXISTS idx_venues_league ON venues(league_id);
 CREATE INDEX IF NOT EXISTS idx_groups_category ON groups(category_id);
 CREATE INDEX IF NOT EXISTS idx_push_league ON push_subscriptions(league_id);
 CREATE INDEX IF NOT EXISTS idx_push_match  ON push_subscriptions(match_id);
+CREATE INDEX IF NOT EXISTS idx_page_views_event_date ON page_views(event_type, created_at);
 `;
 
 export async function initSchema() {
