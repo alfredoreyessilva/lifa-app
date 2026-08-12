@@ -28,6 +28,7 @@ export default function OrgLogoBar({ selectedKind, selectedId }) {
     <div style={{ marginBottom: 24 }}>
       <div className="section-head">
         <h2>Organizaciones administradas</h2>
+        <Link to="/registrar-liga" className="btn btn-outline btn-sm">Registrar liga</Link>
       </div>
       <div className="org-logo-grid">
         {orgs.map((org) => (
