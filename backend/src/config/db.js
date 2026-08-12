@@ -426,6 +426,10 @@ export async function initSchema() {
       'tiktok_url TEXT',
       'website_url TEXT',
       'whatsapp TEXT',
+      // Marca si la liga es administrada oficialmente por sus dueños reales.
+      // La pone únicamente el admin desde /admin — no la puede tocar el
+      // representante de la liga.
+      'is_verified BOOLEAN NOT NULL DEFAULT FALSE',
     ];
     for (const col of newLeagueColumns) {
       await run(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS ${col}`);

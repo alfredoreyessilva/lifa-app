@@ -79,6 +79,20 @@ router.put('/leagues/:id/unpublish', authRequired, adminRequired, asyncHandler(a
   res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id));
 }));
 
+router.put('/leagues/:id/verify', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id);
+  if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
+  await db.prepare('UPDATE leagues SET is_verified = TRUE WHERE id = ?').run(req.params.id);
+  res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id));
+}));
+
+router.put('/leagues/:id/unverify', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id);
+  if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
+  await db.prepare('UPDATE leagues SET is_verified = FALSE WHERE id = ?').run(req.params.id);
+  res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id));
+}));
+
 /* ===================== USUARIOS ===================== */
 
 router.get('/users', authRequired, adminRequired, asyncHandler(async (req, res) => {

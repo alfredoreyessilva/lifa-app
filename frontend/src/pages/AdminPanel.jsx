@@ -336,6 +336,22 @@ function LeaguesTab({ token }) {
     }
   }
 
+  async function toggleVerified(lg) {
+    setBusyId(lg.id);
+    try {
+      if (lg.is_verified) {
+        await api.adminUnverifyLeague(lg.id, token);
+      } else {
+        await api.adminVerifyLeague(lg.id, token);
+      }
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div>
       <div className="section-head">
@@ -368,6 +384,11 @@ function LeaguesTab({ token }) {
                   <span className="tag" style={{ marginLeft: 8, color: lg.is_public ? 'var(--field)' : 'var(--ink-dim)', borderColor: lg.is_public ? 'var(--field)' : 'var(--line-strong)' }}>
                     {lg.is_public ? 'Pública' : 'Privada'}
                   </span>
+                  {lg.is_verified && (
+                    <span className="tag" style={{ marginLeft: 8, color: 'var(--field)', borderColor: 'var(--field)' }}>
+                      ✓ Verificada
+                    </span>
+                  )}
                   {!lg.is_public && lg.publish_requested && (
                     <span className="tag" style={{ marginLeft: 8, color: 'var(--live)', borderColor: 'var(--live)' }}>
                       Solicitó publicarse
@@ -387,6 +408,13 @@ function LeaguesTab({ token }) {
                 onClick={() => togglePublic(lg)}
               >
                 {busyId === lg.id ? 'Un momento…' : lg.is_public ? 'Ocultar liga' : 'Publicar liga'}
+              </button>
+              <button
+                className="btn btn-outline btn-sm"
+                disabled={busyId === lg.id}
+                onClick={() => toggleVerified(lg)}
+              >
+                {busyId === lg.id ? 'Un momento…' : lg.is_verified ? 'Quitar verificación' : 'Marcar verificada'}
               </button>
               <a href={`/ligas/${lg.slug}`} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
                 Ver

@@ -234,6 +234,10 @@ export const api = {
     request(`/admin/leagues/${id}/publish`, { method: 'PUT', token }),
   adminUnpublishLeague: (id, token) =>
     request(`/admin/leagues/${id}/unpublish`, { method: 'PUT', token }),
+  adminVerifyLeague: (id, token) =>
+    request(`/admin/leagues/${id}/verify`, { method: 'PUT', token }),
+  adminUnverifyLeague: (id, token) =>
+    request(`/admin/leagues/${id}/unverify`, { method: 'PUT', token }),
   adminDeleteLeague: (id, token) =>
     request(`/admin/leagues/${id}`, { method: 'DELETE', token }),
 

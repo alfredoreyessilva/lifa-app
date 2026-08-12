@@ -174,6 +174,17 @@ export default function LeaguePage() {
           <h1 style={{ fontSize: 'clamp(32px, 6vw, 56px)' }}>{league.name}</h1>
           {league.description && <p>{league.description}</p>}
 
+          {league.is_verified ? (
+            <div className="league-verified-note league-verified-note--verified">
+              <span className="tag" style={{ color: 'var(--field)', borderColor: 'var(--field)' }}>Liga verificada ✓</span>
+              <p>Espacio administrado oficialmente por la liga.</p>
+            </div>
+          ) : (
+            <div className="league-verified-note">
+              <p>Este espacio aún no es administrado oficialmente por la liga.</p>
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginTop: 12 }}>
             <button className="btn btn-outline btn-sm" onClick={copyLink}>
               {copied ? '✓ Link copiado' : 'Compartir esta liga'}
