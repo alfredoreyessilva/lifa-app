@@ -438,6 +438,12 @@ export async function initSchema() {
     await run(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS team_name TEXT`);
     await run(`CREATE INDEX IF NOT EXISTS idx_push_team ON push_subscriptions(team_name)`);
 
+    // Quién hizo la suscripción. NULL en las suscripciones anónimas viejas
+    // (de antes de exigir sesión para suscribirse) — se dejan como están,
+    // sin migrarlas, ya que no hay forma confiable de saber de quién eran.
+    await run(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id)`);
+
     // Dueño directo de un equipo (representante de medios) — separado del dueño
     // de la liga. Si es NULL, el equipo todavía solo lo administra el
     // representante de la liga (o un admin).

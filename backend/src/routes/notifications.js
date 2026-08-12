@@ -2,6 +2,7 @@ import express from 'express';
 import webpush from 'web-push';
 import db from '../config/db.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { authRequired } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -61,8 +62,10 @@ router.get('/vapid-public-key', (req, res) => {
   res.json({ key: process.env.VAPID_PUBLIC_KEY });
 });
 
-// Suscribirse — acepta league_id, match_id o team_name
-router.post('/subscribe', asyncHandler(async (req, res) => {
+// Suscribirse — acepta league_id, match_id o team_name. Requiere sesión, para
+// saber quién es cada suscriptor (necesario para futuras pantallas como
+// "Mi cartelera").
+router.post('/subscribe', authRequired, asyncHandler(async (req, res) => {
   const { subscription, league_id, match_id, team_name } = req.body;
   if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
     return res.status(400).json({ error: 'Suscripción inválida' });
@@ -72,16 +75,17 @@ router.post('/subscribe', asyncHandler(async (req, res) => {
   }
 
   await db.prepare(`
-    INSERT INTO push_subscriptions (endpoint, p256dh, auth, league_id, match_id, team_name)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT ON CONSTRAINT push_subscriptions_unique DO NOTHING
+    INSERT INTO push_subscriptions (endpoint, p256dh, auth, league_id, match_id, team_name, user_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT ON CONSTRAINT push_subscriptions_unique DO UPDATE SET user_id = EXCLUDED.user_id
   `).run(
     subscription.endpoint,
     subscription.keys.p256dh,
     subscription.keys.auth,
     league_id  || null,
     match_id   || null,
-    team_name  || null
+    team_name  || null,
+    req.user.id
   );
 
   res.status(201).json({ ok: true });

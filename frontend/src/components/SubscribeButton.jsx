@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext.jsx';
+import AuthModal from './AuthModal.jsx';
 
 const BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
 
@@ -42,10 +44,15 @@ async function checkSubscription(endpoint, leagueId, matchId, teamName) {
   return data.subscribed;
 }
 
-async function saveSubscription(subscription, leagueId, matchId, teamName) {
-  await fetch(`${BASE}/notifications/subscribe`, {
+// Ahora exige sesión (el backend rechaza sin token) — se manda el header
+// Authorization con el token de quien se está suscribiendo.
+async function saveSubscription(subscription, leagueId, matchId, teamName, token) {
+  const res = await fetch(`${BASE}/notifications/subscribe`, {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization:  `Bearer ${token}`,
+    },
     body: JSON.stringify({
       subscription,
       league_id: leagueId || null,
@@ -53,6 +60,7 @@ async function saveSubscription(subscription, leagueId, matchId, teamName) {
       team_name: teamName || null,
     }),
   });
+  if (!res.ok) throw new Error('No se pudo guardar la suscripción');
 }
 
 async function removeSubscription(subscription, leagueId, matchId, teamName) {
@@ -76,6 +84,8 @@ async function removeSubscription(subscription, leagueId, matchId, teamName) {
 export default function SubscribeButton({ leagueId, matchId, teamName, label = 'Notificarme' }) {
   const [status,  setStatus]  = useState('loading');
   const [working, setWorking] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const { token } = useAuth();
 
   useEffect(() => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -97,31 +107,46 @@ export default function SubscribeButton({ leagueId, matchId, teamName, label = '
     }).catch(() => setStatus('unsubscribed'));
   }, [leagueId, matchId, teamName]);
 
-  async function toggle() {
+  // Hace la suscripción de verdad, ya con un token de sesión en mano (venga
+  // del contexto porque ya había sesión, o recién obtenido del modal).
+  async function doSubscribe(authToken) {
     setWorking(true);
     try {
-      if (status === 'unsubscribed') {
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') {
-          alert('Necesitas permitir las notificaciones en tu navegador.');
-          setWorking(false);
-          return;
-        }
-        const vapidKey = await getVapidKey();
-        const sub      = await getOrCreateSubscription(vapidKey);
-        await saveSubscription(sub, leagueId, matchId, teamName);
-        setStatus('subscribed');
-      } else {
-        const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.getSubscription();
-        if (sub) await removeSubscription(sub, leagueId, matchId, teamName);
-        setStatus('unsubscribed');
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        alert('Necesitas permitir las notificaciones en tu navegador.');
+        return;
       }
+      const vapidKey = await getVapidKey();
+      const sub      = await getOrCreateSubscription(vapidKey);
+      await saveSubscription(sub, leagueId, matchId, teamName, authToken);
+      setStatus('subscribed');
     } catch (err) {
       console.error('Error con notificaciones:', err);
       alert('Hubo un problema al activar las notificaciones. Intenta de nuevo.');
     } finally {
       setWorking(false);
+    }
+  }
+
+  async function toggle() {
+    if (status === 'unsubscribed') {
+      // Sin sesión: pedirla en el modal, sin sacar al usuario de esta pantalla.
+      if (!token) { setShowAuthModal(true); return; }
+      await doSubscribe(token);
+    } else {
+      setWorking(true);
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) await removeSubscription(sub, leagueId, matchId, teamName);
+        setStatus('unsubscribed');
+      } catch (err) {
+        console.error('Error con notificaciones:', err);
+        alert('Hubo un problema al desactivar las notificaciones. Intenta de nuevo.');
+      } finally {
+        setWorking(false);
+      }
     }
   }
 
@@ -131,17 +156,30 @@ export default function SubscribeButton({ leagueId, matchId, teamName, label = '
   const isSubscribed = status === 'subscribed';
 
   return (
-    <button
-      className={`btn btn-sm ${isSubscribed ? 'btn-flag' : 'btn-outline'}`}
-      onClick={toggle}
-      disabled={working}
-      title={isSubscribed ? 'Cancelar notificaciones' : label}
-    >
-      {working
-        ? '…'
-        : isSubscribed
-          ? '🔔 Notificaciones activas'
-          : `🔕 ${label}`}
-    </button>
+    <>
+      <button
+        className={`btn btn-sm ${isSubscribed ? 'btn-flag' : 'btn-outline'}`}
+        onClick={toggle}
+        disabled={working}
+        title={isSubscribed ? 'Cancelar notificaciones' : label}
+      >
+        {working
+          ? '…'
+          : isSubscribed
+            ? '🔔 Notificaciones activas'
+            : `🔕 ${label}`}
+      </button>
+
+      {showAuthModal && (
+        <AuthModal
+          title="Inicia sesión para recibir notificaciones"
+          onClose={() => setShowAuthModal(false)}
+          onSuccess={(newToken) => {
+            setShowAuthModal(false);
+            doSubscribe(newToken);
+          }}
+        />
+      )}
+    </>
   );
 }

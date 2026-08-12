@@ -563,6 +563,16 @@ a { color: inherit; }
   text-align: center;
 }
 .form-foot a { color: var(--flag); text-decoration: none; }
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--flag);
+  text-decoration: none;
+  font-size: inherit;
+  cursor: pointer;
+}
+.btn-link:hover { text-decoration: underline; }
 
 /* ---------- Dashboard ---------- */
 .dash-header {
