@@ -4,6 +4,7 @@ import db from '../config/db.js';
 import { signToken, authRequired } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { authLimiter } from '../middleware/rateLimit.js';
+import { isValidEmail } from '../utils/validation.js';
 
 const router = express.Router();
 
@@ -11,6 +12,9 @@ router.post('/register', authLimiter, asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Faltan campos: nombre, email, contraseña' });
+  }
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: 'Ese correo no tiene un formato válido' });
   }
   if (password.length < 6) {
     return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
