@@ -40,3 +40,21 @@ export function authRequired(req, res, next) {
     return res.status(401).json({ error: 'Token inválido o expirado' });
   }
 }
+
+// Como authRequired, pero nunca rechaza la petición — si no hay token o es
+// inválido, sigue de largo sin req.user. Sirve para rutas públicas que dan
+// más información cuando sí sabemos quién eres (ej. el resumen de
+// predicciones: cualquiera lo puede ver, pero si hay sesión también
+// devolvemos tu propio voto).
+export function optionalAuth(req, res, next) {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (token) {
+    try {
+      req.user = jwt.verify(token, getJwtSecret());
+    } catch {
+      // token vencido o inválido: seguimos como si no hubiera sesión
+    }
+  }
+  next();
+}

@@ -216,6 +216,19 @@ CREATE TABLE IF NOT EXISTS page_views (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- El voto de "¿quién gana?" de una persona sobre un partido. A propósito
+-- no hay UPDATE permitido desde la app (ver routes/predictions.js) — una
+-- vez que alguien vota, queda fijo para siempre, como una quiniela de
+-- papel. UNIQUE(match_id, user_id) además impide votar dos veces.
+CREATE TABLE IF NOT EXISTS predictions (
+  id SERIAL PRIMARY KEY,
+  match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  pick TEXT NOT NULL CHECK (pick IN ('home', 'away', 'tie')),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(match_id, user_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_categories_league ON categories(league_id);
 CREATE INDEX IF NOT EXISTS idx_matches_category ON matches(category_id);
 CREATE INDEX IF NOT EXISTS idx_matches_date ON matches(match_date);
@@ -224,6 +237,8 @@ CREATE INDEX IF NOT EXISTS idx_groups_category ON groups(category_id);
 CREATE INDEX IF NOT EXISTS idx_push_league ON push_subscriptions(league_id);
 CREATE INDEX IF NOT EXISTS idx_push_match  ON push_subscriptions(match_id);
 CREATE INDEX IF NOT EXISTS idx_page_views_event_date ON page_views(event_type, created_at);
+CREATE INDEX IF NOT EXISTS idx_predictions_match ON predictions(match_id);
+CREATE INDEX IF NOT EXISTS idx_predictions_user  ON predictions(user_id);
 `;
 
 export async function initSchema() {

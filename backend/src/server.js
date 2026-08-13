@@ -12,6 +12,7 @@ import adminRoutes         from './routes/admin.js';
 import notificationRoutes  from './routes/notifications.js';
 import inviteRoutes        from './routes/invites.js';
 import trackRoutes         from './routes/track.js';
+import predictionRoutes    from './routes/predictions.js';
 
 // Orígenes permitidos para llamar a la API desde el navegador. Se definen en
 // la variable de entorno ALLOWED_ORIGINS (separados por coma), por ejemplo:
@@ -67,6 +68,7 @@ app.use('/api/admin',         adminRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/invites',       inviteRoutes);
 app.use('/api/track',         trackRoutes);
+app.use('/api/predictions',   predictionRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);
