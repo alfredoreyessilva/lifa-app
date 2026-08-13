@@ -30,6 +30,9 @@ export const api = {
   getPredictionsSummary: (matchIds, token) =>
     request(`/predictions/summary?matchIds=${matchIds.join(',')}`, { token }),
 
+  // Mi cartelera
+  getBoard: (token) => request('/board', { token }),
+
   // Auth
   register: (payload) => request('/auth/register', { method: 'POST', body: payload }),
   login: (payload) => request('/auth/login', { method: 'POST', body: payload }),
