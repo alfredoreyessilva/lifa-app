@@ -24,6 +24,12 @@ export const api = {
   // el error.
   trackEvent: (eventType) => request('/track', { method: 'POST', body: { event_type: eventType } }),
 
+  // Juego de predicciones ("¿quién gana?")
+  submitPrediction: (matchId, pick, token) =>
+    request('/predictions', { method: 'POST', body: { match_id: matchId, pick }, token }),
+  getPredictionsSummary: (matchIds, token) =>
+    request(`/predictions/summary?matchIds=${matchIds.join(',')}`, { token }),
+
   // Auth
   register: (payload) => request('/auth/register', { method: 'POST', body: payload }),
   login: (payload) => request('/auth/login', { method: 'POST', body: payload }),

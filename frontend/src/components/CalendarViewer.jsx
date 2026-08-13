@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { getMatchStatus } from '../utils/matchStatus.js';
 import { getMatchParts, initials } from '../utils/matchDisplay.js';
 import { shareLink } from '../utils/share.js';
+import PredictionWidget from './PredictionWidget.jsx';
 
 // Visor de calendario reutilizable: el bloque "Ver por: completo / jornada /
 // equipo / sede / grupo" + las tarjetas de partido. Antes vivía solo dentro
@@ -455,6 +456,10 @@ function MatchCard({ match, isNext, now }) {
         </div>
         <TeamBadge name={match.away_team} logoUrl={match.away_logo_url} />
       </div>
+
+      {status === 'scheduled' && (
+        <PredictionWidget matchId={match.id} homeTeam={match.home_team} awayTeam={match.away_team} />
+      )}
 
       {(venueLabel || match.week_label || groupLabel) && (
         <div className="match-card-meta">

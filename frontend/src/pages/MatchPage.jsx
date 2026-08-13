@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import Loading from '../components/Loading.jsx';
 import SubscribeButton from '../components/SubscribeButton.jsx';
+import PredictionWidget from '../components/PredictionWidget.jsx';
 import { getMatchStatus } from '../utils/matchStatus.js';
 import { getMatchParts, initials } from '../utils/matchDisplay.js';
 import { shareLink } from '../utils/share.js';
@@ -147,6 +148,12 @@ export default function MatchPage() {
             {shareState === 'copied' ? '✓ Link copiado' : '🔗 Compartir partido'}
           </button>
         </div>
+
+        {isScheduled && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+            <PredictionWidget matchId={match.id} homeTeam={match.home_team} awayTeam={match.away_team} />
+          </div>
+        )}
 
         {isScheduled && (
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>

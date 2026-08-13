@@ -1588,6 +1588,68 @@ a.match-card-new {
   border-top: 1px solid var(--line);
 }
 
+.prediction-widget {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+}
+.prediction-widget-label {
+  font-family: var(--font-eyebrow);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--ink-dim);
+  text-align: center;
+  margin-bottom: 8px;
+}
+.prediction-widget-buttons {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.prediction-widget-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.prediction-bar {
+  position: relative;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.prediction-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+.prediction-bar--mine .prediction-bar-fill {
+  background: var(--flag);
+  opacity: 0.35;
+}
+.prediction-bar-label {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.prediction-bar--mine .prediction-bar-label {
+  color: var(--paper);
+  font-weight: 600;
+}
+.prediction-widget-total {
+  text-align: center;
+  font-size: 11px;
+  color: var(--ink-dim);
+  margin-top: 2px;
+}
+
 .match-card-actions {
   display: flex;
   gap: 8px;
