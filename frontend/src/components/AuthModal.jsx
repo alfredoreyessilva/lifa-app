@@ -15,7 +15,7 @@ export default function AuthModal({ onClose, onSuccess, title }) {
   const { login } = useAuth();
 
   return (
-    <Modal title={title || (mode === 'login' ? 'Inicia sesión' : 'Crea tu cuenta')} onClose={onClose}>
+    <Modal title={mode === 'login' ? (title || 'Inicia sesión') : 'Crea tu cuenta'} onClose={onClose}>
       {mode === 'login' ? (
         <LoginForm
           onSuccess={(token, user) => { login(token, user); onSuccess?.(token); }}
