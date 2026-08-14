@@ -115,4 +115,68 @@ router.get('/my-stats', authRequired, asyncHandler(async (req, res) => {
   });
 }));
 
+// Ranking de un calendario específico (los mismos partidos que se están
+// viendo en pantalla, sin importar si son de una categoría completa o de
+// un torneo entero): quiénes predijeron en esos partidos, ordenados por %
+// de aciertos. Aparecen quienes ya hicieron al menos MIN_PREDICTIONS
+// predicciones EN ESE MISMO calendario — no hace falta que ya estén
+// calificadas (con marcador guardado), así la gente puede ver quién más
+// participa desde antes de que arranque la temporada. El % de aciertos
+// solo se calcula sobre las que sí ya tienen resultado.
+const MIN_PREDICTIONS_FOR_RANKING = 10;
+
+router.get('/ranking', asyncHandler(async (req, res) => {
+  const idsParam = req.query.matchIds;
+  if (!idsParam) return res.status(400).json({ error: 'Falta matchIds' });
+
+  const matchIds = idsParam.split(',').map((s) => parseInt(s, 10)).filter((n) => Number.isInteger(n));
+  if (matchIds.length === 0) return res.json([]);
+
+  const placeholders = matchIds.map(() => '?').join(',');
+
+  const rows = await db.prepare(`
+    SELECT
+      u.id AS user_id,
+      u.name,
+      COUNT(*) AS total,
+      COUNT(*) FILTER (WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL) AS graded,
+      COUNT(*) FILTER (
+        WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL AND (
+          (p.pick = 'home' AND m.home_score > m.away_score) OR
+          (p.pick = 'away' AND m.away_score > m.home_score) OR
+          (p.pick = 'tie'  AND m.home_score = m.away_score)
+        )
+      ) AS correct
+    FROM predictions p
+    JOIN matches m ON m.id = p.match_id
+    JOIN users u   ON u.id = p.user_id
+    WHERE p.match_id IN (${placeholders})
+    GROUP BY u.id, u.name
+    HAVING COUNT(*) >= ?
+  `).all(...matchIds, MIN_PREDICTIONS_FOR_RANKING);
+
+  const ranking = rows
+    .map((r) => {
+      const total   = Number(r.total);
+      const graded  = Number(r.graded);
+      const correct = Number(r.correct);
+      return {
+        userId: r.user_id,
+        name: r.name,
+        total,
+        graded,
+        correct,
+        accuracyPct: graded > 0 ? Math.round((correct / graded) * 100) : null,
+      };
+    })
+    .sort((a, b) => {
+      if (a.accuracyPct === null && b.accuracyPct === null) return b.graded - a.graded || b.total - a.total;
+      if (a.accuracyPct === null) return 1;
+      if (b.accuracyPct === null) return -1;
+      return b.accuracyPct - a.accuracyPct || b.correct - a.correct;
+    });
+
+  res.json(ranking);
+}));
+
 export default router;

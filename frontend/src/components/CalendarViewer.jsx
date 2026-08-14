@@ -4,6 +4,7 @@ import { getMatchStatus } from '../utils/matchStatus.js';
 import { getMatchParts, initials } from '../utils/matchDisplay.js';
 import { shareLink } from '../utils/share.js';
 import PredictionWidget from './PredictionWidget.jsx';
+import CalendarRanking from './CalendarRanking.jsx';
 
 // Visor de calendario reutilizable: el bloque "Ver por: completo / jornada /
 // equipo / sede / grupo" + las tarjetas de partido. Antes vivía solo dentro
@@ -133,6 +134,7 @@ export default function CalendarViewer({
   // link de una sola jornada de un solo grupo (ej. Jornada 1 de 14 Grandes).
   const [subJornada, setSubJornada] = useState(initialSubJornada);
   const [now, setNow]           = useState(Date.now());
+  const [tab, setTab]           = useState('calendario');
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 30_000);
@@ -219,6 +221,13 @@ export default function CalendarViewer({
 
   return (
     <div>
+      <div className="tab-bar tab-bar--panel" style={{ marginBottom: 20 }}>
+        <button className={`tab-btn ${tab === 'calendario' ? 'active' : ''}`} onClick={() => setTab('calendario')}>Calendario</button>
+        <button className={`tab-btn ${tab === 'ranking'    ? 'active' : ''}`} onClick={() => setTab('ranking')}>Ranking</button>
+      </div>
+
+      {tab === 'calendario' && (
+      <>
       <div className="calendar-header">
         <h2>{title}</h2>
         <div className="calendar-view-bar">
@@ -386,6 +395,12 @@ export default function CalendarViewer({
             </>
           )}
         </>
+      )}
+      </>
+      )}
+
+      {tab === 'ranking' && (
+        <CalendarRanking matchIds={matches.map((m) => m.id)} />
       )}
     </div>
   );

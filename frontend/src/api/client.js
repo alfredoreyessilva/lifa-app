@@ -30,6 +30,7 @@ export const api = {
   getPredictionsSummary: (matchIds, token) =>
     request(`/predictions/summary?matchIds=${matchIds.join(',')}`, { token }),
   getMyPredictionStats: (token) => request('/predictions/my-stats', { token }),
+  getCalendarRanking: (matchIds) => request(`/predictions/ranking?matchIds=${matchIds.join(',')}`),
 
   // Mi cartelera
   getBoard: (token) => request('/board', { token }),
