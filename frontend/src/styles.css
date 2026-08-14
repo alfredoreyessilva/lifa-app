@@ -1754,6 +1754,42 @@ a.match-card-new {
   flex-direction: column;
   gap: 10px;
 }
+.prediction-stats-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+.prediction-stats-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.prediction-stats-pct {
+  font-family: var(--font-display);
+  font-size: 36px;
+  color: var(--flag);
+  line-height: 1;
+  min-width: 70px;
+}
+.prediction-stats-label {
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+}
+.prediction-stats-sub {
+  font-size: 13px;
+  margin-top: 2px;
+}
+.prediction-stats-pending {
+  font-size: 12px;
+  color: var(--ink-dim);
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
 .board-item {
   display: block;
   background: var(--card);

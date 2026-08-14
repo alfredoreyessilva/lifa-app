@@ -29,6 +29,7 @@ export const api = {
     request('/predictions', { method: 'POST', body: { match_id: matchId, pick }, token }),
   getPredictionsSummary: (matchIds, token) =>
     request(`/predictions/summary?matchIds=${matchIds.join(',')}`, { token }),
+  getMyPredictionStats: (token) => request('/predictions/my-stats', { token }),
 
   // Mi cartelera
   getBoard: (token) => request('/board', { token }),

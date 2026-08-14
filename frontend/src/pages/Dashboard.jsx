@@ -15,6 +15,7 @@ import TimezoneSelect from '../components/TimezoneSelect.jsx';
 import InviteTeamModal from '../components/InviteTeamModal.jsx';
 import OrgLogoBar from '../components/OrgLogoBar.jsx';
 import MiCartelera from '../components/MiCartelera.jsx';
+import PredictionStats from '../components/PredictionStats.jsx';
 import EditLeagueForm from '../components/EditLeagueForm.jsx';
 import { getTimezoneLabel } from '../utils/timezones.js';
 
@@ -33,6 +34,7 @@ export default function Dashboard({ kind }) {
   return (
     <div className="container">
       <OrgLogoBar selectedKind={kind} selectedId={id} />
+      <PredictionStats />
       <MiCartelera />
 
       {selected?.kind === 'liga' && <LeagueWorkPanel leagueId={selected.id} />}

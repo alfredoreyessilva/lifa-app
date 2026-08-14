@@ -81,4 +81,38 @@ router.get('/summary', optionalAuth, asyncHandler(async (req, res) => {
   res.json(result);
 }));
 
+// Mis estadísticas de predicciones: cuántas lleva en total, cuántas ya se
+// pueden calificar (el partido tiene marcador guardado — no basta con que
+// esté "finalizado" por tiempo, ver nota en matchStatus.js del frontend) y
+// cuántas acertó. El % solo se calcula sobre las calificadas.
+router.get('/my-stats', authRequired, asyncHandler(async (req, res) => {
+  const row = await db.prepare(`
+    SELECT
+      COUNT(*) AS total,
+      COUNT(*) FILTER (WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL) AS graded,
+      COUNT(*) FILTER (
+        WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL AND (
+          (p.pick = 'home' AND m.home_score > m.away_score) OR
+          (p.pick = 'away' AND m.away_score > m.home_score) OR
+          (p.pick = 'tie'  AND m.home_score = m.away_score)
+        )
+      ) AS correct
+    FROM predictions p
+    JOIN matches m ON m.id = p.match_id
+    WHERE p.user_id = ?
+  `).get(req.user.id);
+
+  const total   = Number(row.total);
+  const graded  = Number(row.graded);
+  const correct = Number(row.correct);
+
+  res.json({
+    total,
+    graded,
+    correct,
+    pending: total - graded,
+    accuracyPct: graded > 0 ? Math.round((correct / graded) * 100) : null,
+  });
+}));
+
 export default router;
