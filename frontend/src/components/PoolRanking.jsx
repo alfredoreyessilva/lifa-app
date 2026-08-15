@@ -28,7 +28,7 @@ export default function PoolRanking({ matchIds }) {
   if (!token) {
     return (
       <div className="empty-state">
-        <h3>Quiniela privada</h3>
+        <h3>Quiniela entre amigos</h3>
         <p>Inicia sesión para crear una quiniela con tus amigos o unirte a una con un código.</p>
         <button className="btn btn-flag" style={{ marginTop: 12 }} onClick={() => setShowAuthModal(true)}>
           Inicia sesión

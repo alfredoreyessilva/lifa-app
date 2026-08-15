@@ -50,7 +50,7 @@ export default function PoolJoinPage() {
       <div className="container">
         <div className="empty-state">
           <h3>¡Ya estás en "{pool.name}"!</h3>
-          <p>Ve al calendario que quieras comparar y abre la pestaña "Quiniela privada" para ver el ranking.</p>
+          <p>Ve al calendario que quieras comparar y abre la pestaña "Quiniela entre amigos" para ver el ranking.</p>
           <div style={{ marginTop: 16 }}>
             <Link to="/" className="btn btn-flag">Ir al inicio</Link>
           </div>

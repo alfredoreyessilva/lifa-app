@@ -225,7 +225,7 @@ export default function CalendarViewer({
       <div className="tab-bar tab-bar--panel" style={{ marginBottom: 20 }}>
         <button className={`tab-btn ${tab === 'calendario' ? 'active' : ''}`} onClick={() => setTab('calendario')}>Calendario</button>
         <button className={`tab-btn ${tab === 'ranking'    ? 'active' : ''}`} onClick={() => setTab('ranking')}>Ranking de predicciones</button>
-        <button className={`tab-btn ${tab === 'quiniela'   ? 'active' : ''}`} onClick={() => setTab('quiniela')}>Quiniela privada</button>
+        <button className={`tab-btn ${tab === 'quiniela'   ? 'active' : ''}`} onClick={() => setTab('quiniela')}>Quiniela entre amigos</button>
       </div>
 
       {tab === 'calendario' && (
