@@ -70,8 +70,10 @@ router.post('/:code/join', authRequired, asyncHandler(async (req, res) => {
 // Ranking interno de la quiniela, sobre una lista de partidos (los que se
 // están viendo en ese calendario) — solo pueden verlo sus miembros. Sin
 // mínimo de predicciones (grupo chico y de confianza, se ve a todos desde
-// el principio). Solo cuentan las predicciones hechas DESDE que cada quien
-// se unió — por eso el filtro p.created_at >= pm.joined_at.
+// el principio). Cuentan TODAS las predicciones de cada quien en esos
+// partidos, aunque las haya hecho antes de unirse a esta quiniela — igual
+// que el ranking general, no hay forma de "emparejar" el punto de partida
+// más que crear la quiniela antes de que arranque la temporada.
 router.get('/:code/ranking', authRequired, asyncHandler(async (req, res) => {
   const pool = await db.prepare('SELECT * FROM pools WHERE join_code = ?').get(req.params.code);
   if (!pool) return res.status(404).json({ error: 'Esta quiniela no existe' });
@@ -110,7 +112,6 @@ router.get('/:code/ranking', authRequired, asyncHandler(async (req, res) => {
       JOIN users u ON u.id = pm.user_id
       LEFT JOIN predictions p ON p.user_id = pm.user_id
         AND p.match_id IN (${placeholders})
-        AND p.created_at >= pm.joined_at
       LEFT JOIN matches m ON m.id = p.match_id
       WHERE pm.pool_id = ?
       GROUP BY u.id, u.name
