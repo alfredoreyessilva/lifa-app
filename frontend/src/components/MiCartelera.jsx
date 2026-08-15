@@ -1,14 +1,19 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { getMatchStatus } from '../utils/matchStatus.js';
-import { getMatchParts, initials } from '../utils/matchDisplay.js';
+import MatchCard from './MatchCard.jsx';
 
 const PICK_LABELS = { home: 'Local', away: 'Visitante', tie: 'Empate' };
 
 // Se coloca debajo de OrgLogoBar en Dashboard.jsx. Es un lugar temporal —
 // más adelante puede que esto se mueva a su propia pantalla.
+//
+// Cada partido se pinta con el mismo MatchCard que usa el calendario (para
+// que se vea idéntico), y debajo se agrega un renglón chico con las
+// etiquetas propias de la cartelera (por qué está aquí: notificación y/o
+// predicción) — eso no es parte de MatchCard porque no aplica en el
+// calendario normal.
 export default function MiCartelera() {
   const { token } = useAuth();
   const [board, setBoard]   = useState(null);
@@ -49,7 +54,7 @@ export default function MiCartelera() {
       </div>
 
       {upcoming.length > 0 && (
-        <div className="board-list">
+        <div className="match-grid">
           {upcoming.map((m) => <BoardItem key={m.id} match={m} />)}
         </div>
       )}
@@ -59,7 +64,7 @@ export default function MiCartelera() {
           <div className="section-head" style={{ marginTop: 24 }}>
             <h3 style={{ fontSize: 16, color: 'var(--ink-dim)' }}>Partidos pasados</h3>
           </div>
-          <div className="board-list">
+          <div className="match-grid">
             {past.map((m) => <BoardItem key={m.id} match={m} />)}
           </div>
         </>
@@ -69,46 +74,18 @@ export default function MiCartelera() {
 }
 
 function BoardItem({ match }) {
-  const status = getMatchStatus(match);
-  const { day, month, time } = getMatchParts(match.match_date, match.timezone);
-
   return (
-    <Link to={`/partidos/${match.id}`} className="board-item">
-      <div className="board-item-league">{match.league_name}</div>
-
-      <div className="board-item-body">
-        <BoardTeam name={match.home_team} logoUrl={match.home_logo_url} />
-        <div className="board-item-score">
-          {status === 'finished' && match.home_score !== null
-            ? <><span>{match.home_score}</span><span className="match-card-score-sep">—</span><span>{match.away_score}</span></>
-            : status === 'live'
-              ? <span className="match-card-score-live">EN VIVO</span>
-              : <span className="match-card-score-vs">{day} {month} · {time}</span>}
-        </div>
-        <BoardTeam name={match.away_team} logoUrl={match.away_logo_url} />
-      </div>
-
+    <div>
+      <MatchCard match={match} />
       <div className="board-item-tags">
+        {match.league_name && <span className="tag">{match.league_name}</span>}
         {match.notified  && <span className="tag" style={{ color: 'var(--flag)', borderColor: 'var(--flag)' }}>🔔 Notificación</span>}
         {match.predicted && (
           <span className="tag" style={{ color: 'var(--field)', borderColor: 'var(--field)' }}>
             🎯 Tu predicción: {PICK_LABELS[match.myPick]}
           </span>
         )}
-        {status === 'live'     && <span className="tag live">🔴 En vivo</span>}
-        {status === 'finished' && <span className="tag finished">Finalizado</span>}
       </div>
-    </Link>
-  );
-}
-
-function BoardTeam({ name, logoUrl }) {
-  return (
-    <div className="match-card-team">
-      <div className="match-card-logo">
-        {logoUrl ? <img src={logoUrl} alt={name} /> : <span>{initials(name)}</span>}
-      </div>
-      <div className="match-card-team-name">{name}</div>
     </div>
   );
 }

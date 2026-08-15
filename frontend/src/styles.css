@@ -1749,11 +1749,6 @@ a.match-card-new {
   justify-items: center;
 }
 
-.board-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
 .ranking-list {
   display: flex;
   flex-direction: column;
@@ -1828,38 +1823,11 @@ a.match-card-new {
   padding-top: 10px;
   border-top: 1px solid var(--line);
 }
-.board-item {
-  display: block;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 14px 16px;
-}
-.board-item-league {
-  font-family: var(--font-eyebrow);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  color: var(--ink-dim);
-  margin-bottom: 8px;
-}
-.board-item-body {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.board-item-score {
-  flex-shrink: 0;
-  text-align: center;
-  font-family: var(--font-display);
-  font-size: 15px;
-  min-width: 90px;
-}
 .board-item-tags {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  margin-top: 10px;
+  margin: 8px 0 20px;
 }
 
 .filter-card {
