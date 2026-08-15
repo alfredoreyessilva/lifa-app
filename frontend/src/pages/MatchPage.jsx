@@ -7,6 +7,7 @@ import PredictionWidget from '../components/PredictionWidget.jsx';
 import { getMatchStatus } from '../utils/matchStatus.js';
 import { getMatchParts, initials } from '../utils/matchDisplay.js';
 import { shareLink } from '../utils/share.js';
+import ShareImageButton from '../components/ShareImageButton.jsx';
 
 // Convierte una URL en una etiqueta corta y legible (ej. "youtube.com"),
 // para diferenciar los botones cuando hay más de un link del mismo tipo.
@@ -147,6 +148,10 @@ export default function MatchPage() {
           <button className="btn btn-outline btn-sm" type="button" onClick={handleShare}>
             {shareState === 'copied' ? '✓ Link copiado' : '🔗 Compartir partido'}
           </button>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
+          <ShareImageButton match={match} dateParts={{ day, month, time, tzLabel }} />
         </div>
 
         {isScheduled && (
