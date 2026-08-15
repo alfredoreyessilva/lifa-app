@@ -22,6 +22,7 @@ import Dashboard from './pages/Dashboard.jsx';
 import Notifications from './pages/Notifications.jsx';
 import AdminPanel from './pages/AdminPanel.jsx';
 import InviteClaim from './pages/InviteClaim.jsx';
+import PoolJoinPage from './pages/PoolJoinPage.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AdminRoute from './components/AdminRoute.jsx';
 
@@ -43,6 +44,7 @@ export default function App() {
             <Route path="/iniciar-sesion" element={<Login />} />
             <Route path="/crear-cuenta" element={<Register />} />
             <Route path="/invitaciones/:token" element={<InviteClaim />} />
+            <Route path="/quiniela/:code" element={<PoolJoinPage />} />
             <Route
               path="/registrar-liga"
               element={<ProtectedRoute><RegisterLeague /></ProtectedRoute>}

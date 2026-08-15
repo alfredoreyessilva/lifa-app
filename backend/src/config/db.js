@@ -229,6 +229,31 @@ CREATE TABLE IF NOT EXISTS predictions (
   UNIQUE(match_id, user_id)
 );
 
+-- Quiniela privada: un grupo de personas, sin partidos amarrados — se
+-- puede usar para comparar en el ranking de CUALQUIER calendario (no solo
+-- el que estaba abierto cuando se creó). join_code es lo que va en el
+-- link que se comparte para invitar (a diferencia de la tabla invites,
+-- este código sirve para que se una cualquiera que lo tenga, muchas veces,
+-- no es de un solo uso).
+CREATE TABLE IF NOT EXISTS pools (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  join_code TEXT UNIQUE NOT NULL,
+  owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Quién pertenece a cada quiniela y desde cuándo. joined_at importa: solo
+-- las predicciones hechas DESDE que alguien se unió cuentan para el
+-- ranking de esa quiniela (ver routes/pools.js).
+CREATE TABLE IF NOT EXISTS pool_members (
+  id SERIAL PRIMARY KEY,
+  pool_id INTEGER NOT NULL REFERENCES pools(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(pool_id, user_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_categories_league ON categories(league_id);
 CREATE INDEX IF NOT EXISTS idx_matches_category ON matches(category_id);
 CREATE INDEX IF NOT EXISTS idx_matches_date ON matches(match_date);
@@ -239,6 +264,8 @@ CREATE INDEX IF NOT EXISTS idx_push_match  ON push_subscriptions(match_id);
 CREATE INDEX IF NOT EXISTS idx_page_views_event_date ON page_views(event_type, created_at);
 CREATE INDEX IF NOT EXISTS idx_predictions_match ON predictions(match_id);
 CREATE INDEX IF NOT EXISTS idx_predictions_user  ON predictions(user_id);
+CREATE INDEX IF NOT EXISTS idx_pool_members_pool ON pool_members(pool_id);
+CREATE INDEX IF NOT EXISTS idx_pool_members_user ON pool_members(user_id);
 `;
 
 export async function initSchema() {

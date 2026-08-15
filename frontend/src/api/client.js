@@ -32,6 +32,14 @@ export const api = {
   getMyPredictionStats: (token) => request('/predictions/my-stats', { token }),
   getCalendarRanking: (matchIds) => request(`/predictions/ranking?matchIds=${matchIds.join(',')}`),
 
+  // Quinielas privadas
+  createPool: (name, token) => request('/pools', { method: 'POST', body: { name }, token }),
+  getMyPools: (token) => request('/pools/mine', { token }),
+  getPoolInfo: (code) => request(`/pools/${code}`),
+  joinPool: (code, token) => request(`/pools/${code}/join`, { method: 'POST', token }),
+  getPoolRanking: (code, matchIds, token) =>
+    request(`/pools/${code}/ranking?matchIds=${matchIds.join(',')}`, { token }),
+
   // Mi cartelera
   getBoard: (token) => request('/board', { token }),
 

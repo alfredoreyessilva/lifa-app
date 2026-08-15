@@ -5,6 +5,7 @@ import { getMatchParts, initials } from '../utils/matchDisplay.js';
 import { shareLink } from '../utils/share.js';
 import PredictionWidget from './PredictionWidget.jsx';
 import CalendarRanking from './CalendarRanking.jsx';
+import PoolRanking from './PoolRanking.jsx';
 
 // Visor de calendario reutilizable: el bloque "Ver por: completo / jornada /
 // equipo / sede / grupo" + las tarjetas de partido. Antes vivía solo dentro
@@ -223,7 +224,8 @@ export default function CalendarViewer({
     <div>
       <div className="tab-bar tab-bar--panel" style={{ marginBottom: 20 }}>
         <button className={`tab-btn ${tab === 'calendario' ? 'active' : ''}`} onClick={() => setTab('calendario')}>Calendario</button>
-        <button className={`tab-btn ${tab === 'ranking'    ? 'active' : ''}`} onClick={() => setTab('ranking')}>Ranking</button>
+        <button className={`tab-btn ${tab === 'ranking'    ? 'active' : ''}`} onClick={() => setTab('ranking')}>Ranking de predicciones</button>
+        <button className={`tab-btn ${tab === 'quiniela'   ? 'active' : ''}`} onClick={() => setTab('quiniela')}>Quiniela privada</button>
       </div>
 
       {tab === 'calendario' && (
@@ -401,6 +403,10 @@ export default function CalendarViewer({
 
       {tab === 'ranking' && (
         <CalendarRanking matchIds={matches.map((m) => m.id)} />
+      )}
+
+      {tab === 'quiniela' && (
+        <PoolRanking matchIds={matches.map((m) => m.id)} />
       )}
     </div>
   );
