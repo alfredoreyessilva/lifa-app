@@ -125,6 +125,51 @@ function fitText(ctx, text, maxWidth, baseSize, font, minSize = 28) {
   return size;
 }
 
+// Dibuja el ícono del balón amarillo, replicando public/favicon.svg,
+// para no depender de cargar un archivo SVG externo dentro del canvas.
+function drawBallIcon(ctx, x, y, size, theme) {
+  ctx.save();
+  ctx.translate(x, y);
+
+  const r = size * 0.1875; // 12/64
+  roundRect(ctx, 0, 0, size, size, r);
+  ctx.fillStyle = theme.fieldDeep;
+  ctx.fill();
+
+  const cx = size / 2;
+  const cy = size / 2;
+  const rx = size * 0.34375; // 22/64
+  const ry = size * 0.21875; // 14/64
+
+  ctx.translate(cx, cy);
+  ctx.rotate((-30 * Math.PI) / 180);
+
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fillStyle = theme.flag;
+  ctx.fill();
+
+  ctx.strokeStyle = theme.fieldDeep;
+  ctx.lineWidth = Math.max(1, size * 0.03125);
+  ctx.lineCap = 'round';
+  const scale = size / 64;
+  const lines = [
+    [14, 32, 50, 32],
+    [22, 27, 22, 37],
+    [29, 25, 29, 39],
+    [36, 25, 36, 39],
+    [43, 27, 43, 37],
+  ];
+  for (const [x1, y1, x2, y2] of lines) {
+    ctx.beginPath();
+    ctx.moveTo((x1 - 32) * scale, (y1 - 32) * scale);
+    ctx.lineTo((x2 - 32) * scale, (y2 - 32) * scale);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 function drawBackground(ctx, w, h, theme) {
   const grad = ctx.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, theme.field);
@@ -172,6 +217,10 @@ export async function generateMatchCard(match, formatKey, dateParts) {
   ]);
 
   drawBackground(ctx, w, h, theme);
+
+  const iconSize = w * 0.075;
+  const iconMargin = w * 0.055;
+  drawBallIcon(ctx, iconMargin, iconMargin, iconSize, theme);
 
   const cx = w / 2;
   let y = h * 0.10;
@@ -257,7 +306,7 @@ export async function generateMatchCard(match, formatKey, dateParts) {
   // --- Footer: marca LIFA ---
   ctx.fillStyle = theme.ink;
   ctx.font = `700 34px ${theme.fontDisplay}`;
-  ctx.fillText('LIFA', cx, h - 60);
+  ctx.fillText('CFBAMX', cx, h - 60);
   ctx.fillStyle = theme.inkDim;
   ctx.font = `500 22px ${theme.fontBody}`;
   ctx.fillText('Calendario de fútbol americano en México', cx, h - 30);
