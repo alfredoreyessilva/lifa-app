@@ -58,7 +58,7 @@ export default function Login() {
           </button>
         </form>
         <div className="form-foot">
-          ¿No tienes cuenta? <Link to="/crear-cuenta">Regístrate como representante de liga</Link>
+          ¿No tienes cuenta? <Link to="/crear-cuenta">Créala aquí</Link>
         </div>
       </div>
     </div>

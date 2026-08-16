@@ -43,10 +43,7 @@ export default function Register() {
   return (
     <div className="container">
       <div className="form-card">
-        <h2>Crear cuenta de representante</h2>
-        <p style={{ color: 'var(--ink-dim)', fontSize: 13, marginTop: -12, marginBottom: 20 }}>
-          Crea una cuenta para registrar y administrar el calendario de tu liga.
-        </p>
+        <h2>Crear cuenta</h2>
         {error && <div className="form-error">{error}</div>}
         <form onSubmit={onSubmit}>
           <div className="field">
