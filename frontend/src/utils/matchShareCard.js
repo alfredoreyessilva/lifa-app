@@ -86,7 +86,7 @@ function drawTeamBadge(ctx, img, name, cx, cy, radius, theme) {
   ctx.save();
   ctx.beginPath();
   ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = theme.field;
   ctx.fill();
   ctx.clip();
 
@@ -97,7 +97,7 @@ function drawTeamBadge(ctx, img, name, cx, cy, radius, theme) {
     const h = img.height * scale;
     ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
   } else {
-    ctx.fillStyle = theme.fieldDeep;
+    ctx.fillStyle = theme.field;
     ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
     ctx.fillStyle = theme.ink;
     ctx.font = `700 ${Math.round(radius * 0.8)}px ${theme.fontDisplay}`;
@@ -177,16 +177,16 @@ function drawBackground(ctx, w, h, theme) {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
 
-  // Rayas sutiles tipo "campo", igual que el fondo de la app (styles.css)
+  // Rayas horizontales tipo "yardas de cancha" (antes eran diagonales)
   ctx.save();
   ctx.globalAlpha = 0.25;
   ctx.strokeStyle = theme.ink;
   ctx.lineWidth = 4;
   const stripeGap = 78;
-  for (let x = -h; x < w + h; x += stripeGap) {
+  for (let y = 0; y < h; y += stripeGap) {
     ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x + h, h);
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
     ctx.stroke();
   }
   ctx.restore();
@@ -227,7 +227,7 @@ export async function generateMatchCard(match, formatKey, dateParts) {
 
   // --- Encabezado: liga / categoría ---
   if (leagueImg) {
-    const size = 72;
+    const size = 110;
     ctx.drawImage(leagueImg, cx - size / 2, y, size, size);
     y += size + 20;
   }
@@ -238,12 +238,6 @@ export async function generateMatchCard(match, formatKey, dateParts) {
   y += 42;
 
   const categoryLabel = [match.category_name, match.season, match.year].filter(Boolean).join(' · ');
-  if (categoryLabel) {
-    ctx.fillStyle = theme.inkDim;
-    ctx.font = `500 26px ${theme.fontBody}`;
-    ctx.fillText(categoryLabel, cx, y);
-    y += 30;
-  }
 
   // --- Sección central: equipos ---
   const badgeY = h * 0.36;
@@ -274,33 +268,37 @@ export async function generateMatchCard(match, formatKey, dateParts) {
   ctx.font = `700 ${size}px ${theme.fontDisplay}`;
   ctx.fillText(match.away_team.toUpperCase(), cx + badgeOffsetX, namesY);
 
-  // --- Panel de fecha / hora / sede ---
+  // --- Panel de fecha / hora / categoría / sede — una sola "tarjeta" oscura ---
   const panelY = namesY + 70;
-  const panelH = h * 0.16;
   const panelW = w * 0.82;
   const panelX = cx - panelW / 2;
+
+  const panelLines = [
+    { text: `${dateParts.day} ${dateParts.month}`, font: `700 46px ${theme.fontDisplay}`, color: theme.flag, gapBefore: 0 },
+    { text: `${dateParts.time} · ${dateParts.tzLabel}`, font: `600 32px ${theme.fontEyebrow}`, color: theme.ink, gapBefore: 54 },
+  ];
+  if (categoryLabel) {
+    panelLines.push({ text: categoryLabel, font: `500 26px ${theme.fontBody}`, color: theme.inkDim, gapBefore: 44 });
+  }
+  if (match.venue_name) {
+    panelLines.push({ text: match.venue_name, font: `500 28px ${theme.fontBody}`, color: theme.inkDim, gapBefore: 40 });
+  }
+
+  const panelPadTop    = 44;
+  const panelPadBottom = 36;
+  const panelH = panelPadTop + panelLines.reduce((sum, l) => sum + l.gapBefore, 0) + panelPadBottom;
 
   ctx.fillStyle = 'rgba(0,0,0,0.20)';
   roundRect(ctx, panelX, panelY, panelW, panelH, 24);
   ctx.fill();
 
-  ctx.fillStyle = theme.flag;
-  ctx.font = `700 46px ${theme.fontDisplay}`;
   ctx.textAlign = 'center';
-  const dateLine = `${dateParts.day} ${dateParts.month}`;
-  ctx.fillText(dateLine, cx, panelY + panelH * 0.42);
-
-  ctx.fillStyle = theme.ink;
-  ctx.font = `600 32px ${theme.fontEyebrow}`;
-  const timeLine = `${dateParts.time} · ${dateParts.tzLabel}`;
-  ctx.fillText(timeLine, cx, panelY + panelH * 0.72);
-
-  let venueY = panelY + panelH + 46;
-  if (match.venue_name) {
-    ctx.fillStyle = theme.inkDim;
-    ctx.font = `500 28px ${theme.fontBody}`;
-    ctx.fillText(match.venue_name, cx, venueY);
-    venueY += 34;
+  let panelTextY = panelY + panelPadTop;
+  for (const line of panelLines) {
+    panelTextY += line.gapBefore;
+    ctx.fillStyle = line.color;
+    ctx.font = line.font;
+    ctx.fillText(line.text, cx, panelTextY);
   }
 
   // --- Footer: marca LIFA ---
@@ -309,7 +307,7 @@ export async function generateMatchCard(match, formatKey, dateParts) {
   ctx.fillText('CFBAMX', cx, h - 60);
   ctx.fillStyle = theme.inkDim;
   ctx.font = `500 22px ${theme.fontBody}`;
-  ctx.fillText('Calendario de fútbol americano en México', cx, h - 30);
+  ctx.fillText('Conectando al Football Americano de México', cx, h - 30);
 
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png', 0.95));
 }
