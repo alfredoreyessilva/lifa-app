@@ -62,6 +62,7 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel }) {
   const [form, setForm] = useState({
     name:          initial?.name          || '',
     logo_url:      initial?.logo_url      || '',
+    away_logo_url: initial?.away_logo_url || '',
     cover_url:     initial?.cover_url     || '',
     location:      initial?.location      || '',
     contact_email: initial?.contact_email || '',
@@ -180,6 +181,40 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel }) {
 
         {/* CUERPO */}
         <div className="team-profile-body">
+
+          {/* Logo de visitante — opcional, solo aparece en partidos donde
+              este equipo juega de visita (útil ej. para que dos cascos
+              queden viendo de frente uno al otro en vez de en la misma
+              dirección). Si no se sube uno, se usa el logo normal. */}
+          <div className="team-profile-section" style={{ textAlign: 'left', marginBottom: 16 }}>
+            <div style={{ fontSize: 11, letterSpacing: '0.15em', color: 'var(--flag)', textTransform: 'uppercase', marginBottom: 6, fontFamily: 'var(--font-eyebrow)' }}>
+              Logo de visitante (opcional)
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 10 }}>
+              Se usa en vez del logo normal solo cuando este equipo juega de visitante — por ejemplo,
+              si usan un casco como logo, así puedes tener uno viendo hacia el otro lado. Si no subes
+              uno, se usa el logo normal como siempre.
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div className="team-profile-logo" style={{ width: 56, height: 56 }}>
+                {form.away_logo_url
+                  ? <img src={form.away_logo_url} alt={`${form.name || 'Logo'} (visitante)`} />
+                  : <span style={{ fontSize: 11, color: 'var(--ink-dim)' }}>Sin logo</span>}
+              </div>
+              <div className="team-editor-logo-actions">
+                <UploadButton
+                  label={form.away_logo_url ? '📷 Cambiar' : '📷 Subir'}
+                  onUploaded={(url) => update('away_logo_url', url)}
+                  disabled={loading}
+                />
+                {form.away_logo_url && (
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => update('away_logo_url', '')}>
+                    Quitar
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
 
           {/* Nombre */}
           <div className="field" style={{ marginBottom: 16 }}>

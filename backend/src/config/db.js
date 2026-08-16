@@ -308,6 +308,11 @@ export async function initSchema() {
       'website_url TEXT',
       'sort_order INTEGER DEFAULT 0',
       'cover_url TEXT',
+      // Logo alterno, solo se usa cuando el equipo aparece como visitante en
+      // un partido (ej. para que dos cascos queden viendo de frente uno al
+      // otro). Si no se define, se usa el logo normal — ver las consultas
+      // que arman home_logo_url/away_logo_url para partidos.
+      'away_logo_url TEXT',
     ];
     for (const col of newTeamColumns) {
       await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS ${col}`);

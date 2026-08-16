@@ -1182,13 +1182,14 @@ router.delete('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(asy
 
 /* ===================== EQUIPOS ===================== */
 
-function validateTeamFields({ contact_email, facebook_url, instagram_url, twitter_url, website_url, logo_url, cover_url, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links }) {
+function validateTeamFields({ contact_email, facebook_url, instagram_url, twitter_url, website_url, logo_url, away_logo_url, cover_url, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links }) {
   if (contact_email && !isValidEmail(contact_email)) return 'El correo de contacto no tiene un formato válido';
   if (facebook_url  && !isValidUrl(facebook_url))    return 'El enlace de Facebook no es una dirección web válida';
   if (instagram_url && !isValidUrl(instagram_url))   return 'El enlace de Instagram no es una dirección web válida';
   if (twitter_url   && !isValidUrl(twitter_url))     return 'El enlace de X / Twitter no es una dirección web válida';
   if (website_url   && !isValidUrl(website_url))     return 'El sitio web no es una dirección web válida';
   if (logo_url      && !isValidUrl(logo_url))        return 'El logo no es una dirección web válida';
+  if (away_logo_url && !isValidUrl(away_logo_url))   return 'El logo de visitante no es una dirección web válida';
   if (cover_url     && !isValidUrl(cover_url))       return 'La imagen de portada no es una dirección web válida';
   const homeStreamError = validateLinksList(home_stream_links, 'transmisión en casa');
   if (homeStreamError) return homeStreamError;
@@ -1220,22 +1221,23 @@ router.get('/teams/search', authRequired, asyncHandler(async (req, res) => {
 
 router.post('/leagues/:leagueId/teams', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
   const {
-    name, logo_url, cover_url, location, contact_email, contact_phone,
+    name, logo_url, away_logo_url, cover_url, location, contact_email, contact_phone,
     facebook_url, instagram_url, twitter_url, website_url, sort_order,
     home_stream_links, away_stream_links, home_ticket_links, away_ticket_links,
   } = req.body;
 
   if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre del equipo es obligatorio' });
 
-  const validationError = validateTeamFields({ contact_email, facebook_url, instagram_url, twitter_url, website_url, logo_url, cover_url, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links });
+  const validationError = validateTeamFields({ contact_email, facebook_url, instagram_url, twitter_url, website_url, logo_url, away_logo_url, cover_url, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links });
   if (validationError) return res.status(400).json({ error: validationError });
 
   const result = await db.prepare(`
-    INSERT INTO teams (league_id, name, logo_url, cover_url, location, contact_email, contact_phone, facebook_url, instagram_url, twitter_url, website_url, sort_order, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO teams (league_id, name, logo_url, away_logo_url, cover_url, location, contact_email, contact_phone, facebook_url, instagram_url, twitter_url, website_url, sort_order, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.league.id, name.trim().toUpperCase(),
     logo_url      || null,
+    away_logo_url || null,
     cover_url     || null,
     location      ? location.trim().toUpperCase()      : null,
     contact_email || null,
@@ -1256,7 +1258,7 @@ router.post('/leagues/:leagueId/teams', authRequired, leagueOwnerRequired, async
 
 router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
   const {
-    name, logo_url, cover_url, location, contact_email, contact_phone,
+    name, logo_url, away_logo_url, cover_url, location, contact_email, contact_phone,
     facebook_url, instagram_url, twitter_url, website_url, sort_order,
     home_stream_links, away_stream_links, home_ticket_links, away_ticket_links,
   } = req.body;
@@ -1269,6 +1271,7 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
     twitter_url:   twitter_url   ?? t.twitter_url,
     website_url:   website_url   ?? t.website_url,
     logo_url:      logo_url      ?? t.logo_url,
+    away_logo_url: away_logo_url ?? t.away_logo_url,
     cover_url:     cover_url     ?? t.cover_url,
     home_stream_links, away_stream_links, home_ticket_links, away_ticket_links,
   };
@@ -1279,6 +1282,7 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
     UPDATE teams SET
       name              = COALESCE(?, name),
       logo_url          = COALESCE(?, logo_url),
+      away_logo_url     = COALESCE(?, away_logo_url),
       cover_url         = COALESCE(?, cover_url),
       location          = COALESCE(?, location),
       contact_email     = COALESCE(?, contact_email),
@@ -1294,7 +1298,7 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
       away_ticket_links = COALESCE(?, away_ticket_links)
     WHERE id = ?
   `).run(
-    toNull(name),          toNull(logo_url),      toNull(cover_url),
+    toNull(name),          toNull(logo_url),      toNull(away_logo_url), toNull(cover_url),
     toNull(location),      toNull(contact_email), toNull(contact_phone),
     toNull(facebook_url),  toNull(instagram_url), toNull(twitter_url),
     toNull(website_url),   toNull(sort_order),
