@@ -11,7 +11,7 @@ const BACKEND_URL = process.env.BACKEND_API_URL || 'https://lifa-backend-p0hq.on
 const SITE_NAME = 'LIFA — Calendarios de Football Americano';
 const DEFAULT_IMAGE = 'https://res.cloudinary.com/dnatxlasg/image/upload/v1783883178/facebook_profile_1024_ezngmz.png';
 
-const BOT_REGEX = /facebookexternalhit|Facebot|Twitterbot|WhatsApp|TelegramBot|LinkedInBot|Slackbot|Discordbot|Googlebot|bingbot|Pinterest|redditbot|vkShare|Applebot|SkypeUriPreview|Iframely|Embedly|W3C_Validator/i;
+const BOT_REGEX = /facebookexternalhit|Facebot|Twitterbot|WhatsApp|TelegramBot|LinkedInBot|Slackbot|Discordbot|Googlebot|Google-InspectionTool|bingbot|Pinterest|redditbot|vkShare|Applebot|SkypeUriPreview|Iframely|Embedly|W3C_Validator/i;
 
 function escapeHtml(str = '') {
   return String(str)
