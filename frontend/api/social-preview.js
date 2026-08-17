@@ -95,7 +95,21 @@ export default async function handler(req, res) {
   const userAgent = req.headers['user-agent'] || '';
   const protocol = req.headers['x-forwarded-proto'] || 'https';
   const host = req.headers['host'];
-  const originalUrl = `${protocol}://${host}${req.url}`;
+  const { type, matchId, slug, categoryId, view, sel } = req.query;
+
+  const siteOrigin = `${protocol}://${host}`;
+
+  // req.url trae la ruta YA reescrita internamente por vercel.json (con
+  // ?type=...&matchId=... pegado) — no la URL limpia que la gente ve y
+  // comparte de verdad. La reconstruimos a mano según el tipo de página.
+  let cleanPath = '/';
+  if (type === 'match' && matchId) cleanPath = `/partidos/${matchId}`;
+  else if (type === 'league' && slug) cleanPath = `/ligas/${slug}`;
+  else if (type === 'calendar' && categoryId) {
+    cleanPath = `/categorias/${categoryId}/calendario`;
+    if (view === 'equipo' && sel) cleanPath += `?view=equipo&sel=${encodeURIComponent(sel)}`;
+  }
+  const originalUrl = `${siteOrigin}${cleanPath}`;
 
   // Si NO es un bot conocido, servimos la SPA real, sin ningún cambio para el usuario.
   if (!BOT_REGEX.test(userAgent)) {
@@ -106,8 +120,6 @@ export default async function handler(req, res) {
       return res.status(500).send('Error interno');
     }
   }
-
-  const { type, matchId, slug, categoryId, view, sel } = req.query;
 
   try {
     // Caso 1: partido individual
@@ -135,17 +147,36 @@ export default async function handler(req, res) {
         // fecha, lugar y equipos. Solo se incluye "location" si hay sede
         // real registrada; sin ella, Google puede rechazar el marcado por
         // incompleto (prefiere que falte el campo a que esté vacío).
+        // Duración estimada de 3 horas (no la tenemos capturada en la base
+        // de datos) — es un cálculo razonable, no un dato inventado como
+        // sí lo sería un precio de boleto que no existe.
+        const endDate = data.match_date
+          ? new Date(new Date(data.match_date).getTime() + 3 * 60 * 60 * 1000).toISOString()
+          : undefined;
+
         const jsonLd = {
           '@context': 'https://schema.org',
           '@type': 'SportsEvent',
           name: title,
+          description,
           startDate: data.match_date || undefined,
+          endDate,
           eventStatus: 'https://schema.org/EventScheduled',
           url: originalUrl,
           image: image || undefined,
           homeTeam: { '@type': 'SportsTeam', name: data.home_team },
           awayTeam: { '@type': 'SportsTeam', name: data.away_team },
-          organizer: data.league_name ? { '@type': 'SportsOrganization', name: data.league_name } : undefined,
+          performer: [
+            { '@type': 'SportsTeam', name: data.home_team },
+            { '@type': 'SportsTeam', name: data.away_team },
+          ],
+          organizer: data.league_name
+            ? {
+                '@type': 'SportsOrganization',
+                name: data.league_name,
+                url: data.league_slug ? `${siteOrigin}/ligas/${data.league_slug}` : undefined,
+              }
+            : undefined,
           location: data.venue_name
             ? {
                 '@type': 'Place',
