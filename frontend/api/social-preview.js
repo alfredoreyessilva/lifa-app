@@ -47,12 +47,18 @@ function matchLineText(m) {
 // buildHtml ahora recibe también un fragmento de contenido real (bodyHtml)
 // para el <body> — antes ahí solo iba el título repetido, que a ojos de
 // Google es casi nada de contenido indexable. Los meta tags (para las
-// vistas previas de redes sociales) quedan exactamente igual.
-function buildHtml({ title, description, image, url, bodyHtml }) {
+// vistas previas de redes sociales) quedan exactamente igual. jsonLd es
+// opcional: datos estructurados (schema.org) para que Google entienda que
+// esto es un evento deportivo real, con fecha, lugar y equipos — puede
+// habilitar resultados enriquecidos en la búsqueda.
+function buildHtml({ title, description, image, url, bodyHtml, jsonLd }) {
   const safeTitle = escapeHtml(title);
   const safeDesc = escapeHtml(description);
   const safeImage = escapeHtml(image);
   const safeUrl = escapeHtml(url);
+  const jsonLdScript = jsonLd
+    ? `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`
+    : '';
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -69,6 +75,7 @@ function buildHtml({ title, description, image, url, bodyHtml }) {
 <meta name="twitter:title" content="${safeTitle}" />
 <meta name="twitter:description" content="${safeDesc}" />
 <meta name="twitter:image" content="${safeImage}" />
+${jsonLdScript}
 </head>
 <body>
 <h1>${safeTitle}</h1>
@@ -123,8 +130,33 @@ export default async function handler(req, res) {
           ${scoreLine}
         `;
 
+        // Datos estructurados (schema.org/SportsEvent) — le dicen a Google
+        // de forma inequívoca "esto es un evento deportivo real", con
+        // fecha, lugar y equipos. Solo se incluye "location" si hay sede
+        // real registrada; sin ella, Google puede rechazar el marcado por
+        // incompleto (prefiere que falte el campo a que esté vacío).
+        const jsonLd = {
+          '@context': 'https://schema.org',
+          '@type': 'SportsEvent',
+          name: title,
+          startDate: data.match_date || undefined,
+          eventStatus: 'https://schema.org/EventScheduled',
+          url: originalUrl,
+          image: image || undefined,
+          homeTeam: { '@type': 'SportsTeam', name: data.home_team },
+          awayTeam: { '@type': 'SportsTeam', name: data.away_team },
+          organizer: data.league_name ? { '@type': 'SportsOrganization', name: data.league_name } : undefined,
+          location: data.venue_name
+            ? {
+                '@type': 'Place',
+                name: data.venue_name,
+                address: data.venue_address || undefined,
+              }
+            : undefined,
+        };
+
         res.setHeader('content-type', 'text/html; charset=utf-8');
-        return res.status(200).send(buildHtml({ title, description, image, url: originalUrl, bodyHtml }));
+        return res.status(200).send(buildHtml({ title, description, image, url: originalUrl, bodyHtml, jsonLd }));
       }
     }
 
@@ -149,8 +181,18 @@ export default async function handler(req, res) {
           ${teamNames      ? `<p>Equipos: ${escapeHtml(teamNames)}</p>` : ''}
         `;
 
+        const jsonLd = {
+          '@context': 'https://schema.org',
+          '@type': 'SportsOrganization',
+          name: data.name,
+          url: originalUrl,
+          logo: data.logo_url || undefined,
+          description: data.description || undefined,
+          address: data.state ? { '@type': 'PostalAddress', addressRegion: data.state, addressCountry: 'MX' } : undefined,
+        };
+
         res.setHeader('content-type', 'text/html; charset=utf-8');
-        return res.status(200).send(buildHtml({ title, description, image, url: originalUrl, bodyHtml }));
+        return res.status(200).send(buildHtml({ title, description, image, url: originalUrl, bodyHtml, jsonLd }));
       }
     }
 
