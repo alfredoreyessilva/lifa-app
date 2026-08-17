@@ -22,7 +22,33 @@ function escapeHtml(str = '') {
     .replace(/'/g, '&#39;');
 }
 
-function buildHtml({ title, description, image, url }) {
+// Fecha corta en español, sin depender de la zona horaria de la liga (los
+// bots no necesitan la hora exacta al minuto, solo un texto real e
+// indexable — muy distinto de mandarles nada de contenido).
+function formatDateEs(isoString) {
+  if (!isoString) return '';
+  try {
+    return new Date(isoString).toLocaleDateString('es-MX', {
+      day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
+}
+
+function matchLineText(m) {
+  const date = formatDateEs(m.match_date);
+  const score = (m.home_score !== null && m.away_score !== null)
+    ? ` (${m.home_score}-${m.away_score})`
+    : '';
+  return `${m.home_team} vs ${m.away_team}${score} — ${date}`;
+}
+
+// buildHtml ahora recibe también un fragmento de contenido real (bodyHtml)
+// para el <body> — antes ahí solo iba el título repetido, que a ojos de
+// Google es casi nada de contenido indexable. Los meta tags (para las
+// vistas previas de redes sociales) quedan exactamente igual.
+function buildHtml({ title, description, image, url, bodyHtml }) {
   const safeTitle = escapeHtml(title);
   const safeDesc = escapeHtml(description);
   const safeImage = escapeHtml(image);
@@ -45,7 +71,8 @@ function buildHtml({ title, description, image, url }) {
 <meta name="twitter:image" content="${safeImage}" />
 </head>
 <body>
-<p>${safeTitle}</p>
+<h1>${safeTitle}</h1>
+${bodyHtml || `<p>${safeDesc}</p>`}
 </body>
 </html>`;
 }
@@ -84,8 +111,20 @@ export default async function handler(req, res) {
         const title = `${data.home_team} vs ${data.away_team} — ${data.league_name}`;
         const description = `${data.category_name || ''} • Consulta el calendario y comparte este partido en ${SITE_NAME}.`.trim();
         const image = data.league_logo_url || DEFAULT_IMAGE;
+
+        const scoreLine = (data.home_score !== null && data.away_score !== null)
+          ? `<p>Marcador final: ${data.home_score} - ${data.away_score}</p>`
+          : '';
+        const bodyHtml = `
+          <p>Liga: ${escapeHtml(data.league_name || '')}</p>
+          ${data.category_name ? `<p>Categoría: ${escapeHtml(data.category_name)}</p>` : ''}
+          <p>Fecha: ${escapeHtml(formatDateEs(data.match_date))}</p>
+          ${data.venue_name ? `<p>Sede: ${escapeHtml(data.venue_name)}${data.venue_address ? ' — ' + escapeHtml(data.venue_address) : ''}</p>` : ''}
+          ${scoreLine}
+        `;
+
         res.setHeader('content-type', 'text/html; charset=utf-8');
-        return res.status(200).send(buildHtml({ title, description, image, url: originalUrl }));
+        return res.status(200).send(buildHtml({ title, description, image, url: originalUrl, bodyHtml }));
       }
     }
 
@@ -97,8 +136,21 @@ export default async function handler(req, res) {
         const title = `${data.name} — ${SITE_NAME}`;
         const description = data.description || `Calendario, equipos y partidos de ${data.name}.`;
         const image = data.logo_url || DEFAULT_IMAGE;
+
+        const categoryNames  = (data.categories || []).map((c) => c.name).join(', ');
+        const tournamentList = (data.tournaments || []).map((t) => `${t.name} ${t.year}`).join(', ');
+        const teamNames      = (data.teams || []).map((t) => t.name).join(', ');
+
+        const bodyHtml = `
+          ${data.description ? `<p>${escapeHtml(data.description)}</p>` : ''}
+          ${data.state ? `<p>Estado: ${escapeHtml(data.state)}</p>` : ''}
+          ${categoryNames  ? `<p>Categorías: ${escapeHtml(categoryNames)}</p>` : ''}
+          ${tournamentList ? `<p>Torneos: ${escapeHtml(tournamentList)}</p>` : ''}
+          ${teamNames      ? `<p>Equipos: ${escapeHtml(teamNames)}</p>` : ''}
+        `;
+
         res.setHeader('content-type', 'text/html; charset=utf-8');
-        return res.status(200).send(buildHtml({ title, description, image, url: originalUrl }));
+        return res.status(200).send(buildHtml({ title, description, image, url: originalUrl, bodyHtml }));
       }
     }
 
@@ -114,8 +166,29 @@ export default async function handler(req, res) {
           : `Calendario — ${data.league_name}`;
         const description = `${data.category_name} • ${SITE_NAME}`;
         const image = isTeamView ? data.team_logo_url : (data.league_logo_url || DEFAULT_IMAGE);
+
+        // Lista real de partidos, para que Googlebot tenga contenido de
+        // verdad que indexar (no solo el título). Limitado a 40 para no
+        // mandar una página enorme si el calendario tiene muchas jornadas.
+        let bodyHtml = '';
+        try {
+          const matchesResp = await fetch(`${BACKEND_URL}/api/leagues/categories/${categoryId}/matches`);
+          if (matchesResp.ok) {
+            const { matches } = await matchesResp.json();
+            const relevant = (matches || [])
+              .filter((m) => !isTeamView || m.home_team === sel || m.away_team === sel)
+              .slice(0, 40);
+            if (relevant.length > 0) {
+              const items = relevant.map((m) => `<li>${escapeHtml(matchLineText(m))}</li>`).join('');
+              bodyHtml = `<p>Partidos de ${escapeHtml(data.category_name)} — ${escapeHtml(data.league_name)}:</p><ul>${items}</ul>`;
+            }
+          }
+        } catch (err) {
+          console.error('Error trayendo partidos para el bot:', err);
+        }
+
         res.setHeader('content-type', 'text/html; charset=utf-8');
-        return res.status(200).send(buildHtml({ title, description, image, url: originalUrl }));
+        return res.status(200).send(buildHtml({ title, description, image, url: originalUrl, bodyHtml }));
       }
     }
   } catch (err) {
