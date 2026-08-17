@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://calendariosfbamx.vercel.app/sitemap.xml

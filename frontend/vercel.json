@@ -5,6 +5,7 @@
     { "source": "/partidos/:matchId", "destination": "/api/social-preview?type=match&matchId=:matchId" },
     { "source": "/ligas/:slug", "destination": "/api/social-preview?type=league&slug=:slug" },
     { "source": "/categorias/:categoryId/calendario", "destination": "/api/social-preview?type=calendar&categoryId=:categoryId" },
+    { "source": "/sitemap.xml", "destination": "/api/sitemap" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

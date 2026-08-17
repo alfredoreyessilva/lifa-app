@@ -25,6 +25,41 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json(leagues);
 }));
 
+// Todo lo necesario para armar el sitemap.xml: solo de ligas públicas, y
+// solo categorías/partidos que de verdad tienen contenido publicado (nada
+// de calendarios vacíos ni partidos en borrador). Lo consume
+// frontend/api/sitemap.js (función serverless de Vercel), no el frontend
+// normal — por eso no necesita paginación ni filtros, siempre es todo.
+router.get('/sitemap-data', asyncHandler(async (req, res) => {
+  const [leagueSlugs, tournamentIds, categoryIds, matches] = await Promise.all([
+    db.prepare(`SELECT slug FROM leagues WHERE is_public = TRUE`).all(),
+    db.prepare(`
+      SELECT t.id FROM tournaments t
+      JOIN leagues l ON l.id = t.league_id
+      WHERE l.is_public = TRUE
+    `).all(),
+    db.prepare(`
+      SELECT DISTINCT c.id FROM categories c
+      JOIN leagues l ON l.id = c.league_id
+      JOIN matches m ON m.category_id = c.id AND m.is_draft = FALSE
+      WHERE l.is_public = TRUE
+    `).all(),
+    db.prepare(`
+      SELECT m.id, m.match_date FROM matches m
+      JOIN categories c ON c.id = m.category_id
+      JOIN leagues l ON l.id = c.league_id
+      WHERE l.is_public = TRUE AND m.is_draft = FALSE
+    `).all(),
+  ]);
+
+  res.json({
+    leagueSlugs:   leagueSlugs.map((r) => r.slug),
+    tournamentIds: tournamentIds.map((r) => r.id),
+    categoryIds:   categoryIds.map((r) => r.id),
+    matches:       matches.map((r) => ({ id: r.id, matchDate: r.match_date })),
+  });
+}));
+
 // Detalle de un solo partido (usado para el link "compartir partido").
 // Se registra con path literal "matches" en el primer segmento, así que
 // nunca choca con la ruta "/:slug" (que es de un solo segmento) ni con
