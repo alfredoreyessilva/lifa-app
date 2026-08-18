@@ -212,6 +212,14 @@ export const api = {
   deleteTeam: (teamId, token) =>
     request(`/manage/teams/${teamId}`, { method: 'DELETE', token }),
 
+  // Jugadores / roster (semana 3 del refactor a organizations/players)
+  getTeamRoster: (teamId, token) =>
+    request(`/players/teams/${teamId}/roster`, { token }),
+  addPlayerToRoster: (teamId, payload, token) =>
+    request(`/players/teams/${teamId}/roster`, { method: 'POST', body: payload, token }),
+  movePlayerToTeam: (playerId, teamId, payload, token) =>
+    request(`/players/${playerId}/move-to-team/${teamId}`, { method: 'POST', body: payload, token }),
+
   // Sedes
   getVenues: (slug) => request(`/leagues/${slug}/venues`),
   createVenue: (leagueId, payload, token) =>

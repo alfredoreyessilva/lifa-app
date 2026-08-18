@@ -1,11 +1,20 @@
 import db from '../config/db.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { isOrgMember } from '../utils/orgMembers.js';
 
 export const leagueOwnerRequired = asyncHandler(async (req, res, next) => {
   const leagueId = Number(req.params.leagueId || req.params.id);
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(leagueId);
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
-  if (req.user.role === 'admin' || league.owner_user_id === req.user.id) {
+  // Piloto de la migración a organization_members: primero se pregunta por
+  // membresía en la organización de la liga. owner_user_id se deja como
+  // respaldo (no se quita) — si por lo que sea la liga no tuviera
+  // organization_id o el usuario no apareciera todavía en
+  // organization_members, el acceso de siempre sigue funcionando igual.
+  // Una vez confirmado que esto corre bien en producción, el respaldo se
+  // puede retirar (no en esta migración, más adelante).
+  const isMember = await isOrgMember(req.user.id, league.organization_id);
+  if (req.user.role === 'admin' || isMember || league.owner_user_id === req.user.id) {
     req.league = league;
     return next();
   }
@@ -17,7 +26,8 @@ export const tournamentOwnerRequired = asyncHandler(async (req, res, next) => {
   const tournament = await db.prepare('SELECT * FROM tournaments WHERE id = ?').get(tournamentId);
   if (!tournament) return res.status(404).json({ error: 'Torneo no encontrado' });
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(tournament.league_id);
-  if (req.user.role === 'admin' || league.owner_user_id === req.user.id) {
+  const isMember = await isOrgMember(req.user.id, league.organization_id);
+  if (req.user.role === 'admin' || isMember || league.owner_user_id === req.user.id) {
     req.league = league;
     req.tournament = tournament;
     return next();
@@ -31,7 +41,8 @@ export const branchOwnerRequired = asyncHandler(async (req, res, next) => {
   if (!branch) return res.status(404).json({ error: 'Rama no encontrada' });
   const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(branch.category_id);
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(category.league_id);
-  if (req.user.role === 'admin' || league.owner_user_id === req.user.id) {
+  const isMember = await isOrgMember(req.user.id, league.organization_id);
+  if (req.user.role === 'admin' || isMember || league.owner_user_id === req.user.id) {
     req.league = league;
     req.category = category;
     req.branch = branch;
@@ -47,7 +58,8 @@ export const conferenceOwnerRequired = asyncHandler(async (req, res, next) => {
   const branch = await db.prepare('SELECT * FROM branches WHERE id = ?').get(conference.branch_id);
   const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(branch.category_id);
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(category.league_id);
-  if (req.user.role === 'admin' || league.owner_user_id === req.user.id) {
+  const isMember = await isOrgMember(req.user.id, league.organization_id);
+  if (req.user.role === 'admin' || isMember || league.owner_user_id === req.user.id) {
     req.league = league;
     req.category = category;
     req.branch = branch;
@@ -62,7 +74,8 @@ export const categoryOwnerRequired = asyncHandler(async (req, res, next) => {
   const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(categoryId);
   if (!category) return res.status(404).json({ error: 'Categoría no encontrada' });
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(category.league_id);
-  if (req.user.role === 'admin' || league.owner_user_id === req.user.id) {
+  const isMember = await isOrgMember(req.user.id, league.organization_id);
+  if (req.user.role === 'admin' || isMember || league.owner_user_id === req.user.id) {
     req.league = league;
     req.category = category;
     return next();
@@ -76,7 +89,8 @@ export const matchOwnerRequired = asyncHandler(async (req, res, next) => {
   if (!match) return res.status(404).json({ error: 'Partido no encontrado' });
   const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(match.category_id);
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(category.league_id);
-  if (req.user.role === 'admin' || league.owner_user_id === req.user.id) {
+  const isMember = await isOrgMember(req.user.id, league.organization_id);
+  if (req.user.role === 'admin' || isMember || league.owner_user_id === req.user.id) {
     req.league = league;
     req.category = category;
     req.match = match;
@@ -91,8 +105,19 @@ export const teamOwnerRequired = asyncHandler(async (req, res, next) => {
   if (!team) return res.status(404).json({ error: 'Equipo no encontrado' });
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(team.league_id);
   // El dueño directo del equipo (representante de medios) puede editar el
-  // perfil de SU equipo, igual que el dueño de la liga o un admin.
-  if (req.user.role === 'admin' || league.owner_user_id === req.user.id || team.owner_user_id === req.user.id) {
+  // perfil de SU equipo, igual que el dueño de la liga o un admin. Ahora se
+  // pregunta por membresía tanto en la organización de la liga como en la
+  // del equipo (son organizaciones distintas) — cualquiera de las dos
+  // formas de acceso, la nueva o la de owner_user_id, sigue funcionando.
+  const isLeagueMember = await isOrgMember(req.user.id, league.organization_id);
+  const isTeamMember = await isOrgMember(req.user.id, team.organization_id);
+  if (
+    req.user.role === 'admin' ||
+    isLeagueMember ||
+    isTeamMember ||
+    league.owner_user_id === req.user.id ||
+    team.owner_user_id === req.user.id
+  ) {
     req.league = league;
     req.team = team;
     return next();
@@ -109,7 +134,8 @@ export const teamLeagueOwnerRequired = asyncHandler(async (req, res, next) => {
   const team = await db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId);
   if (!team) return res.status(404).json({ error: 'Equipo no encontrado' });
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(team.league_id);
-  if (req.user.role === 'admin' || league.owner_user_id === req.user.id) {
+  const isMember = await isOrgMember(req.user.id, league.organization_id);
+  if (req.user.role === 'admin' || isMember || league.owner_user_id === req.user.id) {
     req.league = league;
     req.team = team;
     return next();
@@ -122,7 +148,8 @@ export const venueOwnerRequired = asyncHandler(async (req, res, next) => {
   const venue = await db.prepare('SELECT * FROM venues WHERE id = ?').get(venueId);
   if (!venue) return res.status(404).json({ error: 'Sede no encontrada' });
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(venue.league_id);
-  if (req.user.role === 'admin' || league.owner_user_id === req.user.id) {
+  const isMember = await isOrgMember(req.user.id, league.organization_id);
+  if (req.user.role === 'admin' || isMember || league.owner_user_id === req.user.id) {
     req.league = league;
     req.venue = venue;
     return next();
@@ -136,7 +163,8 @@ export const groupOwnerRequired = asyncHandler(async (req, res, next) => {
   if (!group) return res.status(404).json({ error: 'Grupo no encontrado' });
   const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(group.category_id);
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(category.league_id);
-  if (req.user.role === 'admin' || league.owner_user_id === req.user.id) {
+  const isMember = await isOrgMember(req.user.id, league.organization_id);
+  if (req.user.role === 'admin' || isMember || league.owner_user_id === req.user.id) {
     req.league = league;
     req.category = category;
     req.group = group;

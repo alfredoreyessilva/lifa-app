@@ -13,6 +13,7 @@ import ExcelImport from '../components/ExcelImport.jsx';
 import CharField from '../components/CharField.jsx';
 import TimezoneSelect from '../components/TimezoneSelect.jsx';
 import InviteTeamModal from '../components/InviteTeamModal.jsx';
+import TeamRosterModal from '../components/TeamRosterModal.jsx';
 import OrgLogoBar from '../components/OrgLogoBar.jsx';
 import MiCartelera from '../components/MiCartelera.jsx';
 import PredictionStats from '../components/PredictionStats.jsx';
@@ -160,6 +161,7 @@ function LeagueWorkPanel({ leagueId }) {
           onEditTeam={(team) => setModal({ type: 'edit-team', team })}
           onDeleteTeam={(team) => setModal({ type: 'delete-team', team })}
           onInviteTeam={(team) => setModal({ type: 'invite-team', team })}
+          onTeamRoster={(team) => setModal({ type: 'team-roster', team })}
           onRemoveTeamOwner={(team) => setModal({ type: 'remove-team-owner', team })}
           onAddVenue={() => setModal({ type: 'add-venue' })}
           onEditVenue={(venue) => setModal({ type: 'edit-venue', venue })}
@@ -290,6 +292,10 @@ function LeagueWorkPanel({ leagueId }) {
         </Modal>
       )}
 
+      {modal?.type === 'team-roster' && (
+        <TeamRosterModal team={modal.team} token={token} onClose={() => setModal(null)} />
+      )}
+
       {modal?.type === 'add-venue' && (
         <Modal title="Nueva sede" onClose={() => setModal(null)}>
           <VenueForm submitLabel="Crear sede" onCancel={() => setModal(null)}
@@ -344,7 +350,7 @@ function LeagueWorkPanel({ leagueId }) {
 function LeaguePanel({
   data, onEditLeague, onAddCategory, onEditCategory, onDeleteCategory,
   onAddMatch, onEditMatch, onDeleteMatch, onImportMatches,
-  onAddTeam, onEditTeam, onDeleteTeam, onInviteTeam, onRemoveTeamOwner,
+  onAddTeam, onEditTeam, onDeleteTeam, onInviteTeam, onRemoveTeamOwner, onTeamRoster,
   onAddVenue, onEditVenue, onDeleteVenue,
   onAddGroup, onEditGroup, onDeleteGroup,
 }) {
@@ -426,6 +432,7 @@ function LeaguePanel({
                 </div>
                 <div className="row-actions">
                   <button className="btn btn-outline btn-sm" onClick={() => onEditTeam(team)}>Editar</button>
+                  <button className="btn btn-outline btn-sm" onClick={() => onTeamRoster(team)}>Roster</button>
                   {team.owner_user_id ? (
                     <button className="btn btn-ghost btn-sm" onClick={() => onRemoveTeamOwner(team)}>Quitar representante</button>
                   ) : (

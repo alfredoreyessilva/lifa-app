@@ -54,7 +54,20 @@ router.get('/me', authRequired, asyncHandler(async (req, res) => {
     JOIN leagues l ON l.id = t.league_id
     WHERE t.owner_user_id = ?
   `).all(user.id);
-  res.json({ user, leagues, teams });
+  // Campo nuevo, aditivo: todas las organizaciones donde el usuario es
+  // miembro activo (owner/admin/editor), vía organization_members. "leagues"
+  // y "teams" arriba siguen calculándose igual que siempre (por
+  // owner_user_id) — el frontend todavía los usa así. "organizations" es la
+  // fuente que el panel va a adoptar en el siguiente paso, y a futuro es la
+  // única que va a poder mostrar organizaciones con más de un miembro.
+  const organizations = await db.prepare(`
+    SELECT o.id, o.name, o.slug, o.type, o.logo_url, o.status, om.role AS member_role
+    FROM organization_members om
+    JOIN organizations o ON o.id = om.organization_id
+    WHERE om.user_id = ? AND om.status = 'active'
+    ORDER BY o.type, o.name
+  `).all(user.id);
+  res.json({ user, leagues, teams, organizations });
 }));
 
 export default router;

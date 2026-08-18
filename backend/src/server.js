@@ -15,6 +15,7 @@ import trackRoutes         from './routes/track.js';
 import predictionRoutes    from './routes/predictions.js';
 import boardRoutes         from './routes/board.js';
 import poolRoutes          from './routes/pools.js';
+import playerRoutes        from './routes/players.js';
 
 // Orígenes permitidos para llamar a la API desde el navegador. Se definen en
 // la variable de entorno ALLOWED_ORIGINS (separados por coma), por ejemplo:
@@ -73,6 +74,7 @@ app.use('/api/track',         trackRoutes);
 app.use('/api/predictions',   predictionRoutes);
 app.use('/api/board',         boardRoutes);
 app.use('/api/pools',         poolRoutes);
+app.use('/api/players',       playerRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);

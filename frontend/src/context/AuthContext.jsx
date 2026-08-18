@@ -8,12 +8,25 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [leagues, setLeagues] = useState([]);
   const [teams, setTeams] = useState([]);
+  // Nuevo, aditivo: organizaciones del usuario vía organization_members.
+  // OrgLogoBar y el resto del panel SIGUEN navegando con "leagues"/"teams"
+  // como hasta ahora (esas listas traen league.id / team.id, que es lo que
+  // usan los links para armar la ruta). "organizations" no los reemplaza
+  // todavía — se deja disponible en el contexto para cuando el panel
+  // empiece a mostrar otros tipos de organización (medios, proveedores,
+  // tiendas, clínicas), que no tienen fila en "leagues" ni en "teams".
+  const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!token) { setLoading(false); return; }
     api.me(token)
-      .then((data) => { setUser(data.user); setLeagues(data.leagues); setTeams(data.teams || []); })
+      .then((data) => {
+        setUser(data.user);
+        setLeagues(data.leagues);
+        setTeams(data.teams || []);
+        setOrganizations(data.organizations || []);
+      })
       .catch(() => { setToken(null); localStorage.removeItem('lifa_token'); })
       .finally(() => setLoading(false));
   }, [token]);
@@ -30,6 +43,7 @@ export function AuthProvider({ children }) {
     setUser(null);
     setLeagues([]);
     setTeams([]);
+    setOrganizations([]);
   }
 
   async function refreshLeagues() {
@@ -37,10 +51,11 @@ export function AuthProvider({ children }) {
     const data = await api.me(token);
     setLeagues(data.leagues);
     setTeams(data.teams || []);
+    setOrganizations(data.organizations || []);
   }
 
   return (
-    <AuthContext.Provider value={{ token, user, leagues, teams, loading, login, logout, refreshLeagues }}>
+    <AuthContext.Provider value={{ token, user, leagues, teams, organizations, loading, login, logout, refreshLeagues }}>
       {children}
     </AuthContext.Provider>
   );

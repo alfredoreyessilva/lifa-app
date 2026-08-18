@@ -65,6 +65,40 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Catálogo simple de países. Existe desde ahora (aunque hoy el 100% de los
+-- datos sean de México) porque agregarlo después, con miles de ligas/equipos
+-- ya creados, sería mucho más caro que agregarlo hoy. No es una jerarquía
+-- geográfica completa (sin estado/ciudad todavía) — solo lo mínimo para que
+-- cualquier organización pueda declarar su país.
+CREATE TABLE IF NOT EXISTS countries (
+  id SERIAL PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL
+);
+
+-- Entidad general que va a ir agrupando a todos los tipos de actor de la
+-- plataforma (liga, equipo, medio, proveedor de uniformes, tienda deportiva,
+-- clínica, marca patrocinadora). A propósito NO reemplaza a "leagues" ni a
+-- "teams" — esas tablas siguen existiendo con todos sus campos específicos.
+-- "organizations" es la capa común encima: identidad, tipo, país, contacto
+-- básico. La conexión real (leagues.organization_id / teams.organization_id)
+-- se agrega en un paso aparte, para no mezclar la creación de la tabla con
+-- la migración de datos existentes.
+CREATE TABLE IF NOT EXISTS organizations (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  slug TEXT UNIQUE,
+  type TEXT NOT NULL CHECK (type IN ('league', 'team', 'media', 'supplier', 'store', 'clinic', 'brand')),
+  country_id INTEGER REFERENCES countries(id) ON DELETE SET NULL,
+  logo_url TEXT,
+  description TEXT,
+  website_url TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_organizations_type ON organizations(type);
+CREATE INDEX IF NOT EXISTS idx_organizations_country ON organizations(country_id);
+
 CREATE TABLE IF NOT EXISTS leagues (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
@@ -497,6 +531,141 @@ export async function initSchema() {
     await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`);
     await run(`CREATE INDEX IF NOT EXISTS idx_teams_owner ON teams(owner_user_id)`);
 
+    // Conexión de una liga/equipo con su fila general en "organizations".
+    // Nullable a propósito: nace vacía en ambas tablas, y un paso aparte
+    // (más abajo, con guardas WHERE organization_id IS NULL) crea la
+    // organización correspondiente y llena esta columna — así la creación
+    // de la columna y la migración de datos quedan separadas, y esta parte
+    // nunca puede fallar por datos, solo por estructura.
+    await run(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_leagues_organization ON leagues(organization_id)`);
+
+    await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_teams_organization ON teams(organization_id)`);
+
+    // Backfill: por cada liga que todavía no tenga organization_id, crea su
+    // organización (type='league') reusando el mismo slug (leagues.slug ya es
+    // único, así que es seguro reutilizarlo) y enlázala. Doblemente seguro
+    // de repetir: tanto el INSERT como el UPDATE están protegidos con
+    // "organization_id IS NULL", así que en cualquier arranque posterior,
+    // una vez migradas, no vuelven a tocarse.
+    await run(`
+      WITH new_league_orgs AS (
+        INSERT INTO organizations (name, slug, type, logo_url, description, website_url, status, created_at)
+        SELECT l.name, l.slug, 'league', l.logo_url, l.description, l.website_url, 'active', l.created_at
+        FROM leagues l
+        WHERE l.organization_id IS NULL
+        RETURNING id, slug
+      )
+      UPDATE leagues l
+      SET organization_id = new_league_orgs.id
+      FROM new_league_orgs
+      WHERE l.slug = new_league_orgs.slug AND l.organization_id IS NULL
+    `);
+
+    // Mismo backfill para equipos. A diferencia de las ligas, "teams" no
+    // tiene columna slug ni created_at propia, así que se genera un slug
+    // simple y estable ('team-<id>') solo para cumplir la restricción UNIQUE
+    // de organizations.slug — no se usa para navegación pública todavía.
+    await run(`
+      WITH new_team_orgs AS (
+        INSERT INTO organizations (name, slug, type, logo_url, website_url, status, created_at)
+        SELECT t.name, 'team-' || t.id, 'team', t.logo_url, t.website_url, 'active', CURRENT_TIMESTAMP
+        FROM teams t
+        WHERE t.organization_id IS NULL
+        RETURNING id, slug
+      )
+      UPDATE teams t
+      SET organization_id = new_team_orgs.id
+      FROM new_team_orgs
+      WHERE new_team_orgs.slug = 'team-' || t.id AND t.organization_id IS NULL
+    `);
+
+    // Quién pertenece a cada organización y con qué rol. Esto generaliza el
+    // "un solo owner_user_id" que hoy vive suelto en leagues y teams: una
+    // organización podrá tener varias personas (owner, admin, editor), no
+    // solo una. owner_user_id en leagues/teams NO se borra en este paso —
+    // sigue funcionando exactamente igual que hoy mientras se completa la
+    // migración de ownership.js en los siguientes pasos.
+    await run(`
+      CREATE TABLE IF NOT EXISTS organization_members (
+        id SERIAL PRIMARY KEY,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        role TEXT NOT NULL DEFAULT 'owner' CHECK (role IN ('owner', 'admin', 'editor')),
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(organization_id, user_id)
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_org_members_user ON organization_members(user_id)`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_org_members_org ON organization_members(organization_id)`);
+
+    // Backfill: cada dueño actual de una liga o equipo (owner_user_id) se
+    // da de alta como 'owner' de la organización correspondiente. ON CONFLICT
+    // DO NOTHING (por la restricción UNIQUE de arriba) lo vuelve seguro de
+    // repetir en cada arranque: la primera vez los crea, después no hace nada.
+    await run(`
+      INSERT INTO organization_members (organization_id, user_id, role)
+      SELECT l.organization_id, l.owner_user_id, 'owner'
+      FROM leagues l
+      WHERE l.organization_id IS NOT NULL AND l.owner_user_id IS NOT NULL
+      ON CONFLICT (organization_id, user_id) DO NOTHING
+    `);
+    await run(`
+      INSERT INTO organization_members (organization_id, user_id, role)
+      SELECT t.organization_id, t.owner_user_id, 'owner'
+      FROM teams t
+      WHERE t.organization_id IS NOT NULL AND t.owner_user_id IS NOT NULL
+      ON CONFLICT (organization_id, user_id) DO NOTHING
+    `);
+
+    // Identidad de un jugador, independiente de si tiene cuenta de usuario o
+    // no. user_id nace en NULL porque normalmente el jugador lo da de alta
+    // un equipo/liga/estadístico, no el jugador mismo — más adelante puede
+    // "reclamar" su perfil y ahí se llena user_id. UNIQUE(user_id) permite
+    // muchos jugadores sin cuenta (NULL no choca con NULL en Postgres), pero
+    // evita que una misma cuenta termine detrás de dos perfiles de jugador.
+    await run(`
+      CREATE TABLE IF NOT EXISTS players (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE SET NULL,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        birth_date DATE,
+        position TEXT,
+        jersey_number INTEGER,
+        photo_url TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_players_user ON players(user_id)`);
+
+    // Historial de qué jugador estuvo en qué equipo y cuándo. Separada de
+    // "players" a propósito: un jugador puede pasar por varios equipos a lo
+    // largo del tiempo sin perder registro de los anteriores (end_date se
+    // llena al cambiarlo de equipo, no se borra la fila). tournament_id es
+    // opcional porque no todo roster se arma alrededor de un torneo
+    // específico; season queda como texto libre ("2025", "2025-2026") para
+    // no atarse todavía a un formato único de temporada.
+    await run(`
+      CREATE TABLE IF NOT EXISTS player_team_memberships (
+        id SERIAL PRIMARY KEY,
+        player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        tournament_id INTEGER REFERENCES tournaments(id) ON DELETE SET NULL,
+        season TEXT,
+        jersey_number INTEGER,
+        position TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        end_date DATE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_player_memberships_player ON player_team_memberships(player_id)`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_player_memberships_team ON player_team_memberships(team_id)`);
+
     // Invitaciones de un solo uso para "entregar" el perfil de un equipo (y más
     // adelante, de una liga) a otra persona mediante un link que el
     // representante genera y comparte por su cuenta.
@@ -551,6 +720,22 @@ export async function initSchema() {
       INSERT INTO league_teams (league_id, team_id)
       SELECT league_id, id FROM teams
       ON CONFLICT (league_id, team_id) DO NOTHING
+    `);
+
+    // Siembra base de países. ON CONFLICT (code) DO NOTHING la vuelve segura
+    // de correr en cada arranque: la primera vez los crea, después no hace
+    // nada. Lista corta a propósito — se puede ampliar cuando haga falta,
+    // sin que eso cuente como una migración especial.
+    await run(`
+      INSERT INTO countries (code, name) VALUES
+        ('MX', 'México'),
+        ('US', 'Estados Unidos'),
+        ('CA', 'Canadá'),
+        ('GT', 'Guatemala'),
+        ('CO', 'Colombia'),
+        ('AR', 'Argentina'),
+        ('ES', 'España')
+      ON CONFLICT (code) DO NOTHING
     `);
   } finally {
     // Se suelta el candado y se libera la conexión pase lo que pase (incluso
