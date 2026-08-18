@@ -1,14 +1,16 @@
 import express from 'express';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
-import { teamOwnerRequired, matchOwnerRequired } from '../middleware/ownership.js';
+import { teamOwnerRequired, matchOwnerRequired, branchTeamOwnerRequired } from '../middleware/ownership.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isNonEmptyString } from '../utils/validation.js';
 
 const router = express.Router();
 
-// Roster de un equipo: solo los jugadores con membresía activa
-// (end_date IS NULL) en ese equipo, ordenados por número de jugador.
+// OBSOLETO (corrección roster-por-rama): este endpoint da el roster de TODO
+// el equipo mezclado, sin separar por rama/categoría — eso es justo lo que
+// se corrigió. Se deja vivo por ahora, sin que nada lo llame ya, y se retira
+// en el siguiente paso una vez que la pantalla nueva esté conectada.
 router.get('/teams/:id/roster', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
   const teamId = req.team.id;
   const roster = await db.prepare(`
@@ -22,9 +24,7 @@ router.get('/teams/:id/roster', authRequired, teamOwnerRequired, asyncHandler(as
   res.json({ roster });
 }));
 
-// Agrega un jugador nuevo (todavía sin cuenta propia, user_id queda NULL) y
-// de una vez lo da de alta en el roster del equipo, en un solo paso — es el
-// caso más común: el equipo registra a alguien que nunca ha usado la app.
+// OBSOLETO, mismo motivo que el de arriba.
 router.post('/teams/:id/roster', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
   const teamId = req.team.id;
   const { first_name, last_name, birth_date, position, jersey_number, photo_url, season } = req.body;
@@ -48,6 +48,78 @@ router.post('/teams/:id/roster', authRequired, teamOwnerRequired, asyncHandler(a
   res.status(201).json({ player, membership });
 }));
 
+// Roster de un equipo DENTRO DE UNA RAMA específica — el reemplazo correcto
+// de los dos endpoints obsoletos de arriba. branchTeamOwnerRequired ya
+// valida que el equipo esté inscrito en la rama antes de llegar aquí.
+router.get('/branches/:branchId/teams/:teamId/roster', authRequired, branchTeamOwnerRequired, asyncHandler(async (req, res) => {
+  const roster = await db.prepare(`
+    SELECT p.id, p.first_name, p.last_name, p.birth_date, p.photo_url,
+           ptm.id AS membership_id, ptm.jersey_number, ptm.position, ptm.season, ptm.start_date
+    FROM player_team_memberships ptm
+    JOIN players p ON p.id = ptm.player_id
+    WHERE ptm.team_id = ? AND ptm.branch_id = ? AND ptm.end_date IS NULL
+    ORDER BY ptm.jersey_number NULLS LAST, p.last_name
+  `).all(req.team.id, req.branch.id);
+  res.json({ roster });
+}));
+
+// Agrega un jugador nuevo y lo da de alta en el roster de este equipo, en
+// ESTA rama específica — branch_id ya no se pregunta, se toma del contexto
+// (la URL), tal como se decidió: "se sobreentiende que se subió en esa
+// rama de esa categoría".
+router.post('/branches/:branchId/teams/:teamId/roster', authRequired, branchTeamOwnerRequired, asyncHandler(async (req, res) => {
+  const { first_name, last_name, birth_date, position, jersey_number, photo_url, season } = req.body;
+
+  if (!isNonEmptyString(first_name) || !isNonEmptyString(last_name)) {
+    return res.status(400).json({ error: 'Nombre y apellido son obligatorios' });
+  }
+
+  const player = await db.prepare(`
+    INSERT INTO players (first_name, last_name, birth_date, position, jersey_number, photo_url)
+    VALUES (?, ?, ?, ?, ?, ?)
+    RETURNING *
+  `).get(first_name.trim(), last_name.trim(), birth_date || null, position || null, jersey_number || null, photo_url || null);
+
+  const membership = await db.prepare(`
+    INSERT INTO player_team_memberships (player_id, team_id, branch_id, season, jersey_number, position)
+    VALUES (?, ?, ?, ?, ?, ?)
+    RETURNING *
+  `).get(player.id, req.team.id, req.branch.id, season || null, jersey_number || null, position || null);
+
+  res.status(201).json({ player, membership });
+}));
+
+// Mueve a un jugador YA EXISTENTE (dado de alta antes, en otra rama u otro
+// equipo) al roster de este equipo, en esta rama. Cierra su membresía
+// activa anterior (donde sea que estuviera) y abre una nueva aquí — mismo
+// patrón de historial que el traspaso de abajo.
+router.post('/branches/:branchId/teams/:teamId/roster/:playerId/move', authRequired, branchTeamOwnerRequired, asyncHandler(async (req, res) => {
+  const playerId = Number(req.params.playerId);
+  const { season, jersey_number, position } = req.body;
+
+  const player = await db.prepare('SELECT * FROM players WHERE id = ?').get(playerId);
+  if (!player) return res.status(404).json({ error: 'Jugador no encontrado' });
+
+  await db.prepare(`
+    UPDATE player_team_memberships
+    SET end_date = CURRENT_DATE, status = 'ended'
+    WHERE player_id = ? AND end_date IS NULL
+  `).run(playerId);
+
+  const membership = await db.prepare(`
+    INSERT INTO player_team_memberships (player_id, team_id, branch_id, season, jersey_number, position)
+    VALUES (?, ?, ?, ?, ?, ?)
+    RETURNING *
+  `).get(playerId, req.team.id, req.branch.id, season || null, jersey_number || null, position || null);
+
+  res.status(201).json({ player, membership });
+}));
+
+// OBSOLETO (corrección roster-por-rama): reemplazado por
+// /branches/:branchId/teams/:teamId/roster/:playerId/move de arriba, que sí
+// registra en qué rama queda el jugador. Se deja vivo, sin uso, mismo
+// criterio que los otros dos endpoints obsoletos de este archivo.
+//
 // Mueve a un jugador al equipo :id (el de la URL), cerrando cualquier
 // membresía activa que tuviera en otro equipo (end_date = hoy) y abriendo
 // una nueva en el equipo destino — sin borrar la fila vieja, así el

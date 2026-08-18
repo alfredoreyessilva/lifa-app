@@ -121,6 +121,15 @@ export const api = {
   removeTeamFromBranch: (branchId, teamId, token) =>
     request(`/manage/branches/${branchId}/teams/${teamId}`, { method: 'DELETE', token }),
 
+  // Roster de un equipo DENTRO DE UNA RAMA (reemplaza el roster genérico
+  // de equipo, corrección roster-por-rama)
+  getBranchTeamRoster: (branchId, teamId, token) =>
+    request(`/players/branches/${branchId}/teams/${teamId}/roster`, { token }),
+  addPlayerToBranchRoster: (branchId, teamId, payload, token) =>
+    request(`/players/branches/${branchId}/teams/${teamId}/roster`, { method: 'POST', body: payload, token }),
+  movePlayerToBranchTeam: (branchId, teamId, playerId, payload, token) =>
+    request(`/players/branches/${branchId}/teams/${teamId}/roster/${playerId}/move`, { method: 'POST', body: payload, token }),
+
   // Pruebas de la nueva jerarquía (Rama -> Conferencia)
   createConference: (branchId, payload, token) =>
     request(`/manage/branches/${branchId}/conferences`, { method: 'POST', body: payload, token }),

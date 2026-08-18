@@ -5,16 +5,18 @@ import { api } from '../api/client.js';
 import MatchForm from '../components/MatchForm.jsx';
 import Modal from '../components/Modal.jsx';
 import OrgLogoBar from '../components/OrgLogoBar.jsx';
+import BranchRosterModal from '../components/BranchRosterModal.jsx';
 
-// Pantalla real de una Rama: Calendario (partidos), Equipos, Sedes,
-// Conferencias y Grupos — las 5 al mismo nivel (antes "Conferencias y
-// grupos" vivía aparte, en pantallas propias fuera de esta).
+// Pantalla real de una Rama: Calendario (partidos), Equipos, Roster, Sedes,
+// Conferencias y Grupos.
 // Ruta: /panel/liga/:id/:year/torneo/:tournamentId/categoria/:categoryId/rama/:branchId
 //
-// Equipos y Sedes aquí son de SOLO LECTURA — no se inscribe nada a mano:
-// simplemente se muestran los equipos/sedes de la liga que ya aparecen
-// jugando en los partidos de esta rama (el calendario es la prueba de que
-// participan, como quedamos).
+// CORRECCIÓN: "Equipos" ya NO es de solo lectura. Antes se detectaba
+// implícitamente (aparecía un equipo si ya tenía partidos programados aquí);
+// ahora es una inscripción explícita (branch_teams) que la liga controla
+// ANTES de programar partidos o subir roster — así el roster de un equipo
+// vive correctamente a nivel equipo+rama, no mezclado con sus otras
+// categorías. Sedes se queda igual, de solo lectura (derivada de partidos).
 export default function RamaPanel() {
   const { id, year, tournamentId, categoryId, branchId } = useParams();
   const { token } = useAuth();
@@ -31,6 +33,21 @@ export default function RamaPanel() {
   const [newConferenceName, setNewConferenceName] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupConferenceId, setNewGroupConferenceId] = useState('');
+
+  // Equipos inscritos en esta rama (branch_teams) — reemplaza a la
+  // detección implícita vía partidos.
+  const [branchTeams, setBranchTeams] = useState(null);
+  const [enrollTeamId, setEnrollTeamId] = useState('');
+  const [rosterTeam, setRosterTeam] = useState(null); // equipo cuyo roster se está viendo, o null
+
+  function refreshBranchTeams() {
+    api.getBranchTeams(branchId, token).then(setBranchTeams).catch((e) => setError(e.message));
+  }
+
+  useEffect(() => {
+    if (token) refreshBranchTeams();
+  }, [branchId, token]);
+
 
   useEffect(() => {
     if (!token) return;
@@ -88,20 +105,18 @@ export default function RamaPanel() {
   const venues = leagueData?.venues || [];
   const leagueTimezone = leagueData?.league?.timezone || 'America/Mexico_City';
 
-  // Equipos/Sedes que de verdad aparecen jugando en esta rama, cruzados con
-  // el catálogo de la liga (para tomar su logo si coincide el nombre).
-  const teamNamesInBranch = new Set();
+  // Sedes que de verdad aparecen jugando en esta rama, cruzadas con el
+  // catálogo de la liga — esto SÍ se queda derivado de partidos, no cambió.
   const venueIdsInBranch = new Set();
   (matches || []).forEach((m) => {
-    teamNamesInBranch.add(m.home_team);
-    teamNamesInBranch.add(m.away_team);
     if (m.venue_id) venueIdsInBranch.add(m.venue_id);
   });
-  const teamsInBranch = [...teamNamesInBranch].map((name) => ({
-    name,
-    logo_url: teams.find((t) => t.name?.toUpperCase() === name?.toUpperCase())?.logo_url || null,
-  }));
   const venuesInBranch = venues.filter((v) => venueIdsInBranch.has(v.id));
+
+  // Equipos de la liga que todavía NO están inscritos en esta rama — para
+  // el selector de "Inscribir equipo".
+  const enrolledTeamIds = new Set((branchTeams || []).map((t) => t.id));
+  const availableTeamsToEnroll = teams.filter((t) => !enrolledTeamIds.has(t.id));
 
   return (
     <div className="container">
@@ -125,6 +140,7 @@ export default function RamaPanel() {
       <div className="tab-bar">
         <button className={`tab-btn ${tab === 'calendario'    ? 'active' : ''}`} onClick={() => setTab('calendario')}>Calendario</button>
         <button className={`tab-btn ${tab === 'equipos'       ? 'active' : ''}`} onClick={() => setTab('equipos')}>Equipos</button>
+        <button className={`tab-btn ${tab === 'roster'        ? 'active' : ''}`} onClick={() => setTab('roster')}>Roster</button>
         <button className={`tab-btn ${tab === 'sedes'         ? 'active' : ''}`} onClick={() => setTab('sedes')}>Sedes</button>
         <button className={`tab-btn ${tab === 'conferencias'  ? 'active' : ''}`} onClick={() => setTab('conferencias')}>Conferencias</button>
         <button className={`tab-btn ${tab === 'grupos'        ? 'active' : ''}`} onClick={() => setTab('grupos')}>Grupos</button>
@@ -155,16 +171,70 @@ export default function RamaPanel() {
       )}
 
       {tab === 'equipos' && (
+        <>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!enrollTeamId) return;
+              await api.enrollTeamInBranch(branchId, enrollTeamId, token);
+              setEnrollTeamId('');
+              refreshBranchTeams();
+            }}
+          >
+            <div className="field">
+              <label>Inscribir equipo a esta rama</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <select value={enrollTeamId} onChange={(e) => setEnrollTeamId(e.target.value)} style={{ flex: 1 }}>
+                  <option value="">Selecciona un equipo…</option>
+                  {availableTeamsToEnroll.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                <button className="btn btn-flag btn-sm" disabled={!enrollTeamId}>Inscribir</button>
+              </div>
+              {availableTeamsToEnroll.length === 0 && teams.length > 0 && (
+                <p style={{ color: 'var(--ink-dim)', fontSize: 12, marginTop: 6 }}>Todos los equipos de la liga ya están inscritos aquí.</p>
+              )}
+            </div>
+          </form>
+
+          <div className="league-grid" style={{ marginTop: 16 }}>
+            {branchTeams === null && <p>Cargando…</p>}
+            {branchTeams && branchTeams.length === 0 && (
+              <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>
+                Todavía no hay equipos inscritos en esta rama. Inscribe el primero arriba.
+              </p>
+            )}
+            {branchTeams && branchTeams.map((t) => (
+              <div key={t.id} className="league-card">
+                {t.logo_url ? <img src={t.logo_url} alt={t.name} style={{ width: 56, height: 56, borderRadius: '50%' }} /> : null}
+                <h3>{t.name}</h3>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ color: 'var(--flag)' }}
+                  onClick={async () => { await api.removeTeamFromBranch(branchId, t.id, token); refreshBranchTeams(); }}
+                >
+                  Quitar de la rama
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {tab === 'roster' && (
         <div className="league-grid">
-          {teamsInBranch.length === 0 && (
+          {branchTeams === null && <p>Cargando…</p>}
+          {branchTeams && branchTeams.length === 0 && (
             <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>
-              Todavía no hay equipos — aparecerán aquí en cuanto crees partidos con ellos.
+              Primero inscribe equipos en la pestaña "Equipos" — el roster se captura por equipo, dentro de esta rama.
             </p>
           )}
-          {teamsInBranch.map((t) => (
-            <div key={t.name} className="league-card">
+          {branchTeams && branchTeams.map((t) => (
+            <div key={t.id} className="league-card">
               {t.logo_url ? <img src={t.logo_url} alt={t.name} style={{ width: 56, height: 56, borderRadius: '50%' }} /> : null}
               <h3>{t.name}</h3>
+              <button className="btn btn-outline btn-sm" onClick={() => setRosterTeam(t)}>Ver roster</button>
             </div>
           ))}
         </div>
@@ -345,6 +415,10 @@ export default function RamaPanel() {
             <button className="btn btn-danger" onClick={async () => { await api.deleteMatch(modal.match.id, token); refreshMatches(); setModal(null); }}>Eliminar</button>
           </div>
         </Modal>
+      )}
+
+      {rosterTeam && (
+        <BranchRosterModal branchId={branchId} team={rosterTeam} token={token} onClose={() => setRosterTeam(null)} />
       )}
     </div>
   );

@@ -38,11 +38,12 @@ export default function MatchStatsModal({ match, token, onClose }) {
   const [saving, setSaving] = useState(false);
 
   const notLinked = !match.home_team_id && !match.away_team_id;
+  const noBranch = !match.branch_id;
 
   useEffect(() => {
-    if (notLinked) return;
-    if (match.home_team_id) api.getTeamRoster(match.home_team_id, token).then((d) => setHomeRoster(d.roster)).catch(() => setHomeRoster([]));
-    if (match.away_team_id) api.getTeamRoster(match.away_team_id, token).then((d) => setAwayRoster(d.roster)).catch(() => setAwayRoster([]));
+    if (notLinked || noBranch) return;
+    if (match.home_team_id) api.getBranchTeamRoster(match.branch_id, match.home_team_id, token).then((d) => setHomeRoster(d.roster)).catch(() => setHomeRoster([]));
+    if (match.away_team_id) api.getBranchTeamRoster(match.branch_id, match.away_team_id, token).then((d) => setAwayRoster(d.roster)).catch(() => setAwayRoster([]));
     loadCaptured();
   }, [match.id]);
 
@@ -104,6 +105,10 @@ export default function MatchStatsModal({ match, token, onClose }) {
       {notLinked ? (
         <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>
           Este partido todavía no está conectado con sus equipos. Usa "Conectar equipos con sus partidos" en el panel de la liga antes de capturar estadísticas.
+        </p>
+      ) : noBranch ? (
+        <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>
+          Este partido no tiene rama asignada, así que no se puede saber de qué roster tomar a los jugadores. Edítalo y asígnale una rama primero.
         </p>
       ) : (
         <>

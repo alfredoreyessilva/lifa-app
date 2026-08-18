@@ -3,7 +3,6 @@ import { api } from '../api/client.js';
 import TeamForm from './TeamForm.jsx';
 import Modal from './Modal.jsx';
 import InviteTeamModal from './InviteTeamModal.jsx';
-import TeamRosterModal from './TeamRosterModal.jsx';
 
 // Roster de liga: equipos "de la casa" de una liga (tabla league_teams).
 // Un equipo aquí queda elegible automáticamente para cualquier torneo de
@@ -31,7 +30,6 @@ export default function LeagueRoster({ leagueId, token }) {
 
   const [editingTeam, setEditingTeam] = useState(null); // equipo a editar, o null
   const [inviteTeam,  setInviteTeam]  = useState(null); // equipo a invitar, o null
-  const [rosterTeam,  setRosterTeam]  = useState(null); // equipo a ver su roster de jugadores, o null
 
   const [syncing, setSyncing] = useState(false);
   const [syncReport, setSyncReport] = useState(null);
@@ -221,9 +219,6 @@ export default function LeagueRoster({ leagueId, token }) {
                   <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingTeam(team)}>
                     Editar
                   </button>
-                  <button type="button" className="btn btn-outline btn-sm" onClick={() => setRosterTeam(team)}>
-                    Roster
-                  </button>
                   {team.owner_user_id ? (
                     <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleRemoveOwner(team)}>
                       Quitar representante
@@ -270,14 +265,6 @@ export default function LeagueRoster({ leagueId, token }) {
           token={token}
           onClose={() => setInviteTeam(null)}
           onDone={() => { setInviteTeam(null); refresh(); }}
-        />
-      )}
-
-      {rosterTeam && (
-        <TeamRosterModal
-          team={rosterTeam}
-          token={token}
-          onClose={() => setRosterTeam(null)}
         />
       )}
     </div>

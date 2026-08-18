@@ -172,3 +172,40 @@ export const groupOwnerRequired = asyncHandler(async (req, res, next) => {
   }
   return res.status(403).json({ error: 'No tienes permiso sobre este grupo' });
 });
+
+// Da acceso al roster de UN equipo dentro de UNA rama específica — a quien
+// administra la liga (dueña de la rama) O a quien administra ese equipo,
+// igual que teamOwnerRequired. La diferencia es que además valida que el
+// equipo esté inscrito en branch_teams: no se puede subir roster de un
+// equipo que la liga no haya inscrito en esa rama primero.
+export const branchTeamOwnerRequired = asyncHandler(async (req, res, next) => {
+  const branchId = Number(req.params.branchId);
+  const teamId = Number(req.params.teamId);
+
+  const branch = await db.prepare('SELECT * FROM branches WHERE id = ?').get(branchId);
+  if (!branch) return res.status(404).json({ error: 'Rama no encontrada' });
+  const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(branch.category_id);
+  const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(category.league_id);
+  const team = await db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId);
+  if (!team) return res.status(404).json({ error: 'Equipo no encontrado' });
+
+  const enrolled = await db.prepare('SELECT 1 FROM branch_teams WHERE branch_id = ? AND team_id = ?').get(branchId, teamId);
+  if (!enrolled) return res.status(400).json({ error: 'Este equipo no está inscrito en esta rama todavía' });
+
+  const isLeagueMember = await isOrgMember(req.user.id, league.organization_id);
+  const isTeamMember = await isOrgMember(req.user.id, team.organization_id);
+  if (
+    req.user.role === 'admin' ||
+    isLeagueMember ||
+    isTeamMember ||
+    league.owner_user_id === req.user.id ||
+    team.owner_user_id === req.user.id
+  ) {
+    req.league = league;
+    req.category = category;
+    req.branch = branch;
+    req.team = team;
+    return next();
+  }
+  return res.status(403).json({ error: 'No tienes permiso sobre el roster de este equipo en esta rama' });
+});

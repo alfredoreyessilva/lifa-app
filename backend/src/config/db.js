@@ -666,6 +666,15 @@ export async function initSchema() {
     await run(`CREATE INDEX IF NOT EXISTS idx_player_memberships_player ON player_team_memberships(player_id)`);
     await run(`CREATE INDEX IF NOT EXISTS idx_player_memberships_team ON player_team_memberships(team_id)`);
 
+    // Corrección: el roster de un jugador no vive solo a nivel equipo — vive
+    // a nivel equipo + rama (categoría se deriva de branches.category_id,
+    // no hace falta duplicarla aquí). Nullable a propósito, igual que
+    // organization_id en la semana 1: nace vacía, las filas de prueba de la
+    // semana 3 se quedan sin rama (se descartaron, no importa), y todo
+    // roster nuevo desde ahora se crea siempre con branch_id.
+    await run(`ALTER TABLE player_team_memberships ADD COLUMN IF NOT EXISTS branch_id INTEGER REFERENCES branches(id) ON DELETE CASCADE`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_player_memberships_branch ON player_team_memberships(branch_id)`);
+
     // Estadísticas de UN jugador en UN partido — acumulado por partido, no
     // jugada por jugada (eso es un salto de complejidad grande que hoy no
     // se justifica: no está resuelto quién ni cómo va a capturar los datos,
