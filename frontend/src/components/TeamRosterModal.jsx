@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import Modal from './Modal.jsx';
 
@@ -63,7 +64,10 @@ export default function TeamRosterModal({ team, token, onClose }) {
             <div key={p.membership_id} className="admin-match-row">
               <div>
                 <div className="who">
-                  {p.jersey_number != null ? `#${p.jersey_number} · ` : ''}{p.first_name} {p.last_name}
+                  {p.jersey_number != null ? `#${p.jersey_number} · ` : ''}
+                  <Link to={`/jugador/${p.id}`} target="_blank" rel="noopener noreferrer">
+                    {p.first_name} {p.last_name}
+                  </Link>
                 </div>
                 <div className="info">{p.position || 'Sin posición'}{p.season ? ` · Temporada ${p.season}` : ''}</div>
               </div>

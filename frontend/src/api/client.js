@@ -112,6 +112,15 @@ export const api = {
   getBranches: (categoryId, token) =>
     request(`/manage/categories/${categoryId}/branches`, { token }),
 
+  // Equipos inscritos en una rama (corrección: antes se detectaba por
+  // tener partidos ahí, ahora es explícito)
+  getBranchTeams: (branchId, token) =>
+    request(`/manage/branches/${branchId}/teams`, { token }),
+  enrollTeamInBranch: (branchId, teamId, token) =>
+    request(`/manage/branches/${branchId}/teams`, { method: 'POST', body: { team_id: teamId }, token }),
+  removeTeamFromBranch: (branchId, teamId, token) =>
+    request(`/manage/branches/${branchId}/teams/${teamId}`, { method: 'DELETE', token }),
+
   // Pruebas de la nueva jerarquía (Rama -> Conferencia)
   createConference: (branchId, payload, token) =>
     request(`/manage/branches/${branchId}/conferences`, { method: 'POST', body: payload, token }),
@@ -219,6 +228,12 @@ export const api = {
     request(`/players/teams/${teamId}/roster`, { method: 'POST', body: payload, token }),
   movePlayerToTeam: (playerId, teamId, payload, token) =>
     request(`/players/${playerId}/move-to-team/${teamId}`, { method: 'POST', body: payload, token }),
+  getPlayerCard: (playerId) =>
+    request(`/players/${playerId}/card`),
+  getMatchStats: (matchId, token) =>
+    request(`/players/matches/${matchId}/stats`, { token }),
+  savePlayerMatchStats: (matchId, playerId, payload, token) =>
+    request(`/players/matches/${matchId}/stats/${playerId}`, { method: 'PUT', body: payload, token }),
 
   // Sedes
   getVenues: (slug) => request(`/leagues/${slug}/venues`),

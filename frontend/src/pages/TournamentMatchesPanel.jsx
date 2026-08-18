@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 import MatchForm from '../components/MatchForm.jsx';
+import MatchStatsModal from '../components/MatchStatsModal.jsx';
 import Modal from '../components/Modal.jsx';
 import OrgLogoBar from '../components/OrgLogoBar.jsx';
 
@@ -194,6 +195,8 @@ export default function TournamentMatchesPanel() {
                 {' '}
                 <button className="btn btn-ghost" onClick={() => setModal({ type: 'edit', match: m })}>Editar</button>
                 {' '}
+                <button className="btn btn-ghost" onClick={() => setModal({ type: 'stats', match: m })}>Estadísticas</button>
+                {' '}
                 {m.is_draft && (
                   <button
                     className="btn btn-flag"
@@ -269,6 +272,10 @@ export default function TournamentMatchesPanel() {
             <button className="btn btn-danger" onClick={async () => { await api.deleteMatch(modal.match.id, token); refreshMatches(); setModal(null); }}>Eliminar</button>
           </div>
         </Modal>
+      )}
+
+      {modal?.type === 'stats' && (
+        <MatchStatsModal match={modal.match} token={token} onClose={() => setModal(null)} />
       )}
     </div>
   );

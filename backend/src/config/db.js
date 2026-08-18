@@ -666,6 +666,83 @@ export async function initSchema() {
     await run(`CREATE INDEX IF NOT EXISTS idx_player_memberships_player ON player_team_memberships(player_id)`);
     await run(`CREATE INDEX IF NOT EXISTS idx_player_memberships_team ON player_team_memberships(team_id)`);
 
+    // Estadísticas de UN jugador en UN partido — acumulado por partido, no
+    // jugada por jugada (eso es un salto de complejidad grande que hoy no
+    // se justifica: no está resuelto quién ni cómo va a capturar los datos,
+    // y agregar esa capa más adelante no obliga a rehacer esta tabla, solo
+    // a sumar una nueva encima). 16 columnas fijas, cubren lo básico de
+    // ataque, defensa y equipos especiales. UNIQUE(player_id, match_id)
+    // evita capturar dos veces al mismo jugador en el mismo partido.
+    await run(`
+      CREATE TABLE IF NOT EXISTS player_match_stats (
+        id SERIAL PRIMARY KEY,
+        player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+        team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        pass_completions INTEGER NOT NULL DEFAULT 0,
+        pass_attempts INTEGER NOT NULL DEFAULT 0,
+        pass_yards INTEGER NOT NULL DEFAULT 0,
+        pass_td INTEGER NOT NULL DEFAULT 0,
+        interceptions_thrown INTEGER NOT NULL DEFAULT 0,
+        rush_attempts INTEGER NOT NULL DEFAULT 0,
+        rush_yards INTEGER NOT NULL DEFAULT 0,
+        rush_td INTEGER NOT NULL DEFAULT 0,
+        receptions INTEGER NOT NULL DEFAULT 0,
+        receiving_yards INTEGER NOT NULL DEFAULT 0,
+        receiving_td INTEGER NOT NULL DEFAULT 0,
+        tackles INTEGER NOT NULL DEFAULT 0,
+        sacks INTEGER NOT NULL DEFAULT 0,
+        interceptions_def INTEGER NOT NULL DEFAULT 0,
+        field_goals_made INTEGER NOT NULL DEFAULT 0,
+        extra_points_made INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(player_id, match_id)
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_player_match_stats_player ON player_match_stats(player_id)`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_player_match_stats_match ON player_match_stats(match_id)`);
+
+    // Inscripción explícita: "este equipo participa en esta rama". Antes
+    // era una conclusión implícita (se detectaba porque el equipo ya tenía
+    // partidos programados ahí) — ahora es una decisión que toma la liga,
+    // ANTES de programar partidos o subir roster. Solo la liga inscribe
+    // equipos (no hay auto-inscripción — se decidió explícitamente no
+    // construirla). team_id puede repetirse en varias ramas de la misma
+    // categoría (poco común) pero no dos veces en la misma rama.
+    await run(`
+      CREATE TABLE IF NOT EXISTS branch_teams (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+        team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(branch_id, team_id)
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_branch_teams_branch ON branch_teams(branch_id)`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_branch_teams_team ON branch_teams(team_id)`);
+
+    // Backfill: cualquier equipo que YA tenga un partido programado en una
+    // rama (vía home_team_id/away_team_id) queda inscrito automáticamente
+    // ahí — así no se pierde nada de lo que ya está armado. Solo alcanza a
+    // los partidos ya conectados con sus equipos (home_team_id/away_team_id
+    // no nulos); los que todavía usan solo el nombre en texto no se pueden
+    // inferir con certeza, así que esos simplemente no generan inscripción
+    // automática (se inscriben a mano desde la pestaña "Equipos" de la rama).
+    await run(`
+      INSERT INTO branch_teams (branch_id, team_id)
+      SELECT DISTINCT m.branch_id, m.home_team_id
+      FROM matches m
+      WHERE m.branch_id IS NOT NULL AND m.home_team_id IS NOT NULL
+      ON CONFLICT (branch_id, team_id) DO NOTHING
+    `);
+    await run(`
+      INSERT INTO branch_teams (branch_id, team_id)
+      SELECT DISTINCT m.branch_id, m.away_team_id
+      FROM matches m
+      WHERE m.branch_id IS NOT NULL AND m.away_team_id IS NOT NULL
+      ON CONFLICT (branch_id, team_id) DO NOTHING
+    `);
+
     // Invitaciones de un solo uso para "entregar" el perfil de un equipo (y más
     // adelante, de una liga) a otra persona mediante un link que el
     // representante genera y comparte por su cuenta.

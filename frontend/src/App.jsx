@@ -15,6 +15,7 @@ import LeaguePage from './pages/LeaguePage.jsx';
 import TournamentPage from './pages/TournamentPage.jsx';
 import CalendarPage from './pages/CalendarPage.jsx';
 import MatchPage from './pages/MatchPage.jsx';
+import PlayerCardPage from './pages/PlayerCardPage.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import RegisterLeague from './pages/RegisterLeague.jsx';
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="/torneos/:tournamentId" element={<TournamentPage />} />
             <Route path="/categorias/:categoryId/calendario" element={<CalendarPage />} />
             <Route path="/partidos/:matchId" element={<MatchPage />} />
+            <Route path="/jugador/:playerId" element={<PlayerCardPage />} />
             <Route path="/iniciar-sesion" element={<Login />} />
             <Route path="/crear-cuenta" element={<Register />} />
             <Route path="/invitaciones/:token" element={<InviteClaim />} />

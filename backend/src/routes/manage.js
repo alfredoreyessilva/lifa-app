@@ -348,6 +348,44 @@ router.get('/branches/:branchId/groups', authRequired, branchOwnerRequired, asyn
   res.json(groups);
 }));
 
+// Equipos inscritos en esta rama. Antes era una conclusión implícita (el
+// equipo aparecía porque ya tenía partidos); ahora es explícito, para poder
+// subirle su roster desde antes de que exista el calendario.
+router.get('/branches/:branchId/teams', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  const teams = await db.prepare(`
+    SELECT bt.id AS branch_team_id, t.id, t.name, t.logo_url
+    FROM branch_teams bt
+    JOIN teams t ON t.id = bt.team_id
+    WHERE bt.branch_id = ?
+    ORDER BY t.name
+  `).all(req.branch.id);
+  res.json(teams);
+}));
+
+// Inscribe un equipo a esta rama. Solo la liga puede hacerlo (branchOwnerRequired
+// da acceso por dueño de LIGA, no de equipo) — se decidió explícitamente no
+// permitir que un equipo se auto-inscriba.
+router.post('/branches/:branchId/teams', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  const { team_id } = req.body;
+  if (!team_id) return res.status(400).json({ error: 'team_id es obligatorio' });
+
+  const team = await db.prepare('SELECT * FROM teams WHERE id = ?').get(team_id);
+  if (!team) return res.status(404).json({ error: 'Equipo no encontrado' });
+
+  const branchTeam = await db.prepare(`
+    INSERT INTO branch_teams (branch_id, team_id) VALUES (?, ?)
+    ON CONFLICT (branch_id, team_id) DO NOTHING
+    RETURNING *
+  `).get(req.branch.id, team_id);
+
+  res.status(201).json(branchTeam || { branch_id: req.branch.id, team_id: Number(team_id), already: true });
+}));
+
+router.delete('/branches/:branchId/teams/:teamId', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare('DELETE FROM branch_teams WHERE branch_id = ? AND team_id = ?').run(req.branch.id, req.params.teamId);
+  res.json({ ok: true });
+}));
+
 // --- Pruebas de la nueva jerarquía (Conferencia -> Grupo) ---
 
 router.post('/conferences/:conferenceId/groups-test', authRequired, conferenceOwnerRequired, asyncHandler(async (req, res) => {
