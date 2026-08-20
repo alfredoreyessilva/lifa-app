@@ -8,12 +8,18 @@ import { initials } from '../utils/matchDisplay.js';
 // también arriba de las pantallas nuevas (Torneos, Categorías, Ramas,
 // Partidos del Torneo) mientras trabajas dentro de ellas.
 export default function OrgLogoBar({ selectedKind, selectedId }) {
-  const { leagues, teams } = useAuth();
+  const { leagues, teams, organizations } = useAuth();
   const navigate = useNavigate();
+
+  // "organizations" trae TODO (incluye type='league', que ya se muestra
+  // abajo vía "leagues") — aquí solo se agregan los tipos nuevos, para no
+  // duplicar logos de la misma liga dos veces.
+  const otherOrgs = (organizations || []).filter((o) => !['league', 'team'].includes(o.type));
 
   const orgs = [
     ...leagues.map((lg) => ({ ...lg, kind: 'liga' })),
     ...teams.map((tm) => ({ ...tm, kind: 'equipo' })),
+    ...otherOrgs.map((o) => ({ ...o, kind: 'organizacion' })),
   ];
   const selected = orgs.find((org) => org.kind === selectedKind && String(org.id) === String(selectedId));
 
@@ -24,17 +30,26 @@ export default function OrgLogoBar({ selectedKind, selectedId }) {
     }
   }
 
+  function linkFor(org) {
+    if (org.kind === 'liga') return `/panel/liga/${org.id}/torneos`;
+    if (org.kind === 'organizacion') return `/panel/organizacion/${org.id}`;
+    return `/panel/${org.kind}/${org.id}`;
+  }
+
   return (
     <div style={{ marginBottom: 24 }}>
       <div className="section-head">
         <h2>Organizaciones administradas</h2>
-        <Link to="/registrar-liga" className="btn btn-outline btn-sm">Registrar liga</Link>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Link to="/registrar-liga" className="btn btn-outline btn-sm">Registrar liga</Link>
+          <Link to="/registrar-organizacion" className="btn btn-outline btn-sm">Registrar organización</Link>
+        </div>
       </div>
       <div className="org-logo-grid">
         {orgs.map((org) => (
           <Link
             key={`${org.kind}-${org.id}`}
-            to={org.kind === 'liga' ? `/panel/liga/${org.id}/torneos` : `/panel/${org.kind}/${org.id}`}
+            to={linkFor(org)}
             onClick={(e) => handleLogoClick(e, org)}
             className={`league-logo-btn${org === selected ? ' league-logo-btn--active' : ''}`}
             style={{ width: 72, height: 72 }}

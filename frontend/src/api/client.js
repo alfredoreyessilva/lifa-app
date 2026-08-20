@@ -130,6 +130,15 @@ export const api = {
   movePlayerToBranchTeam: (branchId, teamId, playerId, payload, token) =>
     request(`/players/branches/${branchId}/teams/${teamId}/roster/${playerId}/move`, { method: 'POST', body: payload, token }),
 
+  // Organizaciones nuevas (medio, proveedor, tienda, clínica, marca)
+  getOrganizationTypes: () => request('/organizations/types'),
+  getCountries: () => request('/organizations/countries'),
+  createOrganization: (payload, token) =>
+    request('/organizations', { method: 'POST', body: payload, token }),
+  getOrganization: (id) => request(`/organizations/${id}`),
+  updateOrganization: (id, payload, token) =>
+    request(`/organizations/${id}`, { method: 'PUT', body: payload, token }),
+
   // Pruebas de la nueva jerarquía (Rama -> Conferencia)
   createConference: (branchId, payload, token) =>
     request(`/manage/branches/${branchId}/conferences`, { method: 'POST', body: payload, token }),
