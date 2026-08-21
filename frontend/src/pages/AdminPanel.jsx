@@ -455,8 +455,7 @@ function LeaguesTab({ token }) {
 ══════════════════════════════════════════════════════════════ */
 const ORG_TYPE_LABELS = {
   media: 'Medio de comunicación',
-  supplier: 'Proveedor',
-  store: 'Tienda deportiva',
+  store: 'Tienda / proveedor',
   clinic: 'Clínica',
   brand: 'Marca',
 };

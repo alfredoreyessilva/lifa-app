@@ -21,14 +21,13 @@ function slugify(str) {
 // (venues, torneos, categorías...) que no tiene sentido generalizar. Este
 // endpoint es solo para los tipos de organización nuevos, que no necesitan
 // nada de esa estructura deportiva.
-const REGISTERABLE_TYPES = ['media', 'supplier', 'store', 'clinic', 'brand'];
+const REGISTERABLE_TYPES = ['media', 'store', 'clinic', 'brand'];
 
 router.get('/types', (req, res) => {
   res.json({
     types: [
       { value: 'media', label: 'Medio de comunicación' },
-      { value: 'supplier', label: 'Proveedor de uniformes / equipo' },
-      { value: 'store', label: 'Tienda deportiva' },
+      { value: 'store', label: 'Tienda / proveedor deportivo' },
       { value: 'clinic', label: 'Clínica de rehabilitación / medicina deportiva' },
       { value: 'brand', label: 'Marca / patrocinador' },
     ],

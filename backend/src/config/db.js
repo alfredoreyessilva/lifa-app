@@ -84,11 +84,17 @@ CREATE TABLE IF NOT EXISTS countries (
 -- básico. La conexión real (leagues.organization_id / teams.organization_id)
 -- se agrega en un paso aparte, para no mezclar la creación de la tabla con
 -- la migración de datos existentes.
+--
+-- 'supplier' y 'store' se fusionaron en un solo tipo ('store'): la
+-- distinción no describía nada verificable ("¿vendes uniformes?" no separa
+-- a una tienda de un proveedor, es la misma pregunta) — la relación real
+-- ("es proveedor OFICIAL de tal equipo/liga") es un caso de
+-- organization_relationships (pausado), no un tipo de organización.
 CREATE TABLE IF NOT EXISTS organizations (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
   slug TEXT UNIQUE,
-  type TEXT NOT NULL CHECK (type IN ('league', 'team', 'media', 'supplier', 'store', 'clinic', 'brand')),
+  type TEXT NOT NULL CHECK (type IN ('league', 'team', 'media', 'store', 'clinic', 'brand')),
   country_id INTEGER REFERENCES countries(id) ON DELETE SET NULL,
   logo_url TEXT,
   description TEXT,
@@ -758,6 +764,15 @@ export async function initSchema() {
     `);
     await run(`CREATE INDEX IF NOT EXISTS idx_match_broadcasts_match ON match_broadcasts(match_id)`);
     await run(`CREATE INDEX IF NOT EXISTS idx_match_broadcasts_org ON match_broadcasts(organization_id)`);
+
+    // Fusión de tipos: 'supplier' se une a 'store' (ver comentario junto al
+    // CREATE TABLE de organizations). Primero se migran los datos, luego se
+    // reemplaza el CHECK constraint — en ese orden, porque si se reemplaza
+    // primero el CHECK, la migración de datos fallaría al toparse con filas
+    // 'supplier' que el nuevo CHECK ya no permite.
+    await run(`UPDATE organizations SET type = 'store' WHERE type = 'supplier'`);
+    await run(`ALTER TABLE organizations DROP CONSTRAINT IF EXISTS organizations_type_check`);
+    await run(`ALTER TABLE organizations ADD CONSTRAINT organizations_type_check CHECK (type IN ('league', 'team', 'media', 'store', 'clinic', 'brand'))`);
 
     // Backfill: cualquier equipo que YA tenga un partido programado en una
     // rama (vía home_team_id/away_team_id) queda inscrito automáticamente
