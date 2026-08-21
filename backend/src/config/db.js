@@ -730,6 +730,35 @@ export async function initSchema() {
     await run(`CREATE INDEX IF NOT EXISTS idx_branch_teams_branch ON branch_teams(branch_id)`);
     await run(`CREATE INDEX IF NOT EXISTS idx_branch_teams_team ON branch_teams(team_id)`);
 
+    // Mismo patrón que leagues.is_verified: lo pone únicamente el admin
+    // desde /admin, nunca el dueño de la organización. Para "medio" es lo
+    // que habilita dos cosas — aparecer en el directorio público del home,
+    // y poder autoasignarse a partidos como transmisor. La verificación
+    // certifica QUIÉN es el medio, no le da derechos sobre un partido en
+    // particular — eso es una decisión consciente, no un descuido.
+    await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT FALSE`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_organizations_verified ON organizations(is_verified)`);
+
+    // Qué medio (verificado) transmite qué partido. Se autoasigna el medio
+    // mismo, sin que la liga intervenga — la verificación (arriba) es el
+    // único filtro. url es opcional: si el medio transmite cada partido en
+    // un canal distinto, aquí va ese link específico; si no, el perfil del
+    // medio (su website_url) sirve como referencia general. Independiente
+    // de match.stream_links, que sigue siendo el link predeterminado del
+    // equipo local — esto se muestra ADEMÁS, no lo reemplaza.
+    await run(`
+      CREATE TABLE IF NOT EXISTS match_broadcasts (
+        id SERIAL PRIMARY KEY,
+        match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        url TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(match_id, organization_id)
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_match_broadcasts_match ON match_broadcasts(match_id)`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_match_broadcasts_org ON match_broadcasts(organization_id)`);
+
     // Backfill: cualquier equipo que YA tenga un partido programado en una
     // rama (vía home_team_id/away_team_id) queda inscrito automáticamente
     // ahí — así no se pierde nada de lo que ya está armado. Solo alcanza a

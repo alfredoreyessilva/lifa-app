@@ -300,6 +300,22 @@ export const api = {
     request(`/admin/leagues/${id}/unverify`, { method: 'PUT', token }),
   adminDeleteLeague: (id, token) =>
     request(`/admin/leagues/${id}`, { method: 'DELETE', token }),
+  adminGetOrganizations: (token) =>
+    request('/admin/organizations', { token }),
+  adminVerifyOrganization: (id, token) =>
+    request(`/admin/organizations/${id}/verify`, { method: 'PUT', token }),
+  adminUnverifyOrganization: (id, token) =>
+    request(`/admin/organizations/${id}/unverify`, { method: 'PUT', token }),
+
+  // Medios transmitiendo partidos (autoasignación)
+  getMatchBroadcasts: (matchId) =>
+    request(`/broadcasts/match/${matchId}`),
+  getOrganizationBroadcasts: (organizationId, token) =>
+    request(`/broadcasts/organization/${organizationId}`, { token }),
+  createBroadcast: (payload, token) =>
+    request('/broadcasts', { method: 'POST', body: payload, token }),
+  deleteBroadcast: (id, token) =>
+    request(`/broadcasts/${id}`, { method: 'DELETE', token }),
 
   // Admin — usuarios
   adminGetUsers: (token) => request('/admin/users', { token }),

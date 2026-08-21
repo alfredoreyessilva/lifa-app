@@ -8,6 +8,7 @@ import { getMatchStatus } from '../utils/matchStatus.js';
 import { getMatchParts, initials } from '../utils/matchDisplay.js';
 import { shareLink } from '../utils/share.js';
 import ShareImageButton from '../components/ShareImageButton.jsx';
+import MatchBroadcasters from '../components/MatchBroadcasters.jsx';
 
 // Convierte una URL en una etiqueta corta y legible (ej. "youtube.com"),
 // para diferenciar los botones cuando hay más de un link del mismo tipo.
@@ -149,6 +150,8 @@ export default function MatchPage() {
             {shareState === 'copied' ? '✓ Link copiado' : '🔗 Compartir partido'}
           </button>
         </div>
+
+        <MatchBroadcasters matchId={match.id} />
 
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
           <ShareImageButton match={match} dateParts={{ day, month, time, tzLabel }} />

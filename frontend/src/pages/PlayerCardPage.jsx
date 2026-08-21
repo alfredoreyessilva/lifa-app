@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import Loading from '../components/Loading.jsx';
+import PlayerShareButton from '../components/PlayerShareButton.jsx';
 
 // Traduce las claves de "stats" (camelCase, del backend) a lo que se ve en
 // pantalla. Solo se muestra un bloque si al menos una de sus stats tiene
@@ -109,6 +110,9 @@ export default function PlayerCardPage() {
               <span>{currentTeam.team_name}</span>
             </div>
           )}
+          <div style={{ marginTop: 10 }}>
+            <PlayerShareButton player={player} currentTeam={currentTeam} stats={stats} />
+          </div>
         </div>
       </div>
 

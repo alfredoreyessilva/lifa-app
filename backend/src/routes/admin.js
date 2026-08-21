@@ -93,6 +93,34 @@ router.put('/leagues/:id/unverify', authRequired, adminRequired, asyncHandler(as
   res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id));
 }));
 
+// Mismo patrón que arriba, para organizaciones (medio/proveedor/tienda/
+// clínica/marca). Para "medio" en particular, esto es lo que habilita
+// aparecer en el directorio público y autoasignarse a partidos.
+router.get('/organizations', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  const orgs = await db.prepare(`
+    SELECT o.*, c.name AS country_name
+    FROM organizations o
+    LEFT JOIN countries c ON c.id = o.country_id
+    WHERE o.type NOT IN ('league', 'team')
+    ORDER BY o.is_verified ASC, o.type, o.name
+  `).all();
+  res.json(orgs);
+}));
+
+router.put('/organizations/:id/verify', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  const org = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(req.params.id);
+  if (!org) return res.status(404).json({ error: 'Organización no encontrada' });
+  await db.prepare('UPDATE organizations SET is_verified = TRUE WHERE id = ?').run(req.params.id);
+  res.json(await db.prepare('SELECT * FROM organizations WHERE id = ?').get(req.params.id));
+}));
+
+router.put('/organizations/:id/unverify', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  const org = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(req.params.id);
+  if (!org) return res.status(404).json({ error: 'Organización no encontrada' });
+  await db.prepare('UPDATE organizations SET is_verified = FALSE WHERE id = ?').run(req.params.id);
+  res.json(await db.prepare('SELECT * FROM organizations WHERE id = ?').get(req.params.id));
+}));
+
 /* ===================== USUARIOS ===================== */
 
 router.get('/users', authRequired, adminRequired, asyncHandler(async (req, res) => {
