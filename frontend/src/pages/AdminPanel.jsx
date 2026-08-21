@@ -21,6 +21,7 @@ export default function AdminPanel() {
           { key: 'stats',    label: 'Estadísticas' },
           { key: 'sponsors', label: 'Patrocinadores' },
           { key: 'leagues',  label: 'Ligas' },
+          { key: 'organizations', label: 'Organizaciones' },
           { key: 'users',    label: 'Usuarios' },
         ].map((t) => (
           <button
@@ -36,6 +37,7 @@ export default function AdminPanel() {
       {tab === 'stats'    && <StatsTab    token={token} />}
       {tab === 'sponsors' && <SponsorsTab token={token} />}
       {tab === 'leagues'  && <LeaguesTab  token={token} />}
+      {tab === 'organizations' && <OrganizationsTab token={token} />}
       {tab === 'users'    && <UsersTab    token={token} />}
     </div>
   );
@@ -449,8 +451,110 @@ function LeaguesTab({ token }) {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   USUARIOS
+   ORGANIZACIONES (medio, proveedor, tienda, clínica, marca)
 ══════════════════════════════════════════════════════════════ */
+const ORG_TYPE_LABELS = {
+  media: 'Medio de comunicación',
+  supplier: 'Proveedor',
+  store: 'Tienda deportiva',
+  clinic: 'Clínica',
+  brand: 'Marca',
+};
+
+function OrganizationsTab({ token }) {
+  const [orgs, setOrgs] = useState([]);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState(null);
+
+  useEffect(() => { load(); }, []);
+
+  async function load() {
+    try {
+      setOrgs(await api.adminGetOrganizations(token));
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function toggleVerified(org) {
+    setBusyId(org.id);
+    try {
+      if (org.is_verified) {
+        await api.adminUnverifyOrganization(org.id, token);
+      } else {
+        await api.adminVerifyOrganization(org.id, token);
+      }
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const unverifiedCount = orgs.filter((o) => !o.is_verified).length;
+
+  return (
+    <div>
+      <div className="section-head">
+        <h2>
+          Organizaciones <span className="count">{orgs.length}</span>
+          {unverifiedCount > 0 && (
+            <span className="tag" style={{ marginLeft: 8, color: 'var(--live)', borderColor: 'var(--live)' }}>
+              {unverifiedCount} sin verificar
+            </span>
+          )}
+        </h2>
+      </div>
+
+      {error && <div className="form-error">{error}</div>}
+
+      {orgs.length === 0 ? (
+        <div className="empty-state"><h3>Sin organizaciones registradas</h3></div>
+      ) : (
+        orgs.map((org) => (
+          <div key={org.id} className="admin-match-row">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {org.logo_url && (
+                <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
+                  <img src={org.logo_url} alt={org.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+              )}
+              <div>
+                <div className="who">
+                  {org.name}
+                  <span className="tag" style={{ marginLeft: 8 }}>
+                    {ORG_TYPE_LABELS[org.type] || org.type}
+                  </span>
+                  {org.is_verified && (
+                    <span className="tag" style={{ marginLeft: 8, color: 'var(--field)', borderColor: 'var(--field)' }}>
+                      ✓ Verificada
+                    </span>
+                  )}
+                </div>
+                <div className="info">{org.country_name || 'Sin país'}</div>
+              </div>
+            </div>
+            <div className="row-actions">
+              <button
+                className="btn btn-outline btn-sm"
+                disabled={busyId === org.id}
+                onClick={() => toggleVerified(org)}
+              >
+                {busyId === org.id ? 'Un momento…' : org.is_verified ? 'Quitar verificación' : 'Marcar verificada'}
+              </button>
+              <a href={`/panel/organizacion/${org.id}`} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
+                Ver
+              </a>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+
 function UsersTab({ token }) {
   const [users, setUsers]   = useState([]);
   const [error, setError]   = useState('');

@@ -61,7 +61,7 @@ router.get('/me', authRequired, asyncHandler(async (req, res) => {
   // fuente que el panel va a adoptar en el siguiente paso, y a futuro es la
   // única que va a poder mostrar organizaciones con más de un miembro.
   const organizations = await db.prepare(`
-    SELECT o.id, o.name, o.slug, o.type, o.logo_url, o.status, om.role AS member_role
+    SELECT o.id, o.name, o.slug, o.type, o.logo_url, o.status, o.is_verified, om.role AS member_role
     FROM organization_members om
     JOIN organizations o ON o.id = om.organization_id
     WHERE om.user_id = ? AND om.status = 'active'

@@ -42,6 +42,30 @@ router.get('/countries', asyncHandler(async (req, res) => {
   res.json({ countries });
 }));
 
+// Directorio público de organizaciones verificadas — lo que alimenta la
+// sección "Medios de comunicación" (y a futuro, proveedores/tiendas/
+// clínicas) del home. Solo trae verificadas: is_verified es justo el
+// filtro que decide qué se hace público, como se definió desde el paso 1.
+router.get('/', asyncHandler(async (req, res) => {
+  const { type } = req.query;
+  const params = [];
+  let sql = `
+    SELECT o.id, o.name, o.slug, o.type, o.logo_url, o.description, o.website_url, c.name AS country_name
+    FROM organizations o
+    LEFT JOIN countries c ON c.id = o.country_id
+    WHERE o.is_verified = TRUE AND o.status = 'active'
+  `;
+  if (type) {
+    sql += ' AND o.type = ?';
+    params.push(type);
+  } else {
+    sql += " AND o.type NOT IN ('league', 'team')";
+  }
+  sql += ' ORDER BY o.name';
+  const organizations = await db.prepare(sql).all(...params);
+  res.json({ organizations });
+}));
+
 router.post('/', authRequired, asyncHandler(async (req, res) => {
   const { type, name, country_id, logo_url, description, website_url } = req.body;
 

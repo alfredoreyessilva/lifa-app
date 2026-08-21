@@ -136,6 +136,7 @@ export const api = {
   createOrganization: (payload, token) =>
     request('/organizations', { method: 'POST', body: payload, token }),
   getOrganization: (id) => request(`/organizations/${id}`),
+  getPublicOrganizations: (type) => request(`/organizations${type ? `?type=${type}` : ''}`),
   updateOrganization: (id, payload, token) =>
     request(`/organizations/${id}`, { method: 'PUT', body: payload, token }),
 

@@ -13,6 +13,9 @@ export default function Home() {
   const [teamsError, setTeamsError] = useState('');
   const [selectedTeam, setSelectedTeam] = useState(null);
 
+  const [mediaOrgs, setMediaOrgs] = useState(null);
+  const [mediaError, setMediaError] = useState('');
+
   // Candado para que la visita se registre una sola vez. Sin esto, en
   // desarrollo (npm run dev) React.StrictMode dispara este useEffect dos
   // veces a propósito (para ayudar a detectar efectos mal hechos), y
@@ -23,6 +26,7 @@ export default function Home() {
   useEffect(() => {
     api.getLeagues().then(setLeagues).catch((e) => setError(e.message));
     api.getPublicTeams().then(setTeams).catch((e) => setTeamsError(e.message));
+    api.getPublicOrganizations('media').then((d) => setMediaOrgs(d.organizations)).catch((e) => setMediaError(e.message));
     if (!trackedHomeView.current) {
       trackedHomeView.current = true;
       api.trackEvent('home_view').catch(() => {});
@@ -103,6 +107,43 @@ export default function Home() {
             />
           )}
         </>
+      )}
+
+      <div className="section-head" id="medios" style={{ marginTop: 28 }}>
+        <h2>Medios de comunicación</h2>
+        {mediaOrgs && <span className="count">{mediaOrgs.length} verificados</span>}
+      </div>
+
+      {mediaError && <div className="form-error">{mediaError}</div>}
+
+      {!mediaOrgs && !mediaError && <Loading message="Cargando medios…" />}
+
+      {mediaOrgs && mediaOrgs.length === 0 && (
+        <div className="empty-state">
+          <h3>Todavía no hay medios verificados</h3>
+          <p>En cuanto un medio de comunicación sea verificado, va a aparecer aquí.</p>
+        </div>
+      )}
+
+      {mediaOrgs && mediaOrgs.length > 0 && (
+        <div className="league-grid">
+          {mediaOrgs.map((org) => (
+            <Link key={org.id} to={`/panel/organizacion/${org.id}`} className="league-card">
+              {org.logo_url ? (
+                <img src={org.logo_url} alt={org.name} style={{ width: 56, height: 56, borderRadius: '50%' }} />
+              ) : (
+                <div style={{
+                  width: 56, height: 56, borderRadius: '50%', background: 'var(--surface)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: 'var(--font-display)', color: 'var(--flag)',
+                }}>
+                  {initials(org.name)}
+                </div>
+              )}
+              <h3>{org.name}</h3>
+            </Link>
+          ))}
+        </div>
       )}
 
       <section className="hero">

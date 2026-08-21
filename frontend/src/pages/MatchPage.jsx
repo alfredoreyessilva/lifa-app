@@ -9,6 +9,7 @@ import { getMatchParts, initials } from '../utils/matchDisplay.js';
 import { shareLink } from '../utils/share.js';
 import ShareImageButton from '../components/ShareImageButton.jsx';
 import MatchBroadcasters from '../components/MatchBroadcasters.jsx';
+import MediaBroadcastControl from '../components/MediaBroadcastControl.jsx';
 
 // Convierte una URL en una etiqueta corta y legible (ej. "youtube.com"),
 // para diferenciar los botones cuando hay más de un link del mismo tipo.
@@ -25,6 +26,7 @@ export default function MatchPage() {
   const [match, setMatch]         = useState(null);
   const [error, setError]         = useState('');
   const [shareState, setShareState] = useState('idle');
+  const [broadcastVersion, setBroadcastVersion] = useState(0);
 
   useEffect(() => {
     setMatch(null);
@@ -151,7 +153,8 @@ export default function MatchPage() {
           </button>
         </div>
 
-        <MatchBroadcasters matchId={match.id} />
+        <MatchBroadcasters matchId={match.id} key={broadcastVersion} />
+        <MediaBroadcastControl matchId={match.id} onChange={() => setBroadcastVersion((v) => v + 1)} />
 
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
           <ShareImageButton match={match} dateParts={{ day, month, time, tzLabel }} />
