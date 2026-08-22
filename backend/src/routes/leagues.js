@@ -83,6 +83,7 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
       v.name        AS venue_name,
       v.institution AS venue_institution,
       v.address     AS venue_address,
+      v.city        AS venue_city,
       g.name        AS group_name,
       g2.name       AS group_name_2
     FROM matches m
@@ -236,6 +237,7 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
       v.name        AS venue_name,
       v.institution AS venue_institution,
       v.address     AS venue_address,
+      v.city        AS venue_city,
       g.name        AS group_name,
       g2.name       AS group_name_2
     FROM matches m
@@ -669,6 +671,7 @@ router.get('/tournaments/:tournamentId/public', asyncHandler(async (req, res) =>
       v.name        AS venue_name,
       v.institution AS venue_institution,
       v.address     AS venue_address,
+      v.city        AS venue_city,
       g.name        AS group_name,
       g2.name       AS group_name_2,
       COALESCE(confDirect.id, confViaGroup.id)     AS conference_id,

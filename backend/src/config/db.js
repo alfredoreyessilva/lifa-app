@@ -147,6 +147,7 @@ CREATE TABLE IF NOT EXISTS venues (
   institution TEXT,
   cover_url TEXT,
   address TEXT,
+  city TEXT,
   contact_phone TEXT,
   contact_email TEXT,
   sort_order INTEGER DEFAULT 0,
@@ -851,6 +852,21 @@ export async function initSchema() {
       SELECT league_id, id FROM teams
       ON CONFLICT (league_id, team_id) DO NOTHING
     `);
+
+    // Ciudad de la sede — habilita accesos comerciales automáticos ligados al
+    // partido (por ahora: botón de Hotel; a futuro, Vuelos) sin que un admin
+    // tenga que configurar nada partido por partido. Como las sedes NO se
+    // comparten entre ligas (venues.league_id), cada liga captura la ciudad
+    // de sus propias sedes una sola vez, y todos sus partidos —pasados,
+    // presentes y futuros— la heredan automáticamente vía venue_id.
+    //
+    // Se agrega nullable a propósito: ya existen sedes creadas antes de este
+    // campo, así que un NOT NULL inmediato rompería la migración. El campo
+    // se vuelve obligatorio a nivel de aplicación para sedes NUEVAS (ver
+    // validateVenueFields en manage.js) desde ahora; la restricción NOT NULL
+    // a nivel de base de datos se agrega en un paso aparte, una vez que las
+    // sedes existentes se hayan completado (backfill).
+    await run(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS city TEXT`);
 
     // Siembra base de países. ON CONFLICT (code) DO NOTHING la vuelve segura
     // de correr en cada arranque: la primera vez los crea, después no hace

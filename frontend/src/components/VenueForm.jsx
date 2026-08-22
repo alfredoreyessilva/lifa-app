@@ -51,6 +51,7 @@ export default function VenueForm({ initial, onSubmit, onCancel, submitLabel }) 
     institution:   initial?.institution   || '',
     cover_url:     initial?.cover_url     || '',
     address:       initial?.address       || '',
+    city:          initial?.city          || '',
     contact_phone: initial?.contact_phone || '',
     contact_email: initial?.contact_email || '',
   });
@@ -68,6 +69,8 @@ export default function VenueForm({ initial, onSubmit, onCancel, submitLabel }) 
     const validationError = runValidations([
       () => required(form.name,      'El nombre de la sede'),
       () => maxLength(form.name, 80, 'El nombre de la sede'),
+      () => required(form.city,     'La ciudad de la sede'),
+      () => maxLength(form.city, 80, 'La ciudad de la sede'),
       () => validEmail(form.contact_email),
       () => validUrl(form.cover_url, 'La imagen de portada'),
       () => validGoogleMapsUrl(form.address, 'El link de Google Maps'),
@@ -81,6 +84,7 @@ export default function VenueForm({ initial, onSubmit, onCancel, submitLabel }) 
         name:          form.name.trim(),
         institution:   form.institution.trim(),
         address:       form.address.trim(),
+        city:          form.city.trim(),
         contact_phone: form.contact_phone.trim(),
         contact_email: form.contact_email.trim(),
       });
@@ -140,6 +144,14 @@ export default function VenueForm({ initial, onSubmit, onCancel, submitLabel }) 
           <div className="field" style={{ marginBottom: 16 }}>
             <label>🏫 Institución (opcional)</label>
             <CharField max={80} uppercase value={form.institution} onChange={(e) => update('institution', e.target.value)} placeholder="Ej. Universidad Autónoma de México" />
+          </div>
+
+          {/* Ciudad — obligatoria: es lo que permite generar automáticamente
+              accesos comerciales del partido (Hotel, y a futuro Vuelos) sin
+              que un admin tenga que configurarlos partido por partido. */}
+          <div className="field" style={{ marginBottom: 16 }}>
+            <label>🌎 Ciudad</label>
+            <CharField required max={80} uppercase value={form.city} onChange={(e) => update('city', e.target.value)} placeholder="Ej. Monterrey" />
           </div>
 
           {/* Información de contacto */}

@@ -10,6 +10,7 @@ import { shareLink } from '../utils/share.js';
 import ShareImageButton from '../components/ShareImageButton.jsx';
 import MatchBroadcasters from '../components/MatchBroadcasters.jsx';
 import MediaBroadcastControl from '../components/MediaBroadcastControl.jsx';
+import { buildHotelSearchUrl } from '../utils/matchServices.js';
 
 // Convierte una URL en una etiqueta corta y legible (ej. "youtube.com"),
 // para diferenciar los botones cuando hay más de un link del mismo tipo.
@@ -73,6 +74,7 @@ export default function MatchPage() {
   const isLive         = status === 'live';
   const isScheduled    = status === 'scheduled';
   const categoryLabel  = [match.season, match.year].filter(Boolean).join(' ');
+  const hotelUrl       = buildHotelSearchUrl(match);
 
   return (
     <div className="container">
@@ -139,10 +141,15 @@ export default function MatchPage() {
           ))}
           {(match.ticket_links || []).map((url, i) => (
             <a key={`tickets-${i}`} href={url} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
-              Comprar boletos
+              🎟️ Comprar boletos
               {match.ticket_links.length > 1 ? ` — ${linkHost(url)}` : ''}
             </a>
           ))}
+          {hotelUrl && (
+            <a href={hotelUrl} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
+              🏨 Hotel
+            </a>
+          )}
           {match.venue_address && (
             <a href={match.venue_address} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
               Maps

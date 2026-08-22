@@ -1406,23 +1406,30 @@ function validateVenueFields({ contact_email, cover_url, address }) {
 
 router.post('/leagues/:leagueId/venues', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
   const {
-    name, institution, cover_url, address, contact_phone, contact_email, sort_order,
+    name, institution, cover_url, address, city, contact_phone, contact_email, sort_order,
   } = req.body;
 
   if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre de la sede es obligatorio' });
+  // La ciudad es obligatoria en toda sede nueva: es lo que permite generar
+  // automáticamente accesos comerciales del partido (Hotel, y a futuro
+  // Vuelos) sin que un admin tenga que configurar nada por partido. Como
+  // las sedes no se comparten entre ligas, cada liga la captura una sola
+  // vez, al dar de alta la sede.
+  if (!isNonEmptyString(city)) return res.status(400).json({ error: 'La ciudad de la sede es obligatoria' });
 
   const validationError = validateVenueFields({ contact_email, cover_url, address });
   if (validationError) return res.status(400).json({ error: validationError });
 
   const result = await db.prepare(`
-    INSERT INTO venues (league_id, name, institution, cover_url, address, contact_phone, contact_email, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO venues (league_id, name, institution, cover_url, address, city, contact_phone, contact_email, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.league.id,
     name.trim().toUpperCase(),
     institution   ? institution.trim().toUpperCase()   : null,
     cover_url     || null,
     address       ? address.trim()                     : null,
+    city.trim().toUpperCase(),
     contact_phone ? contact_phone.trim().toUpperCase() : null,
     contact_email || null,
     sort_order    || 0,
@@ -1433,9 +1440,16 @@ router.post('/leagues/:leagueId/venues', authRequired, leagueOwnerRequired, asyn
 
 router.put('/venues/:id', authRequired, venueOwnerRequired, asyncHandler(async (req, res) => {
   const {
-    name, institution, cover_url, address, contact_phone, contact_email, sort_order,
+    name, institution, cover_url, address, city, contact_phone, contact_email, sort_order,
   } = req.body;
   const v = req.venue;
+
+  // Igual que en la creación: la ciudad no puede quedar vacía. Esto
+  // también es lo que permite "completar" (backfill) sedes viejas que se
+  // crearon antes de este campo — al guardar cualquier cambio en una sede
+  // vieja sin ciudad, se le exige capturarla en ese mismo momento.
+  const resolvedCity = city !== undefined ? city : v.city;
+  if (!isNonEmptyString(resolvedCity)) return res.status(400).json({ error: 'La ciudad de la sede es obligatoria' });
 
   const resolved = {
     contact_email: contact_email ?? v.contact_email,
@@ -1451,13 +1465,14 @@ router.put('/venues/:id', authRequired, venueOwnerRequired, asyncHandler(async (
       institution   = COALESCE(?, institution),
       cover_url     = COALESCE(?, cover_url),
       address       = COALESCE(?, address),
+      city          = COALESCE(?, city),
       contact_phone = COALESCE(?, contact_phone),
       contact_email = COALESCE(?, contact_email),
       sort_order    = COALESCE(?, sort_order)
     WHERE id = ?
   `).run(
     toNull(name),        toNull(institution),   toNull(cover_url),
-    toNull(address),     toNull(contact_phone), toNull(contact_email),
+    toNull(address),     toNull(city ? city.toUpperCase() : city), toNull(contact_phone), toNull(contact_email),
     toNull(sort_order),  v.id,
   );
 
