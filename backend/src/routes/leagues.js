@@ -85,15 +85,17 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
       v.address     AS venue_address,
       v.city        AS venue_city,
       g.name        AS group_name,
-      g2.name       AS group_name_2
+      g2.name       AS group_name_2,
+      tr.name       AS tournament_name
     FROM matches m
-    LEFT JOIN categories c ON c.id = m.category_id
-    LEFT JOIN leagues l    ON l.id = c.league_id
-    LEFT JOIN teams th     ON th.league_id = l.id AND UPPER(th.name) = UPPER(m.home_team)
-    LEFT JOIN teams ta     ON ta.league_id = l.id AND UPPER(ta.name) = UPPER(m.away_team)
-    LEFT JOIN venues v     ON v.id = m.venue_id
-    LEFT JOIN groups g     ON g.id = m.group_id
-    LEFT JOIN groups g2    ON g2.id = m.group_id_2
+    LEFT JOIN categories c   ON c.id = m.category_id
+    LEFT JOIN leagues l      ON l.id = c.league_id
+    LEFT JOIN teams th       ON th.league_id = l.id AND UPPER(th.name) = UPPER(m.home_team)
+    LEFT JOIN teams ta       ON ta.league_id = l.id AND UPPER(ta.name) = UPPER(m.away_team)
+    LEFT JOIN venues v       ON v.id = m.venue_id
+    LEFT JOIN groups g       ON g.id = m.group_id
+    LEFT JOIN groups g2      ON g2.id = m.group_id_2
+    LEFT JOIN tournaments tr ON tr.id = c.tournament_id
     WHERE m.id = ? AND m.is_draft = FALSE
   `).get(req.params.matchId);
 

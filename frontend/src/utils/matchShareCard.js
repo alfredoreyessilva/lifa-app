@@ -15,7 +15,32 @@
 import {
   FORMATS, readTheme, loadImage, ensureFonts, drawCircleBadge,
   fitText, drawBallIcon, drawBackground, drawTextPanel, drawFooter,
+  roundRect,
 } from './shareCardCommon.js';
+
+// Pill de "JORNADA N" en la esquina superior derecha, en espejo con el
+// ícono del balón (esquina superior izquierda). Solo se usa aquí — a
+// diferencia de los demás helpers, no aplica a la tarjeta de jugador.
+function drawJornadaPill(ctx, text, rightX, centerY, theme) {
+  ctx.save();
+  ctx.font = `700 26px ${theme.fontEyebrow}`;
+  const padX = 22;
+  const textWidth = ctx.measureText(text).width;
+  const pillW = textWidth + padX * 2;
+  const pillH = 48;
+  const pillX = rightX - pillW;
+  const pillY = centerY - pillH / 2;
+
+  roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+  ctx.fillStyle = theme.flag;
+  ctx.fill();
+
+  ctx.fillStyle = theme.fieldDeep;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, pillX + pillW / 2, pillY + pillH / 2 + 1);
+  ctx.restore();
+}
 
 /**
  * Genera la imagen del partido.
@@ -47,10 +72,21 @@ export async function generateMatchCard(match, formatKey, dateParts) {
   const iconMargin = w * 0.055;
   drawBallIcon(ctx, iconMargin, iconMargin, iconSize, theme);
 
+  // Jornada, en espejo con el ícono del balón (misma altura, lado
+  // contrario) — solo si el partido tiene week_label. Mismo criterio que
+  // MatchCard.jsx/MatchPage.jsx: si es puramente numérico se antepone
+  // "JORNADA", si no, se muestra el texto tal cual (ej. "FINAL").
+  if (match.week_label) {
+    const jornadaText = /^\d+$/.test(match.week_label)
+      ? `JORNADA ${match.week_label}`
+      : match.week_label.toUpperCase();
+    drawJornadaPill(ctx, jornadaText, w - iconMargin, iconMargin + iconSize / 2, theme);
+  }
+
   const cx = w / 2;
   let y = h * 0.10;
 
-  // --- Encabezado: liga / categoría ---
+  // --- Encabezado: liga / torneo / categoría ---
   if (leagueImg) {
     const size = 110;
     ctx.drawImage(leagueImg, cx - size / 2, y, size, size);
@@ -61,6 +97,16 @@ export async function generateMatchCard(match, formatKey, dateParts) {
   ctx.font = `600 30px ${theme.fontEyebrow}`;
   ctx.fillText((match.league_name || 'LIFA').toUpperCase(), cx, y);
   y += 42;
+
+  // Nombre del torneo, justo debajo de la liga — mismo tratamiento visual
+  // que el eyebrow de liga pero más pequeño y en tinta tenue, para que se
+  // lea como un subtítulo y no compita con el nombre de la liga.
+  if (match.tournament_name) {
+    ctx.fillStyle = theme.inkDim;
+    ctx.font = `600 24px ${theme.fontEyebrow}`;
+    ctx.fillText(match.tournament_name.toUpperCase(), cx, y);
+    y += 34;
+  }
 
   const categoryLabel = [match.category_name, match.season, match.year].filter(Boolean).join(' · ');
 
