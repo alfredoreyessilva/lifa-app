@@ -47,6 +47,9 @@ export const api = {
   register: (payload) => request('/auth/register', { method: 'POST', body: payload }),
   login: (payload) => request('/auth/login', { method: 'POST', body: payload }),
   me: (token) => request('/auth/me', { token }),
+  verifyEmail: (code, token) => request('/auth/verify-email', { method: 'POST', body: { code }, token }),
+  resendVerificationCode: (token) => request('/auth/resend-code', { method: 'POST', token }),
+  googleAuth: (credential) => request('/auth/google', { method: 'POST', body: { credential } }),
 
   // Ligas públicas
   getLeagues: () => request('/leagues'),

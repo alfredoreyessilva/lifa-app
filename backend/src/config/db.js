@@ -868,6 +868,39 @@ export async function initSchema() {
     // sedes existentes se hayan completado (backfill).
     await run(`ALTER TABLE venues ADD COLUMN IF NOT EXISTS city TEXT`);
 
+    // Verificación de correo: no bloquea nada de lo que ya existe (login por
+    // contraseña sigue funcionando igual). DEFAULT TRUE a propósito: así
+    // ninguna cuenta ya creada antes de este cambio queda marcada de la nada
+    // como "sin verificar" — el registro nuevo (routes/auth.js) inserta
+    // explícitamente FALSE para las cuentas que sí deben verificar, y el
+    // login con Google inserta explícitamente TRUE (Google ya lo confirmó).
+    await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT TRUE`);
+
+    // Identidad de Google (el "sub" del token), solo para cuentas creadas o
+    // vinculadas con "Continuar con Google". NULL para cuentas normales.
+    await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT UNIQUE`);
+
+    // Nullable desde ahora: una cuenta creada solo con Google no tiene
+    // contraseña propia. Las cuentas existentes conservan su hash intacto.
+    await run(`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`);
+
+    // Códigos de un solo uso para confirmar que el dueño de la cuenta
+    // controla ese correo. Tabla aparte (no una columna en "users") porque
+    // puede haber varios códigos pedidos en el tiempo (reenvíos) y así el
+    // histórico no se pisa — solo el más reciente y no vencido cuenta al
+    // verificar (ver routes/auth.js).
+    await run(`
+      CREATE TABLE IF NOT EXISTS email_verification_codes (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        code TEXT NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_email_verification_user ON email_verification_codes(user_id)`);
+
     // Siembra base de países. ON CONFLICT (code) DO NOTHING la vuelve segura
     // de correr en cada arranque: la primera vez los crea, después no hace
     // nada. Lista corta a propósito — se puede ampliar cuando haga falta,

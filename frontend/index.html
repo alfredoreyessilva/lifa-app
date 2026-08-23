@@ -25,6 +25,12 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Google Identity Services: solo se usa si VITE_GOOGLE_CLIENT_ID está
+         configurado (ver src/components/GoogleAuthButton.jsx). Cargarlo aquí
+         siempre es inofensivo: si no se usa el botón, el script simplemente
+         no hace nada. -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
     <div id="root"></div>

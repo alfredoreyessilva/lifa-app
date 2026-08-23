@@ -54,8 +54,15 @@ export function AuthProvider({ children }) {
     setOrganizations(data.organizations || []);
   }
 
+  // Actualiza al usuario en memoria sin volver a pedir /auth/me completo —
+  // se usa justo después de verificar el correo (routes/auth.js ya regresa
+  // el usuario actualizado en esa misma respuesta).
+  function updateUser(patch) {
+    setUser((prev) => (prev ? { ...prev, ...patch } : prev));
+  }
+
   return (
-    <AuthContext.Provider value={{ token, user, leagues, teams, organizations, loading, login, logout, refreshLeagues }}>
+    <AuthContext.Provider value={{ token, user, leagues, teams, organizations, loading, login, logout, refreshLeagues, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
