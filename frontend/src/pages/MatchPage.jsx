@@ -11,6 +11,7 @@ import ShareImageButton from '../components/ShareImageButton.jsx';
 import MatchBroadcasters from '../components/MatchBroadcasters.jsx';
 import MediaBroadcastControl from '../components/MediaBroadcastControl.jsx';
 import { buildHotelSearchUrl } from '../utils/matchServices.js';
+import FlightSearchWidget from '../components/FlightSearchWidget.jsx';
 
 // Convierte una URL en una etiqueta corta y legible (ej. "youtube.com"),
 // para diferenciar los botones cuando hay más de un link del mismo tipo.
@@ -150,6 +151,7 @@ export default function MatchPage() {
               🏨 Hotel
             </a>
           )}
+          <FlightSearchWidget match={match} />
           {match.venue_address && (
             <a href={match.venue_address} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
               Maps

@@ -16,6 +16,14 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 
 > Nota: versiones antiguas de este README mencionaban SQLite — eso ya no aplica, el proyecto usa Postgres desde hace tiempo.
 
+## Cambios recientes importantes (agosto 2026)
+
+- **Monetización de afiliados de viaje activada**: la plataforma ya genera comisión real sobre los botones de Hotel y Vuelo en `MatchPage`. Ver la sección "Monetización" más abajo para el detalle completo de cómo funciona y qué falta.
+- **Travelpayouts Drive instalado** (`frontend/index.html`, `<script>` al inicio del `<head>`): convierte automáticamente los links salientes a marcas de viaje soportadas (ej. Booking.com) en links de afiliado, sin tocar el código de React que genera esos links.
+- **Función de Vuelos construida** (antes solo era un comentario de "a futuro" en el código): nuevo componente `frontend/src/components/FlightSearchWidget.jsx` y utilidades nuevas en `matchServices.js` (`IATA_BY_CITY`, `iataForCity`). Al hacer clic en "✈️ Vuelo" en la tarjeta de un partido, se despliega un formulario de búsqueda de Aviasales embebido (vía Travelpayouts), con el destino ya puesto según la ciudad de la sede — el origen lo detecta Aviasales por la IP del usuario, y las fechas las ajusta el usuario a mano (el widget no acepta fecha por default; se le muestra la fecha del partido como referencia).
+- El botón de Hotel (`buildHotelSearchUrl`) no cambió de código — sigue generando un link limpio a `booking.com/searchresults.html`; ahora es Drive quien le agrega el marcador de afiliado en el navegador del usuario.
+- `buildFlightSearchUrl` y `ORIGIN_CITY_OPTIONS` en `matchServices.js` quedaron sin uso (eran de un primer approach con link directo + selector de ciudad de origen, reemplazado por el widget embebido). Se dejaron en el archivo por si se necesitan de referencia; no afectan nada en producción.
+
 ## Cambios recientes importantes (julio 2026)
 
 - **Nuevo modelo de "Mi panel" — varias organizaciones por cuenta**: al crear una cuenta o iniciar sesión, ya no se entra directo al panel de una liga. `/panel` ahora muestra los logos de todas las ligas y equipos que administras (sin abrir ninguno automáticamente), cada uno con su propia URL (`/panel/liga/:id`, `/panel/equipo/:id`). Un clic abre su panel de trabajo; un segundo clic sobre el mismo logo lo cierra. Esto sienta la base para agregar más tipos de organización (empresa, medio) sin rediseñar de nuevo la navegación.
@@ -31,6 +39,8 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 
 ## En progreso — no terminado todavía
 
+- **Aprobación de Booking.com dentro de Travelpayouts**: el proyecto ya está verificado y Drive corriendo, pero el programa de Booking.com específicamente sigue en revisión ("we're reviewing your project"). Hasta que lo aprueben, el botón de Hotel funciona pero no genera comisión — no requiere ningún cambio de código, se activa solo cuando Travelpayouts lo confirme.
+- **Configurar método de pago (payout) en Travelpayouts**: sección Finance de la cuenta de Travelpayouts, pendiente de cargar cuenta de PayPal o bancaria. No depende de haber llegado al mínimo de pago ($50 USD vía PayPal) — hay que configurarlo antes de eso para no perderse el siguiente ciclo de pago.
 - **Botón de "Rechazar" una liga pendiente**: hoy en `/admin` solo existe "Aprobar" y "Eliminar" (que borra todo permanentemente). Falta el endpoint y el botón correspondiente, y el aviso de "tu liga fue rechazada" en el panel del dueño.
 - **Contenido real de "Notificaciones"**: la página y el botón ya existen, pero todavía no muestra nada — falta decidir y construir qué información va ahí.
 - **Más tipos de organización**: "Registrar Organización" solo ofrece Liga por ahora. Equipo (fuera del flujo de invitación de una liga), Empresa/Marca y Medio de comunicación quedan pendientes.
@@ -59,12 +69,19 @@ lifa-app/
       seed.js                Datos de ejemplo para desarrollo local
       server.js              Arranque de Express: CORS, rate limiting, rutas, manejo de errores
   frontend/
+    index.html               <head> con script de Travelpayouts Drive (ver "Monetización")
     src/
       pages/
         Home, LeaguePage, CalendarPage, MatchPage, Login, Register,
         RegisterLeague, RegisterOrganization, Dashboard, Notifications,
         AdminPanel, InviteClaim
-      components/, context/, api/, utils/
+      components/
+        FlightSearchWidget.jsx   Botón "✈️ Vuelo" en MatchPage — despliega el
+                                 widget de búsqueda de Aviasales (ver "Monetización")
+        (resto de components/), context/, api/
+      utils/
+        matchServices.js      Hotel (buildHotelSearchUrl) y Vuelos (iataForCity,
+                               IATA_BY_CITY) — accesos comerciales por partido
 ```
 
 ## Cómo correrlo en local
@@ -120,6 +137,33 @@ npm run dev      # http://localhost:5173
 
 - Acceso a `/admin` con endpoints propios en `admin.js` (fuera del alcance de un representante normal).
 - Pestaña "Ligas": aprueba ligas pendientes (aparecen primero en la lista, marcadas), o las elimina.
+
+## Monetización (afiliados de viaje)
+
+La plataforma monetiza mediante comisión de afiliado en dos accesos de `MatchPage`: 🏨 Hotel y ✈️ Vuelo. Ninguno de los dos vende nada directamente — ambos mandan al usuario a un tercero (Booking.com, Aviasales) que sí procesa la reserva y el pago; LIFA solo cobra comisión cuando esa reserva se completa.
+
+Todo corre a través de una sola cuenta de **Travelpayouts** (red de afiliados de viaje), sin necesidad de tener una empresa constituida — basta con RFC persona física con actividad empresarial para poder facturar la comisión más adelante.
+
+### Hotel — Drive + link limpio
+
+- `buildHotelSearchUrl()` en `matchServices.js` arma un link normal a `booking.com/searchresults.html` con la ciudad de la sede y la fecha del partido — sin ningún ID de afiliado hardcodeado.
+- El script de **Travelpayouts Drive** (pegado en `frontend/index.html`, dentro del `<head>`) detecta ese link en el navegador del usuario y le agrega el marcador de afiliado automáticamente, sin que el código de React sepa nada de esto.
+- **Requisito para que genere comisión**: estar aprobado en el programa de Booking.com dentro de Travelpayouts (Programs → Booking.com). A diferencia de otras marcas de la red, Booking.com pasa por revisión manual de su parte (puede tardar varios días) — mientras tanto el botón funciona igual, solo que sin comisión.
+- La variable de entorno `VITE_HOTEL_AFFILIATE_ID` existe en el código como alternativa (afiliado directo con Booking, sin pasar por Travelpayouts), pero **debe quedar sin configurar** mientras se use Drive — ambos sistemas escriben el mismo parámetro (`aid`) en la URL y competirían entre sí.
+
+### Vuelo — widget embebido de Aviasales
+
+- El botón "✈️ Vuelo" (`FlightSearchWidget.jsx`) despliega, dentro de la misma tarjeta del partido, el widget "Flights Search Form" de Aviasales (vía Travelpayouts) — el usuario busca y compara sin salir de la página; solo sale del sitio al momento de reservar.
+- El **destino** viene pre-cargado según la ciudad de la sede, resuelta a código IATA con el diccionario `IATA_BY_CITY` (`matchServices.js` — cubre las ciudades mexicanas con aeropuerto más comunes para sedes de ligas; si una sede real no aparece ahí, el botón de Vuelo no se muestra — nunca se manda un destino adivinado).
+- El **origen** no se pide — Aviasales lo detecta por la IP del usuario.
+- La **fecha** no se puede pre-cargar (este tipo de widget no lo soporta); se le muestra al usuario la fecha del partido como texto de referencia arriba del formulario, para que la ajuste ahí mismo.
+- El código base del widget (`AVIASALES_WIDGET_BASE_SRC` en `FlightSearchWidget.jsx`) incluye el marcador de afiliado (`shmarker`) y el diseño configurado en Travelpayouts (Tools → Search Forms). Si se vuelve a generar el widget desde su panel con otro diseño, hay que actualizar esa constante con el código nuevo completo.
+- A diferencia de Booking, Aviasales no requirió aprobación manual — quedó activo automáticamente al registrarse en Travelpayouts.
+
+### Pendiente del lado de la cuenta (no de código)
+
+- Aprobación de Booking.com dentro de Travelpayouts (ver "En progreso").
+- Configurar método de pago (payout) en la sección Finance de Travelpayouts — PayPal (mínimo $50 USD) es la opción más simple para persona física en México. Configurarlo no depende de haber llegado al mínimo; hacerlo antes evita perder un ciclo de pago completo.
 
 ## Seguridad — decisiones ya tomadas
 
