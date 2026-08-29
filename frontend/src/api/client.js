@@ -143,6 +143,18 @@ export const api = {
   updateOrganization: (id, payload, token) =>
     request(`/organizations/${id}`, { method: 'PUT', body: payload, token }),
 
+  // Inventario de tienda (products)
+  getPublicProducts: (organizationId) =>
+    request(`/products/organization/${organizationId}`),
+  getManagedProducts: (organizationId, token) =>
+    request(`/products/organization/${organizationId}/manage`, { token }),
+  createProduct: (organizationId, payload, token) =>
+    request(`/products/organization/${organizationId}`, { method: 'POST', body: payload, token }),
+  updateProduct: (id, payload, token) =>
+    request(`/products/${id}`, { method: 'PUT', body: payload, token }),
+  deleteProduct: (id, token) =>
+    request(`/products/${id}`, { method: 'DELETE', token }),
+
   // Pruebas de la nueva jerarquía (Rama -> Conferencia)
   createConference: (branchId, payload, token) =>
     request(`/manage/branches/${branchId}/conferences`, { method: 'POST', body: payload, token }),
@@ -310,6 +322,8 @@ export const api = {
     request(`/admin/organizations/${id}/verify`, { method: 'PUT', token }),
   adminUnverifyOrganization: (id, token) =>
     request(`/admin/organizations/${id}/unverify`, { method: 'PUT', token }),
+  adminUpdateOrganizationPlan: (id, payload, token) =>
+    request(`/admin/organizations/${id}/plan`, { method: 'PUT', body: payload, token }),
 
   // Medios transmitiendo partidos (autoasignación)
   getMatchBroadcasts: (matchId) =>

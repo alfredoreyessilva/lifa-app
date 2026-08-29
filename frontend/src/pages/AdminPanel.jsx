@@ -464,6 +464,7 @@ function OrganizationsTab({ token }) {
   const [orgs, setOrgs] = useState([]);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
+  const [modal, setModal] = useState(null);
 
   useEffect(() => { load(); }, []);
 
@@ -542,6 +543,14 @@ function OrganizationsTab({ token }) {
               >
                 {busyId === org.id ? 'Un momento…' : org.is_verified ? 'Quitar verificación' : 'Marcar verificada'}
               </button>
+              {org.type === 'store' && (
+                <button
+                  className={`btn btn-sm ${org.plan === 'pro' ? 'btn-outline' : 'btn-flag'}`}
+                  onClick={() => setModal({ type: 'plan-org', org })}
+                >
+                  {org.plan === 'pro' ? '⚙️ Plan Pro' : 'Activar Pro'}
+                </button>
+              )}
               <a href={`/panel/organizacion/${org.id}`} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
                 Ver
               </a>
@@ -549,7 +558,105 @@ function OrganizationsTab({ token }) {
           </div>
         ))
       )}
+
+      {modal?.type === 'plan-org' && (
+        <PlanModal
+          org={modal.org}
+          token={token}
+          onClose={() => setModal(null)}
+          onSaved={() => { setModal(null); load(); }}
+        />
+      )}
     </div>
+  );
+}
+
+// Modal para activar/renovar el plan Pro de una tienda y guardar los datos
+// de su número de WhatsApp. Mientras no haya cobro automático, esto es lo
+// que el admin llena a mano después de recibir el pago por fuera de la
+// plataforma (transferencia/PayPal). "Días a agregar" suma a la fecha de
+// vencimiento actual (o a hoy si no tenía una) en vez de pedir una fecha
+// exacta, para que renovar un mes más sea un solo clic.
+function PlanModal({ org, token, onClose, onSaved }) {
+  const [plan, setPlan] = useState(org.plan || 'free');
+  const [daysToAdd, setDaysToAdd] = useState(30);
+  const [whatsappPhoneNumberId, setWhatsappPhoneNumberId] = useState(org.whatsapp_phone_number_id || '');
+  const [whatsappDisplayNumber, setWhatsappDisplayNumber] = useState(org.whatsapp_display_number || '');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const currentExpiry = org.plan_expires_at ? new Date(org.plan_expires_at) : null;
+  const currentlyActive = org.plan === 'pro' && (!currentExpiry || currentExpiry > new Date());
+
+  async function handleSave() {
+    setSaving(true);
+    setError('');
+    try {
+      let plan_expires_at;
+      if (plan === 'pro') {
+        const base = currentExpiry && currentExpiry > new Date() ? currentExpiry : new Date();
+        base.setDate(base.getDate() + Number(daysToAdd || 0));
+        plan_expires_at = base.toISOString();
+      } else {
+        plan_expires_at = null;
+      }
+
+      await api.adminUpdateOrganizationPlan(org.id, {
+        plan,
+        plan_expires_at,
+        whatsapp_phone_number_id: whatsappPhoneNumberId || null,
+        whatsapp_display_number: whatsappDisplayNumber || null,
+      }, token);
+      onSaved();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title={`Plan de ${org.name}`} onClose={onClose}>
+      {error && <div className="form-error">{error}</div>}
+
+      <p style={{ fontSize: 13, color: 'var(--ink-dim)' }}>
+        Estado actual: {currentlyActive
+          ? <strong style={{ color: 'var(--field)' }}>Pro activo{currentExpiry ? ` hasta ${currentExpiry.toLocaleDateString('es-MX')}` : ''}</strong>
+          : <strong>Sin plan activo</strong>}
+      </p>
+
+      <div className="field">
+        <label>Plan</label>
+        <select value={plan} onChange={(e) => setPlan(e.target.value)}>
+          <option value="free">Gratis (sin bot)</option>
+          <option value="pro">Pro (bot de WhatsApp con IA)</option>
+        </select>
+      </div>
+
+      {plan === 'pro' && (
+        <div className="field">
+          <label>Días a agregar desde hoy (o desde el vencimiento actual)</label>
+          <input type="number" min="1" value={daysToAdd} onChange={(e) => setDaysToAdd(e.target.value)} />
+        </div>
+      )}
+
+      <div className="field">
+        <label>WhatsApp Phone Number ID (de Meta for Developers)</label>
+        <input value={whatsappPhoneNumberId} onChange={(e) => setWhatsappPhoneNumberId(e.target.value)} placeholder="1029384756..." />
+      </div>
+
+      <div className="field">
+        <label>Número a mostrar en el perfil (ej. 52 55 1234 5678)</label>
+        <input value={whatsappDisplayNumber} onChange={(e) => setWhatsappDisplayNumber(e.target.value)} placeholder="52 55 1234 5678" />
+      </div>
+
+      <div className="modal-actions">
+        <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+        <button className="btn btn-flag" disabled={saving} onClick={handleSave}>
+          {saving ? 'Guardando…' : 'Guardar'}
+        </button>
+      </div>
+    </Modal>
   );
 }
 

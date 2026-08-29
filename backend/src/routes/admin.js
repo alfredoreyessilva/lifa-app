@@ -121,6 +121,41 @@ router.put('/organizations/:id/unverify', authRequired, adminRequired, asyncHand
   res.json(await db.prepare('SELECT * FROM organizations WHERE id = ?').get(req.params.id));
 }));
 
+// Gestión manual del plan de pago y de la conexión de WhatsApp de una
+// organización. Es el reemplazo temporal de un sistema de cobro
+// automático: mientras no haya Stripe/Conekta integrado, el admin activa
+// aquí el plan a mano cuando el cliente paga por fuera de la plataforma
+// (transferencia/PayPal), y pega los datos que Meta le dio a esa tienda
+// (phone_number_id) para que el webhook del bot sepa a quién pertenece
+// cada número. Ver routes/bot.js para dónde se consultan estos campos.
+router.put('/organizations/:id/plan', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  const org = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(req.params.id);
+  if (!org) return res.status(404).json({ error: 'Organización no encontrada' });
+
+  const { plan, plan_expires_at, whatsapp_phone_number_id, whatsapp_display_number } = req.body;
+  if (plan !== undefined && !['free', 'pro'].includes(plan)) {
+    return res.status(400).json({ error: 'El plan debe ser "free" o "pro"' });
+  }
+
+  const updated = await db.prepare(`
+    UPDATE organizations SET
+      plan                     = COALESCE(?, plan),
+      plan_expires_at          = ?,
+      whatsapp_phone_number_id = COALESCE(?, whatsapp_phone_number_id),
+      whatsapp_display_number  = COALESCE(?, whatsapp_display_number)
+    WHERE id = ?
+    RETURNING *
+  `).get(
+    plan ?? null,
+    plan_expires_at !== undefined ? (plan_expires_at || null) : org.plan_expires_at,
+    whatsapp_phone_number_id ?? null,
+    whatsapp_display_number ?? null,
+    org.id
+  );
+
+  res.json(updated);
+}));
+
 /* ===================== USUARIOS ===================== */
 
 router.get('/users', authRequired, adminRequired, asyncHandler(async (req, res) => {

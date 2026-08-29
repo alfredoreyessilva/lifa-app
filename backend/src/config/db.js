@@ -901,6 +901,51 @@ export async function initSchema() {
     `);
     await run(`CREATE INDEX IF NOT EXISTS idx_email_verification_user ON email_verification_codes(user_id)`);
 
+    // Inventario por organización — hoy pensado para type='store', pero no
+    // se restringe a nivel de esquema por si a futuro una 'clinic' quiere
+    // listar paquetes/servicios con el mismo shape. La relación es 1
+    // organization -> N products, igual que organization -> N teams.
+    await run(`
+      CREATE TABLE IF NOT EXISTS products (
+        id SERIAL PRIMARY KEY,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        description TEXT,
+        price NUMERIC,
+        currency TEXT NOT NULL DEFAULT 'MXN',
+        stock INTEGER,
+        size_variant TEXT,
+        image_url TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_products_org ON products(organization_id)`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_products_org_active ON products(organization_id, is_active)`);
+
+    // Separado de is_active a propósito: is_active dice "esto existe y se
+    // vende" (lo consulta el bot de WhatsApp, que debe ver TODO el
+    // inventario activo para atender cualquier pregunta del cliente, sea
+    // o no del nicho). show_on_platform dice "esto aparece en el
+    // directorio público de LIFA App" — para tiendas que venden más allá
+    // de fútbol americano y no quieren mostrar ahí lo que no aplica.
+    // Default TRUE: no le agrega fricción a la mayoría de tiendas (donde
+    // casi todo su catálogo SÍ es del nicho); solo desactivan lo que no.
+    await run(`ALTER TABLE products ADD COLUMN IF NOT EXISTS show_on_platform BOOLEAN NOT NULL DEFAULT TRUE`);
+
+    // Plan y datos de WhatsApp por organización. Por ahora el cobro es
+    // manual (transferencia/PayPal fuera de la plataforma) y un admin
+    // activa/renueva el plan a mano desde /admin — por eso plan_expires_at
+    // es una fecha simple y no hay tabla de facturación todavía. Cuando se
+    // integre un cobro automático (Stripe/Conekta), este mismo campo es el
+    // que esa integración va a actualizar; no hace falta cambiar el resto
+    // del código que ya lo consulta (ej. el gate del webhook del bot).
+    await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free'`);
+    await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS plan_expires_at TIMESTAMP`);
+    await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS whatsapp_phone_number_id TEXT`);
+    await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS whatsapp_display_number TEXT`);
+
     // Siembra base de países. ON CONFLICT (code) DO NOTHING la vuelve segura
     // de correr en cada arranque: la primera vez los crea, después no hace
     // nada. Lista corta a propósito — se puede ampliar cuando haga falta,

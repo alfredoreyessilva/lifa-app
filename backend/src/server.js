@@ -18,6 +18,8 @@ import poolRoutes          from './routes/pools.js';
 import playerRoutes        from './routes/players.js';
 import organizationRoutes  from './routes/organizations.js';
 import broadcastRoutes     from './routes/broadcasts.js';
+import productRoutes       from './routes/products.js';
+import botRoutes           from './routes/bot.js';
 
 // Orígenes permitidos para llamar a la API desde el navegador. Se definen en
 // la variable de entorno ALLOWED_ORIGINS (separados por coma), por ejemplo:
@@ -79,6 +81,8 @@ app.use('/api/pools',         poolRoutes);
 app.use('/api/players',       playerRoutes);
 app.use('/api/organizations', organizationRoutes);
 app.use('/api/broadcasts',    broadcastRoutes);
+app.use('/api/products',      productRoutes);
+app.use('/api/bot',           botRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);

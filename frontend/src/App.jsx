@@ -18,6 +18,7 @@ import MatchPage from './pages/MatchPage.jsx';
 import PlayerCardPage from './pages/PlayerCardPage.jsx';
 import RegisterOrganizationPage from './pages/RegisterOrganizationPage.jsx';
 import OrganizationDetailPage from './pages/OrganizationDetailPage.jsx';
+import ProductsPanel from './pages/ProductsPanel.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import RegisterLeague from './pages/RegisterLeague.jsx';
@@ -97,6 +98,10 @@ export default function App() {
             <Route
               path="/panel/equipo/:id"
               element={<ProtectedRoute><Dashboard kind="equipo" /></ProtectedRoute>}
+            />
+            <Route
+              path="/panel/organizacion/:id/inventario"
+              element={<ProtectedRoute><ProductsPanel /></ProtectedRoute>}
             />
             <Route
               path="/notificaciones"
