@@ -61,3 +61,49 @@ export function initials(name) {
     .join('')
     .toUpperCase();
 }
+
+// Arma el texto que acompaña a la imagen del partido al compartir (botón
+// "Generar imagen" → "Compartir"). Incluye lo que ya tenga cargado el
+// partido — nada se inventa — y omite cualquier dato que no exista.
+//
+// Reglas de contenido (acordadas en conversación de producto):
+// - Si el partido ya finalizó y tiene marcador, se muestra el resultado.
+// - Si no ha finalizado y tiene links de transmisión, se listan TODOS los
+//   que haya (sin distinguir si son del equipo local o visitante — el
+//   partido los guarda ya mezclados en un solo arreglo, sin ese detalle).
+// - Siempre cierra con el link a la ficha del partido dentro de la app.
+export function buildMatchShareText(match, dateParts, status) {
+  const lines = [];
+
+  lines.push(`${match.home_team} vs ${match.away_team} — CFBAMX`);
+  lines.push(`📅 ${dateParts.day} ${dateParts.month} · ${dateParts.time} (${dateParts.tzLabel})`);
+
+  const metaParts = [];
+  if (match.league_name) metaParts.push(match.league_name);
+  if (match.tournament_name) metaParts.push(match.tournament_name);
+  if (match.week_label) {
+    metaParts.push(/^\d+$/.test(match.week_label) ? `Jornada ${match.week_label}` : match.week_label);
+  }
+  if (match.venue_name) metaParts.push(match.venue_name);
+  if (metaParts.length) lines.push(`🏈 ${metaParts.join(' · ')}`);
+
+  const hasScore = status === 'finished' && match.home_score != null && match.away_score != null;
+  if (hasScore) {
+    lines.push('');
+    lines.push(`Resultado final: ${match.home_team} ${match.home_score} - ${match.away_score} ${match.away_team}`);
+  }
+
+  if ((match.stream_links || []).length > 0) {
+    lines.push('');
+    if (status === 'live') lines.push('🔴 En vivo ahora:');
+    else if (status === 'finished') lines.push('📺 Repetición:');
+    else lines.push('📺 Míralo aquí:');
+    for (const url of match.stream_links) lines.push(url);
+  }
+
+  lines.push('');
+  lines.push('Más detalles del partido:');
+  lines.push(`${window.location.origin}/partidos/${match.id}`);
+
+  return lines.join('\n');
+}

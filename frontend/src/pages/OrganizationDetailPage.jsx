@@ -105,53 +105,62 @@ export default function OrganizationDetailPage() {
   // Vista pública — se muestra siempre por defecto, seas o no el dueño.
   if (!isMine || mode === 'view') {
     return (
-      <div className="container" style={{ maxWidth: 520 }}>
-        <div className="player-hero">
-          <div className="player-photo">
-            {org.logo_url ? <img src={org.logo_url} alt={org.name} /> : <span>{org.name[0]}</span>}
+      <>
+        {/* Bloque de perfil: angosto y centrado, igual que el resto de
+            páginas de perfil de la app (jugador, cancha, etc). */}
+        <div className="container" style={{ maxWidth: 520 }}>
+          <div className="player-hero">
+            <div className="player-photo">
+              {org.logo_url ? <img src={org.logo_url} alt={org.name} /> : <span>{org.name[0]}</span>}
+            </div>
+            <div>
+              <div className="player-hero-eyebrow">{org.type}</div>
+              <h1 className="player-hero-name" style={{ fontSize: 26 }}>{org.name}</h1>
+              {org.country_name && <div className="player-hero-team"><span>{org.country_name}</span></div>}
+            </div>
           </div>
-          <div>
-            <div className="player-hero-eyebrow">{org.type}</div>
-            <h1 className="player-hero-name" style={{ fontSize: 26 }}>{org.name}</h1>
-            {org.country_name && <div className="player-hero-team"><span>{org.country_name}</span></div>}
-          </div>
+
+          {isMine && (
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              style={{ marginTop: 14 }}
+              onClick={() => setMode('edit')}
+            >
+              ✏️ Editar organización
+            </button>
+          )}
+
+          {org.description && <p style={{ marginTop: 16 }}>{org.description}</p>}
+          {org.website_url && (
+            <p style={{ marginTop: 10 }}>
+              <a href={org.website_url} target="_blank" rel="noopener noreferrer">{org.website_url}</a>
+            </p>
+          )}
         </div>
 
-        {isMine && (
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            style={{ marginTop: 14 }}
-            onClick={() => setMode('edit')}
-          >
-            ✏️ Editar organización
-          </button>
-        )}
-
-        {org.description && <p style={{ marginTop: 16 }}>{org.description}</p>}
-        {org.website_url && (
-          <p style={{ marginTop: 10 }}>
-            <a href={org.website_url} target="_blank" rel="noopener noreferrer">{org.website_url}</a>
-          </p>
-        )}
-
+        {/* Catálogo: usa el ancho estándar de la app (1080px, el mismo
+            que las demás grillas) para que quepan 4 tarjetas del tamaño
+            normal por fila, en vez del ancho angosto del perfil. */}
         {org.type === 'store' && products && products.length > 0 && (
-          <div style={{ marginTop: 24 }}>
-            <h3 style={{ marginBottom: 12 }}>Catálogo</h3>
-            <div className="league-grid">
-              {products.map((p) => (
-                <div key={p.id} className="league-card">
-                  {p.image_url && (
-                    <img src={p.image_url} alt={p.name} style={{ width: '100%', borderRadius: 8, marginBottom: 8 }} />
-                  )}
-                  <h3>{p.name}</h3>
-                  {p.description && <p style={{ fontSize: 13, color: 'var(--ink-dim)' }}>{p.description}</p>}
-                  <p style={{ fontSize: 13, fontWeight: 600 }}>
-                    {p.price != null ? `$${Number(p.price).toLocaleString('es-MX')} ${p.currency}` : 'Precio a consultar'}
-                    {p.size_variant ? ` · ${p.size_variant}` : ''}
-                  </p>
-                </div>
-              ))}
+          <div className="container">
+            <div style={{ marginTop: 24 }}>
+              <h3 style={{ marginBottom: 12 }}>Catálogo</h3>
+              <div className="catalog-grid">
+                {products.map((p) => (
+                  <div key={p.id} className="league-card">
+                    {p.image_url && (
+                      <img src={p.image_url} alt={p.name} style={{ width: '100%', borderRadius: 8, marginBottom: 8 }} />
+                    )}
+                    <h3>{p.name}</h3>
+                    {p.description && <p style={{ fontSize: 13, color: 'var(--ink-dim)' }}>{p.description}</p>}
+                    <p style={{ fontSize: 13, fontWeight: 600 }}>
+                      {p.price != null ? `$${Number(p.price).toLocaleString('es-MX')} ${p.currency}` : 'Precio a consultar'}
+                      {p.size_variant ? ` · ${p.size_variant}` : ''}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -163,17 +172,19 @@ export default function OrganizationDetailPage() {
             O la fecha todavía no pasó). */}
         {org.type === 'store' && org.whatsapp_display_number && org.plan === 'pro' &&
           (!org.plan_expires_at || new Date(org.plan_expires_at) > new Date()) && (
-          <a
-            href={`https://wa.me/${org.whatsapp_display_number.replace(/\D/g, '')}?text=${encodeURIComponent(`Hola, vi ${org.name} en LIFA App y quiero preguntar por un producto`)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-flag"
-            style={{ marginTop: 16, display: 'inline-block' }}
-          >
-            💬 Consultar por WhatsApp
-          </a>
+          <div className="container" style={{ maxWidth: 520 }}>
+            <a
+              href={`https://wa.me/${org.whatsapp_display_number.replace(/\D/g, '')}?text=${encodeURIComponent(`Hola, vi ${org.name} en LIFA App y quiero preguntar por un producto`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-flag"
+              style={{ marginTop: 16, display: 'inline-block' }}
+            >
+              💬 Consultar por WhatsApp
+            </a>
+          </div>
         )}
-      </div>
+      </>
     );
   }
 

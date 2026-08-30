@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { generateMatchCard, SHARE_CARD_FORMATS } from '../utils/matchShareCard.js';
+import { buildMatchShareText } from '../utils/matchDisplay.js';
 
 // Botón "Generar imagen" para la ficha de partido. Vive junto al botón de
 // compartir link que ya existe en MatchPage — es una segunda forma de
@@ -7,7 +8,7 @@ import { generateMatchCard, SHARE_CARD_FORMATS } from '../utils/matchShareCard.j
 //
 // v1 a propósito NO tiene: selector de plantilla, subida de foto, ni IA.
 // Un solo template (GAME_PREVIEW), dos formatos fijos (post / story).
-export default function ShareImageButton({ match, dateParts }) {
+export default function ShareImageButton({ match, dateParts, matchStatus }) {
   const [status, setStatus] = useState('idle'); // idle | generating | ready | error
   const [previewUrl, setPreviewUrl] = useState(null);
   const [blobByFormat, setBlobByFormat] = useState({});
@@ -17,8 +18,8 @@ export default function ShareImageButton({ match, dateParts }) {
     setStatus('generating');
     try {
       const [postBlob, storyBlob] = await Promise.all([
-        generateMatchCard(match, 'post', dateParts),
-        generateMatchCard(match, 'story', dateParts),
+        generateMatchCard(match, 'post', dateParts, matchStatus),
+        generateMatchCard(match, 'story', dateParts, matchStatus),
       ]);
       const blobs = { post: postBlob, story: storyBlob };
       setBlobByFormat(blobs);
@@ -44,29 +45,46 @@ export default function ShareImageButton({ match, dateParts }) {
   }
 
   async function handleDownload() {
+    console.log('[compartir] handleDownload() ejecutándose');
     const blob = blobByFormat[activeFormat];
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = fileName();
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
+    console.log('[compartir] click de descarga disparado, nombre:', fileName());
+    // Se retrasa la revocación: si se revoca de inmediato, algunos
+    // navegadores (Firefox, y a veces Chrome de escritorio) cancelan la
+    // descarga en silencio porque todavía no la habían iniciado.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   async function handleNativeShare() {
+    console.log('[compartir] click detectado');
     const blob = blobByFormat[activeFormat];
+    console.log('[compartir] blob listo:', !!blob, blob && blob.size);
     const file = new File([blob], fileName(), { type: 'image/png' });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    const canShareFiles = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+    console.log('[compartir] navigator.share existe:', !!navigator.share);
+    console.log('[compartir] navigator.canShare existe:', !!navigator.canShare);
+    console.log('[compartir] canShare({files}) resultado:', canShareFiles);
+    if (canShareFiles) {
       try {
+        console.log('[compartir] llamando navigator.share con archivo…');
         await navigator.share({
           files: [file],
           title: `${match.home_team} vs ${match.away_team}`,
-          text: 'Mira este partido en LIFA',
+          text: buildMatchShareText(match, dateParts, matchStatus),
         });
+        console.log('[compartir] navigator.share resuelto OK');
       } catch (err) {
+        console.log('[compartir] navigator.share lanzó error:', err.name, err.message);
         if (err.name !== 'AbortError') console.error(err);
       }
     } else {
+      console.log('[compartir] no se puede compartir archivo, usando handleDownload()');
       handleDownload();
     }
   }

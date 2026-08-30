@@ -200,6 +200,21 @@ a { color: inherit; }
   gap: 16px;
   padding-bottom: 64px;
 }
+
+/* ---------- Catálogo de tienda (4 columnas en escritorio) ----------
+   Clase separada de .league-grid a propósito: .league-grid la usan
+   ligas, categorías, grupos, torneos, etc. y no queremos afectarlas. */
+.catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  padding-bottom: 64px;
+}
+@media (max-width: 640px) {
+  .catalog-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 .league-card {
   background: var(--card);
   border: 1px solid var(--line);

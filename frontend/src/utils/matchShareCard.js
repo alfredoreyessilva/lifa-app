@@ -47,9 +47,12 @@ function drawJornadaPill(ctx, text, rightX, centerY, theme) {
  * @param {object} match - el objeto que devuelve api.getMatch (sin transformar)
  * @param {'post'|'story'} formatKey
  * @param {{day:string, month:string, time:string, tzLabel:string}} dateParts - de getMatchParts()
+ * @param {'scheduled'|'live'|'finished'} [status] - de getMatchStatus(match). Si el partido ya
+ *   finalizó y trae marcador, se dibuja el marcador en vez de "VS"; si está en vivo, se dibuja
+ *   "EN VIVO". Mismo criterio que MatchPage.jsx/MatchCard.jsx.
  * @returns {Promise<Blob>}
  */
-export async function generateMatchCard(match, formatKey, dateParts) {
+export async function generateMatchCard(match, formatKey, dateParts, status) {
   const format = FORMATS[formatKey] || FORMATS.post;
   const theme = readTheme();
   const { width: w, height: h } = format;
@@ -118,12 +121,27 @@ export async function generateMatchCard(match, formatKey, dateParts) {
   drawCircleBadge(ctx, homeImg, match.home_team, cx - badgeOffsetX, badgeY, badgeRadius, theme);
   drawCircleBadge(ctx, awayImg, match.away_team, cx + badgeOffsetX, badgeY, badgeRadius, theme);
 
-  // "VS" al centro
+  // "VS" al centro — salvo que el partido ya tenga marcador (finished) o
+  // esté en curso (live), igual que se muestra en MatchPage.jsx/MatchCard.jsx.
+  const hasScore = status === 'finished' && match.home_score != null && match.away_score != null;
   ctx.fillStyle = theme.flag;
-  ctx.font = `700 64px ${theme.fontDisplay}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('VS', cx, badgeY);
+  if (hasScore) {
+    ctx.font = `600 22px ${theme.fontEyebrow}`;
+    ctx.fillStyle = theme.inkDim;
+    ctx.fillText('FINALIZADO', cx, badgeY - 56);
+
+    ctx.fillStyle = theme.flag;
+    ctx.font = `700 64px ${theme.fontDisplay}`;
+    ctx.fillText(`${match.home_score} - ${match.away_score}`, cx, badgeY);
+  } else if (status === 'live') {
+    ctx.font = `700 30px ${theme.fontEyebrow}`;
+    ctx.fillText('EN VIVO', cx, badgeY);
+  } else {
+    ctx.font = `700 64px ${theme.fontDisplay}`;
+    ctx.fillText('VS', cx, badgeY);
+  }
 
   // Nombres de equipo debajo de cada badge
   const namesY = badgeY + badgeRadius + 56;

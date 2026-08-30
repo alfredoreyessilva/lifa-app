@@ -166,7 +166,7 @@ export default function MatchPage() {
         <MediaBroadcastControl matchId={match.id} onChange={() => setBroadcastVersion((v) => v + 1)} />
 
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
-          <ShareImageButton match={match} dateParts={{ day, month, time, tzLabel }} />
+          <ShareImageButton match={match} dateParts={{ day, month, time, tzLabel }} matchStatus={status} />
         </div>
 
         {isScheduled && (
