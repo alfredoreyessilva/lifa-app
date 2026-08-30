@@ -1,6 +1,7 @@
-import { Routes, Route, Link } from 'react-router-dom';
+import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import TopBar from './components/TopBar.jsx';
 import SponsorBar from './components/SponsorBar.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import Home from './pages/Home.jsx';
 import YearSelectPage from './pages/YearSelectPage.jsx';
 import TournamentFormTestPage from './pages/TournamentFormTestPage.jsx';
@@ -31,12 +32,20 @@ import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AdminRoute from './components/AdminRoute.jsx';
 
 export default function App() {
+  const location = useLocation();
   return (
     <>
       <TopBar />
       <div className="app-layout">
         <SponsorBar />
         <main className="app-main">
+          {/* La key en location.pathname hace que el ErrorBoundary se
+              "resetee" solo al navegar a otra ruta, así que si una página
+              llega a fallar, el usuario puede salir de ella sin tener que
+              recargar toda la app a mano. TopBar, SponsorBar y footer viven
+              fuera de este boundary, así que siguen visibles aunque una
+              página específica truene. */}
+          <ErrorBoundary key={location.pathname}>
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/anios" element={<YearSelectPage />} />
@@ -113,6 +122,7 @@ export default function App() {
             />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </ErrorBoundary>
         </main>
       </div>
       <footer className="footer">

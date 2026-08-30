@@ -50,30 +50,54 @@ function formatMatchDateHint(match) {
 // Si la ciudad de la sede no resuelve a un código IATA conocido
 // (iataForCity), el componente no se renderiza — nunca mostramos un botón
 // que de todos modos abriría un widget sin destino válido.
+//
+// CAUSA RAÍZ DEL CRASH AL NAVEGAR (ver diagnóstico previo): el script de
+// Travelpayouts manipula el DOM por su cuenta (inserta nodos, y varios
+// widgets de este estilo usan document.write) dentro del MISMO documento
+// que React administra. No importa qué tan cuidadoso sea el cleanup de
+// React: en cuanto ese script mueve/reemplaza nodos que React también
+// está rastreando, cualquier intento posterior de React de desmontar esa
+// región (por ejemplo al navegar de MatchPage al calendario) puede
+// encontrar el DOM en un estado distinto al que esperaba y lanzar errores
+// tipo removeChild/insertBefore/NotFoundError, tumbando TODO el árbol.
+//
+// La solución real es dejar de compartir el documento: el script corre
+// adentro de un <iframe> propio, en SU PROPIO document, completamente
+// aislado del árbol de React. Sin importar qué haga internamente (incluso
+// document.write), nunca puede tocar un nodo que React esté administrando.
+// Al cerrar el widget o navegar fuera de la página, React solo tiene que
+// quitar el <iframe> como bloque — nunca necesita saber qué hay adentro.
 export default function FlightSearchWidget({ match }) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef(null);
+  const iframeRef = useRef(null);
 
   const destinationIata = iataForCity(match?.venue_city);
   const dateHint = formatMatchDateHint(match);
 
-  // El script de Travelpayouts busca su propio <script> en el DOM para
-  // saber dónde insertar el widget, así que hay que crearlo con
-  // document.createElement (pegarlo como HTML de React no lo ejecuta) y
-  // limpiarlo al cerrar, para poder volver a abrirlo sin arrastrar
-  // instancias viejas del widget.
   useEffect(() => {
-    if (!open || !destinationIata || !containerRef.current) return;
+    if (!open || !destinationIata || !iframeRef.current) return;
 
-    const script = document.createElement('script');
-    script.async = true;
-    script.charset = 'utf-8';
-    script.src = buildWidgetSrc(destinationIata);
-    containerRef.current.appendChild(script);
+    const iframeDoc = iframeRef.current.contentDocument;
+    if (!iframeDoc) return;
 
-    return () => {
-      if (containerRef.current) containerRef.current.innerHTML = '';
-    };
+    // Escribimos un documento HTML mínimo dentro del iframe y dejamos que
+    // el script de Travelpayouts corra ahí. No hace falta ningún cleanup
+    // manual: cuando el iframe se desmonta (se cierra el widget o se
+    // navega fuera de la página), el navegador destruye ese documento
+    // completo por su cuenta, sin que React tenga que negociar nada con
+    // el script de terceros.
+    iframeDoc.open();
+    iframeDoc.write(`<!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <style>html, body { margin: 0; padding: 0; background: transparent; }</style>
+        </head>
+        <body>
+          <script async charset="utf-8" src="${buildWidgetSrc(destinationIata)}"></script>
+        </body>
+      </html>`);
+    iframeDoc.close();
   }, [open, destinationIata]);
 
   if (!destinationIata) return null;
@@ -88,7 +112,19 @@ export default function FlightSearchWidget({ match }) {
           {dateHint && (
             <p style={{ fontSize: 13, opacity: 0.8, marginBottom: 8 }}>📅 {dateHint}</p>
           )}
-          <div ref={containerRef} />
+          <iframe
+            key={`flight-widget-${destinationIata}`}
+            ref={iframeRef}
+            title="Buscador de vuelos"
+            // sandbox: allow-same-origin + allow-scripts para que el
+            // script corra con permisos normales (cookies de tracking,
+            // etc., igual que antes); allow-forms porque es un formulario
+            // de búsqueda; allow-popups + allow-popups-to-escape-sandbox
+            // para que el resultado de la búsqueda pueda abrir una
+            // pestaña nueva normal (no también aislada).
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+            style={{ width: '100%', minHeight: 420, border: 'none', display: 'block' }}
+          />
         </div>
       )}
     </>

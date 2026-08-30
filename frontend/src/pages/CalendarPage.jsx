@@ -36,12 +36,29 @@ export default function CalendarPage() {
   return (
     <div className="container">
       <div className="crumb"><Link to="/">Inicio</Link> / {category.name}</div>
-      <CalendarViewer
-        matches={matches}
-        title={category.name}
-        emptyTitle="Calendario sin publicar"
-        emptyText="Esta categoría aún no tiene partidos programados."
-      />
+
+      {/* Antes este calendario (modelo viejo: categoría directo de liga) se
+          pintaba "pelón", sin el panel oscuro (.league-header-panel) que sí
+          usa TournamentPage.jsx para el calendario del modelo nuevo. Por
+          eso, al entrar por Liga → Torneo → Calendario se veía el panel
+          negro, pero al volver aquí desde MatchPage ("Ver calendario
+          completo") se perdía y solo quedaba el fondo verde — mismo dato,
+          dos diseños distintos según la ruta. Se envuelve igual que en
+          TournamentPage para que el calendario luzca consistente sin
+          importar por dónde se llegue. */}
+      <div className="league-header-panel">
+        <div className="league-header-panel-body">
+          <h1 style={{ fontSize: 'clamp(32px, 6vw, 56px)' }}>{category.name}</h1>
+        </div>
+        <div className="league-header-panel-body league-header-panel-body--content">
+          <CalendarViewer
+            matches={matches}
+            title={category.name}
+            emptyTitle="Calendario sin publicar"
+            emptyText="Esta categoría aún no tiene partidos programados."
+          />
+        </div>
+      </div>
     </div>
   );
 }

@@ -229,7 +229,14 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
   `).get(req.params.categoryId);
   if (!category) return res.status(404).json({ error: 'Categoría no encontrada' });
 
-  const matches = await db.prepare(`
+  // La conferencia de un partido se sabe de dos formas posibles (igual que
+  // en /tournaments/:tournamentId/public): directo en el partido
+  // (m.conference_id) o indirecto vía su grupo (g.conference_id). Antes
+  // esta consulta (a diferencia de la de torneo) no resolvía ninguna de
+  // las dos, así que el calendario al que se regresa desde MatchPage
+  // nunca mostraba la opción "Ver por conferencia" aunque el partido sí
+  // tuviera una asignada.
+  const rows = await db.prepare(`
     SELECT
       m.*,
       c.auto_status_enabled      AS auto_status_enabled,
@@ -241,7 +248,9 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
       v.address     AS venue_address,
       v.city        AS venue_city,
       g.name        AS group_name,
-      g2.name       AS group_name_2
+      g2.name       AS group_name_2,
+      COALESCE(confDirect.id, confViaGroup.id)     AS conference_id,
+      COALESCE(confDirect.name, confViaGroup.name) AS conference_name
     FROM matches m
     LEFT JOIN categories c  ON c.id  = m.category_id
     LEFT JOIN teams th      ON th.league_id = c.league_id
@@ -251,9 +260,28 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
     LEFT JOIN venues v      ON v.id = m.venue_id
     LEFT JOIN groups g      ON g.id = m.group_id
     LEFT JOIN groups g2     ON g2.id = m.group_id_2
+    LEFT JOIN conferences confViaGroup ON confViaGroup.id = g.conference_id
+    LEFT JOIN conferences confDirect   ON confDirect.id = m.conference_id
     WHERE m.category_id = ? AND m.is_draft = FALSE
     ORDER BY m.match_date ASC
   `).all(category.id);
+
+  // Los LEFT JOIN de arriba comparan equipos por nombre (UPPER(th.name) =
+  // UPPER(m.home_team)), no por id. Si en algún momento quedó un equipo
+  // duplicado en la tabla `teams` (mismo league_id, mismo nombre, dos
+  // filas distintas — típicamente por un doble clic al crearlo o una
+  // reimportación), el JOIN "abre" cada partido de ese equipo en dos
+  // filas idénticas, y el calendario público terminaba mostrando el
+  // partido repetido. Esto NO se soluciona borrando el equipo duplicado a
+  // mano cada vez que aparezca: nos protegemos aquí quedándonos con una
+  // sola fila por m.id antes de responder, sin importar cuántas veces se
+  // haya repetido por el JOIN.
+  const seenIds = new Set();
+  const matches = rows.filter((m) => {
+    if (seenIds.has(m.id)) return false;
+    seenIds.add(m.id);
+    return true;
+  });
 
   res.json({ category, matches });
 }));

@@ -13,6 +13,7 @@ export default function ShareImageButton({ match, dateParts, matchStatus }) {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [blobByFormat, setBlobByFormat] = useState({});
   const [activeFormat, setActiveFormat] = useState('post');
+  const [isSharing, setIsSharing] = useState(false);
 
   async function handleOpen() {
     setStatus('generating');
@@ -62,6 +63,7 @@ export default function ShareImageButton({ match, dateParts, matchStatus }) {
   }
 
   async function handleNativeShare() {
+    if (isSharing) return; // candado: evita doble clic mientras hay un share en curso
     console.log('[compartir] click detectado');
     const blob = blobByFormat[activeFormat];
     console.log('[compartir] blob listo:', !!blob, blob && blob.size);
@@ -71,6 +73,8 @@ export default function ShareImageButton({ match, dateParts, matchStatus }) {
     console.log('[compartir] navigator.canShare existe:', !!navigator.canShare);
     console.log('[compartir] canShare({files}) resultado:', canShareFiles);
     if (canShareFiles) {
+      setIsSharing(true);
+      const startedAt = performance.now();
       try {
         console.log('[compartir] llamando navigator.share con archivo…');
         await navigator.share({
@@ -78,10 +82,22 @@ export default function ShareImageButton({ match, dateParts, matchStatus }) {
           title: `${match.home_team} vs ${match.away_team}`,
           text: buildMatchShareText(match, dateParts, matchStatus),
         });
-        console.log('[compartir] navigator.share resuelto OK');
+        console.log('[compartir] navigator.share resuelto OK en', Math.round(performance.now() - startedAt), 'ms');
       } catch (err) {
-        console.log('[compartir] navigator.share lanzó error:', err.name, err.message);
-        if (err.name !== 'AbortError') console.error(err);
+        const elapsed = Math.round(performance.now() - startedAt);
+        console.log('[compartir] navigator.share lanzó error en', elapsed, 'ms:', err.name, err.message);
+        // Antes, si el navegador rechazaba con AbortError, no hacíamos
+        // nada más — asumiendo que el usuario vio el panel nativo y le
+        // dio "cancelar". En la práctica, varios navegadores (Brave con
+        // sus Shields de privacidad, ciertos entornos de escritorio,
+        // WebViews) rechazan como AbortError sin haber mostrado NUNCA el
+        // panel. Como no hay forma confiable de distinguir un caso del
+        // otro desde JS, ahora SIEMPRE caemos a descargar la imagen si
+        // compartir falla, para que el usuario nunca se quede sin nada.
+        console.log('[compartir] fallback: descargando la imagen en su lugar');
+        handleDownload();
+      } finally {
+        setIsSharing(false);
       }
     } else {
       console.log('[compartir] no se puede compartir archivo, usando handleDownload()');
@@ -153,8 +169,13 @@ export default function ShareImageButton({ match, dateParts, matchStatus }) {
       )}
 
       <div style={{ display: 'flex', gap: 8 }}>
-        <button className="btn btn-flag btn-sm" type="button" onClick={handleNativeShare}>
-          Compartir
+        <button
+          className="btn btn-flag btn-sm"
+          type="button"
+          onClick={handleNativeShare}
+          disabled={isSharing}
+        >
+          {isSharing ? 'Compartiendo…' : 'Compartir'}
         </button>
         <button className="btn btn-outline btn-sm" type="button" onClick={handleDownload}>
           Descargar

@@ -28,6 +28,7 @@ export default function MatchPage() {
   const [match, setMatch]         = useState(null);
   const [error, setError]         = useState('');
   const [shareState, setShareState] = useState('idle');
+  const [isSharing, setIsSharing] = useState(false);
   const [broadcastVersion, setBroadcastVersion] = useState(0);
 
   useEffect(() => {
@@ -44,14 +45,20 @@ export default function MatchPage() {
   }, [match]);
 
   async function handleShare() {
-    const result = await shareLink(
-      window.location.href,
-      `${match.home_team} vs ${match.away_team}`,
-      'Mira este partido en LIFA'
-    );
-    if (result === 'copied') {
-      setShareState('copied');
-      setTimeout(() => setShareState('idle'), 2000);
+    if (isSharing) return; // candado: evita doble clic mientras hay un share en curso
+    setIsSharing(true);
+    try {
+      const result = await shareLink(
+        window.location.href,
+        `${match.home_team} vs ${match.away_team}`,
+        'Mira este partido en LIFA'
+      );
+      if (result === 'copied') {
+        setShareState('copied');
+        setTimeout(() => setShareState('idle'), 2000);
+      }
+    } finally {
+      setIsSharing(false);
     }
   }
 
@@ -157,8 +164,13 @@ export default function MatchPage() {
               Maps
             </a>
           )}
-          <button className="btn btn-outline btn-sm" type="button" onClick={handleShare}>
-            {shareState === 'copied' ? '✓ Link copiado' : '🔗 Compartir partido'}
+          <button
+            className="btn btn-outline btn-sm"
+            type="button"
+            onClick={handleShare}
+            disabled={isSharing}
+          >
+            {shareState === 'copied' ? '✓ Link copiado' : isSharing ? 'Compartiendo…' : '🔗 Compartir partido'}
           </button>
         </div>
 

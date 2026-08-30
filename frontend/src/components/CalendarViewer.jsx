@@ -54,7 +54,14 @@ function getEquipos(matches) {
 function getSedes(matches) {
   const seen = new Map();
   for (const m of matches) {
-    if (m.venue_id && !seen.has(m.venue_id)) {
+    // Se exige también m.venue_name (no solo el id): un venue_id puede
+    // apuntar a una sede que ya no tiene nombre resuelto (por ejemplo, un
+    // JOIN que no encontró coincidencia), y sin este chequeo esa entrada
+    // entraba al mapa con "name: undefined" y tronaba más abajo en el
+    // .sort() con "Cannot read properties of undefined (reading
+    // 'localeCompare')" — exactamente el crash que tumbaba toda la app al
+    // navegar al calendario.
+    if (m.venue_id && m.venue_name && !seen.has(m.venue_id)) {
       seen.set(m.venue_id, m.venue_name);
     }
   }
@@ -68,10 +75,12 @@ function getSedes(matches) {
 function getGrupos(matches) {
   const seen = new Map();
   for (const m of matches) {
-    if (m.group_id && !seen.has(m.group_id)) {
+    // Mismo chequeo que en getSedes: id sin nombre resuelto no entra al
+    // mapa, para no tronar en el .sort() de abajo.
+    if (m.group_id && m.group_name && !seen.has(m.group_id)) {
       seen.set(m.group_id, m.group_name);
     }
-    if (m.group_id_2 && !seen.has(m.group_id_2)) {
+    if (m.group_id_2 && m.group_name_2 && !seen.has(m.group_id_2)) {
       seen.set(m.group_id_2, m.group_name_2);
     }
   }
@@ -83,10 +92,22 @@ function getGrupos(matches) {
 // grupo, hoy solo se conoce indirectamente: partido -> grupo -> conferencia
 // (no hay conference_id directo en partidos). Un partido cuyo grupo no
 // pertenece a ninguna conferencia simplemente no aparece aquí.
+//
+// CAUSA RAÍZ DEL CRASH al navegar de MatchPage al calendario: la tabla
+// `matches` todavía tiene un campo `conference_id` de una versión anterior
+// del modelo de datos (antes de que las conferencias se derivaran vía
+// grupo). El backend nunca llena `conference_name` para ese campo viejo
+// (no hay ningún JOIN que lo resuelva), así que llegaba como
+// `undefined`. Antes, con solo comprobar `m.conference_id`, esa entrada
+// vieja SÍ entraba al mapa con nombre `undefined`, y el `.sort()` de abajo
+// truena con "Cannot read properties of undefined (reading
+// 'localeCompare')" — eso es lo que tumbaba TODA la app (no solo esta
+// página) porque el error ocurre durante el render, antes de que React
+// termine de montar el árbol.
 function getConferencias(matches) {
   const seen = new Map();
   for (const m of matches) {
-    if (m.conference_id && !seen.has(m.conference_id)) {
+    if (m.conference_id && m.conference_name && !seen.has(m.conference_id)) {
       seen.set(m.conference_id, m.conference_name);
     }
   }
@@ -114,12 +135,25 @@ const ALL_VIEWS   = ['completo', 'jornada', 'equipo', 'sede', 'grupo', 'conferen
 const VIEW_LABELS = { completo: 'Calendario completo', jornada: 'Jornada', equipo: 'Equipo', sede: 'Sede', grupo: 'Grupo', conferencia: 'Conferencia' };
 
 export default function CalendarViewer({
-  matches,
+  matches: matchesProp,
   title,
   shareText,
   emptyTitle = 'Calendario sin publicar',
   emptyText = 'Todavía no hay partidos programados.',
 }) {
+  // Segunda barrera contra partidos duplicados (además de la que ya se
+  // agregó en el backend): si por cualquier motivo llegan dos objetos de
+  // partido con el mismo id -por ejemplo, datos viejos en caché, u otro
+  // endpoint que no tenga todavía el fix-, nos quedamos solo con el
+  // primero. Así el calendario nunca muestra un mismo partido dos veces,
+  // sin importar de dónde vino el duplicado.
+  const seenMatchIds = new Set();
+  const matches = matchesProp.filter((m) => {
+    if (seenMatchIds.has(m.id)) return false;
+    seenMatchIds.add(m.id);
+    return true;
+  });
+
   const [searchParams, setSearchParams] = useSearchParams();
 
   // La vista y la selección se inicializan desde la URL, para que un link
