@@ -7,6 +7,11 @@ import { iataForCity } from '../utils/matchServices.js';
 // panel. Si algún día cambias el diseño desde ahí, actualiza esta constante
 // con el nuevo código completo.
 //
+// color_button usa el mismo amarillo que --flag en styles.css (#ffd23f),
+// en vez del amarillo genérico (#F0E90A) que trae Travelpayouts por
+// default, para que el botón del widget se sienta parte del sitio y no
+// pegado encima.
+//
 // A propósito NO incluye "destination" — ese se agrega dinámicamente según
 // el partido (ver buildWidgetSrc). "origin" se deja sin especificar a
 // propósito: Aviasales lo detecta solo por la IP del usuario, así que no
@@ -14,8 +19,8 @@ import { iataForCity } from '../utils/matchServices.js';
 const AVIASALES_WIDGET_BASE_SRC =
   'https://tpwdg.com/content?currency=mxn&trs=566269&shmarker=769609&show_hotels=true' +
   '&powered_by=true&locale=es&searchUrl=www.aviasales.es%2Fsearch' +
-  '&primary_override=%2306AA06ff&color_button=%23F0E90Aff&color_icons=%23E9F0E9ff' +
-  '&dark=%23F6F6F3ff&light=%2308750Aff&secondary=%23078130ff&special=%23D4E603ff' +
+  '&primary_override=%2306AA06ff&color_button=%23FFD23Fff&color_icons=%23E9F0E9ff' +
+  '&dark=%23F6F6F3ff&light=%2308750Aff&secondary=%23078130ff&special=%23FFD23Fff' +
   '&color_focused=%233FA207ff&border_radius=13&no_labels=&plain=false' +
   '&promo_id=7879&campaign_id=100';
 

@@ -25,15 +25,36 @@ html, body, #root { min-height: 100%; }
 
 body {
   margin: 0;
-  background: var(--field-deep);
+  background-color: var(--field-deep);
+  /* Capas del "campo", de encima hacia abajo (basado en el esquema de
+     cancha de referencia: números a ambos costados, marcas de yarda hacia
+     el interior, líneas de banda en los bordes):
+     1. grano/textura de césped (muy sutil, rompe la planicie del color)
+     2-3. números de yarda, columna izquierda y columna derecha
+     4-5. marcas de yarda (hash marks), dos columnas hacia el interior
+     6-7. líneas de banda (sideline) en los bordes izquierdo/derecho
+     8. líneas de yarda (ya existían)
+     9. franjas de podado, alternando --field / --field-deep como base
+  */
   background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='860'%3E%3Cg font-family='Arial Black, Impact, sans-serif' font-weight='700' fill='white' fill-opacity='0.07' text-anchor='middle'%3E%3Ctext x='100' y='95' font-size='110'%3E10%3C/text%3E%3Ctext x='100' y='245' font-size='110'%3E20%3C/text%3E%3Ctext x='100' y='395' font-size='110'%3E30%3C/text%3E%3Ctext x='100' y='545' font-size='110'%3E40%3C/text%3E%3Ctext x='100' y='700' font-size='120' fill-opacity='0.09'%3E50%3C/text%3E%3C/g%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='860'%3E%3Cg font-family='Arial Black, Impact, sans-serif' font-weight='700' fill='white' fill-opacity='0.07' text-anchor='middle'%3E%3Ctext x='100' y='95' font-size='110'%3E10%3C/text%3E%3Ctext x='100' y='245' font-size='110'%3E20%3C/text%3E%3Ctext x='100' y='395' font-size='110'%3E30%3C/text%3E%3Ctext x='100' y='545' font-size='110'%3E40%3C/text%3E%3Ctext x='100' y='700' font-size='120' fill-opacity='0.09'%3E50%3C/text%3E%3C/g%3E%3C/svg%3E"),
+    repeating-linear-gradient(to bottom, transparent 0 32px, var(--line) 32px 38px),
+    repeating-linear-gradient(to bottom, transparent 0 32px, var(--line) 32px 38px),
+    linear-gradient(var(--line-strong), var(--line-strong)),
+    linear-gradient(var(--line-strong), var(--line-strong)),
     repeating-linear-gradient(
       to bottom,
       transparent 0px,
       transparent 74px,
       var(--line) 74px,
       var(--line) 78px
-    );
+    ),
+    repeating-linear-gradient(to bottom, var(--field) 0 234px, var(--field-deep) 234px 468px);
+  background-repeat: repeat, repeat-y, repeat-y, repeat-y, repeat-y, no-repeat, no-repeat, repeat, repeat;
+  background-position: 0 0, 6% top, 94% top, 35% 0, 65% 0, 0 0, 100% 0, 0 0, 0 0;
+  background-size: 140px 140px, 200px 860px, 200px 860px, 3px 100%, 3px 100%, 4px 100%, 4px 100%, auto, auto;
   color: var(--ink);
   font-family: var(--font-body);
   line-height: 1.5;
