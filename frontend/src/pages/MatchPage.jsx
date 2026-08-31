@@ -86,10 +86,24 @@ export default function MatchPage() {
 
   return (
     <div className="container">
+      {/* El breadcrumb solo puede "colgar" del nivel más alto que ya se
+          conoce: si el partido pertenece a un Torneo, el siguiente nivel
+          clicable es el Torneo (nunca la Categoría) — es la propia
+          TournamentPage la que decide, con su navegación inteligente, si
+          hace falta pedir categoría/rama o si puede ir directo al
+          calendario. Poner aquí un link directo a "Categoría" reintroducía
+          esa sección como un paso navegable siempre, incluso en un torneo
+          de una sola categoría, rompiendo el diseño que evita justamente
+          eso. Solo en el modelo viejo (categoría sin torneo) el destino
+          final sigue siendo el calendario plano de la categoría. */}
       <div className="crumb">
         <Link to="/">Inicio</Link>
         {match.league_slug && <> / <Link to={`/ligas/${match.league_slug}`}>{match.league_name}</Link></>}
-        {match.category_id && <> / <Link to={`/categorias/${match.category_id}/calendario`}>{match.category_name}</Link></>}
+        {match.tournament_id ? (
+          <> / <Link to={`/torneos/${match.tournament_id}`}>{match.tournament_name}</Link></>
+        ) : (
+          match.category_id && <> / <Link to={`/categorias/${match.category_id}/calendario`}>{match.category_name}</Link></>
+        )}
         {' '}/ {match.home_team} vs {match.away_team}
       </div>
 
@@ -193,7 +207,18 @@ export default function MatchPage() {
           </div>
         )}
 
-        {match.category_id && (
+        {/* Mismo criterio que el breadcrumb: si hay Torneo, el botón manda
+            ahí (y es esa pantalla la que decide si hace falta elegir
+            categoría/rama, o si salta directo al calendario). Solo el
+            modelo viejo sin torneo sigue yendo directo al calendario plano
+            de la categoría. */}
+        {match.tournament_id ? (
+          <div style={{ textAlign: 'center', marginTop: 20 }}>
+            <Link to={`/torneos/${match.tournament_id}`} className="btn btn-outline btn-sm">
+              Ver calendario completo →
+            </Link>
+          </div>
+        ) : match.category_id && (
           <div style={{ textAlign: 'center', marginTop: 20 }}>
             <Link to={`/categorias/${match.category_id}/calendario`} className="btn btn-outline btn-sm">
               Ver calendario completo →

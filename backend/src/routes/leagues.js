@@ -86,6 +86,7 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
       v.city        AS venue_city,
       g.name        AS group_name,
       g2.name       AS group_name_2,
+      c.tournament_id AS tournament_id,
       tr.name       AS tournament_name
     FROM matches m
     LEFT JOIN categories c   ON c.id = m.category_id
