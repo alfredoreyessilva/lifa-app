@@ -55,8 +55,15 @@ function TeamSelect({ label, value, onChange, teams, onCreateNew }) {
   );
 }
 
+// Etapas especiales seleccionables en "Jornada", además de los números de
+// semana normales (1-30). Se guardan en mayúsculas, igual que hace el
+// backend con cualquier valor de week_label.
+const SPECIAL_WEEK_LABELS = ['FINAL', 'SEMIFINAL', 'PLAYOFF', 'SCRIMMAGE'];
+
 function parseWeekNumber(val) {
   if (!val) return '';
+  const upper = String(val).trim().toUpperCase();
+  if (SPECIAL_WEEK_LABELS.includes(upper)) return upper;
   const match = /(\d+)/.exec(String(val));
   return match ? match[1] : '';
 }
@@ -573,12 +580,16 @@ export default function MatchForm({
           <select
             value={form.week_label}
             onChange={(e) => update('week_label', e.target.value)}
-            style={{ width: 90 }}
+            style={{ width: 140 }}
           >
             <option value="">—</option>
             {Array.from({ length: 30 }, (_, i) => i + 1).map((n) => (
               <option key={n} value={String(n)}>{n}</option>
             ))}
+            <option value="FINAL">Final</option>
+            <option value="SEMIFINAL">Semifinal</option>
+            <option value="PLAYOFF">Playoff</option>
+            <option value="SCRIMMAGE">Scrimmage</option>
           </select>
         </div>
       </div>
