@@ -515,6 +515,47 @@ a { color: inherit; }
 
 .match-action { white-space: nowrap; }
 
+/* ---------- Notificaciones ---------- */
+.notification-item {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.notification-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.notification-item-title {
+  font-family: var(--font-eyebrow);
+  font-size: 15px;
+  color: var(--paper);
+}
+.notification-item-time {
+  font-size: 11px;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.notification-item-body {
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+.notification-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--live);
+  border: 2px solid var(--field-deep);
+}
+
 /* ---------- Empty state ---------- */
 .empty-state {
   text-align: center;

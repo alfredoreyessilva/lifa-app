@@ -71,6 +71,24 @@ router.post('/:token/claim', authRequired, asyncHandler(async (req, res) => {
   await db.prepare(`UPDATE invites SET used_by = ?, used_at = CURRENT_TIMESTAMP WHERE id = ?`).run(req.user.id, invite.id);
 
   const team = await db.prepare('SELECT * FROM teams WHERE id = ?').get(invite.team_id);
+
+  // Primer tipo de notificación en la bandeja de la liga: le avisa al
+  // representante de la liga que el equipo ya tomó control de su perfil
+  // (es decir, que alguien reclamó el magic link que le habían entregado).
+  // Solo aplica a invitaciones de tipo 'team', que son las únicas que hoy
+  // tienen una liga dueña a quien avisarle.
+  if (invite.type === 'team' && team) {
+    await db.prepare(`
+      INSERT INTO notifications (recipient_type, recipient_id, type, title, body, data)
+      VALUES ('league', ?, 'team_claimed', ?, ?, ?)
+    `).run(
+      team.league_id,
+      `${team.name} tomó control de su perfil`,
+      'El equipo ya inició sesión con el link que le compartiste y ahora administra su propia información.',
+      JSON.stringify({ team_id: team.id, team_name: team.name })
+    );
+  }
+
   res.json({ ok: true, team });
 }));
 

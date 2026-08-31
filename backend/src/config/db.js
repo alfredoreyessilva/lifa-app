@@ -946,6 +946,32 @@ export async function initSchema() {
     await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS whatsapp_phone_number_id TEXT`);
     await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS whatsapp_display_number TEXT`);
 
+    // Notificaciones dentro de la app (pantalla "Notificaciones"), separadas
+    // de push_subscriptions: aquéllas son suscripciones a avisos push del
+    // navegador sobre partidos; esta tabla es la bandeja propia de cada
+    // organización administrada (liga o equipo) dentro de la plataforma.
+    // recipient_type/recipient_id apuntan a leagues.id o teams.id según el
+    // caso — mismo criterio de "kind" que ya usa Notifications.jsx en el
+    // frontend (liga/equipo), para poder listar ambos tipos sin dos tablas.
+    // "data" queda como JSONB libre para que futuros tipos de notificación
+    // (además de 'team_claimed') puedan cargar lo que necesiten sin volver
+    // a alterar el esquema.
+    await run(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        recipient_type TEXT NOT NULL CHECK (recipient_type IN ('league', 'team')),
+        recipient_id INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT,
+        data JSONB,
+        read_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_type, recipient_id)`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_notifications_recipient_unread ON notifications(recipient_type, recipient_id) WHERE read_at IS NULL`);
+
     // Siembra base de países. ON CONFLICT (code) DO NOTHING la vuelve segura
     // de correr en cada arranque: la primera vez los crea, después no hace
     // nada. Lista corta a propósito — se puede ampliar cuando haga falta,

@@ -348,4 +348,12 @@ export const api = {
   getInvite: (inviteToken) => request(`/invites/${inviteToken}`),
   claimInvite: (inviteToken, token) =>
     request(`/invites/${inviteToken}/claim`, { method: 'POST', token }),
+
+  // Bandeja de notificaciones (pantalla "Notificaciones")
+  getLeagueNotifications: (leagueId, token) => request(`/notifications/league/${leagueId}`, { token }),
+  getTeamNotifications: (teamId, token) => request(`/notifications/team/${teamId}`, { token }),
+  markLeagueNotificationRead: (leagueId, notifId, token) =>
+    request(`/notifications/league/${leagueId}/${notifId}/read`, { method: 'POST', token }),
+  markTeamNotificationRead: (teamId, notifId, token) =>
+    request(`/notifications/team/${teamId}/${notifId}/read`, { method: 'POST', token }),
 };

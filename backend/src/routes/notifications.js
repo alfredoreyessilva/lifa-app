@@ -3,6 +3,7 @@ import webpush from 'web-push';
 import db from '../config/db.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { authRequired } from '../middleware/auth.js';
+import { leagueOwnerRequired, teamOwnerRequired } from '../middleware/ownership.js';
 
 const router = express.Router();
 
@@ -217,6 +218,61 @@ router.post('/trigger', asyncHandler(async (req, res) => {
     const notifiedColumn = isLive ? 'notified_live' : 'notified_upcoming';
     await db.prepare(`UPDATE matches SET ${notifiedColumn} = TRUE WHERE id = ?`).run(match.id);
   }
+
+  res.json({ ok: true });
+}));
+
+/* ================== BANDEJA DE NOTIFICACIONES (pantalla "Notificaciones") ==================
+ * Distinto del bloque de arriba (push_subscriptions / web-push): esto es la
+ * lista que se guarda en la tabla `notifications` y se muestra dentro de la
+ * app para cada organización administrada (liga o equipo), como la que ya
+ * pinta Notifications.jsx en el frontend.
+ */
+
+// Notificaciones de una liga — solo el representante de esa liga (o un
+// admin) puede verlas. Las más nuevas primero.
+router.get('/league/:id', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+  const items = await db.prepare(`
+    SELECT id, type, title, body, data, read_at, created_at
+    FROM notifications
+    WHERE recipient_type = 'league' AND recipient_id = ?
+    ORDER BY created_at DESC
+    LIMIT 100
+  `).all(req.league.id);
+
+  res.json({ notifications: items });
+}));
+
+// Notificaciones de un equipo — mismo criterio, para cuando existan tipos
+// de notificación dirigidos al equipo en vez de a la liga.
+router.get('/team/:id', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+  const items = await db.prepare(`
+    SELECT id, type, title, body, data, read_at, created_at
+    FROM notifications
+    WHERE recipient_type = 'team' AND recipient_id = ?
+    ORDER BY created_at DESC
+    LIMIT 100
+  `).all(req.team.id);
+
+  res.json({ notifications: items });
+}));
+
+// Marcar como leída una notificación de liga.
+router.post('/league/:id/:notifId/read', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare(`
+    UPDATE notifications SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
+    WHERE id = ? AND recipient_type = 'league' AND recipient_id = ?
+  `).run(Number(req.params.notifId), req.league.id);
+
+  res.json({ ok: true });
+}));
+
+// Marcar como leída una notificación de equipo.
+router.post('/team/:id/:notifId/read', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare(`
+    UPDATE notifications SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
+    WHERE id = ? AND recipient_type = 'team' AND recipient_id = ?
+  `).run(Number(req.params.notifId), req.team.id);
 
   res.json({ ok: true });
 }));
