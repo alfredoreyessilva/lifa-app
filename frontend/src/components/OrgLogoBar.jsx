@@ -31,7 +31,7 @@ export default function OrgLogoBar({ selectedKind, selectedId }) {
   }
 
   function linkFor(org) {
-    if (org.kind === 'liga') return `/panel/liga/${org.id}/torneos`;
+    if (org.kind === 'liga') return `/panel/liga/${org.id}/estructura`;
     if (org.kind === 'organizacion') return `/panel/organizacion/${org.id}?edit=1`;
     return `/panel/${org.kind}/${org.id}`;
   }

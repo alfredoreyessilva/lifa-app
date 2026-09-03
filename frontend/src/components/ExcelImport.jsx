@@ -4,7 +4,7 @@ import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ALL_TIMEZONES } from '../utils/timezones.js';
 
-export default function ExcelImport({ categoryId, categoryName, teams, venues, groups, onDone, onCancel }) {
+export default function ExcelImport({ categoryId, branchId, categoryName, teams, venues, groups, onDone, onCancel }) {
   const { token } = useAuth();
   const fileRef   = useRef(null);
   const [result,   setResult]   = useState(null); // { imported, skipped, skippedRows }
@@ -94,7 +94,7 @@ export default function ExcelImport({ categoryId, categoryName, teams, venues, g
     setLoading(true);
 
     try {
-      const data = await api.importMatches(categoryId, file, token);
+      const data = await api.importMatches(categoryId, file, token, branchId);
       setResult(data);
     } catch (err) {
       setError(err.message);

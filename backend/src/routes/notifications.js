@@ -1,5 +1,6 @@
 import express from 'express';
 import webpush from 'web-push';
+import jwt from 'jsonwebtoken';
 import db from '../config/db.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { authRequired } from '../middleware/auth.js';
@@ -23,11 +24,13 @@ function ensureVapid() {
   vapidConfigured = true;
 }
 
-// Envía las notificaciones en paralelo (no una por una) para que el cronjob no tarde
-// demasiado y cron-job.org no lo marque como fallido/deshabilitado.
+// Envía las notificaciones en paralelo para que el cronjob no tarde
 async function sendToSubs(subs, payload) {
+  const validSubs = subs.filter((sub) => sub.endpoint && sub.p256dh && sub.auth);
+  if (validSubs.length === 0) return 0;
+
   const results = await Promise.allSettled(
-    subs.map((sub) =>
+    validSubs.map((sub) =>
       webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
         JSON.stringify(payload)
@@ -42,7 +45,7 @@ async function sendToSubs(subs, payload) {
     if (result.status === 'rejected') {
       errors++;
       if (result.reason?.statusCode === 410) {
-        expiredEndpoints.push(subs[idx].endpoint);
+        expiredEndpoints.push(validSubs[idx].endpoint);
       }
     }
   });
@@ -63,68 +66,217 @@ router.get('/vapid-public-key', (req, res) => {
   res.json({ key: process.env.VAPID_PUBLIC_KEY });
 });
 
-// Suscribirse — acepta league_id, match_id o team_name. Requiere sesión, para
-// saber quién es cada suscriptor (necesario para futuras pantallas como
-// "Mi cartelera").
+// Suscribirse o actualizar preferencias — acepta opciones granulares
+// y permite guardar seguimiento en bandeja (in-app) sin requerir push de navegador.
 router.post('/subscribe', authRequired, asyncHandler(async (req, res) => {
-  const { subscription, league_id, match_id, team_name } = req.body;
-  if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
-    return res.status(400).json({ error: 'Suscripción inválida' });
-  }
+  const { subscription, preferences, league_id, match_id, team_name } = req.body;
   if (!league_id && !match_id && !team_name) {
     return res.status(400).json({ error: 'Debes indicar una liga, partido o equipo' });
   }
 
+  const inApp = preferences?.in_app !== undefined ? Boolean(preferences.in_app) : true;
+  const pushEnabled = Boolean(subscription?.endpoint && preferences?.push_enabled);
+  const notifyUpcoming = preferences?.notify_upcoming !== undefined ? Boolean(preferences.notify_upcoming) : true;
+  const notifyLive = preferences?.notify_live !== undefined ? Boolean(preferences.notify_live) : true;
+  const notifyFinal = preferences?.notify_final !== undefined ? Boolean(preferences.notify_final) : true;
+  const notifyChanges = preferences?.notify_changes !== undefined ? Boolean(preferences.notify_changes) : true;
+
+  // Limpiamos cualquier registro previo idéntico para este usuario antes de insertar
   await db.prepare(`
-    INSERT INTO push_subscriptions (endpoint, p256dh, auth, league_id, match_id, team_name, user_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT ON CONSTRAINT push_subscriptions_unique DO UPDATE SET user_id = EXCLUDED.user_id
+    DELETE FROM push_subscriptions
+    WHERE user_id = ?
+      AND league_id IS NOT DISTINCT FROM ?
+      AND match_id  IS NOT DISTINCT FROM ?
+      AND team_name IS NOT DISTINCT FROM ?
+  `).run(req.user.id, league_id || null, match_id || null, team_name || null);
+
+  await db.prepare(`
+    INSERT INTO push_subscriptions (
+      endpoint, p256dh, auth, league_id, match_id, team_name, user_id,
+      in_app, push_enabled, notify_upcoming, notify_live, notify_final, notify_changes
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    subscription.endpoint,
-    subscription.keys.p256dh,
-    subscription.keys.auth,
+    subscription?.endpoint || null,
+    subscription?.keys?.p256dh || null,
+    subscription?.keys?.auth || null,
     league_id  || null,
     match_id   || null,
     team_name  || null,
-    req.user.id
+    req.user.id,
+    inApp,
+    pushEnabled,
+    notifyUpcoming,
+    notifyLive,
+    notifyFinal,
+    notifyChanges
   );
 
-  res.status(201).json({ ok: true });
+  res.status(201).json({
+    ok: true,
+    preferences: {
+      in_app: inApp,
+      push_enabled: pushEnabled,
+      notify_upcoming: notifyUpcoming,
+      notify_live: notifyLive,
+      notify_final: notifyFinal,
+      notify_changes: notifyChanges,
+    }
+  });
 }));
 
-// Verificar si ya está suscrito
+// Verificar si ya está suscrito y devolver preferencias actuales
 router.post('/check', asyncHandler(async (req, res) => {
   const { endpoint, league_id, match_id, team_name } = req.body;
-  if (!endpoint) return res.status(400).json({ error: 'Endpoint requerido' });
 
-  const sub = await db.prepare(`
-    SELECT id FROM push_subscriptions
-    WHERE endpoint = ?
-      AND league_id IS NOT DISTINCT FROM ?
-      AND match_id  IS NOT DISTINCT FROM ?
-      AND team_name IS NOT DISTINCT FROM ?
-  `).get(endpoint, league_id || null, match_id || null, team_name || null);
+  let userId = null;
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET);
+      userId = decoded.id;
+    } catch {}
+  }
 
-  res.json({ subscribed: !!sub });
+  let sub = null;
+  if (userId) {
+    sub = await db.prepare(`
+      SELECT * FROM push_subscriptions
+      WHERE user_id = ?
+        AND league_id IS NOT DISTINCT FROM ?
+        AND match_id  IS NOT DISTINCT FROM ?
+        AND team_name IS NOT DISTINCT FROM ?
+    `).get(userId, league_id || null, match_id || null, team_name || null);
+  }
+
+  if (!sub && endpoint) {
+    sub = await db.prepare(`
+      SELECT * FROM push_subscriptions
+      WHERE endpoint = ?
+        AND league_id IS NOT DISTINCT FROM ?
+        AND match_id  IS NOT DISTINCT FROM ?
+        AND team_name IS NOT DISTINCT FROM ?
+    `).get(endpoint, league_id || null, match_id || null, team_name || null);
+  }
+
+  res.json({
+    subscribed: !!sub,
+    preferences: sub ? {
+      in_app: sub.in_app !== false,
+      push_enabled: Boolean(sub.push_enabled),
+      notify_upcoming: sub.notify_upcoming !== false,
+      notify_live: sub.notify_live !== false,
+      notify_final: sub.notify_final !== false,
+      notify_changes: sub.notify_changes !== false,
+    } : null
+  });
 }));
 
-// Cancelar suscripción
+// Cancelar suscripción general
 router.post('/unsubscribe', asyncHandler(async (req, res) => {
   const { subscription, league_id, match_id, team_name } = req.body;
-  if (!subscription?.endpoint) return res.status(400).json({ error: 'Endpoint requerido' });
+
+  let userId = null;
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET);
+      userId = decoded.id;
+    } catch {}
+  }
+
+  if (userId) {
+    await db.prepare(`
+      DELETE FROM push_subscriptions
+      WHERE user_id = ?
+        AND league_id IS NOT DISTINCT FROM ?
+        AND match_id  IS NOT DISTINCT FROM ?
+        AND team_name IS NOT DISTINCT FROM ?
+    `).run(userId, league_id || null, match_id || null, team_name || null);
+  }
+
+  if (subscription?.endpoint) {
+    await db.prepare(`
+      DELETE FROM push_subscriptions
+      WHERE endpoint = ?
+        AND league_id IS NOT DISTINCT FROM ?
+        AND match_id  IS NOT DISTINCT FROM ?
+        AND team_name IS NOT DISTINCT FROM ?
+    `).run(subscription.endpoint, league_id || null, match_id || null, team_name || null);
+  }
+
+  res.json({ ok: true });
+}));
+
+// Partidos que sigue el usuario (vía suscripciones vinculadas a su user_id)
+router.get('/followed-matches', authRequired, asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+
+  const matchSubs = await db.prepare(`
+    SELECT DISTINCT match_id FROM push_subscriptions
+    WHERE user_id = ? AND match_id IS NOT NULL
+  `).all(userId);
+
+  const teamSubs = await db.prepare(`
+    SELECT DISTINCT league_id, team_name FROM push_subscriptions
+    WHERE user_id = ? AND team_name IS NOT NULL AND league_id IS NOT NULL
+  `).all(userId);
+
+  const teamMatchIds = new Set();
+  for (const sub of teamSubs) {
+    const rows = await db.prepare(`
+      SELECT m.id FROM matches m
+      JOIN categories c ON c.id = m.category_id
+      WHERE c.league_id = ?
+        AND (UPPER(m.home_team) = UPPER(?) OR UPPER(m.away_team) = UPPER(?))
+        AND m.is_draft = FALSE
+    `).all(sub.league_id, sub.team_name, sub.team_name);
+    rows.forEach((r) => teamMatchIds.add(r.id));
+  }
+
+  const allMatchIds = Array.from(new Set([...matchSubs.map((r) => r.match_id), ...teamMatchIds]));
+  if (allMatchIds.length === 0) return res.json({ matches: [] });
+
+  const placeholders = allMatchIds.map(() => '?').join(',');
+  const matches = await db.prepare(`
+    SELECT
+      m.*,
+      c.name AS category_name,
+      c.season AS season,
+      c.year AS year,
+      c.auto_status_enabled AS auto_status_enabled,
+      c.auto_status_window_hours AS auto_status_window_hours,
+      l.id AS league_id,
+      l.name AS league_name,
+      l.slug AS league_slug,
+      l.logo_url AS league_logo_url,
+      l.timezone AS league_timezone,
+      th.logo_url AS home_logo_url,
+      COALESCE(ta.away_logo_url, ta.logo_url) AS away_logo_url,
+      v.name AS venue_name,
+      v.city AS venue_city
+    FROM matches m
+    LEFT JOIN categories c ON c.id = m.category_id
+    LEFT JOIN leagues l    ON l.id = c.league_id
+    LEFT JOIN teams th     ON th.league_id = l.id AND UPPER(th.name) = UPPER(m.home_team)
+    LEFT JOIN teams ta     ON ta.league_id = l.id AND UPPER(ta.name) = UPPER(m.away_team)
+    LEFT JOIN venues v     ON v.id = m.venue_id
+    WHERE m.id IN (${placeholders}) AND m.is_draft = FALSE
+    ORDER BY m.match_date ASC
+  `).all(...allMatchIds);
+
+  res.json({ matches });
+}));
+
+// Dejar de seguir un partido puntual desde el centro de notificaciones
+router.post('/unfollow-match', authRequired, asyncHandler(async (req, res) => {
+  const { match_id } = req.body;
+  if (!match_id) return res.status(400).json({ error: 'match_id requerido' });
 
   await db.prepare(`
     DELETE FROM push_subscriptions
-    WHERE endpoint  = ?
-      AND league_id IS NOT DISTINCT FROM ?
-      AND match_id  IS NOT DISTINCT FROM ?
-      AND team_name IS NOT DISTINCT FROM ?
-  `).run(
-    subscription.endpoint,
-    league_id  || null,
-    match_id   || null,
-    team_name  || null
-  );
+    WHERE user_id = ? AND match_id = ?
+  `).run(req.user.id, match_id);
 
   res.json({ ok: true });
 }));
@@ -140,9 +292,6 @@ router.post('/trigger', asyncHandler(async (req, res) => {
 
   const now = Date.now();
 
-  // Solo trae partidos dentro de la ventana relevante (3h antes a 1h después de "ahora")
-  // y que aún les falte alguna notificación por enviar. Esto evita que la tabla completa
-  // de partidos sin marcador se revise en cada corrida del cronjob.
   const matches = await db.prepare(`
     SELECT m.*, c.league_id,
            l.name as league_name, l.slug as league_slug
@@ -162,7 +311,6 @@ router.post('/trigger', asyncHandler(async (req, res) => {
     const endTime   = matchTime + LIVE_WINDOW_MS;
     const timeUntil = matchTime - now;
 
-    // Solo se considera "por notificar" si esa notificación específica no se ha enviado antes
     const isUpcoming = timeUntil > 0 && timeUntil <= NOTIFY_WINDOW_MS && !match.notified_upcoming;
     const isLive     = now >= matchTime && now < endTime && !match.notified_live;
 
@@ -183,28 +331,33 @@ router.post('/trigger', asyncHandler(async (req, res) => {
       icon: '/favicon.svg',
     };
 
-    // 1. Suscriptores de la liga
+    // Filtramos suscriptores con push habilitado y preferencia coincidente
+    const prefCol = isLive ? 'notify_live' : 'notify_upcoming';
+
     const leagueSubs = await db.prepare(`
       SELECT * FROM push_subscriptions
       WHERE league_id = ? AND match_id IS NULL AND team_name IS NULL
+        AND endpoint IS NOT NULL
+        AND (push_enabled = TRUE OR push_enabled IS NULL)
+        AND (${prefCol} = TRUE OR ${prefCol} IS NULL)
     `).all(match.league_id);
 
-    // 2. Suscriptores del partido específico
     const matchSubs = await db.prepare(`
       SELECT * FROM push_subscriptions
       WHERE match_id = ? AND team_name IS NULL
+        AND endpoint IS NOT NULL
+        AND (push_enabled = TRUE OR push_enabled IS NULL)
+        AND (${prefCol} = TRUE OR ${prefCol} IS NULL)
     `).all(match.id);
 
-    // 3. Suscriptores del equipo local o visitante — solo de ESTA liga.
-    // (league_id = ? cubre las suscripciones nuevas, ya correctamente scoped;
-    // league_id IS NULL cubre suscripciones viejas que no se pudieron migrar
-    // automáticamente por ser ambiguas — mismo comportamiento que ya tenían.)
     const teamSubs = await db.prepare(`
       SELECT * FROM push_subscriptions
       WHERE team_name IN (?, ?) AND match_id IS NULL AND (league_id = ? OR league_id IS NULL)
+        AND endpoint IS NOT NULL
+        AND (push_enabled = TRUE OR push_enabled IS NULL)
+        AND (${prefCol} = TRUE OR ${prefCol} IS NULL)
     `).all(match.home_team, match.away_team, match.league_id);
 
-    // Unir y deduplicar por endpoint
     const allSubs = [...leagueSubs, ...matchSubs, ...teamSubs].filter(
       (sub, idx, arr) => arr.findIndex((s) => s.endpoint === sub.endpoint) === idx
     );
@@ -213,24 +366,92 @@ router.post('/trigger', asyncHandler(async (req, res) => {
       await sendToSubs(allSubs, payload);
     }
 
-    // Se marca como notificado aunque no hubiera suscriptores, para no volver a
-    // evaluar este mismo evento (próximo/en vivo) en la siguiente corrida del cronjob.
     const notifiedColumn = isLive ? 'notified_live' : 'notified_upcoming';
     await db.prepare(`UPDATE matches SET ${notifiedColumn} = TRUE WHERE id = ?`).run(match.id);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Fase 3 — recordatorios a la BANDEJA de la liga (in-app, sin push a nadie).
+  // Van a la tabla `notifications` (recipient_type='league'), igual que los
+  // avisos de admin. Son de una sola vez: al enviarlos se marca la bandera
+  // correspondiente y el cron ya no vuelve a mirar ese partido.
+  //
+  // El fin nominal de un partido se calcula como match_date + ventana de la
+  // categoría (auto_status_window_hours, 3h por defecto). El recordatorio
+  // entra 1h después de ese fin nominal. Solo se miran partidos de los
+  // últimos 2 días para no reprocesar todo el histórico ni escanear la
+  // tabla completa en cada corrida.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const NOMINAL_END = `
+    m.match_date::timestamptz
+    + (COALESCE(c.auto_status_window_hours, 3) || ' hours')::interval
+    + INTERVAL '1 hour'
+  `;
+
+  // (1) Partido FINALIZADO (a mano o por auto-status) que sigue sin marcador.
+  const missingScore = await db.prepare(`
+    SELECT m.id, m.home_team, m.away_team, m.week_label, c.league_id
+    FROM matches m
+    JOIN categories c ON c.id = m.category_id
+    WHERE m.is_draft = FALSE
+      AND m.reminded_missing_score = FALSE
+      AND (m.home_score IS NULL OR m.away_score IS NULL)
+      AND m.match_date::timestamptz > NOW() - INTERVAL '2 days'
+      AND NOW() > ${NOMINAL_END}
+      AND (
+        m.status = 'finished'
+        OR (COALESCE(c.auto_status_enabled, FALSE) = TRUE AND m.status = 'scheduled')
+      )
+  `).all();
+
+  for (const match of missingScore) {
+    const jornada = match.week_label ? ` (${match.week_label})` : '';
+    await db.prepare(`
+      INSERT INTO notifications (recipient_type, recipient_id, type, title, body, data)
+      VALUES ('league', ?, 'score_reminder', ?, ?, ?)
+    `).run(
+      match.league_id,
+      'Falta capturar un marcador ⏳',
+      `El partido ${match.home_team} vs ${match.away_team}${jornada} terminó hace más de una hora y todavía no tiene marcador. Captúralo para mantener la tabla al día.`,
+      JSON.stringify({ match_id: match.id, league_id: match.league_id, url: `/partidos/${match.id}` })
+    );
+    await db.prepare('UPDATE matches SET reminded_missing_score = TRUE WHERE id = ?').run(match.id);
+  }
+
+  // (2) Partido PROGRAMADO cuya fecha ya pasó y nunca se tocó (ni inicio ni
+  //     final). Solo aplica a categorías SIN auto-status — si tuvieran
+  //     auto-status, el partido ya contaría como finalizado y caería en (1).
+  const notStarted = await db.prepare(`
+    SELECT m.id, m.home_team, m.away_team, m.week_label, c.league_id
+    FROM matches m
+    JOIN categories c ON c.id = m.category_id
+    WHERE m.is_draft = FALSE
+      AND m.reminded_not_started = FALSE
+      AND m.status = 'scheduled'
+      AND COALESCE(c.auto_status_enabled, FALSE) = FALSE
+      AND m.match_date::timestamptz > NOW() - INTERVAL '2 days'
+      AND NOW() > ${NOMINAL_END}
+  `).all();
+
+  for (const match of notStarted) {
+    const jornada = match.week_label ? ` (${match.week_label})` : '';
+    await db.prepare(`
+      INSERT INTO notifications (recipient_type, recipient_id, type, title, body, data)
+      VALUES ('league', ?, 'match_not_started', ?, ?, ?)
+    `).run(
+      match.league_id,
+      'Un partido programado ya pasó 📅',
+      `El partido ${match.home_team} vs ${match.away_team}${jornada} estaba programado y ya pasó su fecha, pero nunca se marcó como iniciado ni finalizado. Actualiza su estado, su marcador o su fecha.`,
+      JSON.stringify({ match_id: match.id, league_id: match.league_id, url: `/partidos/${match.id}` })
+    );
+    await db.prepare('UPDATE matches SET reminded_not_started = TRUE WHERE id = ?').run(match.id);
   }
 
   res.json({ ok: true });
 }));
 
-/* ================== BANDEJA DE NOTIFICACIONES (pantalla "Notificaciones") ==================
- * Distinto del bloque de arriba (push_subscriptions / web-push): esto es la
- * lista que se guarda en la tabla `notifications` y se muestra dentro de la
- * app para cada organización administrada (liga o equipo), como la que ya
- * pinta Notifications.jsx en el frontend.
- */
-
-// Notificaciones de una liga — solo el representante de esa liga (o un
-// admin) puede verlas. Las más nuevas primero.
+// Notificaciones de organizaciones (bandeja de entrada)
 router.get('/league/:id', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
   const items = await db.prepare(`
     SELECT id, type, title, body, data, read_at, created_at
@@ -243,8 +464,6 @@ router.get('/league/:id', authRequired, leagueOwnerRequired, asyncHandler(async 
   res.json({ notifications: items });
 }));
 
-// Notificaciones de un equipo — mismo criterio, para cuando existan tipos
-// de notificación dirigidos al equipo en vez de a la liga.
 router.get('/team/:id', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
   const items = await db.prepare(`
     SELECT id, type, title, body, data, read_at, created_at
@@ -257,7 +476,6 @@ router.get('/team/:id', authRequired, teamOwnerRequired, asyncHandler(async (req
   res.json({ notifications: items });
 }));
 
-// Marcar como leída una notificación de liga.
 router.post('/league/:id/:notifId/read', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
   await db.prepare(`
     UPDATE notifications SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
@@ -267,7 +485,6 @@ router.post('/league/:id/:notifId/read', authRequired, leagueOwnerRequired, asyn
   res.json({ ok: true });
 }));
 
-// Marcar como leída una notificación de equipo.
 router.post('/team/:id/:notifId/read', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
   await db.prepare(`
     UPDATE notifications SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)

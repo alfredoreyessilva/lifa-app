@@ -79,8 +79,15 @@ export const api = {
     request(`/leagues/${leagueId}/tournaments`, { method: 'POST', body: payload, token }),
   getTournaments: (leagueId, year, token) =>
     request(`/leagues/${leagueId}/tournaments${year ? `?year=${year}` : ''}`, { token }),
+  updateTournament: (tournamentId, payload, token) =>
+    request(`/manage/tournaments/${tournamentId}`, { method: 'PUT', body: payload, token }),
   deleteTournament: (tournamentId, token) =>
     request(`/manage/tournaments/${tournamentId}`, { method: 'DELETE', token }),
+
+  // Árbol completo de una liga (Torneo -> Categoría -> Rama -> Conferencia
+  // -> Grupo) para la pantalla "Estructura".
+  getLeagueTree: (leagueId, token) =>
+    request(`/leagues/${leagueId}/tree`, { token }),
 
   // Roster de liga: equipos "de la casa" (tabla league_teams). Elegibles
   // automáticamente en cualquier torneo de esa liga, sin inscripción aparte.
@@ -114,6 +121,10 @@ export const api = {
     request(`/manage/categories/${categoryId}/branches`, { method: 'POST', body: payload, token }),
   getBranches: (categoryId, token) =>
     request(`/manage/categories/${categoryId}/branches`, { token }),
+  updateBranch: (branchId, payload, token) =>
+    request(`/manage/branches/${branchId}`, { method: 'PUT', body: payload, token }),
+  deleteBranch: (branchId, token) =>
+    request(`/manage/branches/${branchId}`, { method: 'DELETE', token }),
 
   // Equipos inscritos en una rama (corrección: antes se detectaba por
   // tener partidos ahí, ahora es explícito)
@@ -160,6 +171,10 @@ export const api = {
     request(`/manage/branches/${branchId}/conferences`, { method: 'POST', body: payload, token }),
   getConferences: (branchId, token) =>
     request(`/manage/branches/${branchId}/conferences`, { token }),
+  updateConference: (conferenceId, payload, token) =>
+    request(`/manage/conferences/${conferenceId}`, { method: 'PUT', body: payload, token }),
+  deleteConference: (conferenceId, token) =>
+    request(`/manage/conferences/${conferenceId}`, { method: 'DELETE', token }),
 
   // Pruebas de la nueva jerarquía (Conferencia -> Grupo)
   createTestGroup: (conferenceId, payload, token) =>
@@ -174,12 +189,6 @@ export const api = {
     request(`/manage/branches/${branchId}/groups`, { method: 'POST', body: payload, token }),
   getBranchGroups: (branchId, token) =>
     request(`/manage/branches/${branchId}/groups`, { token }),
-
-  // Pruebas de la nueva jerarquía (Rama -> Partido)
-  createTestMatch: (branchId, payload, token) =>
-    request(`/manage/branches/${branchId}/matches-test`, { method: 'POST', body: payload, token }),
-  getTestMatches: (branchId, token) =>
-    request(`/manage/branches/${branchId}/matches-test`, { token }),
 
   // Partidos reales de una rama (todos los campos)
   getBranchMatches: (branchId, token) =>
@@ -203,10 +212,12 @@ export const api = {
   deleteMatch: (matchId, token) =>
     request(`/manage/matches/${matchId}`, { method: 'DELETE', token }),
 
-  // Importación masiva desde Excel
-  importMatches: async (categoryId, file, token) => {
+  // Importación masiva desde Excel. Si se pasa branchId, los partidos entran
+  // directo a esa rama (modelo nuevo); si no, quedan solo a nivel categoría.
+  importMatches: async (categoryId, file, token, branchId) => {
     const formData = new FormData();
     formData.append('file', file);
+    if (branchId) formData.append('branch_id', branchId);
     const res = await fetch(`${BASE}/manage/categories/${categoryId}/matches/import`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
@@ -356,4 +367,7 @@ export const api = {
     request(`/notifications/league/${leagueId}/${notifId}/read`, { method: 'POST', token }),
   markTeamNotificationRead: (teamId, notifId, token) =>
     request(`/notifications/team/${teamId}/${notifId}/read`, { method: 'POST', token }),
+  getFollowedMatches: (token) => request('/notifications/followed-matches', { token }),
+  unfollowMatch: (matchId, token) =>
+    request('/notifications/unfollow-match', { method: 'POST', body: { match_id: matchId }, token }),
 };

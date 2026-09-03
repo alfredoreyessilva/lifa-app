@@ -2431,3 +2431,135 @@ a.match-card-new {
   color: var(--ink-dim);
   margin-top: 4px;
 }
+
+/* ===== Árbol de estructura de la liga (/panel/liga/:id/estructura) ===== */
+.tree {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  overflow: hidden;
+}
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  min-height: 44px;
+}
+.tree-row:last-child { border-bottom: none; }
+.tree-row:hover { background: var(--card-hover); }
+.tree-row.is-dim .tree-name { color: var(--ink-dim); font-style: italic; }
+
+.tree-caret {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--ink-dim);
+  cursor: pointer;
+  font-size: 11px;
+  transition: transform 0.12s ease;
+}
+.tree-caret.is-open { transform: rotate(90deg); }
+.tree-caret.is-leaf { visibility: hidden; cursor: default; }
+
+.tree-kind {
+  flex: 0 0 auto;
+  font-family: var(--font-eyebrow);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--surface);
+  background: var(--flag);
+  border-radius: 3px;
+  padding: 2px 5px;
+}
+.tree-name {
+  font-family: var(--font-eyebrow);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tree-name mark {
+  background: var(--flag);
+  color: var(--surface);
+  border-radius: 2px;
+}
+.tree-badge {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+.tree-spacer { flex: 1 1 auto; }
+.tree-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.tree-actions .btn { padding: 4px 8px; font-size: 11px; }
+.tree-icon-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink-dim);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+.tree-icon-btn:hover { color: var(--ink); border-color: var(--line-strong); }
+.tree-icon-btn.is-danger:hover { color: var(--live); border-color: var(--live); }
+
+.tree-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.tree-toolbar input[type="search"] {
+  flex: 1 1 220px;
+  min-width: 180px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.tree-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 6px 3px 9px;
+  font-size: 12px;
+}
+.tree-chip-btn {
+  background: transparent;
+  border: none;
+  color: var(--ink-dim);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+.tree-chip-btn:hover { color: var(--ink); background: rgba(255,255,255,0.08); }
+.tree-chip-btn.is-danger:hover { color: var(--live); }
+
+@media (max-width: 640px) {
+  .tree-row { flex-wrap: wrap; min-height: 0; }
+  .tree-actions { width: 100%; padding-left: 30px; }
+}

@@ -97,7 +97,7 @@ export default function TournamentMatchesPanel() {
     <div className="container">
       <OrgLogoBar selectedKind="liga" selectedId={id} />
       <div className="crumb">
-        <Link to={`/panel/liga/${id}/${year}/torneo/${tournamentId}`}>← Categorías</Link>
+        <Link to={`/panel/liga/${id}/estructura`}>← Liga</Link>
       </div>
 
       <div className="dash-header">

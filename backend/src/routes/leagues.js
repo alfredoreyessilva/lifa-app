@@ -455,6 +455,139 @@ router.get('/:leagueId/tournaments', authRequired, leagueOwnerRequired, asyncHan
   res.json(tournaments);
 }));
 
+// Toda la liga en una sola respuesta, para el panel unificado
+// (/panel/liga/:id/estructura): la liga, sus equipos y sedes, y la jerarquía
+// Torneo -> Categoría -> Rama -> (Conferencia) -> Grupo con los partidos y
+// los equipos inscritos de cada rama ya embebidos. Así el panel hace UNA
+// petición y todo el trabajo (crear/editar/borrar en cualquier nivel) pasa
+// sin cambiar de página.
+//
+// Solo incluye lo que cuelga de un torneo. Las categorías del modelo viejo
+// (sin tournament_id) NO se mezclan aquí — se reportan aparte en `legacy`
+// para que el panel pueda enlazar a la pantalla clásica si todavía hay algo
+// ahí.
+router.get('/:leagueId/tree', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+  const leagueId = req.league.id;
+
+  const [
+    tournaments, categories, branches, conferences, groups,
+    matches, branchTeams, teams, venues, legacy,
+  ] = await Promise.all([
+    db.prepare(`
+      SELECT * FROM tournaments
+      WHERE league_id = ?
+      ORDER BY year DESC, sort_order ASC, name ASC
+    `).all(leagueId),
+    db.prepare(`
+      SELECT c.* FROM categories c
+      JOIN tournaments t ON t.id = c.tournament_id
+      WHERE t.league_id = ?
+      ORDER BY c.sort_order ASC, c.name ASC
+    `).all(leagueId),
+    db.prepare(`
+      SELECT b.* FROM branches b
+      JOIN categories c ON c.id = b.category_id
+      JOIN tournaments t ON t.id = c.tournament_id
+      WHERE t.league_id = ?
+      ORDER BY b.sort_order ASC, b.name ASC
+    `).all(leagueId),
+    db.prepare(`
+      SELECT cf.* FROM conferences cf
+      JOIN branches b ON b.id = cf.branch_id
+      JOIN categories c ON c.id = b.category_id
+      JOIN tournaments t ON t.id = c.tournament_id
+      WHERE t.league_id = ?
+      ORDER BY cf.sort_order ASC, cf.name ASC
+    `).all(leagueId),
+    db.prepare(`
+      SELECT g.* FROM groups g
+      JOIN categories c ON c.id = g.category_id
+      JOIN tournaments t ON t.id = c.tournament_id
+      WHERE t.league_id = ? AND (g.branch_id IS NOT NULL OR g.conference_id IS NOT NULL)
+      ORDER BY g.sort_order ASC, g.name ASC
+    `).all(leagueId),
+    db.prepare(`
+      SELECT m.* FROM matches m
+      JOIN branches b ON b.id = m.branch_id
+      JOIN categories c ON c.id = b.category_id
+      JOIN tournaments t ON t.id = c.tournament_id
+      WHERE t.league_id = ?
+      ORDER BY m.match_date ASC, m.id ASC
+    `).all(leagueId),
+    db.prepare(`
+      SELECT bt.branch_id, t.id, t.name, t.logo_url
+      FROM branch_teams bt
+      JOIN teams t ON t.id = bt.team_id
+      JOIN branches b ON b.id = bt.branch_id
+      JOIN categories c ON c.id = b.category_id
+      JOIN tournaments tn ON tn.id = c.tournament_id
+      WHERE tn.league_id = ?
+      ORDER BY t.name ASC
+    `).all(leagueId),
+    db.prepare('SELECT * FROM teams WHERE league_id = ? ORDER BY sort_order ASC, name ASC').all(leagueId),
+    db.prepare('SELECT * FROM venues WHERE league_id = ? ORDER BY sort_order ASC, name ASC').all(leagueId),
+    db.prepare(`
+      SELECT
+        (SELECT COUNT(*)::int FROM categories WHERE league_id = ? AND tournament_id IS NULL) AS categories,
+        (SELECT COUNT(*)::int FROM matches m JOIN categories c ON c.id = m.category_id
+           WHERE c.league_id = ? AND c.tournament_id IS NULL) AS matches
+    `).get(leagueId, leagueId),
+  ]);
+
+  const by = (rows, key) => {
+    const out = {};
+    for (const r of rows) (out[r[key]] ||= []).push(r);
+    return out;
+  };
+
+  const matchesByBranch     = by(matches, 'branch_id');
+  const branchTeamsByBranch  = by(branchTeams, 'branch_id');
+  const groupsByConference   = {};
+  const directGroupsByBranch = {};
+  for (const g of groups) {
+    if (g.conference_id) (groupsByConference[g.conference_id] ||= []).push(g);
+    else if (g.branch_id) (directGroupsByBranch[g.branch_id] ||= []).push(g);
+  }
+
+  const conferencesByBranch = {};
+  for (const cf of conferences) {
+    (conferencesByBranch[cf.branch_id] ||= []).push({
+      ...cf,
+      groups: groupsByConference[cf.id] || [],
+    });
+  }
+
+  const branchesByCategory = {};
+  for (const b of branches) {
+    (branchesByCategory[b.category_id] ||= []).push({
+      ...b,
+      conferences:  conferencesByBranch[b.id] || [],
+      directGroups: directGroupsByBranch[b.id] || [],
+      teams:        branchTeamsByBranch[b.id] || [],
+      matches:      matchesByBranch[b.id] || [],
+    });
+  }
+
+  const categoriesByTournament = {};
+  for (const c of categories) {
+    (categoriesByTournament[c.tournament_id] ||= []).push({
+      ...c,
+      branches: branchesByCategory[c.id] || [],
+    });
+  }
+
+  res.json({
+    league: req.league,
+    teams,
+    venues,
+    legacy,
+    tournaments: tournaments.map((t) => ({
+      ...t,
+      categories: categoriesByTournament[t.id] || [],
+    })),
+  });
+}));
+
 // --- Pruebas de la nueva jerarquía (Torneo -> Categoría) ---
 // Estas dos rutas son análogas a "categorías bajo liga", pero cuelgan de
 // tournament_id. Todavía no las usa ninguna pantalla real, solo pantallas

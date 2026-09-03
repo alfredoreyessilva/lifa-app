@@ -423,6 +423,17 @@ export async function initSchema() {
     // Control de notificaciones ya enviadas por partido (evita reenvíos repetidos del cronjob)
     await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_upcoming BOOLEAN NOT NULL DEFAULT FALSE`);
     await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_live BOOLEAN NOT NULL DEFAULT FALSE`);
+    // Fase 3 — más control de avisos ya enviados por partido:
+    //   notified_final         → push del marcador final ya se mandó a los seguidores.
+    //   reminded_missing_score → ya se avisó a la liga que un partido FINALIZADO no tiene marcador.
+    //   reminded_not_started   → ya se avisó a la liga que un partido PROGRAMADO pasó su fecha sin tocarse.
+    // Los dos "reminded_*" son de una sola vez (decisión de producto): se marcan TRUE al enviar
+    // y el cronjob nunca vuelve a mirar ese partido. La consulta del cron además se limita a
+    // partidos de los últimos 2 días, para que al desplegar esto no se dispare un aluvión de
+    // avisos históricos ni se escanee la tabla completa en cada corrida.
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS notified_final BOOLEAN NOT NULL DEFAULT FALSE`);
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS reminded_missing_score BOOLEAN NOT NULL DEFAULT FALSE`);
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS reminded_not_started BOOLEAN NOT NULL DEFAULT FALSE`);
 
     // Visibilidad pública de una liga: reemplaza el viejo `status` (pending/approved).
     // Son dos controles independientes:
@@ -972,10 +983,7 @@ export async function initSchema() {
     await run(`CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_type, recipient_id)`);
     await run(`CREATE INDEX IF NOT EXISTS idx_notifications_recipient_unread ON notifications(recipient_type, recipient_id) WHERE read_at IS NULL`);
 
-    // Siembra base de países. ON CONFLICT (code) DO NOTHING la vuelve segura
-    // de correr en cada arranque: la primera vez los crea, después no hace
-    // nada. Lista corta a propósito — se puede ampliar cuando haga falta,
-    // sin que eso cuente como una migración especial.
+    // Siembra base de países.
     await run(`
       INSERT INTO countries (code, name) VALUES
         ('MX', 'México'),
@@ -987,10 +995,24 @@ export async function initSchema() {
         ('ES', 'España')
       ON CONFLICT (code) DO NOTHING
     `);
+
+    // Soporte para preferencias granulares de notificación y modo in-app sin push
+    await run(`ALTER TABLE push_subscriptions ALTER COLUMN endpoint DROP NOT NULL`).catch(() => {});
+    await run(`ALTER TABLE push_subscriptions ALTER COLUMN p256dh DROP NOT NULL`).catch(() => {});
+    await run(`ALTER TABLE push_subscriptions ALTER COLUMN auth DROP NOT NULL`).catch(() => {});
+    await run(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS in_app BOOLEAN DEFAULT TRUE`);
+    await run(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS push_enabled BOOLEAN DEFAULT FALSE`);
+    await run(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS notify_upcoming BOOLEAN DEFAULT TRUE`);
+    await run(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS notify_live BOOLEAN DEFAULT TRUE`);
+    await run(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS notify_final BOOLEAN DEFAULT TRUE`);
+    await run(`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS notify_changes BOOLEAN DEFAULT TRUE`);
+    await run(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_push_user_sub
+      ON push_subscriptions (user_id, COALESCE(league_id, 0), COALESCE(match_id, 0), COALESCE(team_name, ''))
+      WHERE user_id IS NOT NULL
+    `);
   } finally {
-    // Se suelta el candado y se libera la conexión pase lo que pase (incluso
-    // si algo de arriba lanzó un error), para que nunca se quede otra
-    // instancia esperando un candado que ya nadie va a soltar.
+    // Se suelta el candado y se libera la conexión pase lo que pase
     await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY]).catch(() => {});
     client.release();
   }

@@ -4,14 +4,8 @@ import SponsorBar from './components/SponsorBar.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import Home from './pages/Home.jsx';
 import YearSelectPage from './pages/YearSelectPage.jsx';
-import TournamentFormTestPage from './pages/TournamentFormTestPage.jsx';
-import TournamentsYearPanel from './pages/TournamentsYearPanel.jsx';
-import CategoriesPanel from './pages/CategoriesPanel.jsx';
 import TournamentMatchesPanel from './pages/TournamentMatchesPanel.jsx';
-import BranchesPanel from './pages/BranchesPanel.jsx';
-import RamaPanel from './pages/RamaPanel.jsx';
-import ConferencesPanel from './pages/ConferencesPanel.jsx';
-import GroupsPanel from './pages/GroupsPanel.jsx';
+import LeagueStructurePanel from './pages/LeagueStructurePanel.jsx';
 import LeaguePage from './pages/LeaguePage.jsx';
 import TournamentPage from './pages/TournamentPage.jsx';
 import CalendarPage from './pages/CalendarPage.jsx';
@@ -49,7 +43,6 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/anios" element={<YearSelectPage />} />
-            <Route path="/torneo-test" element={<TournamentFormTestPage />} />
             <Route path="/ligas/:slug" element={<LeaguePage />} />
             <Route path="/torneos/:tournamentId" element={<TournamentPage />} />
             <Route path="/categorias/:categoryId/calendario" element={<CalendarPage />} />
@@ -77,32 +70,12 @@ export default function App() {
               element={<ProtectedRoute><Dashboard kind="liga" /></ProtectedRoute>}
             />
             <Route
-              path="/panel/liga/:id/torneos"
-              element={<ProtectedRoute><TournamentsYearPanel /></ProtectedRoute>}
-            />
-            <Route
-              path="/panel/liga/:id/:year/torneo/:tournamentId"
-              element={<ProtectedRoute><CategoriesPanel /></ProtectedRoute>}
+              path="/panel/liga/:id/estructura"
+              element={<ProtectedRoute><LeagueStructurePanel /></ProtectedRoute>}
             />
             <Route
               path="/panel/liga/:id/:year/torneo/:tournamentId/partidos"
               element={<ProtectedRoute><TournamentMatchesPanel /></ProtectedRoute>}
-            />
-            <Route
-              path="/panel/liga/:id/:year/torneo/:tournamentId/categoria/:categoryId"
-              element={<ProtectedRoute><BranchesPanel /></ProtectedRoute>}
-            />
-            <Route
-              path="/panel/liga/:id/:year/torneo/:tournamentId/categoria/:categoryId/rama/:branchId"
-              element={<ProtectedRoute><RamaPanel /></ProtectedRoute>}
-            />
-            <Route
-              path="/panel/liga/:id/:year/torneo/:tournamentId/categoria/:categoryId/rama/:branchId/conferencias"
-              element={<ProtectedRoute><ConferencesPanel /></ProtectedRoute>}
-            />
-            <Route
-              path="/panel/liga/:id/:year/torneo/:tournamentId/categoria/:categoryId/rama/:branchId/conferencia/:conferenceId"
-              element={<ProtectedRoute><GroupsPanel /></ProtectedRoute>}
             />
             <Route
               path="/panel/equipo/:id"

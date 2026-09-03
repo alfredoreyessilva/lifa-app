@@ -95,6 +95,7 @@ export default function TeamInfoPanel({ team, leagueId, onClose }) {
               leagueId={leagueId}
               teamName={team.name}
               label={`Notificarme de partidos de ${team.name}`}
+              targetName={`Partidos de ${team.name}`}
             />
           </div>
         </div>

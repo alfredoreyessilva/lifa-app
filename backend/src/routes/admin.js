@@ -69,6 +69,17 @@ router.put('/leagues/:id/publish', authRequired, adminRequired, asyncHandler(asy
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id);
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
   await db.prepare('UPDATE leagues SET is_public = TRUE WHERE id = ?').run(req.params.id);
+
+  await db.prepare(`
+    INSERT INTO notifications (recipient_type, recipient_id, type, title, body, data)
+    VALUES ('league', ?, 'league_approved', ?, ?, ?)
+  `).run(
+    league.id,
+    '¡Tu liga ha sido aprobada y publicada! 🎉',
+    `La liga ${league.name} ya está visible para el público en general en el directorio de ligas.`,
+    JSON.stringify({ league_id: league.id, league_slug: league.slug, url: `/ligas/${league.slug}` })
+  );
+
   res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id));
 }));
 
@@ -76,6 +87,18 @@ router.put('/leagues/:id/unpublish', authRequired, adminRequired, asyncHandler(a
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id);
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
   await db.prepare('UPDATE leagues SET is_public = FALSE WHERE id = ?').run(req.params.id);
+
+  const reason = req.body?.reason || 'Tu liga ha sido ocultada del sitio público por el equipo de administración.';
+  await db.prepare(`
+    INSERT INTO notifications (recipient_type, recipient_id, type, title, body, data)
+    VALUES ('league', ?, 'league_unapproved', ?, ?, ?)
+  `).run(
+    league.id,
+    'Estado de publicación de liga actualizado',
+    reason,
+    JSON.stringify({ league_id: league.id, league_slug: league.slug, url: `/panel/liga/${league.id}` })
+  );
+
   res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id));
 }));
 
@@ -83,6 +106,17 @@ router.put('/leagues/:id/verify', authRequired, adminRequired, asyncHandler(asyn
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id);
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
   await db.prepare('UPDATE leagues SET is_verified = TRUE WHERE id = ?').run(req.params.id);
+
+  await db.prepare(`
+    INSERT INTO notifications (recipient_type, recipient_id, type, title, body, data)
+    VALUES ('league', ?, 'league_verified', ?, ?, ?)
+  `).run(
+    league.id,
+    '¡Tu liga ha sido verificada oficialmente! ⭐',
+    `La liga ${league.name} cuenta ahora con el distintivo oficial de verificación.`,
+    JSON.stringify({ league_id: league.id, league_slug: league.slug, url: `/ligas/${league.slug}` })
+  );
+
   res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id));
 }));
 
@@ -90,6 +124,18 @@ router.put('/leagues/:id/unverify', authRequired, adminRequired, asyncHandler(as
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id);
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
   await db.prepare('UPDATE leagues SET is_verified = FALSE WHERE id = ?').run(req.params.id);
+
+  const reason = req.body?.reason || `La insignia de verificación de la liga ${league.name} ha sido retirada por el equipo de administración.`;
+  await db.prepare(`
+    INSERT INTO notifications (recipient_type, recipient_id, type, title, body, data)
+    VALUES ('league', ?, 'league_unverified', ?, ?, ?)
+  `).run(
+    league.id,
+    'Insignia de verificación retirada ⚠️',
+    reason,
+    JSON.stringify({ league_id: league.id, league_slug: league.slug, url: `/panel/liga/${league.id}` })
+  );
+
   res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id));
 }));
 

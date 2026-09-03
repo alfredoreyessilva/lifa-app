@@ -13,6 +13,7 @@ import {
   parseLocalDateTimeString,
 } from '../utils/timezones.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { notifyMatchFollowers } from '../utils/pushNotifier.js';
 
 const router = express.Router();
 
@@ -42,6 +43,61 @@ function validateLinksList(links, label) {
 // exclusivamente del horario (fecha + ventana de 3h) — el marcador NUNCA
 // determina el estado, solo es un dato que se guarda aparte.
 const LIVE_WINDOW_MS = 3 * 60 * 60 * 1000;
+
+// Fase 3 — avisos push en tiempo real a los SEGUIDORES de un partido, tras
+// guardar una edición. Compara la fila antes/después y manda push solo por
+// lo que cambió de verdad. Nunca lanza hacia afuera (el que llama la envuelve
+// en try/catch); pushNotifier además captura sus propios errores de red.
+// Coordina con el cronjob a través de las mismas banderas notified_live /
+// notified_final para que un evento no se avise dos veces.
+async function pushMatchEditAlerts(before, after) {
+  if (!after || after.is_draft) return;
+
+  const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+  const hadScore = num(before.home_score) !== null && num(before.away_score) !== null;
+  const hasScore = num(after.home_score)  !== null && num(after.away_score)  !== null;
+
+  // 1. Marcador final: pasó de "sin marcador completo" a "con marcador
+  //    completo" y aún no se había avisado.
+  if (!before.notified_final && !hadScore && hasScore) {
+    await notifyMatchFollowers(after.id, {
+      eventType: 'final_score',
+      title: `🏆 Marcador final — ${after.home_team} vs ${after.away_team}`,
+      body:  `Resultado: ${after.home_team} ${after.home_score} · ${after.away_team} ${after.away_score}.`,
+      url:   `/partidos/${after.id}`,
+    });
+    await db.prepare('UPDATE matches SET notified_final = TRUE WHERE id = ?').run(after.id);
+  }
+
+  // 2. Arranque manual: el organizador marcó "en vivo" antes de que el cron
+  //    lo detectara (o en una categoría sin auto-status).
+  if (after.status === 'live' && before.status !== 'live' && !before.notified_live) {
+    await notifyMatchFollowers(after.id, {
+      eventType: 'live',
+      title: `🔴 EN VIVO — ${after.home_team} vs ${after.away_team}`,
+      body:  '¡El partido ya comenzó!',
+      url:   `/partidos/${after.id}`,
+    });
+    await db.prepare('UPDATE matches SET notified_live = TRUE WHERE id = ?').run(after.id);
+  }
+
+  // 3. Cambio de fecha/hora o de sede en un partido que todavía no ocurre.
+  const dateChanged  = String(before.match_date) !== String(after.match_date);
+  const venueChanged = (before.venue_id || null) !== (after.venue_id || null);
+  const isFuture     = new Date(after.match_date).getTime() > Date.now();
+  if (isFuture && (dateChanged || venueChanged)) {
+    const body =
+      dateChanged && venueChanged ? 'Cambiaron la fecha/hora y la sede de este partido.'
+      : dateChanged               ? 'Cambió la fecha u hora de este partido.'
+      :                             'Cambió la sede de este partido.';
+    await notifyMatchFollowers(after.id, {
+      eventType: 'schedule_change',
+      title: `📅 Cambio de programación — ${after.home_team} vs ${after.away_team}`,
+      body,
+      url:   `/partidos/${after.id}`,
+    });
+  }
+}
 // Busca si el nombre de equipo (texto libre) coincide con un equipo real
 // elegible para esa categoría — en este orden:
 //   1. Miembro de la liga dueña del torneo (elegible en cualquiera de sus
@@ -180,6 +236,35 @@ router.delete('/categories/:categoryId', authRequired, categoryOwnerRequired, as
   res.json({ ok: true });
 }));
 
+// Renombra un torneo (y opcionalmente cambia su año). No toca nada de lo
+// que cuelga de él.
+router.put('/tournaments/:tournamentId', authRequired, tournamentOwnerRequired, asyncHandler(async (req, res) => {
+  const { name, year, sort_order, logo_url } = req.body;
+  if (name !== undefined && !isNonEmptyString(name)) {
+    return res.status(400).json({ error: 'El nombre del torneo no puede estar vacío' });
+  }
+  if (year !== undefined && !Number.isInteger(parseInt(year))) {
+    return res.status(400).json({ error: 'El año no es válido' });
+  }
+
+  await db.prepare(`
+    UPDATE tournaments SET
+      name       = COALESCE(?, name),
+      year       = COALESCE(?, year),
+      sort_order = COALESCE(?, sort_order),
+      logo_url   = COALESCE(?, logo_url)
+    WHERE id = ?
+  `).run(
+    toNull(name ? name.trim() : name),
+    toNull(year !== undefined ? parseInt(year) : year),
+    toNull(sort_order),
+    toNull(logo_url),
+    req.tournament.id,
+  );
+
+  res.json(await db.prepare('SELECT * FROM tournaments WHERE id = ?').get(req.tournament.id));
+}));
+
 // Borra el torneo completo, y en cascada TODO lo que cuelga de él:
 // categorías, ramas, conferencias, grupos, y partidos. Es destructivo e
 // irreversible (por eso el frontend pide escribir el nombre del torneo
@@ -239,11 +324,35 @@ router.get('/categories/:categoryId/branches', authRequired, categoryOwnerRequir
   res.json(branches);
 }));
 
-// Partidos REALES (todos los campos) de una Rama — a diferencia de
-// /branches/:branchId/matches-test (que era solo para probar la jerarquía
-// con lo mínimo), esta ruta devuelve exactamente lo que MatchForm.jsx
-// necesita para crear/editar un partido de verdad: marcador, sede, links,
-// zona horaria, estado, etc.
+router.put('/branches/:branchId', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  const { name, sort_order } = req.body;
+  if (name !== undefined && !isNonEmptyString(name)) {
+    return res.status(400).json({ error: 'El nombre de la rama no puede estar vacío' });
+  }
+
+  await db.prepare(`
+    UPDATE branches SET
+      name       = COALESCE(?, name),
+      sort_order = COALESCE(?, sort_order)
+    WHERE id = ?
+  `).run(
+    toNull(name ? name.trim() : name),
+    toNull(sort_order),
+    req.branch.id,
+  );
+
+  res.json(await db.prepare('SELECT * FROM branches WHERE id = ?').get(req.branch.id));
+}));
+
+// Borra una rama y, en cascada, sus conferencias, grupos y partidos.
+router.delete('/branches/:branchId', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare('DELETE FROM branches WHERE id = ?').run(req.branch.id);
+  res.json({ ok: true });
+}));
+
+// Partidos de una Rama con todos los campos que MatchForm.jsx necesita para
+// crear/editar un partido de verdad: marcador, sede, links, zona horaria,
+// estado, etc.
 router.get('/branches/:branchId/matches', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
   const matches = await db.prepare(`
     SELECT * FROM matches WHERE branch_id = ?
@@ -317,6 +426,33 @@ router.get('/branches/:branchId/conferences', authRequired, branchOwnerRequired,
     ORDER BY sort_order ASC, name ASC
   `).all(req.branch.id);
   res.json(conferences);
+}));
+
+router.put('/conferences/:conferenceId', authRequired, conferenceOwnerRequired, asyncHandler(async (req, res) => {
+  const { name, sort_order } = req.body;
+  if (name !== undefined && !isNonEmptyString(name)) {
+    return res.status(400).json({ error: 'El nombre de la conferencia no puede estar vacío' });
+  }
+
+  await db.prepare(`
+    UPDATE conferences SET
+      name       = COALESCE(?, name),
+      sort_order = COALESCE(?, sort_order)
+    WHERE id = ?
+  `).run(
+    toNull(name ? name.trim() : name),
+    toNull(sort_order),
+    req.conference.id,
+  );
+
+  res.json(await db.prepare('SELECT * FROM conferences WHERE id = ?').get(req.conference.id));
+}));
+
+// Borra una conferencia y, en cascada, sus grupos. Los partidos que apunten
+// a esa conferencia (conference_id) quedan sin conferencia, no se borran.
+router.delete('/conferences/:conferenceId', authRequired, conferenceOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare('DELETE FROM conferences WHERE id = ?').run(req.conference.id);
+  res.json({ ok: true });
 }));
 
 // Grupo colgado DIRECTO de la rama, sin conferencia — ambos niveles son
@@ -406,42 +542,6 @@ router.get('/conferences/:conferenceId/groups-test', authRequired, conferenceOwn
     ORDER BY sort_order ASC, name ASC
   `).all(req.conference.id);
   res.json(groups);
-}));
-
-// --- Pruebas de la nueva jerarquía (Rama -> Partido) ---
-// A propósito NO reutiliza el formulario/ruta real de partidos (que maneja
-// zonas horarias, sedes, grupos, etc.) — aquí solo lo mínimo indispensable
-// (equipos + fecha) para comprobar que un partido puede colgar de branch_id.
-// El estado nace siempre "scheduled"; el botón de iniciar/finalizar es el
-// siguiente paso pendiente, el motivo original de esta conversación.
-
-router.post('/branches/:branchId/matches-test', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
-  const { home_team, away_team, match_date, group_id } = req.body;
-  if (!isNonEmptyString(home_team) || !isNonEmptyString(away_team) || !isNonEmptyString(match_date)) {
-    return res.status(400).json({ error: 'Se requieren equipo local, visitante y fecha' });
-  }
-
-  const result = await db.prepare(`
-    INSERT INTO matches (category_id, branch_id, group_id, home_team, away_team, match_date, status)
-    VALUES (?, ?, ?, ?, ?, ?, 'scheduled')
-  `).run(
-    req.branch.category_id,
-    req.branch.id,
-    group_id || null,
-    home_team.trim(),
-    away_team.trim(),
-    match_date,
-  );
-
-  res.status(201).json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(result.lastInsertRowid));
-}));
-
-router.get('/branches/:branchId/matches-test', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
-  const matches = await db.prepare(`
-    SELECT * FROM matches WHERE branch_id = ?
-    ORDER BY match_date ASC
-  `).all(req.branch.id);
-  res.json(matches);
 }));
 
 router.put('/groups/:id', authRequired, groupOwnerRequired, asyncHandler(async (req, res) => {
@@ -572,15 +672,33 @@ router.post(
       return res.status(400).json({ error: 'El archivo está vacío o no tiene filas de datos' });
     }
 
-    // Equipos y sedes reales de esta liga, y grupos de esta categoría, para
-    // intentar hacer coincidir el texto del Excel contra ellos (sin importar
-    // mayúsculas/minúsculas) y así no reintroducir duplicados por texto libre.
+    // Opcional: importar a una Rama concreta de esta categoría (modelo nuevo).
+    // Si viene, cada partido nace con branch_id, y los grupos se buscan en el
+    // ámbito de la rama (directos + los de sus conferencias) en vez de la
+    // categoría entera.
+    let branchId = null;
+    if (req.body.branch_id) {
+      const branch = await db.prepare('SELECT * FROM branches WHERE id = ? AND category_id = ?')
+        .get(req.body.branch_id, req.category.id);
+      if (!branch) return res.status(400).json({ error: 'La rama indicada no pertenece a esta categoría' });
+      branchId = branch.id;
+    }
+
+    // Equipos y sedes reales de esta liga, y grupos de esta categoría (o de la
+    // rama, si se indicó una), para intentar hacer coincidir el texto del
+    // Excel contra ellos (sin importar mayúsculas/minúsculas) y así no
+    // reintroducir duplicados por texto libre.
     const registeredTeams  = await db.prepare(`
       SELECT id, name, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links
       FROM teams WHERE league_id = ?
     `).all(req.league.id);
     const registeredVenues = await db.prepare('SELECT id, name FROM venues WHERE league_id = ?').all(req.league.id);
-    const registeredGroups = await db.prepare('SELECT id, name FROM groups WHERE category_id = ?').all(req.category.id);
+    const registeredGroups = branchId
+      ? await db.prepare(`
+          SELECT id, name FROM groups
+          WHERE branch_id = ? OR conference_id IN (SELECT id FROM conferences WHERE branch_id = ?)
+        `).all(branchId, branchId)
+      : await db.prepare('SELECT id, name FROM groups WHERE category_id = ?').all(req.category.id);
 
     function findTeam(name) {
       return registeredTeams.find((t) => t.name.toLowerCase() === name.toLowerCase());
@@ -786,10 +904,11 @@ router.post(
         // — guardar aquí en las viejas dejaba el link invisible para todo lo
         // demás, aunque sí quedara guardado en la base de datos.
         const result = await db.prepare(`
-          INSERT INTO matches (category_id, home_team, away_team, match_date, venue, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO matches (category_id, branch_id, home_team, away_team, match_date, venue, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           req.category.id,
+          branchId,
           homeTeam,
           awayTeam,
           matchDate     || null,
@@ -1189,7 +1308,13 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
     toNull(home_score), toNull(away_score), toNull(resolvedTimezone), m.id
   );
 
-  res.json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id));
+  const updatedMatch = await db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id);
+  // No bloqueamos la respuesta con el envío de push (puede tardar por red).
+  // pushNotifier ya captura sus propios errores; aquí solo lo dejamos logueado.
+  pushMatchEditAlerts(m, updatedMatch).catch((err) =>
+    console.error('Error al mandar avisos push de edición de partido:', err)
+  );
+  res.json(updatedMatch);
 }));
 
 // --- Estado manual del partido (nuevo, aislado) ---
@@ -1210,7 +1335,11 @@ router.patch('/matches/:id/status', authRequired, matchOwnerRequired, asyncHandl
 
   await db.prepare('UPDATE matches SET status = ? WHERE id = ?').run(status, req.match.id);
 
-  res.json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(req.match.id));
+  const updatedMatch = await db.prepare('SELECT * FROM matches WHERE id = ?').get(req.match.id);
+  pushMatchEditAlerts(req.match, updatedMatch).catch((err) =>
+    console.error('Error al mandar avisos push de cambio de estado de partido:', err)
+  );
+  res.json(updatedMatch);
 }));
 
 router.delete('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {

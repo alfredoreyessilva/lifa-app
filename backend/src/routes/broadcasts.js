@@ -65,12 +65,46 @@ router.post('/', authRequired, asyncHandler(async (req, res) => {
     return res.status(403).json({ error: 'No tienes permiso sobre este medio' });
   }
 
+  // Si el medio ya estaba en este partido, esto es solo una edición del link:
+  // se actualiza la URL pero NO se vuelve a avisar a la liga.
+  const existing = await db.prepare(
+    'SELECT id FROM match_broadcasts WHERE match_id = ? AND organization_id = ?'
+  ).get(match_id, organization_id);
+
   const broadcast = await db.prepare(`
     INSERT INTO match_broadcasts (match_id, organization_id, url)
     VALUES (?, ?, ?)
     ON CONFLICT (match_id, organization_id) DO UPDATE SET url = EXCLUDED.url
     RETURNING *
   `).get(match_id, organization_id, url || null);
+
+  // Aviso a la bandeja de la liga (solo in-app, sin push) la primera vez que
+  // este medio se suma al partido.
+  if (!existing) {
+    const matchDetails = await db.prepare(`
+      SELECT m.id, m.home_team, m.away_team, c.league_id
+      FROM matches m
+      JOIN categories c ON c.id = m.category_id
+      WHERE m.id = ?
+    `).get(match_id);
+
+    if (matchDetails) {
+      await db.prepare(`
+        INSERT INTO notifications (recipient_type, recipient_id, type, title, body, data)
+        VALUES ('league', ?, 'broadcast_added', ?, ?, ?)
+      `).run(
+        matchDetails.league_id,
+        'Nuevo medio transmitiendo tu partido 🎥',
+        `El medio "${org.name}" agregó un enlace de transmisión para el partido ${matchDetails.home_team} vs ${matchDetails.away_team}.`,
+        JSON.stringify({
+          match_id: matchDetails.id,
+          league_id: matchDetails.league_id,
+          media_name: org.name,
+          url: `/partidos/${matchDetails.id}`,
+        })
+      );
+    }
+  }
 
   res.status(201).json(broadcast);
 }));
