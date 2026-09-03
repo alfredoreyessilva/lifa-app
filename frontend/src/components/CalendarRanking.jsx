@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 
-const MIN_GAMES = 10;
-
 // Se usa dentro de CalendarViewer, como pestaña "Ranking" junto a
 // "Calendario". Recibe la lista exacta de IDs de partido que se están
 // viendo — el ranking es de ESE calendario, no uno nacional cruzando ligas.
@@ -25,8 +23,8 @@ export default function CalendarRanking({ matchIds }) {
       <div className="empty-state">
         <h3>Todavía no hay ranking aquí</h3>
         <p>
-          Se necesitan al menos {MIN_GAMES} predicciones en este calendario para que alguien
-          aparezca. Sigue votando en "¿Quién gana?" y vuelve más tarde.
+          Nadie ha votado en este calendario todavía. Vota en "¿Quién gana?" y
+          aparecerás aquí desde tu primera predicción.
         </p>
       </div>
     );

@@ -118,12 +118,12 @@ router.get('/my-stats', authRequired, asyncHandler(async (req, res) => {
 // Ranking de un calendario específico (los mismos partidos que se están
 // viendo en pantalla, sin importar si son de una categoría completa o de
 // un torneo entero): quiénes predijeron en esos partidos, ordenados por %
-// de aciertos. Aparecen quienes ya hicieron al menos MIN_PREDICTIONS
-// predicciones EN ESE MISMO calendario — no hace falta que ya estén
-// calificadas (con marcador guardado), así la gente puede ver quién más
-// participa desde antes de que arranque la temporada. El % de aciertos
-// solo se calcula sobre las que sí ya tienen resultado.
-const MIN_PREDICTIONS_FOR_RANKING = 10;
+// de aciertos. Aparece cualquiera que ya haya votado al menos MIN_PREDICTIONS
+// partido(s) EN ESE MISMO calendario — no hace falta que ya estén calificadas
+// (con marcador guardado), así la gente puede ver quién más participa desde
+// que vota su primer partido y no se confunde nadie. El % de aciertos solo se
+// calcula sobre las que sí ya tienen resultado.
+const MIN_PREDICTIONS_FOR_RANKING = 1;
 
 router.get('/ranking', asyncHandler(async (req, res) => {
   const idsParam = req.query.matchIds;
