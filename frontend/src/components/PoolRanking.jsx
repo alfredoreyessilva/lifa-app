@@ -98,18 +98,26 @@ function PoolRankingList({ code, matchIds }) {
       {data.ranking.length === 0 ? (
         <div className="empty-state"><p>Todavía no hay nadie en esta quiniela.</p></div>
       ) : (
-        <div className="ranking-list">
-          {data.ranking.map((r, i) => (
-            <div key={r.userId} className={`ranking-row${user?.id === r.userId ? ' ranking-row--me' : ''}`}>
-              <div className="ranking-pos">{i + 1}</div>
-              <div className="ranking-name">{r.name}{user?.id === r.userId ? ' (tú)' : ''}</div>
-              <div className="ranking-detail">
-                {r.graded > 0 ? `${r.correct}/${r.graded} calificados` : `${r.total} predicciones · sin calificar`}
+        <>
+          <p className="ranking-note">
+            1 punto por acierto · 2 puntos por acierto en fase final (playoff, semifinal, final) ·
+            los partidos de scrimmage no cuentan.
+          </p>
+          <div className="ranking-list">
+            {data.ranking.map((r, i) => (
+              <div key={r.userId} className={`ranking-row${user?.id === r.userId ? ' ranking-row--me' : ''}`}>
+                <div className="ranking-pos">{i + 1}</div>
+                <div className="ranking-name">{r.name}{user?.id === r.userId ? ' (tú)' : ''}</div>
+                <div className="ranking-detail">
+                  {r.graded > 0
+                    ? `${r.correct}/${r.graded} aciertos${r.accuracyPct === null ? '' : ` · ${r.accuracyPct}%`}`
+                    : `${r.total} predicciones · sin calificar`}
+                </div>
+                <div className="ranking-pct">{r.points ?? 0}<small>pts</small></div>
               </div>
-              <div className="ranking-pct">{r.accuracyPct === null ? '—' : `${r.accuracyPct}%`}</div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

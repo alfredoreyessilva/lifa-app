@@ -10,7 +10,8 @@ const EMPTY_SUMMARY = { home: 0, away: 0, tie: 0, total: 0, myPick: null };
 // <Link> que navega al partido) como en MatchPage (suelto, sin Link
 // alrededor). En los dos casos paramos la propagación de los clics, para
 // que votar no dispare de rebote la navegación de la tarjeta.
-export default function PredictionWidget({ matchId, homeTeam, awayTeam }) {
+export default function PredictionWidget({ matchId, homeTeam, awayTeam, weekLabel }) {
+  const isScrimmage = weekLabel === 'SCRIMMAGE';
   const { token } = useAuth();
   const [summary, setSummary] = useState(null);
   const [working, setWorking] = useState(false);
@@ -57,6 +58,9 @@ export default function PredictionWidget({ matchId, homeTeam, awayTeam }) {
   return (
     <div className="prediction-widget" onClick={stop}>
       <div className="prediction-widget-label">¿Quién gana?</div>
+      {isScrimmage && (
+        <div className="prediction-widget-note">Scrimmage — no cuenta para el ranking</div>
+      )}
 
       {summary.myPick ? (
         <div className="prediction-widget-results">

@@ -95,19 +95,28 @@ router.get('/:code/ranking', authRequired, asyncHandler(async (req, res) => {
     `).all(pool.id);
   } else {
     const placeholders = matchIds.map(() => '?').join(',');
+    // Mismo criterio que el ranking del calendario (routes/predictions.js):
+    // 1 punto por acierto, 2 si el partido es de fase final (playoff /
+    // semifinal / final), y los partidos de scrimmage no cuentan para nada.
+    const notScrimmage = "m.week_label IS DISTINCT FROM 'SCRIMMAGE'";
+    const isCorrect = `
+      m.home_score IS NOT NULL AND m.away_score IS NOT NULL AND (
+        (p.pick = 'home' AND m.home_score > m.away_score) OR
+        (p.pick = 'away' AND m.away_score > m.home_score) OR
+        (p.pick = 'tie'  AND m.home_score = m.away_score)
+      )`;
     rows = await db.prepare(`
       SELECT
         u.id AS user_id,
         u.name,
-        COUNT(p.id) AS total,
-        COUNT(p.id) FILTER (WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL) AS graded,
-        COUNT(p.id) FILTER (
-          WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL AND (
-            (p.pick = 'home' AND m.home_score > m.away_score) OR
-            (p.pick = 'away' AND m.away_score > m.home_score) OR
-            (p.pick = 'tie'  AND m.home_score = m.away_score)
-          )
-        ) AS correct
+        COUNT(p.id) FILTER (WHERE ${notScrimmage}) AS total,
+        COUNT(p.id) FILTER (WHERE ${notScrimmage} AND m.home_score IS NOT NULL AND m.away_score IS NOT NULL) AS graded,
+        COUNT(p.id) FILTER (WHERE ${notScrimmage} AND ${isCorrect}) AS correct,
+        COALESCE(SUM(
+          CASE WHEN ${notScrimmage} AND ${isCorrect}
+            THEN (CASE WHEN m.week_label IN ('PLAYOFF', 'SEMIFINAL', 'FINAL') THEN 2 ELSE 1 END)
+            ELSE 0 END
+        ), 0) AS points
       FROM pool_members pm
       JOIN users u ON u.id = pm.user_id
       LEFT JOIN predictions p ON p.user_id = pm.user_id
@@ -123,21 +132,23 @@ router.get('/:code/ranking', authRequired, asyncHandler(async (req, res) => {
       const total   = Number(r.total);
       const graded  = Number(r.graded);
       const correct = Number(r.correct);
+      const points  = Number(r.points ?? 0);
       return {
         userId: r.user_id,
         name: r.name,
         total,
         graded,
         correct,
+        points,
         accuracyPct: graded > 0 ? Math.round((correct / graded) * 100) : null,
       };
     })
-    .sort((a, b) => {
-      if (a.accuracyPct === null && b.accuracyPct === null) return b.graded - a.graded || b.total - a.total;
-      if (a.accuracyPct === null) return 1;
-      if (b.accuracyPct === null) return -1;
-      return b.accuracyPct - a.accuracyPct || b.correct - a.correct;
-    });
+    .sort((a, b) =>
+      b.points - a.points ||
+      b.correct - a.correct ||
+      b.graded - a.graded ||
+      b.total - a.total
+    );
 
   res.json({ pool: { name: pool.name, joinCode: pool.join_code }, ranking });
 }));

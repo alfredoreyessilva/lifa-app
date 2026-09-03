@@ -5,6 +5,8 @@ import { api } from '../api/client.js';
 // Se usa dentro de CalendarViewer, como pestaña "Ranking" junto a
 // "Calendario". Recibe la lista exacta de IDs de partido que se están
 // viendo — el ranking es de ESE calendario, no uno nacional cruzando ligas.
+// Se ordena por PUNTOS: 1 por acierto, 2 por acierto en fase final. Los
+// partidos de scrimmage no cuentan.
 export default function CalendarRanking({ matchIds }) {
   const { user } = useAuth();
   const [ranking, setRanking] = useState(null);
@@ -31,17 +33,25 @@ export default function CalendarRanking({ matchIds }) {
   }
 
   return (
-    <div className="ranking-list">
-      {ranking.map((r, i) => (
-        <div key={r.userId} className={`ranking-row${user?.id === r.userId ? ' ranking-row--me' : ''}`}>
-          <div className="ranking-pos">{i + 1}</div>
-          <div className="ranking-name">{r.name}{user?.id === r.userId ? ' (tú)' : ''}</div>
-          <div className="ranking-detail">
-            {r.graded > 0 ? `${r.correct}/${r.graded} calificados` : `${r.total} predicciones · sin calificar`}
+    <>
+      <p className="ranking-note">
+        1 punto por acierto · 2 puntos por acierto en fase final (playoff, semifinal, final) ·
+        los partidos de scrimmage no cuentan. El % de aciertos es solo un dato y no define el orden.
+      </p>
+      <div className="ranking-list">
+        {ranking.map((r, i) => (
+          <div key={r.userId} className={`ranking-row${user?.id === r.userId ? ' ranking-row--me' : ''}`}>
+            <div className="ranking-pos">{i + 1}</div>
+            <div className="ranking-name">{r.name}{user?.id === r.userId ? ' (tú)' : ''}</div>
+            <div className="ranking-detail">
+              {r.graded > 0
+                ? `${r.correct}/${r.graded} aciertos${r.accuracyPct === null ? '' : ` · ${r.accuracyPct}%`}`
+                : `${r.total} ${r.total === 1 ? 'predicción' : 'predicciones'} · sin calificar`}
+            </div>
+            <div className="ranking-pct">{r.points}<small>pts</small></div>
           </div>
-          <div className="ranking-pct">{r.accuracyPct === null ? '—' : `${r.accuracyPct}%`}</div>
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+    </>
   );
 }

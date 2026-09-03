@@ -61,7 +61,7 @@ export default function MatchCard({ match, isNext = false }) {
       </div>
 
       {status === 'scheduled' && (
-        <PredictionWidget matchId={match.id} homeTeam={match.home_team} awayTeam={match.away_team} />
+        <PredictionWidget matchId={match.id} homeTeam={match.home_team} awayTeam={match.away_team} weekLabel={match.week_label} />
       )}
 
       {(venueLabel || match.week_label || groupLabel) && (

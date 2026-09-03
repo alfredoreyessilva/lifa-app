@@ -84,7 +84,8 @@ router.get('/summary', optionalAuth, asyncHandler(async (req, res) => {
 // Mis estadísticas de predicciones: cuántas lleva en total, cuántas ya se
 // pueden calificar (el partido tiene marcador guardado — no basta con que
 // esté "finalizado" por tiempo, ver nota en matchStatus.js del frontend) y
-// cuántas acertó. El % solo se calcula sobre las calificadas.
+// cuántas acertó. El % solo se calcula sobre las calificadas. Los partidos
+// de scrimmage no cuentan (igual que en el ranking).
 router.get('/my-stats', authRequired, asyncHandler(async (req, res) => {
   const row = await db.prepare(`
     SELECT
@@ -100,6 +101,7 @@ router.get('/my-stats', authRequired, asyncHandler(async (req, res) => {
     FROM predictions p
     JOIN matches m ON m.id = p.match_id
     WHERE p.user_id = ?
+      AND m.week_label IS DISTINCT FROM 'SCRIMMAGE'
   `).get(req.user.id);
 
   const total   = Number(row.total);
@@ -115,14 +117,31 @@ router.get('/my-stats', authRequired, asyncHandler(async (req, res) => {
   });
 }));
 
-// Ranking de un calendario específico (los mismos partidos que se están
-// viendo en pantalla, sin importar si son de una categoría completa o de
-// un torneo entero): quiénes predijeron en esos partidos, ordenados por %
-// de aciertos. Aparece cualquiera que ya haya votado al menos MIN_PREDICTIONS
-// partido(s) EN ESE MISMO calendario — no hace falta que ya estén calificadas
-// (con marcador guardado), así la gente puede ver quién más participa desde
-// que vota su primer partido y no se confunde nadie. El % de aciertos solo se
-// calcula sobre las que sí ya tienen resultado.
+// Partidos identificados como fase final en la columna "Jornada" del
+// formulario de partido — un acierto en uno de estos vale el DOBLE.
+const PLAYOFF_WEEK_LABELS = "('PLAYOFF', 'SEMIFINAL', 'FINAL')";
+
+// Expresión SQL: cuántos puntos vale este renglón de predicción.
+// 0 si el partido no tiene marcador o si se falló; si se acertó, 2 cuando el
+// partido es de fase final y 1 en cualquier otro caso. Los partidos de
+// SCRIMMAGE se excluyen antes (WHERE), así que nunca llegan aquí.
+const POINTS_SQL = `
+  CASE WHEN m.home_score IS NOT NULL AND m.away_score IS NOT NULL AND (
+    (p.pick = 'home' AND m.home_score > m.away_score) OR
+    (p.pick = 'away' AND m.away_score > m.home_score) OR
+    (p.pick = 'tie'  AND m.home_score = m.away_score)
+  ) THEN (CASE WHEN m.week_label IN ${PLAYOFF_WEEK_LABELS} THEN 2 ELSE 1 END)
+  ELSE 0 END
+`;
+
+// Ranking de un calendario específico (los partidos que el frontend manda —
+// siempre el calendario completo, nunca un recorte filtrado): quiénes
+// predijeron en esos partidos, ordenados por PUNTOS. Puntos = 1 por acierto,
+// 2 por acierto en fase final (playoff / semifinal / final). Los partidos de
+// scrimmage no cuentan para nada. Aparece cualquiera que ya haya votado al
+// menos MIN_PREDICTIONS partido(s) que sí cuenten. No hace falta que estén
+// calificados; el % de aciertos se muestra aparte, solo sobre los que ya
+// tienen resultado, y no interviene en el orden.
 const MIN_PREDICTIONS_FOR_RANKING = 1;
 
 router.get('/ranking', asyncHandler(async (req, res) => {
@@ -146,11 +165,13 @@ router.get('/ranking', asyncHandler(async (req, res) => {
           (p.pick = 'away' AND m.away_score > m.home_score) OR
           (p.pick = 'tie'  AND m.home_score = m.away_score)
         )
-      ) AS correct
+      ) AS correct,
+      COALESCE(SUM(${POINTS_SQL}), 0) AS points
     FROM predictions p
     JOIN matches m ON m.id = p.match_id
     JOIN users u   ON u.id = p.user_id
     WHERE p.match_id IN (${placeholders})
+      AND m.week_label IS DISTINCT FROM 'SCRIMMAGE'
     GROUP BY u.id, u.name
     HAVING COUNT(*) >= ?
   `).all(...matchIds, MIN_PREDICTIONS_FOR_RANKING);
@@ -160,21 +181,26 @@ router.get('/ranking', asyncHandler(async (req, res) => {
       const total   = Number(r.total);
       const graded  = Number(r.graded);
       const correct = Number(r.correct);
+      const points  = Number(r.points);
       return {
         userId: r.user_id,
         name: r.name,
         total,
         graded,
         correct,
+        points,
         accuracyPct: graded > 0 ? Math.round((correct / graded) * 100) : null,
       };
     })
-    .sort((a, b) => {
-      if (a.accuracyPct === null && b.accuracyPct === null) return b.graded - a.graded || b.total - a.total;
-      if (a.accuracyPct === null) return 1;
-      if (b.accuracyPct === null) return -1;
-      return b.accuracyPct - a.accuracyPct || b.correct - a.correct;
-    });
+    // El ganador se define por PUNTOS. Los desempates finos (rachas, sorpresas,
+    // etc.) los resuelve quien organice un concurso, leyendo esta tabla — aquí
+    // solo se rompe el empate con datos que ya tenemos, para dar un orden.
+    .sort((a, b) =>
+      b.points - a.points ||
+      b.correct - a.correct ||
+      b.graded - a.graded ||
+      b.total - a.total
+    );
 
   res.json(ranking);
 }));

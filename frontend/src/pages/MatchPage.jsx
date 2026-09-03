@@ -197,7 +197,7 @@ export default function MatchPage() {
 
         {isScheduled && (
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
-            <PredictionWidget matchId={match.id} homeTeam={match.home_team} awayTeam={match.away_team} />
+            <PredictionWidget matchId={match.id} homeTeam={match.home_team} awayTeam={match.away_team} weekLabel={match.week_label} />
           </div>
         )}
 
