@@ -4,6 +4,7 @@ import { authRequired } from '../middleware/auth.js';
 import { teamOwnerRequired, matchOwnerRequired, branchTeamOwnerRequired } from '../middleware/ownership.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isNonEmptyString } from '../utils/validation.js';
+import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL } from '../utils/scoring.js';
 
 const router = express.Router();
 
@@ -269,16 +270,11 @@ router.get('/:id/card', asyncHandler(async (req, res) => {
     const predRow = await db.prepare(`
       SELECT
         COUNT(*) AS total,
-        COUNT(*) FILTER (WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL) AS graded,
-        COUNT(*) FILTER (
-          WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL AND (
-            (p.pick = 'home' AND m.home_score > m.away_score) OR
-            (p.pick = 'away' AND m.away_score > m.home_score) OR
-            (p.pick = 'tie'  AND m.home_score = m.away_score)
-          )
-        ) AS correct
+        COUNT(*) FILTER (WHERE ${MATCH_GRADABLE_SQL}) AS graded,
+        COUNT(*) FILTER (WHERE ${PREDICTION_CORRECT_SQL}) AS correct
       FROM predictions p
       JOIN matches m ON m.id = p.match_id
+      JOIN categories c ON c.id = m.category_id
       WHERE p.user_id = ?
     `).get(player.user_id);
     const total = Number(predRow.total);

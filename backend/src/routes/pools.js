@@ -4,6 +4,7 @@ import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isNonEmptyString } from '../utils/validation.js';
+import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL, PREDICTION_POINTS_SQL } from '../utils/scoring.js';
 
 const router = express.Router();
 
@@ -95,33 +96,28 @@ router.get('/:code/ranking', authRequired, asyncHandler(async (req, res) => {
     `).all(pool.id);
   } else {
     const placeholders = matchIds.map(() => '?').join(',');
-    // Mismo criterio que el ranking del calendario (routes/predictions.js):
-    // 1 punto por acierto, 2 si el partido es de fase final (playoff /
-    // semifinal / final), y los partidos de scrimmage no cuentan para nada.
+    // Mismo criterio que el ranking del calendario (routes/predictions.js y
+    // utils/scoring.js): 1 punto por acierto, 2 si el partido es de fase final
+    // (playoff / semifinal / final), los partidos de scrimmage no cuentan, y un
+    // partido no reparte puntos hasta que YA TERMINÓ (no basta el marcador
+    // parcial mientras sigue en vivo).
     const notScrimmage = "m.week_label IS DISTINCT FROM 'SCRIMMAGE'";
-    const isCorrect = `
-      m.home_score IS NOT NULL AND m.away_score IS NOT NULL AND (
-        (p.pick = 'home' AND m.home_score > m.away_score) OR
-        (p.pick = 'away' AND m.away_score > m.home_score) OR
-        (p.pick = 'tie'  AND m.home_score = m.away_score)
-      )`;
     rows = await db.prepare(`
       SELECT
         u.id AS user_id,
         u.name,
         COUNT(p.id) FILTER (WHERE ${notScrimmage}) AS total,
-        COUNT(p.id) FILTER (WHERE ${notScrimmage} AND m.home_score IS NOT NULL AND m.away_score IS NOT NULL) AS graded,
-        COUNT(p.id) FILTER (WHERE ${notScrimmage} AND ${isCorrect}) AS correct,
+        COUNT(p.id) FILTER (WHERE ${notScrimmage} AND ${MATCH_GRADABLE_SQL}) AS graded,
+        COUNT(p.id) FILTER (WHERE ${notScrimmage} AND ${PREDICTION_CORRECT_SQL}) AS correct,
         COALESCE(SUM(
-          CASE WHEN ${notScrimmage} AND ${isCorrect}
-            THEN (CASE WHEN m.week_label IN ('PLAYOFF', 'SEMIFINAL', 'FINAL') THEN 2 ELSE 1 END)
-            ELSE 0 END
+          CASE WHEN ${notScrimmage} THEN (${PREDICTION_POINTS_SQL}) ELSE 0 END
         ), 0) AS points
       FROM pool_members pm
       JOIN users u ON u.id = pm.user_id
       LEFT JOIN predictions p ON p.user_id = pm.user_id
         AND p.match_id IN (${placeholders})
       LEFT JOIN matches m ON m.id = p.match_id
+      LEFT JOIN categories c ON c.id = m.category_id
       WHERE pm.pool_id = ?
       GROUP BY u.id, u.name
     `).all(...matchIds, pool.id);
