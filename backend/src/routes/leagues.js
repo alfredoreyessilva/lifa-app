@@ -829,6 +829,8 @@ router.get('/tournaments/:tournamentId/public', asyncHandler(async (req, res) =>
     SELECT
       m.*,
       c.name        AS category_name,
+      c.auto_status_enabled      AS auto_status_enabled,
+      c.auto_status_window_hours AS auto_status_window_hours,
       b.name        AS branch_name,
       th.logo_url   AS home_logo_url,
       COALESCE(ta.away_logo_url, ta.logo_url) AS away_logo_url,

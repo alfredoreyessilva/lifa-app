@@ -355,8 +355,14 @@ router.delete('/branches/:branchId', authRequired, branchOwnerRequired, asyncHan
 // estado, etc.
 router.get('/branches/:branchId/matches', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
   const matches = await db.prepare(`
-    SELECT * FROM matches WHERE branch_id = ?
-    ORDER BY match_date ASC
+    SELECT
+      m.*,
+      c.auto_status_enabled      AS auto_status_enabled,
+      c.auto_status_window_hours AS auto_status_window_hours
+    FROM matches m
+    JOIN categories c ON c.id = m.category_id
+    WHERE m.branch_id = ?
+    ORDER BY m.match_date ASC
   `).all(req.branch.id);
   res.json(matches);
 }));
@@ -371,6 +377,8 @@ router.get('/tournaments/:tournamentId/matches', authRequired, tournamentOwnerRe
     SELECT
       m.*,
       c.name AS category_name,
+      c.auto_status_enabled      AS auto_status_enabled,
+      c.auto_status_window_hours AS auto_status_window_hours,
       b.name AS branch_name,
       c.is_placeholder AS category_needs_review,
       b.is_placeholder AS branch_needs_review
