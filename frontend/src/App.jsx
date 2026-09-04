@@ -1,3 +1,4 @@
+import { useLayoutEffect } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import TopBar from './components/TopBar.jsx';
 import SponsorBar from './components/SponsorBar.jsx';
@@ -25,10 +26,23 @@ import PoolJoinPage from './pages/PoolJoinPage.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AdminRoute from './components/AdminRoute.jsx';
 
+// Al navegar a otra ruta, React Router conserva el scroll de la página
+// anterior — así que al entrar a la MatchPage desde un calendario ya
+// deslizado quedabas "al fondo". Esto reinicia el scroll arriba en cada
+// cambio de ruta (no en cambios de query string, para no romper filtros).
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
 export default function App() {
   const location = useLocation();
   return (
     <>
+      <ScrollToTop />
       <TopBar />
       <div className="app-layout">
         <SponsorBar />
@@ -99,7 +113,13 @@ export default function App() {
         </main>
       </div>
       <footer className="footer">
-        <div className="container">CALENDARIOS DE FOOTBALL AMERICANO MÉXICO</div>
+        <div className="container">
+          <img
+            className="footer-logo"
+            src="/cfbamx.jpg"
+            alt="CFBAMX — Calendarios de Football Americano México"
+          />
+        </div>
       </footer>
     </>
   );

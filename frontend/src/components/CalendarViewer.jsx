@@ -206,7 +206,19 @@ export default function CalendarViewer({
     }
   }
 
+  // El primer partido pendiente marca la "hora próxima". Todos los partidos
+  // que siguen en "scheduled" y arrancan exactamente a esa misma hora
+  // comparten el estado "Próximo" — no solo el primero de la lista.
   const nextMatch = matches.find(m => getMatchStatus(m) === 'scheduled');
+  const nextMatchTime = nextMatch ? new Date(nextMatch.match_date).getTime() : null;
+  const nextMatchIds = new Set(
+    nextMatchTime === null
+      ? []
+      : matches
+          .filter(m => getMatchStatus(m) === 'scheduled'
+            && new Date(m.match_date).getTime() === nextMatchTime)
+          .map(m => m.id)
+  );
 
   let filteredMatches = matches;
   if (view === 'jornada' && selected) filteredMatches = matches.filter((m) => m.week_label === selected);
@@ -292,7 +304,7 @@ export default function CalendarViewer({
         </div>
       ) : (
         <>
-          {view === 'completo' && <MatchGrid matches={matches} nextMatch={nextMatch} />}
+          {view === 'completo' && <MatchGrid matches={matches} nextMatchIds={nextMatchIds} />}
 
           {view === 'jornada' && !selected && (
             <div className="filter-grid">
@@ -314,7 +326,7 @@ export default function CalendarViewer({
             <>
               <button className="filter-back" onClick={clearSelection}>← Todas las jornadas</button>
               <div className="filter-selected-title">{/^\d+$/.test(selected) ? `Jornada ${selected}` : selected}</div>
-              <MatchGrid matches={filteredMatches} nextMatch={nextMatch} />
+              <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} />
             </>
           )}
 
@@ -340,7 +352,7 @@ export default function CalendarViewer({
             <>
               <button className="filter-back" onClick={clearSelection}>← Todos los equipos</button>
               <div className="filter-selected-title">{selected}</div>
-              <MatchGrid matches={filteredMatches} nextMatch={nextMatch} />
+              <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} />
             </>
           )}
 
@@ -364,7 +376,7 @@ export default function CalendarViewer({
             <>
               <button className="filter-back" onClick={clearSelection}>← Todas las sedes</button>
               <div className="filter-selected-title">📍 {selectedSedeName}</div>
-              <MatchGrid matches={filteredMatches} nextMatch={nextMatch} />
+              <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} />
             </>
           )}
 
@@ -403,7 +415,7 @@ export default function CalendarViewer({
                 </div>
               )}
 
-              <MatchGrid matches={filteredMatches} nextMatch={nextMatch} />
+              <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} />
             </>
           )}
 
@@ -427,7 +439,7 @@ export default function CalendarViewer({
             <>
               <button className="filter-back" onClick={clearSelection}>← Todas las conferencias</button>
               <div className="filter-selected-title">🏈 {selectedConferenciaName}</div>
-              <MatchGrid matches={filteredMatches} nextMatch={nextMatch} />
+              <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} />
             </>
           )}
         </>
@@ -446,11 +458,11 @@ export default function CalendarViewer({
   );
 }
 
-function MatchGrid({ matches, nextMatch }) {
+function MatchGrid({ matches, nextMatchIds }) {
   if (matches.length === 0) return <div className="empty-state"><p>No hay partidos en esta selección.</p></div>;
   return (
     <div className="match-grid">
-      {matches.map((m) => <MatchCard key={m.id} match={m} isNext={nextMatch?.id === m.id} />)}
+      {matches.map((m) => <MatchCard key={m.id} match={m} isNext={!!nextMatchIds?.has(m.id)} />)}
     </div>
   );
 }

@@ -80,6 +80,21 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
       l.timezone AS league_timezone,
       th.logo_url AS home_logo_url,
       COALESCE(ta.away_logo_url, ta.logo_url) AS away_logo_url,
+      CASE WHEN th.id IS NOT NULL THEN json_build_object(
+        'id', th.id, 'name', th.name, 'logo_url', th.logo_url, 'cover_url', th.cover_url,
+        'location', th.location, 'contact_email', th.contact_email, 'contact_phone', th.contact_phone,
+        'facebook_url', th.facebook_url, 'instagram_url', th.instagram_url,
+        'twitter_url', th.twitter_url, 'website_url', th.website_url,
+        'league_id', l.id
+      ) END AS home_team_details,
+      CASE WHEN ta.id IS NOT NULL THEN json_build_object(
+        'id', ta.id, 'name', ta.name,
+        'logo_url', COALESCE(ta.away_logo_url, ta.logo_url), 'cover_url', ta.cover_url,
+        'location', ta.location, 'contact_email', ta.contact_email, 'contact_phone', ta.contact_phone,
+        'facebook_url', ta.facebook_url, 'instagram_url', ta.instagram_url,
+        'twitter_url', ta.twitter_url, 'website_url', ta.website_url,
+        'league_id', l.id
+      ) END AS away_team_details,
       v.name        AS venue_name,
       v.institution AS venue_institution,
       v.address     AS venue_address,
@@ -91,8 +106,12 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
     FROM matches m
     LEFT JOIN categories c   ON c.id = m.category_id
     LEFT JOIN leagues l      ON l.id = c.league_id
-    LEFT JOIN teams th       ON th.league_id = l.id AND UPPER(th.name) = UPPER(m.home_team)
-    LEFT JOIN teams ta       ON ta.league_id = l.id AND UPPER(ta.name) = UPPER(m.away_team)
+    LEFT JOIN teams th       ON th.id = COALESCE(m.home_team_id, (
+      SELECT t.id FROM teams t WHERE t.league_id = l.id AND UPPER(t.name) = UPPER(m.home_team) LIMIT 1
+    ))
+    LEFT JOIN teams ta       ON ta.id = COALESCE(m.away_team_id, (
+      SELECT t.id FROM teams t WHERE t.league_id = l.id AND UPPER(t.name) = UPPER(m.away_team) LIMIT 1
+    ))
     LEFT JOIN venues v       ON v.id = m.venue_id
     LEFT JOIN groups g       ON g.id = m.group_id
     LEFT JOIN groups g2      ON g2.id = m.group_id_2
@@ -101,6 +120,31 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
   `).get(req.params.matchId);
 
   if (!match) return res.status(404).json({ error: 'Partido no encontrado' });
+
+  // Partido anterior / siguiente dentro del mismo calendario, en el mismo
+  // orden cronológico que muestran CalendarPage y TournamentPage
+  // (match_date ASC, con el id como desempate estable). El alcance es el
+  // Torneo cuando el partido pertenece a uno, o si no, la Categoría —
+  // igual criterio que el botón "Ver calendario completo" de MatchPage.
+  const scopeSql = match.tournament_id
+    ? `JOIN categories c ON c.id = m.category_id WHERE c.tournament_id = ?`
+    : `WHERE m.category_id = ?`;
+  const scopeId = match.tournament_id || match.category_id;
+  const neighbors = scopeId
+    ? await db.prepare(`
+        WITH ordered AS (
+          SELECT m.id,
+                 LAG(m.id)  OVER w AS prev_id,
+                 LEAD(m.id) OVER w AS next_id
+          FROM matches m
+          ${scopeSql} AND m.is_draft = FALSE
+          WINDOW w AS (ORDER BY m.match_date ASC, m.id ASC)
+        )
+        SELECT prev_id, next_id FROM ordered WHERE id = ?
+      `).get(scopeId, match.id)
+    : null;
+  match.prev_match_id = neighbors?.prev_id ?? null;
+  match.next_match_id = neighbors?.next_id ?? null;
 
   res.json(match);
 }));

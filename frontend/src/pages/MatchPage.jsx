@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import Loading from '../components/Loading.jsx';
 import SubscribeButton from '../components/SubscribeButton.jsx';
@@ -12,6 +12,7 @@ import MatchBroadcasters from '../components/MatchBroadcasters.jsx';
 import MediaBroadcastControl from '../components/MediaBroadcastControl.jsx';
 import { buildHotelSearchUrl } from '../utils/matchServices.js';
 import FlightSearchWidget from '../components/FlightSearchWidget.jsx';
+import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
 
 // Convierte una URL en una etiqueta corta y legible (ej. "youtube.com"),
 // para diferenciar los botones cuando hay más de un link del mismo tipo.
@@ -25,6 +26,7 @@ function linkHost(url) {
 
 export default function MatchPage() {
   const { matchId } = useParams();
+  const navigate = useNavigate();
   const [match, setMatch]         = useState(null);
   const [error, setError]         = useState('');
   const [shareState, setShareState] = useState('idle');
@@ -36,6 +38,42 @@ export default function MatchPage() {
     setError('');
     api.getMatch(matchId).then(setMatch).catch((e) => setError(e.message));
   }, [matchId]);
+
+  const prevId = match?.prev_match_id || null;
+  const nextId = match?.next_match_id || null;
+  const goPrev = () => { if (prevId) navigate(`/partidos/${prevId}`); };
+  const goNext = () => { if (nextId) navigate(`/partidos/${nextId}`); };
+
+  // Navegación con teclado (flechas ← →) entre partidos del mismo calendario.
+  useEffect(() => {
+    function onKey(e) {
+      const el = e.target;
+      if (el instanceof Element && el.closest('input, textarea, select, [contenteditable]')) return;
+      if (e.key === 'ArrowLeft')  goPrev();
+      if (e.key === 'ArrowRight') goNext();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [prevId, nextId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Swipe horizontal en celular: arrastrar hacia la izquierda = siguiente
+  // partido, hacia la derecha = anterior. Se ignora si el gesto es más
+  // vertical que horizontal (el usuario está haciendo scroll).
+  const touch = useRef(null);
+  function onTouchStart(e) {
+    const t = e.touches[0];
+    touch.current = { x: t.clientX, y: t.clientY };
+  }
+  function onTouchEnd(e) {
+    if (!touch.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touch.current.x;
+    const dy = t.clientY - touch.current.y;
+    touch.current = null;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy)) return;
+    if (dx < 0) goNext();
+    else goPrev();
+  }
 
   useEffect(() => {
     if (match) {
@@ -107,10 +145,24 @@ export default function MatchPage() {
         {' '}/ {match.home_team} vs {match.away_team}
       </div>
 
-      <div
-        className={`match-card-new${isLive ? ' match-card-new--live' : ''}`}
-        style={{ maxWidth: 520, margin: '24px auto' }}
-      >
+      {/* Flechas a los lados para saltar al partido anterior / siguiente del
+          mismo calendario (en celular las flechas se ocultan y el salto se
+          hace deslizando el dedo — ver onTouchStart/onTouchEnd). */}
+      <div className="match-nav" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        <button
+          type="button"
+          className="match-nav-arrow match-nav-arrow--prev"
+          onClick={goPrev}
+          disabled={!prevId}
+          aria-label="Partido anterior"
+        >
+          ‹
+        </button>
+
+        <div
+          className={`match-card-new${isLive ? ' match-card-new--live' : ''}`}
+          style={{ maxWidth: 520, width: '100%' }}
+        >
         <div className="match-card-header">
           <div className="match-card-datetime">
             <span className="match-card-date">{day} {month}</span>
@@ -154,6 +206,12 @@ export default function MatchPage() {
           </div>
         )}
 
+        {isScheduled && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+            <PredictionWidget matchId={match.id} homeTeam={match.home_team} awayTeam={match.away_team} weekLabel={match.week_label} />
+          </div>
+        )}
+
         <div className="match-card-actions" style={{ marginTop: 16 }}>
           {(match.stream_links || []).map((url, i) => (
             <a key={`stream-${i}`} href={url} target="_blank" rel="noopener noreferrer" className="btn btn-flag btn-sm">
@@ -188,18 +246,9 @@ export default function MatchPage() {
           </button>
         </div>
 
-        <MatchBroadcasters matchId={match.id} key={broadcastVersion} />
-        <MediaBroadcastControl matchId={match.id} onChange={() => setBroadcastVersion((v) => v + 1)} />
-
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
           <ShareImageButton match={match} dateParts={{ day, month, time, tzLabel }} matchStatus={status} />
         </div>
-
-        {isScheduled && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
-            <PredictionWidget matchId={match.id} homeTeam={match.home_team} awayTeam={match.away_team} weekLabel={match.week_label} />
-          </div>
-        )}
 
         {isScheduled && (
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
@@ -229,7 +278,48 @@ export default function MatchPage() {
             </Link>
           </div>
         )}
+
+        <MatchBroadcasters matchId={match.id} key={broadcastVersion} />
+        <MediaBroadcastControl matchId={match.id} onChange={() => setBroadcastVersion((v) => v + 1)} />
+        </div>
+
+        <button
+          type="button"
+          className="match-nav-arrow match-nav-arrow--next"
+          onClick={goNext}
+          disabled={!nextId}
+          aria-label="Partido siguiente"
+        >
+          ›
+        </button>
       </div>
+
+      {/* Fichas de los dos equipos que juegan, mostradas directamente (no en
+          modal): local a la izquierda, visitante a la derecha, cada una a
+          ancho completo de su columna. En celular quedan una arriba de la
+          otra. Solo aparecen cuando el partido ya está enlazado con equipos
+          reales del roster (home_team_details / away_team_details vienen del
+          backend). */}
+      {(match.home_team_details || match.away_team_details) && (
+        <div className="match-teams">
+          {match.home_team_details && (
+            <TeamInfoPanel
+              inline
+              roleLabel="Local"
+              team={match.home_team_details}
+              leagueId={match.home_team_details.league_id}
+            />
+          )}
+          {match.away_team_details && (
+            <TeamInfoPanel
+              inline
+              roleLabel="Visitante"
+              team={match.away_team_details}
+              leagueId={match.away_team_details.league_id}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

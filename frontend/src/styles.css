@@ -814,6 +814,14 @@ a { color: inherit; }
   font-family: var(--font-eyebrow);
   text-transform: uppercase;
 }
+.footer-logo {
+  display: block;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 360px;
+  height: auto;
+  border-radius: 8px;
+}
 
 /* ---------- Breadcrumb ---------- */
 .crumb {
@@ -974,6 +982,19 @@ a { color: inherit; }
   margin-top: 10px;
   flex-wrap: wrap;
   justify-content: center;
+}
+
+/* Todos los botones dentro de la ficha de equipo van en amarillo (flag),
+   se abra como modal o embebida en la MatchPage. */
+.team-profile-modal .btn {
+  background: var(--flag);
+  color: #1a1300;
+  border-color: var(--flag);
+}
+.team-profile-modal .btn:hover {
+  background: #ffe066;
+  border-color: #ffe066;
+  color: #1a1300;
 }
 
 /* ---------- Tabs ---------- */
@@ -1768,6 +1789,105 @@ a.match-card-new {
   justify-content: center;
   flex-wrap: wrap;
   padding-top: 4px;
+}
+
+/* MatchPage: flechas de navegación entre partidos (anterior / siguiente
+   del mismo calendario), una a cada lado de la tarjeta. */
+.match-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  max-width: 620px;
+  margin: 24px auto;
+}
+.match-nav .match-card-new {
+  margin: 0;
+}
+.match-nav-arrow {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: var(--card);
+  color: var(--flag);
+  font-size: 26px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+}
+.match-nav-arrow:hover:not(:disabled) {
+  background: var(--card-hover);
+  transform: scale(1.08);
+}
+.match-nav-arrow:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+/* En celular no hay espacio para flechas a los lados: se ocultan y el
+   salto entre partidos se hace deslizando el dedo sobre la tarjeta. */
+@media (max-width: 640px) {
+  .match-nav {
+    gap: 0;
+  }
+  .match-nav-arrow {
+    display: none;
+  }
+}
+
+/* MatchPage: fichas completas de los dos equipos, lado a lado
+   (local | visitante), cada una a ancho completo de su columna.
+   En celular quedan una arriba de la otra. */
+.match-teams {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+  margin: 0 auto 40px;
+}
+@media (max-width: 640px) {
+  .match-teams {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* TeamInfoPanel embebido (sin modal): ocupa todo el ancho disponible
+   de su contenedor, sin límite de alto ni scroll propio. */
+.team-profile-modal--inline {
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  box-shadow: none;
+}
+.team-profile-role {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--flag);
+  font-family: var(--font-eyebrow);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+/* MatchPage: todos los botones dentro de la tarjeta van en amarillo (flag) */
+.match-card-new .btn {
+  background: var(--flag);
+  color: #1a1300;
+  border-color: var(--flag);
+}
+.match-card-new .btn:hover {
+  background: #ffe066;
+  border-color: #ffe066;
+  color: #1a1300;
 }
 
 /* Móvil: 1 columna */
