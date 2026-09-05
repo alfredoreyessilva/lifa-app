@@ -16,12 +16,22 @@ function adminRequired(req, res, next) {
 /* ===================== ESTADÍSTICAS ===================== */
 
 router.get('/stats', authRequired, adminRequired, asyncHandler(async (req, res) => {
-  const [leagues, users, matches, teams, homeViews, homeViewsByDay] = await Promise.all([
+  const [leagues, users, matches, teams, homeViews, uniqueVisitors, homeViewsByDay, sponsorStats, userGrowthByMonth, predictionStats, leaguesByStateRows] = await Promise.all([
     db.prepare('SELECT COUNT(*) as count FROM leagues').get(),
     db.prepare('SELECT COUNT(*) as count FROM users').get(),
     db.prepare('SELECT COUNT(*) as count FROM matches').get(),
     db.prepare('SELECT COUNT(*) as count FROM teams').get(),
     db.prepare(`SELECT COUNT(*) as count FROM page_views WHERE event_type = 'home_view'`).get(),
+    // Visitantes únicos (por visitor_id, ver track.js) contra vistas totales
+    // de Home: la diferencia entre ambos es lo que le importa a un
+    // patrocinador — cuánta GENTE llega, no solo cuántas veces se cargó la
+    // página. Solo cuenta desde que se agregó visitor_id (filas viejas
+    // quedan NULL), no es un histórico retroactivo.
+    db.prepare(`
+      SELECT COUNT(DISTINCT visitor_id) as count
+      FROM page_views
+      WHERE event_type = 'home_view' AND visitor_id IS NOT NULL
+    `).get(),
     db.prepare(`
       SELECT created_at::date as day, COUNT(*) as count
       FROM page_views
@@ -29,6 +39,63 @@ router.get('/stats', authRequired, adminRequired, asyncHandler(async (req, res) 
         AND created_at >= CURRENT_DATE - INTERVAL '30 days'
       GROUP BY day
       ORDER BY day ASC
+    `).all(),
+    // Impresiones (se le mostró el logo) y clics por patrocinador, para
+    // poder presentarle a cada uno el alcance real de su espacio.
+    db.prepare(`
+      SELECT
+        s.id,
+        s.name,
+        s.logo_url,
+        COUNT(*) FILTER (WHERE pv.event_type = 'sponsor_impression') as impressions,
+        COUNT(*) FILTER (WHERE pv.event_type = 'sponsor_click') as clicks
+      FROM sponsors s
+      LEFT JOIN page_views pv ON pv.sponsor_id = s.id
+      GROUP BY s.id, s.name, s.logo_url, s.sort_order
+      ORDER BY s.sort_order ASC
+    `).all(),
+    // Usuarios nuevos por mes y el acumulado hasta ese mes, para la gráfica
+    // de crecimiento (mucho más útil para mostrarle a un patrocinador que
+    // el conteo total suelto: cuenta la tendencia, no solo el punto actual).
+    db.prepare(`
+      SELECT
+        to_char(month, 'YYYY-MM-DD') as month,
+        new_users,
+        SUM(new_users) OVER (ORDER BY month ASC) as total_users
+      FROM (
+        SELECT date_trunc('month', created_at)::date as month, COUNT(*) as new_users
+        FROM users
+        GROUP BY month
+      ) monthly
+      ORDER BY month ASC
+    `).all(),
+    // Participación en quinielas: cuánta gente predice partidos y cuánta se
+    // organiza en quinielas privadas — la prueba de que no es tráfico
+    // pasivo, hay una comunidad interactuando de verdad.
+    db.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM predictions) as total_predictions,
+        (SELECT COUNT(DISTINCT user_id) FROM predictions) as unique_predictors,
+        (SELECT COUNT(*) FROM pools) as total_pools,
+        (SELECT COUNT(DISTINCT user_id) FROM pool_members) as pool_members
+    `).get(),
+    // Ligas por estado, para el mapa/lista de alcance geográfico. Una liga
+    // puede estar en varios estados a la vez ("states", jsonb) — cada una
+    // suma un conteo por CADA estado en el que opera, no solo uno. Las
+    // ligas viejas o de otros países que no tienen "states" (arreglo vacío)
+    // caen a su "state" de texto libre, o a "Sin estado" si no tienen nada.
+    db.prepare(`
+      SELECT state, COUNT(*) as count FROM (
+        SELECT jsonb_array_elements_text(states) as state
+        FROM leagues
+        WHERE jsonb_array_length(states) > 0
+        UNION ALL
+        SELECT COALESCE(NULLIF(TRIM(state), ''), 'Sin estado') as state
+        FROM leagues
+        WHERE jsonb_array_length(states) = 0
+      ) expanded
+      GROUP BY state
+      ORDER BY count DESC
     `).all(),
   ]);
   res.json({
@@ -38,11 +105,34 @@ router.get('/stats', authRequired, adminRequired, asyncHandler(async (req, res) 
     teams:   teams.count,
     homeViews: {
       total: Number(homeViews.count),
+      uniqueVisitors: Number(uniqueVisitors.count),
       last30Days: homeViewsByDay.map((row) => ({
         day: row.day,
         count: Number(row.count),
       })),
     },
+    sponsors: sponsorStats.map((s) => ({
+      id: s.id,
+      name: s.name,
+      logo_url: s.logo_url,
+      impressions: Number(s.impressions),
+      clicks: Number(s.clicks),
+    })),
+    userGrowth: userGrowthByMonth.map((row) => ({
+      month: row.month,
+      newUsers: Number(row.new_users),
+      totalUsers: Number(row.total_users),
+    })),
+    predictions: {
+      total: Number(predictionStats.total_predictions),
+      uniquePredictors: Number(predictionStats.unique_predictors),
+      totalPools: Number(predictionStats.total_pools),
+      poolMembers: Number(predictionStats.pool_members),
+    },
+    leaguesByState: leaguesByStateRows.map((row) => ({
+      state: row.state,
+      count: Number(row.count),
+    })),
   });
 }));
 

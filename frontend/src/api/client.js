@@ -1,5 +1,24 @@
 const BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
 
+// Id anónimo por navegador (no por persona) para poder contar "visitantes
+// únicos" en las estadísticas, sin cuentas ni cookies de terceros — solo un
+// valor al azar que este mismo navegador se vuelve a mandar en cada evento.
+// Si localStorage falla (modo privado, storage bloqueado) simplemente no se
+// manda: el evento se sigue registrando, solo no cuenta para "únicos".
+function getVisitorId() {
+  try {
+    const KEY = 'lifa_visitor_id';
+    let id = localStorage.getItem(KEY);
+    if (!id) {
+      id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      localStorage.setItem(KEY, id);
+    }
+    return id;
+  } catch {
+    return null;
+  }
+}
+
 async function request(path, { method = 'GET', body, token } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -22,7 +41,13 @@ export const api = {
   // sin internet un instante) no debe tronar la pantalla del visitante, así
   // que quien la llama la debe envolver en try/catch y simplemente ignorar
   // el error.
-  trackEvent: (eventType) => request('/track', { method: 'POST', body: { event_type: eventType } }),
+  trackEvent: (eventType, sponsorId) => {
+    const body = { event_type: eventType };
+    if (sponsorId) body.sponsor_id = sponsorId;
+    const visitorId = getVisitorId();
+    if (visitorId) body.visitor_id = visitorId;
+    return request('/track', { method: 'POST', body });
+  },
 
   // Juego de predicciones ("¿quién gana?")
   submitPrediction: (matchId, pick, token) =>

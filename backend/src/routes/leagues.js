@@ -5,6 +5,7 @@ import { leagueOwnerRequired, tournamentOwnerRequired } from '../middleware/owne
 import { isValidUrl, isNonEmptyString } from '../utils/validation.js';
 import { isValidTimezone } from '../utils/timezones.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { MEXICO_STATES } from '../utils/mexicoStates.js';
 
 const router = express.Router();
 
@@ -18,7 +19,7 @@ function slugify(str) {
 
 router.get('/', asyncHandler(async (req, res) => {
   const leagues = await db.prepare(`
-    SELECT id, name, slug, logo_url, state, description
+    SELECT id, name, slug, logo_url, state, states, description
     FROM leagues WHERE is_public = TRUE
     ORDER BY name ASC
   `).all();
@@ -331,9 +332,16 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
   res.json({ category, matches });
 }));
 
+// Un arreglo de estados a texto JSON para guardarlo en la columna jsonb
+// "states" — mismo patrón que toLinksJson en manage.js.
+function toStatesJson(value) {
+  if (value === undefined) return null;
+  return JSON.stringify(Array.isArray(value) ? value.filter((s) => typeof s === 'string' && s.trim()) : []);
+}
+
 router.post('/', authRequired, asyncHandler(async (req, res) => {
   const {
-    name, logo_url, cover_url, state, description, timezone,
+    name, logo_url, cover_url, country_id, state, states, description, timezone,
     facebook_url, instagram_url, twitter_url, youtube_url,
     tiktok_url, website_url, whatsapp,
   } = req.body;
@@ -349,17 +357,34 @@ router.post('/', authRequired, asyncHandler(async (req, res) => {
   if (website_url  && !isValidUrl(website_url))  return res.status(400).json({ error: 'El sitio web no es válido' });
   if (timezone     && !isValidTimezone(timezone)) return res.status(400).json({ error: 'La zona horaria seleccionada no es válida' });
 
+  // La lista fija de MEXICO_STATES solo se exige cuando el país elegido es
+  // México — el resto de países, por ahora, no tiene esa restricción (siguen
+  // sin selector de estado en el formulario). Una liga real casi siempre
+  // opera en más de un estado, por eso "states" es un arreglo — "state"
+  // (texto) se mantiene como resumen legible para lo que todavía lo muestra.
+  let country = null;
+  if (country_id) {
+    country = await db.prepare('SELECT * FROM countries WHERE id = ?').get(country_id);
+    if (!country) return res.status(400).json({ error: 'El país seleccionado no es válido' });
+  }
+  const isMexico = country?.code === 'MX';
+  if (isMexico && (!Array.isArray(states) || states.length === 0 || states.some((s) => !MEXICO_STATES.includes(s)))) {
+    return res.status(400).json({ error: 'Selecciona al menos un estado válido de México' });
+  }
+
   let slug = slugify(name);
   const existing = await db.prepare('SELECT id FROM leagues WHERE slug = ?').get(slug);
   if (existing) slug = `${slug}-${Date.now().toString().slice(-5)}`;
 
   const result = await db.prepare(`
-    INSERT INTO leagues (name, slug, logo_url, cover_url, state, description, owner_user_id, timezone,
+    INSERT INTO leagues (name, slug, logo_url, cover_url, country_id, state, states, description, owner_user_id, timezone,
       facebook_url, instagram_url, twitter_url, youtube_url, tiktok_url, website_url, whatsapp)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    name.trim(), slug, logo_url || null, cover_url || null,
-    state || null, description || null, req.user.id,
+    name.trim(), slug, logo_url || null, cover_url || null, country_id || null,
+    isMexico ? states.join(', ') : (state || null),
+    toStatesJson(isMexico ? states : []),
+    description || null, req.user.id,
     timezone || 'America/Mexico_City',
     facebook_url || null, instagram_url || null, twitter_url || null,
     youtube_url || null, tiktok_url || null, website_url || null, whatsapp || null
@@ -374,7 +399,7 @@ function toNull(value) {
 
 router.put('/:id', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
   const {
-    name, logo_url, cover_url, state, description, timezone,
+    name, logo_url, cover_url, country_id, state, states, description, timezone,
     facebook_url, instagram_url, twitter_url, youtube_url,
     tiktok_url, website_url, whatsapp,
   } = req.body;
@@ -391,12 +416,35 @@ router.put('/:id', authRequired, leagueOwnerRequired, asyncHandler(async (req, r
   if (tiktok_url    && !isValidUrl(tiktok_url))    return res.status(400).json({ error: 'El enlace de TikTok no es válido' });
   if (website_url   && !isValidUrl(website_url))   return res.status(400).json({ error: 'El sitio web no es válido' });
 
+  // Igual que en el registro: la lista fija de estados solo se exige si la
+  // liga (ya sea que lo traiga esta petición o lo tuviera de antes) es de
+  // México. Solo se valida si "states" viene en el body — si esta petición
+  // no toca el estado (ej. solo cambia el logo), no se le exige de nuevo.
+  let country = null;
+  const effectiveCountryId = country_id !== undefined ? country_id : league.country_id;
+  if (effectiveCountryId) {
+    country = await db.prepare('SELECT * FROM countries WHERE id = ?').get(effectiveCountryId);
+    if (!country) return res.status(400).json({ error: 'El país seleccionado no es válido' });
+  }
+  const isMexico = country?.code === 'MX';
+  if (isMexico && states !== undefined
+      && (!Array.isArray(states) || states.length === 0 || states.some((s) => !MEXICO_STATES.includes(s)))) {
+    return res.status(400).json({ error: 'Selecciona al menos un estado válido de México' });
+  }
+
+  // "state" (texto) se mantiene como resumen legible: si mandaron un
+  // arreglo nuevo de estados de México, se deriva de ahí; si no, se respeta
+  // lo que venga en el body tal cual (o no se toca, como antes).
+  const stateParam = (isMexico && Array.isArray(states)) ? states.join(', ') : state;
+
   await db.prepare(`
     UPDATE leagues SET
       name          = COALESCE(?, name),
       logo_url      = COALESCE(?, logo_url),
       cover_url     = COALESCE(?, cover_url),
+      country_id    = COALESCE(?, country_id),
       state         = COALESCE(?, state),
+      states        = COALESCE(?, states),
       description   = COALESCE(?, description),
       timezone      = COALESCE(?, timezone),
       facebook_url  = COALESCE(?, facebook_url),
@@ -409,8 +457,9 @@ router.put('/:id', authRequired, leagueOwnerRequired, asyncHandler(async (req, r
     WHERE id = ?
   `).run(
     toNull(name ? name.trim() : name),
-    toNull(logo_url), toNull(cover_url),
-    toNull(state), toNull(description), toNull(timezone),
+    toNull(logo_url), toNull(cover_url), toNull(country_id),
+    toNull(stateParam), toStatesJson(isMexico ? states : undefined),
+    toNull(description), toNull(timezone),
     toNull(facebook_url), toNull(instagram_url), toNull(twitter_url),
     toNull(youtube_url), toNull(tiktok_url), toNull(website_url),
     toNull(whatsapp), league.id

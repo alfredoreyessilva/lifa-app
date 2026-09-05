@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import Loading from '../components/Loading.jsx';
+import Modal from '../components/Modal.jsx';
+import MatchForm from '../components/MatchForm.jsx';
 import SubscribeButton from '../components/SubscribeButton.jsx';
 import PredictionWidget from '../components/PredictionWidget.jsx';
 import { getMatchStatus } from '../utils/matchStatus.js';
@@ -27,11 +30,15 @@ function linkHost(url) {
 export default function MatchPage() {
   const { matchId } = useParams();
   const navigate = useNavigate();
+  const { leagues, token } = useAuth();
   const [match, setMatch]         = useState(null);
   const [error, setError]         = useState('');
   const [shareState, setShareState] = useState('idle');
   const [isSharing, setIsSharing] = useState(false);
   const [broadcastVersion, setBroadcastVersion] = useState(0);
+  const [editing, setEditing]     = useState(false);
+  const [manageData, setManageData] = useState(null);
+  const [manageError, setManageError] = useState('');
 
   useEffect(() => {
     setMatch(null);
@@ -100,6 +107,25 @@ export default function MatchPage() {
     }
   }
 
+  // Carga los datos de gestión de la liga (equipos, sedes, grupos) solo
+  // cuando el dueño de la liga abre el modal de edición — así el partido
+  // se puede editar sin salir de la vista pública, en vez de mandarlo al
+  // panel (que reemplazaba de fondo esta pantalla por "Mi panel").
+  async function loadManageData() {
+    setManageError('');
+    try {
+      const data = await api.getManageLeague(match.league_id, token);
+      setManageData(data);
+    } catch (e) {
+      setManageError(e.message);
+    }
+  }
+
+  function openEdit() {
+    setEditing(true);
+    if (!manageData) loadManageData();
+  }
+
   if (error) {
     return (
       <div className="container">
@@ -121,6 +147,10 @@ export default function MatchPage() {
   const isScheduled    = status === 'scheduled';
   const categoryLabel  = [match.season, match.year].filter(Boolean).join(' ');
   const hotelUrl       = buildHotelSearchUrl(match);
+  // El usuario ve "Editar" solo si es dueño de la liga de este partido —
+  // "leagues" en AuthContext ya viene filtrado a las ligas de las que es
+  // owner_user_id (ver /auth/me), así que basta con buscar el id ahí.
+  const isLeagueOwner  = leagues.some((lg) => lg.id === match.league_id);
 
   return (
     <div className="container">
@@ -213,6 +243,11 @@ export default function MatchPage() {
         )}
 
         <div className="match-card-actions" style={{ marginTop: 16 }}>
+          {isLeagueOwner && (
+            <button type="button" className="btn btn-flag btn-sm" onClick={openEdit}>
+              ✎ Editar partido
+            </button>
+          )}
           {(match.stream_links || []).map((url, i) => (
             <a key={`stream-${i}`} href={url} target="_blank" rel="noopener noreferrer" className="btn btn-flag btn-sm">
               {isLive ? '🔴 Ver en vivo' : 'Ver partido'}
@@ -319,6 +354,37 @@ export default function MatchPage() {
             />
           )}
         </div>
+      )}
+
+      {editing && (
+        <Modal title="Editar partido" onClose={() => setEditing(false)}>
+          {manageError && <div className="form-error">{manageError}</div>}
+          {!manageData ? (
+            <div className="loading">Cargando…</div>
+          ) : (
+            <MatchForm
+              initial={match}
+              submitLabel="Guardar cambios"
+              teams={manageData.teams}
+              venues={manageData.venues}
+              groups={manageData.categories.find((c) => c.id === match.category_id)?.groups || []}
+              leagueTimezone={manageData.league?.timezone}
+              token={token}
+              leagueId={match.league_id}
+              categoryId={match.category_id}
+              onVenueCreated={loadManageData}
+              onTeamCreated={loadManageData}
+              onGroupCreated={loadManageData}
+              onCancel={() => setEditing(false)}
+              onSubmit={async (payload) => {
+                await api.updateMatch(match.id, payload, token);
+                const updated = await api.getMatch(matchId);
+                setMatch(updated);
+                setEditing(false);
+              }}
+            />
+          )}
+        </Modal>
       )}
     </div>
   );

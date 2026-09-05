@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { api } from '../api/client.js';
 import CharField from './CharField.jsx';
 import LogoField from './LogoField.jsx';
 import TimezoneSelect from './TimezoneSelect.jsx';
+import { MEXICO_STATES } from '../utils/mexicoStates.js';
+import { runValidations } from '../utils/validation.js';
 
 const DEFAULT_TZ = 'America/Mexico_City';
 
@@ -10,9 +13,15 @@ const DEFAULT_TZ = 'America/Mexico_City';
 // Dashboard.jsx (la pantalla vieja); se saca aquí para poder usarlo
 // también desde la pestaña "Liga" del flujo nuevo (TournamentsYearPanel.jsx).
 export default function EditLeagueForm({ league, onSubmit, onCancel }) {
+  const [countries, setCountries] = useState(null);
   const [form, setForm] = useState({
     name:          league.name,
+    country_id:    league.country_id    || '',
     state:         league.state         || '',
+    // Se filtra contra MEXICO_STATES por si quedó algo del texto libre
+    // viejo (escrito a mano, ej. "Nacional") que nunca fue un estado real
+    // de la lista — si se colara, bloquearía guardar sin que se note por qué.
+    states:        Array.isArray(league.states) ? league.states.filter((s) => MEXICO_STATES.includes(s)) : [],
     logo_url:      league.logo_url      || '',
     cover_url:     league.cover_url     || '',
     description:   league.description   || '',
@@ -28,11 +37,31 @@ export default function EditLeagueForm({ league, onSubmit, onCancel }) {
   const [error,   setError]   = useState('');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    api.getCountries().then((d) => setCountries(d.countries)).catch(() => setCountries([]));
+  }, []);
+
   function update(key, value) { setForm((f) => ({ ...f, [key]: value })); }
+
+  function toggleState(s) {
+    setForm((f) => ({
+      ...f,
+      states: f.states.includes(s) ? f.states.filter((x) => x !== s) : [...f.states, s],
+    }));
+  }
+
+  const selectedCountry = countries?.find((c) => String(c.id) === String(form.country_id));
+  const isMexico = selectedCountry?.code === 'MX';
 
   async function submit(e) {
     e.preventDefault();
     setError('');
+
+    const validationError = runValidations([
+      () => (isMexico && form.states.length === 0 ? 'Selecciona al menos un estado' : null),
+    ]);
+    if (validationError) { setError(validationError); return; }
+
     setLoading(true);
     try { await onSubmit(form); }
     catch (e) { setError(e.message); setLoading(false); }
@@ -47,8 +76,33 @@ export default function EditLeagueForm({ league, onSubmit, onCancel }) {
         <CharField required max={40} uppercase value={form.name} onChange={(e) => update('name', e.target.value)} />
       </div>
       <div className="field">
-        <label>Estado / Región</label>
-        <CharField max={40} uppercase value={form.state} onChange={(e) => update('state', e.target.value)} />
+        <label>País</label>
+        <select value={form.country_id} onChange={(e) => update('country_id', e.target.value)}>
+          <option value="">Selecciona…</option>
+          {(countries || []).map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+      </div>
+      <div className="field">
+        {isMexico ? (
+          <>
+            <label>Estados en los que opera la liga</label>
+            <div className="state-checkbox-grid">
+              {MEXICO_STATES.map((s) => (
+                <label key={s} className="state-checkbox">
+                  <input type="checkbox" checked={form.states.includes(s)} onChange={() => toggleState(s)} />
+                  {s}
+                </label>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <label>Estado / Región (opcional)</label>
+            <CharField max={40} uppercase value={form.state} onChange={(e) => update('state', e.target.value)} />
+          </>
+        )}
       </div>
       <div className="field">
         <label>Descripción</label>

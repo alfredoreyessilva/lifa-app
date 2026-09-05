@@ -1011,6 +1011,81 @@ export async function initSchema() {
       ON push_subscriptions (user_id, COALESCE(league_id, 0), COALESCE(match_id, 0), COALESCE(team_name, ''))
       WHERE user_id IS NOT NULL
     `);
+
+    // Impresiones/clics por patrocinador (eventos 'sponsor_impression' y
+    // 'sponsor_click' en track.js), para poder mostrarle a cada patrocinador
+    // cuánta gente vio su logo y cuánta le dio clic. NULL para el resto de
+    // eventos (ej. 'home_view'), que no están ligados a un patrocinador.
+    await run(`ALTER TABLE page_views ADD COLUMN IF NOT EXISTS sponsor_id INTEGER REFERENCES sponsors(id) ON DELETE CASCADE`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_page_views_sponsor ON page_views(sponsor_id, event_type)`);
+
+    // Identificador anónimo por navegador (generado y guardado en
+    // localStorage desde el cliente, ver api/client.js) para poder contar
+    // visitantes ÚNICOS y no solo el total de vistas. No es un dato
+    // personal — es un id al azar sin dueño conocido, igual de anónimo que
+    // el resto de esta tabla — por eso puede quedar NULL para quien tenga
+    // localStorage bloqueado, sin que se le rechace el evento.
+    await run(`ALTER TABLE page_views ADD COLUMN IF NOT EXISTS visitor_id TEXT`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_page_views_visitor ON page_views(event_type, visitor_id)`);
+
+    // País de la liga — por ahora solo se usa para exigir un estado de la
+    // lista fija de México (ver MEXICO_STATES en routes/leagues.js); el
+    // resto de países sigue sin selector de estado. Las ligas ya existentes
+    // se asumen de México (hoy el 100% de los datos lo son, mismo criterio
+    // que se usó para "organizations").
+    await run(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS country_id INTEGER REFERENCES countries(id) ON DELETE SET NULL`);
+    await run(`
+      UPDATE leagues SET country_id = (SELECT id FROM countries WHERE code = 'MX')
+      WHERE country_id IS NULL
+    `);
+
+    // Varios estados por liga (arreglo jsonb, mismo patrón que
+    // home_stream_links) — una liga real casi siempre opera en más de un
+    // estado, así que un solo texto se quedaba corto. Solo se llena cuando
+    // el país es México (ver MEXICO_STATES en routes/leagues.js); el resto
+    // de países sigue sin selector, así que queda como arreglo vacío.
+    await run(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS states JSONB NOT NULL DEFAULT '[]'::jsonb`);
+    // El "state" de texto libre que ya tenían las ligas (escrito a mano
+    // desde siempre, ej. "Nacional", "CDMX") NO se migra a "states": no es
+    // confiable contra la lista fija de MEXICO_STATES, así que casi
+    // ninguna liga tendría un estado real seleccionado si lo copiáramos
+    // tal cual. Solo se migra cuando ese texto coincide EXACTO con un
+    // estado válido de la lista.
+    await run(`
+      UPDATE leagues
+      SET states = jsonb_build_array(state)
+      WHERE jsonb_array_length(states) = 0
+        AND country_id = (SELECT id FROM countries WHERE code = 'MX')
+        AND state IN (
+          'AGUASCALIENTES', 'BAJA CALIFORNIA', 'BAJA CALIFORNIA SUR', 'CAMPECHE',
+          'CHIAPAS', 'CHIHUAHUA', 'CIUDAD DE MÉXICO', 'COAHUILA', 'COLIMA', 'DURANGO',
+          'ESTADO DE MÉXICO', 'GUANAJUATO', 'GUERRERO', 'HIDALGO', 'JALISCO', 'MICHOACÁN',
+          'MORELOS', 'NAYARIT', 'NUEVO LEÓN', 'OAXACA', 'PUEBLA', 'QUERÉTARO', 'QUINTANA ROO',
+          'SAN LUIS POTOSÍ', 'SINALOA', 'SONORA', 'TABASCO', 'TAMAULIPAS', 'TLAXCALA',
+          'VERACRUZ', 'YUCATÁN', 'ZACATECAS'
+        )
+    `);
+    // Limpia lo que alcanzó a quedar mal de una versión anterior de esta
+    // misma migración, que copiaba "state" a "states" sin validar contra la
+    // lista — deja cualquier arreglo con al menos un valor inválido en
+    // blanco otra vez, para que se vea como "sin estado seleccionado" en
+    // vez de un valor a medias que además rompe la validación al editar.
+    await run(`
+      UPDATE leagues
+      SET states = '[]'::jsonb
+      WHERE jsonb_array_length(states) > 0
+        AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements_text(states) AS elem
+          WHERE elem NOT IN (
+            'AGUASCALIENTES', 'BAJA CALIFORNIA', 'BAJA CALIFORNIA SUR', 'CAMPECHE',
+            'CHIAPAS', 'CHIHUAHUA', 'CIUDAD DE MÉXICO', 'COAHUILA', 'COLIMA', 'DURANGO',
+            'ESTADO DE MÉXICO', 'GUANAJUATO', 'GUERRERO', 'HIDALGO', 'JALISCO', 'MICHOACÁN',
+            'MORELOS', 'NAYARIT', 'NUEVO LEÓN', 'OAXACA', 'PUEBLA', 'QUERÉTARO', 'QUINTANA ROO',
+            'SAN LUIS POTOSÍ', 'SINALOA', 'SONORA', 'TABASCO', 'TAMAULIPAS', 'TLAXCALA',
+            'VERACRUZ', 'YUCATÁN', 'ZACATECAS'
+          )
+        )
+    `);
   } finally {
     // Se suelta el candado y se libera la conexión pase lo que pase
     await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY]).catch(() => {});

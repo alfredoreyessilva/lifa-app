@@ -1,16 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import LogoField from '../components/LogoField.jsx';
 import CharField from '../components/CharField.jsx';
 import TimezoneSelect from '../components/TimezoneSelect.jsx';
+import { MEXICO_STATES } from '../utils/mexicoStates.js';
 import { required, validUrl, runValidations } from '../utils/validation.js';
 
 export default function RegisterLeague() {
+  const [countries, setCountries] = useState(null);
   const [form, setForm] = useState({
     name:          '',
+    country_id:    '',
     state:         '',
+    states:        [],
     logo_url:      '',
     cover_url:     '',
     description:   '',
@@ -28,9 +32,29 @@ export default function RegisterLeague() {
   const { token, refreshLeagues } = useAuth();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    api.getCountries().then((d) => {
+      setCountries(d.countries);
+      // México preseleccionado: hoy el 100% de las ligas son de México, así
+      // que casi nadie va a tener que tocar este campo.
+      const mexico = d.countries.find((c) => c.code === 'MX');
+      if (mexico) setForm((f) => (f.country_id ? f : { ...f, country_id: mexico.id }));
+    }).catch(() => setCountries([]));
+  }, []);
+
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
   }
+
+  function toggleState(s) {
+    setForm((f) => ({
+      ...f,
+      states: f.states.includes(s) ? f.states.filter((x) => x !== s) : [...f.states, s],
+    }));
+  }
+
+  const selectedCountry = countries?.find((c) => String(c.id) === String(form.country_id));
+  const isMexico = selectedCountry?.code === 'MX';
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -38,6 +62,7 @@ export default function RegisterLeague() {
 
     const validationError = runValidations([
       () => required(form.name, 'El nombre de la liga'),
+      () => (isMexico && form.states.length === 0 ? 'Selecciona al menos un estado' : null),
       () => validUrl(form.logo_url,      'El logo'),
       () => validUrl(form.cover_url,     'La foto de portada'),
       () => validUrl(form.facebook_url,  'El enlace de Facebook'),
@@ -54,6 +79,7 @@ export default function RegisterLeague() {
       await api.createLeague({
         ...form,
         name:        form.name.trim(),
+        country_id:  form.country_id || null,
         state:       form.state.trim(),
         description: form.description.trim(),
       }, token);
@@ -82,8 +108,36 @@ export default function RegisterLeague() {
             <CharField required max={40} uppercase value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="Ej. LIGA DE FÚTBOL AMERICANO JALISCO" />
           </div>
           <div className="field">
-            <label>Estado / Región</label>
-            <CharField max={40} uppercase value={form.state} onChange={(e) => update('state', e.target.value)} placeholder="Ej. JALISCO" />
+            <label>País</label>
+            <select value={form.country_id} onChange={(e) => update('country_id', e.target.value)}>
+              <option value="">Selecciona…</option>
+              {(countries || []).map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            {isMexico ? (
+              <>
+                <label>Estados en los que opera la liga</label>
+                <p style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: -4, marginBottom: 8 }}>
+                  Muchas ligas juegan en más de un estado — marca todos los que apliquen.
+                </p>
+                <div className="state-checkbox-grid">
+                  {MEXICO_STATES.map((s) => (
+                    <label key={s} className="state-checkbox">
+                      <input type="checkbox" checked={form.states.includes(s)} onChange={() => toggleState(s)} />
+                      {s}
+                    </label>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <label>Estado / Región (opcional)</label>
+                <CharField max={40} uppercase value={form.state} onChange={(e) => update('state', e.target.value)} placeholder="Ej. JALISCO" />
+              </>
+            )}
           </div>
           <div className="field">
             <label>Descripción breve (opcional)</label>

@@ -63,6 +63,16 @@ function StatsTab({ token }) {
     { label: 'Partidos',          value: stats.matches,  icon: '🏈' },
     { label: 'Equipos',           value: stats.teams,    icon: '⛹️' },
     { label: 'Visitas a Home',    value: stats.homeViews?.total ?? 0, icon: '👁️' },
+    { label: 'Visitantes únicos', value: stats.homeViews?.uniqueVisitors ?? 0, icon: '🧑‍🤝‍🧑' },
+  ];
+
+  const predictions = stats.predictions ?? { total: 0, uniquePredictors: 0, totalPools: 0, poolMembers: 0 };
+  const participationRate = stats.users > 0 ? Math.round((predictions.uniquePredictors / stats.users) * 100) : 0;
+  const engagementItems = [
+    { label: 'Predicciones hechas',        value: predictions.total,           icon: '🎯' },
+    { label: `Usuarios que predicen (${participationRate}%)`, value: predictions.uniquePredictors, icon: '🙋' },
+    { label: 'Quinielas creadas',          value: predictions.totalPools,      icon: '🏆' },
+    { label: 'Usuarios en quinielas',      value: predictions.poolMembers,     icon: '👥' },
   ];
 
   const last30Days = stats.homeViews?.last30Days ?? [];
@@ -72,6 +82,23 @@ function StatsTab({ token }) {
     <>
       <div className="admin-stats-grid">
         {items.map((item) => (
+          <div key={item.label} className="admin-stat-card">
+            <div className="admin-stat-icon">{item.icon}</div>
+            <div className="admin-stat-value">{item.value}</div>
+            <div className="admin-stat-label">{item.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <h3>Crecimiento de usuarios</h3>
+      <UserGrowthChart data={stats.userGrowth ?? []} />
+
+      <h3>Ligas por estado</h3>
+      <LeaguesByStateList data={stats.leaguesByState ?? []} />
+
+      <h3>Participación en quinielas</h3>
+      <div className="admin-stats-grid">
+        {engagementItems.map((item) => (
           <div key={item.label} className="admin-stat-card">
             <div className="admin-stat-icon">{item.icon}</div>
             <div className="admin-stat-value">{item.value}</div>
@@ -96,7 +123,190 @@ function StatsTab({ token }) {
           ))}
         </div>
       )}
+
+      <h3>Patrocinadores — impresiones y clics</h3>
+      {(stats.sponsors ?? []).length === 0 ? (
+        <p className="admin-stat-label">Todavía no hay patrocinadores registrados.</p>
+      ) : (
+        <div className="admin-sponsor-list">
+          {stats.sponsors.map((s) => {
+            const ctr = s.impressions > 0 ? (s.clicks / s.impressions) * 100 : 0;
+            return (
+              <div key={s.id} className="admin-sponsor-row">
+                <div className="admin-sponsor-logo">
+                  <img src={s.logo_url} alt={s.name || 'Patrocinador'} />
+                </div>
+                <div className="admin-sponsor-info">
+                  <div className="who">{s.name || 'Sin nombre'}</div>
+                </div>
+                <div className="admin-sponsor-stats">
+                  <div className="admin-sponsor-stat">
+                    <div className="admin-sponsor-stat-value">{s.impressions}</div>
+                    <div className="admin-sponsor-stat-label">Impresiones</div>
+                  </div>
+                  <div className="admin-sponsor-stat">
+                    <div className="admin-sponsor-stat-value">{s.clicks}</div>
+                    <div className="admin-sponsor-stat-label">Clics</div>
+                  </div>
+                  <div className="admin-sponsor-stat">
+                    <div className="admin-sponsor-stat-value">{ctr.toFixed(1)}%</div>
+                    <div className="admin-sponsor-stat-label">CTR</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </>
+  );
+}
+
+// Gráfica de línea del total acumulado de usuarios mes a mes. A propósito
+// muestra el ACUMULADO (no altas por mes): es la curva que cuenta la
+// historia de tracción que le importa a un patrocinador, en vez de un
+// conteo con picos y valles que no dice nada por sí solo.
+function UserGrowthChart({ data }) {
+  const [hoverIndex, setHoverIndex] = useState(null);
+
+  if (data.length === 0) {
+    return <p className="admin-stat-label">Todavía no hay usuarios registrados.</p>;
+  }
+
+  const W = 760, H = 220;
+  const marginLeft = 44, marginRight = 16, marginTop = 16, marginBottom = 28;
+  const plotW = W - marginLeft - marginRight;
+  const plotH = H - marginTop - marginBottom;
+  const baselineY = marginTop + plotH;
+  const n = data.length;
+
+  const maxValue = Math.max(...data.map((d) => d.totalUsers), 1);
+  const magnitude = Math.pow(10, Math.floor(Math.log10(maxValue)));
+  const normalized = maxValue / magnitude;
+  const niceStep = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  const niceMax = niceStep * magnitude;
+
+  const x = (i) => (n === 1 ? marginLeft + plotW / 2 : marginLeft + (i / (n - 1)) * plotW);
+  const y = (v) => marginTop + plotH - (v / niceMax) * plotH;
+
+  const linePoints = data.map((d, i) => `${x(i)},${y(d.totalUsers)}`).join(' ');
+  const areaPoints = `${marginLeft},${baselineY} ${linePoints} ${x(n - 1)},${baselineY}`;
+
+  const monthLabel = (m) =>
+    new Date(`${m}T00:00:00`).toLocaleDateString('es-MX', { month: 'short', year: '2-digit' });
+
+  // No más de ~6 etiquetas en el eje X para que no se amontonen los meses.
+  const maxLabels = 6;
+  const labelStep = Math.max(1, Math.ceil(n / maxLabels));
+  const lastIndex = n - 1;
+  const hovered = hoverIndex != null ? data[hoverIndex] : null;
+  const last = data[lastIndex];
+
+  return (
+    <div className="admin-line-chart-wrap">
+      <svg
+        className="admin-line-chart-svg"
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={`Crecimiento de usuarios: de ${data[0].totalUsers} a ${last.totalUsers} usuarios, entre ${monthLabel(data[0].month)} y ${monthLabel(last.month)}`}
+      >
+        {[0, 0.5, 1].map((step) => {
+          const gy = y(niceMax * step);
+          return (
+            <g key={step}>
+              <line x1={marginLeft} x2={W - marginRight} y1={gy} y2={gy} className="admin-line-chart-grid" />
+              <text x={marginLeft - 8} y={gy} dy="3" className="admin-line-chart-axis-label" textAnchor="end">
+                {Math.round(niceMax * step).toLocaleString('es-MX')}
+              </text>
+            </g>
+          );
+        })}
+
+        <polygon points={areaPoints} className="admin-line-chart-area" />
+        <polyline points={linePoints} className="admin-line-chart-line" />
+
+        {data.map((d, i) => {
+          if (i !== lastIndex && i % labelStep !== 0) return null;
+          const anchor = i === 0 ? 'start' : i === lastIndex ? 'end' : 'middle';
+          return (
+            <text key={d.month} x={x(i)} y={H - 6} textAnchor={anchor} className="admin-line-chart-axis-label">
+              {monthLabel(d.month)}
+            </text>
+          );
+        })}
+
+        {hovered && hoverIndex !== lastIndex && (
+          <>
+            <line x1={x(hoverIndex)} x2={x(hoverIndex)} y1={marginTop} y2={baselineY} className="admin-line-chart-crosshair" />
+            <circle cx={x(hoverIndex)} cy={y(hovered.totalUsers)} r="5" className="admin-line-chart-dot" />
+          </>
+        )}
+
+        {/* Marca del último punto: siempre visible, es el número que más le importa a alguien que solo mira una vez (sin pasar el mouse) */}
+        <circle cx={x(lastIndex)} cy={y(last.totalUsers)} r="5" className="admin-line-chart-dot" />
+        <text x={x(lastIndex)} y={y(last.totalUsers) - 12} textAnchor="end" className="admin-line-chart-end-label">
+          {last.totalUsers.toLocaleString('es-MX')}
+        </text>
+
+        {data.map((d, i) => {
+          const colWidth = plotW / n;
+          return (
+            <rect
+              key={d.month}
+              x={marginLeft + i * colWidth}
+              y={marginTop}
+              width={colWidth}
+              height={plotH}
+              fill="transparent"
+              tabIndex={0}
+              aria-label={`${monthLabel(d.month)}: ${d.totalUsers} usuarios en total, ${d.newUsers} nuevos ese mes`}
+              onMouseEnter={() => setHoverIndex(i)}
+              onFocus={() => setHoverIndex(i)}
+              onMouseLeave={() => setHoverIndex(null)}
+              onBlur={() => setHoverIndex(null)}
+            >
+              <title>{`${monthLabel(d.month)}: ${d.totalUsers} usuarios (+${d.newUsers} nuevos)`}</title>
+            </rect>
+          );
+        })}
+      </svg>
+
+      {hovered && (
+        <div
+          className="admin-line-chart-tooltip"
+          style={{ left: `${(x(hoverIndex) / W) * 100}%`, top: `${(y(hovered.totalUsers) / H) * 100}%` }}
+        >
+          <strong>{hovered.totalUsers.toLocaleString('es-MX')} usuarios</strong>
+          <div>{monthLabel(hovered.month)} · +{hovered.newUsers} nuevos</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Ranking de ligas por estado (hoy, en la práctica, solo estados de México
+// — ver MEXICO_STATES en RegisterLeague.jsx). Es el alcance geográfico que
+// le importa a un patrocinador: en qué regiones ya hay presencia real.
+function LeaguesByStateList({ data }) {
+  if (data.length === 0) {
+    return <p className="admin-stat-label">Todavía no hay ligas registradas.</p>;
+  }
+
+  const max = Math.max(...data.map((d) => d.count), 1);
+
+  return (
+    <div className="admin-state-list">
+      {data.map((d) => (
+        <div key={d.state} className="admin-state-row">
+          <div className="admin-state-name">{d.state}</div>
+          <div className="admin-state-bar-track">
+            <div className="admin-state-bar-fill" style={{ width: `${(d.count / max) * 100}%` }} />
+          </div>
+          <div className="admin-state-count">{d.count}</div>
+        </div>
+      ))}
+    </div>
   );
 }
 

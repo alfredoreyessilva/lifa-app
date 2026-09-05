@@ -625,6 +625,39 @@ a { color: inherit; }
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
+.state-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px 12px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-dim);
+}
+.field .state-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+.state-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  accent-color: var(--flag);
+  flex-shrink: 0;
+}
 .form-error {
   background: rgba(255, 82, 82, 0.1);
   border: 1px solid rgba(255, 82, 82, 0.3);
@@ -1364,6 +1397,79 @@ a { color: inherit; }
   letter-spacing: 0.05em;
 }
 
+.admin-line-chart-wrap {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 32px;
+}
+
+.admin-line-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.admin-line-chart-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.admin-line-chart-axis-label {
+  fill: var(--ink-dim);
+  font-size: 10px;
+}
+
+.admin-line-chart-area {
+  fill: var(--field);
+  fill-opacity: 0.12;
+  stroke: none;
+}
+
+.admin-line-chart-line {
+  fill: none;
+  stroke: var(--field);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.admin-line-chart-dot {
+  fill: var(--field);
+  stroke: var(--card);
+  stroke-width: 2;
+}
+
+.admin-line-chart-end-label {
+  fill: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.admin-line-chart-crosshair {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+}
+
+.admin-line-chart-tooltip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 12px));
+  background: rgba(8, 19, 13, 0.92);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--ink);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.admin-line-chart-tooltip strong {
+  display: block;
+  font-size: 13px;
+}
+
 .admin-bar-chart {
   display: flex;
   align-items: flex-end;
@@ -1399,6 +1505,48 @@ a { color: inherit; }
   margin-top: 4px;
 }
  
+.admin-state-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 32px;
+}
+
+.admin-state-row {
+  display: grid;
+  grid-template-columns: 160px 1fr 36px;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-state-name {
+  font-size: 13px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-state-bar-track {
+  height: 10px;
+  background: var(--surface);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.admin-state-bar-fill {
+  height: 100%;
+  background: var(--field);
+  border-radius: 5px;
+}
+
+.admin-state-count {
+  font-size: 13px;
+  color: var(--ink-dim);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .admin-sponsor-list {
   display: flex;
   flex-direction: column;
@@ -1439,7 +1587,32 @@ a { color: inherit; }
   flex: 1;
   min-width: 0;
 }
- 
+
+.admin-sponsor-stats {
+  display: flex;
+  gap: 24px;
+  flex-shrink: 0;
+}
+
+.admin-sponsor-stat {
+  text-align: center;
+  min-width: 64px;
+}
+
+.admin-sponsor-stat-value {
+  font-size: 20px;
+  font-family: var(--font-display);
+  color: var(--flag);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.admin-sponsor-stat-label {
+  font-size: 11px;
+  color: var(--ink-dim);
+  letter-spacing: 0.05em;
+}
+
 /* Botón danger */
 .btn-danger {
   background: #dc2626;
