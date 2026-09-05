@@ -69,7 +69,6 @@ export default function Home() {
                   : initials(lg.name)}
               </div>
               <h3>{lg.name}</h3>
-              {lg.state && <span className="state">{lg.state}</span>}
             </Link>
           ))}
         </div>
