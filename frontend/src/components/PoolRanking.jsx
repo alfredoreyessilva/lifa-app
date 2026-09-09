@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import AuthModal from './AuthModal.jsx';
+import RankingImageButton from './RankingImageButton.jsx';
 
-export default function PoolRanking({ matchIds }) {
+export default function PoolRanking({ matchIds, header = {} }) {
   const { token, user } = useAuth();
   const [pools, setPools]         = useState(null);
   const [selectedCode, setSelectedCode] = useState(null);
@@ -55,7 +56,7 @@ export default function PoolRanking({ matchIds }) {
               ))}
             </select>
           </div>
-          {selectedCode && <PoolRankingList code={selectedCode} matchIds={matchIds} />}
+          {selectedCode && <PoolRankingList code={selectedCode} matchIds={matchIds} header={header} />}
         </>
       )}
 
@@ -64,7 +65,7 @@ export default function PoolRanking({ matchIds }) {
   );
 }
 
-function PoolRankingList({ code, matchIds }) {
+function PoolRankingList({ code, matchIds, header = {} }) {
   const { token, user } = useAuth();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -99,6 +100,9 @@ function PoolRankingList({ code, matchIds }) {
         <div className="empty-state"><p>Todavía no hay nadie en esta quiniela.</p></div>
       ) : (
         <>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+            <RankingImageButton ranking={data.ranking} header={{ ...header, poolName: data.pool?.name }} />
+          </div>
           <p className="ranking-note">
             1 punto por acierto · 2 puntos por acierto en fase final (playoff, semifinal, final) ·
             los partidos de scrimmage no cuentan.

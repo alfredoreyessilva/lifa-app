@@ -274,7 +274,12 @@ router.get('/categories/:categoryId/share-meta', asyncHandler(async (req, res) =
 
 router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
   const category = await db.prepare(`
-    SELECT * FROM categories WHERE id = ?
+    SELECT c.*, l.name AS league_name, l.logo_url AS league_logo_url,
+           t.name AS tournament_name
+    FROM categories c
+    JOIN leagues l ON l.id = c.league_id
+    LEFT JOIN tournaments t ON t.id = c.tournament_id
+    WHERE c.id = ?
   `).get(req.params.categoryId);
   if (!category) return res.status(404).json({ error: 'Categoría no encontrada' });
 
@@ -914,7 +919,8 @@ router.patch('/:leagueId/roster/sync-matches', authRequired, leagueOwnerRequired
 router.get('/tournaments/:tournamentId/public', asyncHandler(async (req, res) => {
   const tournament = await db.prepare(`
     SELECT t.id, t.name, t.year, t.logo_url,
-           l.id AS league_id, l.name AS league_name, l.slug AS league_slug
+           l.id AS league_id, l.name AS league_name, l.slug AS league_slug,
+           l.logo_url AS league_logo_url
     FROM tournaments t
     JOIN leagues l ON l.id = t.league_id
     WHERE t.id = ? AND l.is_public = TRUE

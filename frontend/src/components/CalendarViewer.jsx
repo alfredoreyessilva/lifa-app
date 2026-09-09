@@ -138,6 +138,11 @@ export default function CalendarViewer({
   matches: matchesProp,
   title,
   shareText,
+  // Encabezado para la imagen del ranking: { league, tournament, context }.
+  // Cada página que usa el visor lo arma con lo que sabe de su contexto
+  // (liga / torneo / categoría · rama). `title` queda como respaldo del
+  // texto resaltado si no se pasa `tournament`.
+  rankingHeader = {},
   emptyTitle = 'Calendario sin publicar',
   emptyText = 'Todavía no hay partidos programados.',
 }) {
@@ -448,11 +453,17 @@ export default function CalendarViewer({
       )}
 
       {tab === 'ranking' && (
-        <CalendarRanking matchIds={matches.map((m) => m.id)} />
+        <CalendarRanking
+          matchIds={matches.map((m) => m.id)}
+          header={{ title, ...rankingHeader }}
+        />
       )}
 
       {tab === 'quiniela' && (
-        <PoolRanking matchIds={matches.map((m) => m.id)} />
+        <PoolRanking
+          matchIds={matches.map((m) => m.id)}
+          header={{ title, ...rankingHeader }}
+        />
       )}
     </div>
   );

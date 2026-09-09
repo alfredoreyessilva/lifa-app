@@ -54,6 +54,11 @@ export default function CalendarPage() {
           <CalendarViewer
             matches={matches}
             title={category.name}
+            rankingHeader={{
+              tournament: category.tournament_name || category.name,
+              context: category.tournament_name ? category.name : null,
+              leagueLogo: category.league_logo_url || null,
+            }}
             emptyTitle="Calendario sin publicar"
             emptyText="Esta categoría aún no tiene partidos programados."
           />

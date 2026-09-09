@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
+import RankingImageButton from './RankingImageButton.jsx';
 
 // Se usa dentro de CalendarViewer, como pestaña "Ranking" junto a
 // "Calendario". Recibe la lista exacta de IDs de partido que se están
 // viendo — el ranking es de ESE calendario, no uno nacional cruzando ligas.
 // Se ordena por PUNTOS: 1 por acierto, 2 por acierto en fase final. Los
 // partidos de scrimmage no cuentan.
-export default function CalendarRanking({ matchIds }) {
+export default function CalendarRanking({ matchIds, header = {} }) {
   const { user } = useAuth();
   const [ranking, setRanking] = useState(null);
   const [error, setError]     = useState('');
@@ -34,6 +35,9 @@ export default function CalendarRanking({ matchIds }) {
 
   return (
     <>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <RankingImageButton ranking={ranking} header={header} />
+      </div>
       <p className="ranking-note">
         1 punto por acierto · 2 puntos por acierto en fase final (playoff, semifinal, final) ·
         los partidos de scrimmage no cuentan. El % de aciertos es solo un dato y no define el orden.

@@ -199,6 +199,11 @@ export default function TournamentPage() {
                 matches={matchesToShow}
                 title={infoLabel || tournament.name}
                 shareText={tournament.name}
+                rankingHeader={{
+                  tournament: tournament.name,
+                  context: infoLabel || null,
+                  leagueLogo: tournament.league_logo_url || null,
+                }}
                 emptyTitle="Calendario sin publicar"
                 emptyText="Este torneo aún no tiene partidos programados."
               />
