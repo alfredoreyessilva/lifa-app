@@ -25,6 +25,10 @@ const TYPE_META = {
   broadcast_added:   { icon: '🎥', label: 'Transmisión', color: 'var(--live)' },
   score_reminder:    { icon: '⏳', label: 'Marcador pendiente', color: 'var(--ink-dim)' },
   match_not_started: { icon: '📅', label: 'Partido sin actualizar', color: 'var(--ink-dim)' },
+  billing_charge_new:       { icon: '🧾', label: 'Nuevo cargo',     color: 'var(--flag)' },
+  billing_due_soon:         { icon: '⏰', label: 'Cargo por vencer', color: 'var(--ink-dim)' },
+  billing_overdue:          { icon: '🔴', label: 'Cargo vencido',    color: 'var(--live)' },
+  billing_payment_recorded: { icon: '✅', label: 'Pago registrado',  color: 'var(--field)' },
 };
 
 function OrgNotificationItem({ notification }) {
@@ -71,7 +75,7 @@ function OrgNotificationItem({ notification }) {
       {targetUrl && (
         <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-start' }}>
           <Link to={targetUrl} className="btn btn-outline btn-sm" style={{ fontSize: 12, padding: '3px 10px' }}>
-            Ir a la publicación →
+            {notification.type?.startsWith('billing_') ? 'Ver estado de cuenta →' : 'Ir a la publicación →'}
           </Link>
         </div>
       )}

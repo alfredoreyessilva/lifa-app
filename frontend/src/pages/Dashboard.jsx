@@ -35,8 +35,12 @@ export default function Dashboard({ kind }) {
   return (
     <div className="container">
       <OrgLogoBar selectedKind={kind} selectedId={id} />
-      <PredictionStats />
-      <MiCartelera />
+
+      {/* Contenido personal ("de aficionado"): solo en "Mi panel" (sin liga ni
+          equipo seleccionado). Al entrar a una liga o equipo, la página es el
+          espacio de trabajo de ESA organización y nada más. */}
+      {!kind && <PredictionStats />}
+      {!kind && <MiCartelera />}
 
       {selected?.kind === 'liga' && <LeagueWorkPanel leagueId={selected.id} />}
       {selected?.kind === 'equipo' && (
@@ -379,8 +383,9 @@ function LeaguePanel({
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Link to={`/ligas/${league.slug}`} className="btn btn-outline btn-sm">Ver mi página</Link>
+          <Link to={`/panel/liga/${league.id}/cobranza`} className="btn btn-outline btn-sm">💵 Cobranza</Link>
           <button className="btn btn-outline btn-sm" onClick={onEditLeague}>Editar liga</button>
           <button className="btn btn-outline btn-sm" onClick={onAddCategory}>+ Agregar categoría</button>
         </div>
@@ -569,12 +574,21 @@ function TeamOnlyPanel({ teams, token, onChange }) {
   const [selectedTeamId, setSelectedTeamId] = useState(teams[0]?.id ?? null);
   const [mode, setMode] = useState('view'); // 'view' | 'edit'
   const [error, setError] = useState('');
+  const [statement, setStatement] = useState(null);
   const team = teams.find((t) => t.id === selectedTeamId) || teams[0];
+
+  useEffect(() => {
+    if (!team?.id || !token) return;
+    setStatement(null);
+    api.getTeamStatement(team.id, token).then(setStatement).catch(() => setStatement(null));
+  }, [team?.id, token]);
 
   function selectTeam(id) {
     setSelectedTeamId(id);
     setMode('view');
   }
+
+  const balance = statement ? Number(statement.balance || 0) : null;
 
   return (
     <div className="container">
@@ -583,6 +597,21 @@ function TeamOnlyPanel({ teams, token, onChange }) {
           <span className="eyebrow">Panel de representante de equipo</span>
           <h1>{team.name}</h1>
           <span style={{ fontSize: 12, color: 'var(--ink-dim)' }}>{team.league_name}</span>
+          {statement && (
+            <div style={{ fontSize: 13, marginTop: 6 }}>
+              <span style={{ color: balance < 0 ? 'var(--flag)' : balance > 0 ? 'var(--field)' : 'var(--ink-dim)', fontWeight: 600 }}>
+                {balance < 0
+                  ? `Debes $${Math.abs(balance).toLocaleString('es-MX', { minimumFractionDigits: 2 })} a la liga`
+                  : balance > 0
+                    ? `Saldo a favor $${balance.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+                    : 'Al corriente con la liga'}
+              </span>
+              {' · '}
+              <Link to={`/panel/equipo/${team.id}/estado-de-cuenta`} style={{ color: 'var(--flag)' }}>
+                Ver estado de cuenta
+              </Link>
+            </div>
+          )}
         </div>
         {teams.length > 1 && (
           <select

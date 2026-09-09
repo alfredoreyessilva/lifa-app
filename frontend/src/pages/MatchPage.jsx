@@ -16,6 +16,7 @@ import MediaBroadcastControl from '../components/MediaBroadcastControl.jsx';
 import { buildHotelSearchUrl } from '../utils/matchServices.js';
 import FlightSearchWidget from '../components/FlightSearchWidget.jsx';
 import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
+import VenueInfoPanel from '../components/VenueInfoPanel.jsx';
 
 // Convierte una URL en una etiqueta corta y legible (ej. "youtube.com"),
 // para diferenciar los botones cuando hay más de un link del mismo tipo.
@@ -353,6 +354,28 @@ export default function MatchPage() {
               leagueId={match.away_team_details.league_id}
             />
           )}
+        </div>
+      )}
+
+      {/* Ficha de la sede, debajo de las de los equipos y con el mismo
+          formato "abierto" (no en modal): banner, nombre, institución,
+          ciudad, link a Maps y contacto. Solo aparece cuando el partido
+          tiene una sede registrada (venue_id → venue_name). */}
+      {match.venue_name && (
+        <div className="match-venue">
+          <VenueInfoPanel
+            inline
+            roleLabel="Sede"
+            venue={{
+              name: match.venue_name,
+              institution: match.venue_institution,
+              city: match.venue_city,
+              address: match.venue_address,
+              cover_url: match.venue_cover_url,
+              contact_phone: match.venue_contact_phone,
+              contact_email: match.venue_contact_email,
+            }}
+          />
         </div>
       )}
 

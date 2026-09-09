@@ -15,6 +15,8 @@ import PlayerCardPage from './pages/PlayerCardPage.jsx';
 import RegisterOrganizationPage from './pages/RegisterOrganizationPage.jsx';
 import OrganizationDetailPage from './pages/OrganizationDetailPage.jsx';
 import ProductsPanel from './pages/ProductsPanel.jsx';
+import BillingLeaguePanel from './pages/BillingLeaguePanel.jsx';
+import TeamStatementPanel from './pages/TeamStatementPanel.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import RegisterLeague from './pages/RegisterLeague.jsx';
@@ -88,12 +90,20 @@ export default function App() {
               element={<ProtectedRoute><LeagueStructurePanel /></ProtectedRoute>}
             />
             <Route
+              path="/panel/liga/:id/cobranza"
+              element={<ProtectedRoute><BillingLeaguePanel /></ProtectedRoute>}
+            />
+            <Route
               path="/panel/liga/:id/:year/torneo/:tournamentId/partidos"
               element={<ProtectedRoute><TournamentMatchesPanel /></ProtectedRoute>}
             />
             <Route
               path="/panel/equipo/:id"
               element={<ProtectedRoute><Dashboard kind="equipo" /></ProtectedRoute>}
+            />
+            <Route
+              path="/panel/equipo/:id/estado-de-cuenta"
+              element={<ProtectedRoute><TeamStatementPanel /></ProtectedRoute>}
             />
             <Route
               path="/panel/organizacion/:id/inventario"

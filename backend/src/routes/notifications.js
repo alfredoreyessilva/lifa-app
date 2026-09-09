@@ -5,6 +5,7 @@ import db from '../config/db.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { authRequired } from '../middleware/auth.js';
 import { leagueOwnerRequired, teamOwnerRequired } from '../middleware/ownership.js';
+import { runBillingReminders } from '../utils/billingReminders.js';
 
 const router = express.Router();
 
@@ -447,6 +448,13 @@ router.post('/trigger', asyncHandler(async (req, res) => {
     );
     await db.prepare('UPDATE matches SET reminded_not_started = TRUE WHERE id = ?').run(match.id);
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Fase 4 — recordatorios de cobranza (liga → equipos): cargos por vencer y
+  // vencidos van a la bandeja del equipo. La lógica vive en utils/ para no
+  // mezclar el modelo de cobranza con este archivo; es idempotente y no lanza.
+  // ─────────────────────────────────────────────────────────────────────────
+  await runBillingReminders(db);
 
   res.json({ ok: true });
 }));

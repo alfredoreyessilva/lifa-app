@@ -169,6 +169,43 @@ export const api = {
   movePlayerToBranchTeam: (branchId, teamId, playerId, payload, token) =>
     request(`/players/branches/${branchId}/teams/${teamId}/roster/${playerId}/move`, { method: 'POST', body: payload, token }),
 
+  // Roster por plantilla de Excel: descarga la plantilla ya personalizada
+  // (membrete de liga + equipo + torneo/categoría/rama) y sube la plantilla
+  // llena. La subida solo agrega los jugadores que no estén ya en la rama.
+  downloadBranchRosterTemplate: async (branchId, teamId, token) => {
+    const res = await fetch(`${BASE}/players/branches/${branchId}/teams/${teamId}/roster/template`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'No se pudo generar la plantilla');
+    }
+    const blob = await res.blob();
+    const match = /filename="(.+?)"/.exec(res.headers.get('Content-Disposition') || '');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = match ? match[1] : 'roster.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+  importBranchRoster: async (branchId, teamId, file, token) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${BASE}/players/branches/${branchId}/teams/${teamId}/roster/import`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'No se pudo importar el archivo');
+    return data;
+  },
+  updateBranchRosterPlayer: (branchId, teamId, playerId, payload, token) =>
+    request(`/players/branches/${branchId}/teams/${teamId}/roster/${playerId}`, { method: 'PATCH', body: payload, token }),
+
   // Organizaciones nuevas (medio, proveedor, tienda, clínica, marca)
   getOrganizationTypes: () => request('/organizations/types'),
   getCountries: () => request('/organizations/countries'),
@@ -395,4 +432,29 @@ export const api = {
   getFollowedMatches: (token) => request('/notifications/followed-matches', { token }),
   unfollowMatch: (matchId, token) =>
     request('/notifications/unfollow-match', { method: 'POST', body: { match_id: matchId }, token }),
+
+  // Cobranza / estado de cuenta (liga → equipos)
+  getBillingOverview: (leagueId, token) =>
+    request(`/billing/leagues/${leagueId}/overview`, { token }),
+  getBillingMatchCounts: (leagueId, { tournamentId, weekLabel } = {}, token) => {
+    const qs = new URLSearchParams();
+    if (tournamentId) qs.set('tournament_id', tournamentId);
+    if (weekLabel) qs.set('week_label', weekLabel);
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request(`/billing/leagues/${leagueId}/match-counts${suffix}`, { token });
+  },
+  getTeamLedger: (leagueId, teamId, token) =>
+    request(`/billing/leagues/${leagueId}/teams/${teamId}/entries`, { token }),
+  createCharges: (leagueId, payload, token) =>
+    request(`/billing/leagues/${leagueId}/charges`, { method: 'POST', body: payload, token }),
+  repeatCharges: (leagueId, payload, token) =>
+    request(`/billing/leagues/${leagueId}/charges/repeat`, { method: 'POST', body: payload, token }),
+  recordPayment: (leagueId, teamId, payload, token) =>
+    request(`/billing/leagues/${leagueId}/teams/${teamId}/payments`, { method: 'POST', body: payload, token }),
+  voidLedgerEntry: (entryId, reason, token) =>
+    request(`/billing/entries/${entryId}/void`, { method: 'POST', body: { reason }, token }),
+  updateBillingSettings: (leagueId, payload, token) =>
+    request(`/billing/leagues/${leagueId}/settings`, { method: 'PATCH', body: payload, token }),
+  getTeamStatement: (teamId, token) =>
+    request(`/billing/teams/${teamId}/statement`, { token }),
 };

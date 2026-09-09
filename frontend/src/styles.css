@@ -2022,6 +2022,14 @@ a.match-card-new {
   }
 }
 
+/* MatchPage: ficha de la sede, debajo de las de los equipos. Centrada y
+   con el mismo ancho que la tarjeta del partido para que no se estire a
+   todo lo ancho estando sola. */
+.match-venue {
+  max-width: 520px;
+  margin: 0 auto 40px;
+}
+
 /* TeamInfoPanel embebido (sin modal): ocupa todo el ancho disponible
    de su contenedor, sin límite de alto ni scroll propio. */
 .team-profile-modal--inline {

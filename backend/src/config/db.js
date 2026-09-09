@@ -659,6 +659,12 @@ export async function initSchema() {
     `);
     await run(`CREATE INDEX IF NOT EXISTS idx_players_user ON players(user_id)`);
 
+    // CURP / documento de identidad del jugador. Opcional (nullable): muchos
+    // jugadores se dan de alta sin él y se completa después. Se usa además
+    // como clave para no duplicar a un jugador al re-subir la plantilla de
+    // roster (si dos filas traen el mismo CURP, la segunda se omite).
+    await run(`ALTER TABLE players ADD COLUMN IF NOT EXISTS curp TEXT`);
+
     // Historial de qué jugador estuvo en qué equipo y cuándo. Separada de
     // "players" a propósito: un jugador puede pasar por varios equipos a lo
     // largo del tiempo sin perder registro de los anteriores (end_date se
@@ -1086,6 +1092,65 @@ export async function initSchema() {
           )
         )
     `);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Cobranza liga → equipos ("estado de cuenta"). Libro append-only por
+    // (liga, equipo): la liga registra cargos (renta de campo, arbitraje,
+    // transmisión, inscripción, multas…) y los pagos que recibe. El saldo NO
+    // se guarda: se calcula sumando movimientos (ver routes/billing.js).
+    //
+    // Reglas del libro:
+    //  - Un movimiento no se edita ni se borra nunca.
+    //  - Un cargo/pago mal hecho se "cancela": se marca status='void' (solo
+    //    para que deje de disparar recordatorios) y se inserta una fila
+    //    'adjustment' que revierte el monto (direction 'credit'/'debit').
+    //  - 'batch_id' agrupa los cargos creados en un mismo alta en bloque, para
+    //    poder repetirlos la jornada siguiente con un clic.
+    // ─────────────────────────────────────────────────────────────────────────
+    await run(`
+      CREATE TABLE IF NOT EXISTS team_ledger_entries (
+        id SERIAL PRIMARY KEY,
+        league_id  INTEGER NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
+        team_id    INTEGER NOT NULL REFERENCES teams(id)   ON DELETE CASCADE,
+        kind       TEXT NOT NULL CHECK (kind IN ('charge', 'payment', 'adjustment')),
+        category   TEXT,
+        concept    TEXT NOT NULL,
+        amount     NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+        currency   TEXT NOT NULL DEFAULT 'MXN',
+        due_date   DATE,
+        week_label TEXT,
+        status     TEXT NOT NULL DEFAULT 'open',
+        direction  TEXT CHECK (direction IN ('credit', 'debit')),
+        payment_method TEXT,
+        reference  TEXT,
+        proof_url  TEXT,
+        note       TEXT,
+        batch_id   TEXT,
+        reverses_entry_id  INTEGER REFERENCES team_ledger_entries(id) ON DELETE SET NULL,
+        created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_by_side    TEXT NOT NULL DEFAULT 'league' CHECK (created_by_side IN ('league', 'team')),
+        voided_by_user_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        voided_at  TIMESTAMP,
+        reminded_due_soon        BOOLEAN NOT NULL DEFAULT FALSE,
+        overdue_reminder_count   INTEGER NOT NULL DEFAULT 0,
+        last_overdue_reminder_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_ledger_team   ON team_ledger_entries(team_id, created_at)`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_ledger_league ON team_ledger_entries(league_id, status)`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_ledger_batch  ON team_ledger_entries(batch_id)`);
+    await run(`
+      CREATE INDEX IF NOT EXISTS idx_ledger_due
+      ON team_ledger_entries(due_date)
+      WHERE kind = 'charge' AND status = 'open'
+    `);
+
+    // Interruptor por liga para los recordatorios automáticos de cobranza
+    // (cargo por vencer / vencido). Nace apagado: la liga lo prende cuando ya
+    // cargó a sus equipos y quiere que la plataforma les recuerde sola.
+    await run(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS billing_reminders_enabled BOOLEAN NOT NULL DEFAULT FALSE`);
   } finally {
     // Se suelta el candado y se libera la conexión pase lo que pase
     await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY]).catch(() => {});

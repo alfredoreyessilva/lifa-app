@@ -16,6 +16,10 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 
 > Nota: versiones antiguas de este README mencionaban SQLite — eso ya no aplica, el proyecto usa Postgres desde hace tiempo.
 
+## Cambios recientes importantes (septiembre 2026)
+
+- **Cobranza liga → equipos ("estado de cuenta") — V1**: la liga registra desde `/panel/liga/:id/cobranza` lo que cobra cada semana a sus equipos (renta de campo, arbitraje, transmisión, inscripción, multas), lleva un **libro append-only** por equipo y ve el panorama de adeudos. El monto es **por equipo** (tabla con casilla por equipo + botón que lo calcula como cuota × # de partidos de ese equipo en la jornada). El representante del equipo ve su estado de cuenta **de solo lectura** en `/panel/equipo/:id/estado-de-cuenta` y recibe recordatorios (cargo nuevo / por vencer / vencido / pago registrado) en su bandeja. En esta V1 **solo la liga escribe** — no hay flujo de "el equipo reporta un pago". Detalle completo en la sección "Cobranza" más abajo.
+
 ## Cambios recientes importantes (agosto 2026)
 
 - **Monetización de afiliados de viaje activada**: la plataforma ya genera comisión real sobre los botones de Hotel y Vuelo en `MatchPage`. Ver la sección "Monetización" más abajo para el detalle completo de cómo funciona y qué falta.
@@ -164,6 +168,92 @@ Todo corre a través de una sola cuenta de **Travelpayouts** (red de afiliados d
 
 - Aprobación de Booking.com dentro de Travelpayouts (ver "En progreso").
 - Configurar método de pago (payout) en la sección Finance de Travelpayouts — PayPal (mínimo $50 USD) es la opción más simple para persona física en México. Configurarlo no depende de haber llegado al mínimo; hacerlo antes evita perder un ciclo de pago completo.
+
+## Cobranza (estado de cuenta liga → equipos)
+
+Primer sistema de la plataforma que mueve dinero. La liga cobra cada semana a sus
+equipos (campo, arbitraje, transmisión, inscripción, multas) y aquí lleva ese
+registro en vez de un Excel + WhatsApp.
+
+### Modelo — libro append-only
+
+Todo vive en una tabla, `team_ledger_entries` (`config/db.js`), una fila por
+movimiento. **Un movimiento nunca se edita ni se borra.** El saldo de un equipo
+**no se guarda** — se calcula sumando sus movimientos (`computeBalance` en
+`routes/billing.js`). Saldo negativo = el equipo le debe a la liga.
+
+- `kind = 'charge'` — un cargo. `status`: `open` → `settled` (cuando el equipo ya
+  no debe nada) o `void` (cancelado).
+- `kind = 'payment'` — un pago que la liga registra que recibió. En la V1 nace
+  `confirmed` (no hay flujo de "pendiente de aprobar").
+- `kind = 'adjustment'` — corrección. Al **cancelar** un cargo o pago se marca el
+  original `status = 'void'` (solo para que deje de mandar recordatorios) y se
+  inserta un `adjustment` con `direction` `credit`/`debit` y `reverses_entry_id`
+  apuntando al original. Así el libro conserva las tres filas y el saldo cuadra.
+- `batch_id` agrupa los cargos creados en un mismo alta — es lo que permite el
+  botón "repetir jornada anterior". Los cargos de un lote comparten
+  categoría/concepto/vencimiento pero **cada equipo puede tener su propio monto**
+  (un equipo con 3 categorías juega más partidos y paga más que uno con 1).
+
+### El monto es por equipo
+
+El alta de cargos (`ChargeForm`) tiene una **tabla con un renglón por equipo y su
+casilla de monto**. Un "monto base" rellena la columna de un jalón; luego se ajusta
+lo que haga falta. El botón **"Calcular por # de partidos"** llena la columna
+automáticamente: eliges torneo y/o jornada y una cuota por partido, y el sistema
+pone `cuota × (partidos de ese equipo en el filtro)` — usa
+`GET /leagues/:leagueId/match-counts`, que cuenta por `team_id` o por nombre contra
+`matches` (no-borrador) de las categorías filtradas. Equipos sin partidos quedan en
+$0 y se omiten. El cuerpo del POST es `{ items: [{team_id, amount}], category,
+concept, due_date, week_label?, note? }`. "Repetir" reusa el monto de cada equipo
+del lote original.
+
+### Endpoints — `routes/billing.js` (`/api/billing`)
+
+| Método | Ruta | Quién |
+|-|-|-|
+| `GET` | `/leagues/:leagueId/overview` | liga — tabla de equipos con saldo, vencido, próximo vencimiento, lotes recientes, torneos y jornadas |
+| `GET` | `/leagues/:leagueId/match-counts` | liga — partidos por equipo (filtros `tournament_id`, `week_label`) para la calculadora de montos |
+| `GET` | `/leagues/:leagueId/teams/:teamId/entries` | liga — libro de un equipo |
+| `POST` | `/leagues/:leagueId/charges` | liga — crea 1..N cargos con monto por equipo (`items`), un `batch_id`, notifica a cada equipo |
+| `POST` | `/leagues/:leagueId/charges/repeat` | liga — repite un `batch_id` con nueva fecha, respetando el monto de cada equipo |
+| `POST` | `/leagues/:leagueId/teams/:teamId/payments` | liga — registra un pago recibido |
+| `POST` | `/entries/:id/void` | liga — cancela un cargo/pago (2 escrituras) |
+| `PATCH` | `/leagues/:leagueId/settings` | liga — prende/apaga los recordatorios automáticos |
+| `GET` | `/teams/:id/statement` | equipo (o la liga) — estado de cuenta de solo lectura |
+
+Permisos: los endpoints de liga usan `leagueOwnerRequired`; el estado de cuenta usa
+`teamOwnerRequired` (deja pasar al rep del equipo **y** a la liga). Un equipo nunca
+puede ver la cuenta de otro. Nada de cobranza aparece en el sitio público.
+
+### Recordatorios
+
+`utils/billingReminders.js` (`runBillingReminders`) se ejecuta al final de
+`POST /api/notifications/trigger` — el mismo cron externo que ya manda los avisos de
+partidos, sin configuración nueva. Solo corre para ligas con
+`billing_reminders_enabled = TRUE`. Cadencia fija: "por vencer" una vez cuando
+faltan ≤3 días; "vencido" cada 3 días, hasta 4 veces. Todo va a la bandeja in-app
+del equipo (tabla `notifications`, tipos `billing_charge_new` / `billing_due_soon` /
+`billing_overdue` / `billing_payment_recorded`), sin push ni correo.
+
+### Frontend
+
+- `pages/BillingLeaguePanel.jsx` — `/panel/liga/:id/cobranza` (link "💵 Cobranza"
+  en el encabezado de los dos paneles de liga: el clásico `/panel/liga/:id` y el de
+  estructura `/panel/liga/:id/estructura`, que es al que llega el logo bar).
+  Registrar cobro (`ChargeForm`, con tabla de monto por equipo + calculadora por
+  partidos), repetir jornada (`RepeatChargeModal`), registrar pago (`PaymentForm`),
+  ver movimientos, cancelar.
+- `pages/TeamStatementPanel.jsx` — `/panel/equipo/:id/estado-de-cuenta`, solo
+  lectura. El saldo también se asoma en el encabezado del panel del equipo.
+- `Dashboard.jsx` — "Mi cartelera" y "% de aciertos" solo se muestran en "Mi panel"
+  (`/panel`), no al entrar a una liga o equipo.
+
+### Fuera de la V1
+
+El equipo reportando pagos con comprobante para que la liga confirme/rechace; cobro
+en línea (pasarela); facturación/CFDI; pago de la liga a árbitros; desglose por
+jugador; suspender a un equipo por adeudo.
 
 ## Seguridad — decisiones ya tomadas
 

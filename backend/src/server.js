@@ -20,6 +20,7 @@ import organizationRoutes  from './routes/organizations.js';
 import broadcastRoutes     from './routes/broadcasts.js';
 import productRoutes       from './routes/products.js';
 import botRoutes           from './routes/bot.js';
+import billingRoutes       from './routes/billing.js';
 
 // Orígenes permitidos para llamar a la API desde el navegador. Se definen en
 // la variable de entorno ALLOWED_ORIGINS (separados por coma), por ejemplo:
@@ -83,6 +84,7 @@ app.use('/api/organizations', organizationRoutes);
 app.use('/api/broadcasts',    broadcastRoutes);
 app.use('/api/products',      productRoutes);
 app.use('/api/bot',           botRoutes);
+app.use('/api/billing',       billingRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);

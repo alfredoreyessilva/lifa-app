@@ -1,4 +1,7 @@
 import express from 'express';
+import multer from 'multer';
+import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
 import { teamOwnerRequired, matchOwnerRequired, branchTeamOwnerRequired } from '../middleware/ownership.js';
@@ -7,6 +10,82 @@ import { isNonEmptyString } from '../utils/validation.js';
 import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL } from '../utils/scoring.js';
 
 const router = express.Router();
+
+// Mismo patrón que routes/manage.js y routes/upload.js: cada archivo define su
+// propio multer en memoria (no hay una config compartida en el proyecto).
+const xlsxUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = /\.(xlsx|xls)$/.test(file.originalname.toLowerCase());
+    if (ok) cb(null, true);
+    else cb(new Error('Solo se permiten archivos .xlsx o .xls'));
+  },
+});
+
+// Columnas de la plantilla de roster, en orden. `keys` son los alias que se
+// aceptan al leer el Excel de vuelta (sin distinguir mayúsculas/acentos vía
+// normalización más abajo).
+const ROSTER_COLUMNS = [
+  { header: 'Nombre',                         width: 20, keys: ['nombre', 'first name', 'first_name'] },
+  { header: 'Apellido',                       width: 20, keys: ['apellido', 'apellidos', 'last name', 'last_name'] },
+  { header: 'Fecha de nacimiento (DD/MM/AAAA)', width: 26, keys: ['fecha de nacimiento', 'fecha de nacimiento (dd/mm/aaaa)', 'fecha nacimiento', 'nacimiento', 'birth date', 'birth_date'] },
+  { header: 'Posición',                       width: 14, keys: ['posicion', 'posición', 'position', 'pos'] },
+  { header: 'Número',                         width: 10, keys: ['numero', 'número', 'num', 'jersey', 'dorsal', 'jersey_number'] },
+  { header: 'CURP',                           width: 22, keys: ['curp', 'identificacion', 'identificación', 'id'] },
+  { header: 'Foto (URL)',                     width: 40, keys: ['foto (url)', 'foto', 'foto url', 'photo', 'photo_url', 'url foto'] },
+];
+
+// "áéíóú" -> "aeiou", minúsculas, sin espacios de sobra. Para comparar
+// encabezados/valores del Excel de forma tolerante.
+function norm(s) {
+  return String(s ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '');
+}
+
+// Parsea la fecha de nacimiento de una celda: puede venir como Date (si Excel
+// la guardó como fecha) o como texto DD/MM/AAAA o AAAA-MM-DD. Devuelve
+// 'YYYY-MM-DD' o null si no se pudo.
+function parseBirthDate(value) {
+  if (value instanceof Date && !isNaN(value)) {
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    const d = String(value.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  let m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/.exec(raw);
+  if (m) {
+    const [, d, mo, y] = m;
+    return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  m = /^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/.exec(raw);
+  if (m) {
+    const [, y, mo, d] = m;
+    return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  return null;
+}
+
+// Baja una imagen (logo) por URL y devuelve { buffer, extension } para
+// ExcelJS, o null si falla o no hay URL. Nunca lanza.
+async function fetchImageForXlsx(url) {
+  if (!url || typeof url !== 'string') return null;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const type = res.headers.get('content-type') || '';
+    const extension = /png/i.test(type) ? 'png' : /jpe?g/i.test(type) || /jpg/i.test(url) ? 'jpeg' : 'png';
+    const buffer = Buffer.from(await res.arrayBuffer());
+    return { buffer, extension };
+  } catch {
+    return null;
+  }
+}
 
 // OBSOLETO (corrección roster-por-rama): este endpoint da el roster de TODO
 // el equipo mezclado, sin separar por rama/categoría — eso es justo lo que
@@ -54,8 +133,9 @@ router.post('/teams/:id/roster', authRequired, teamOwnerRequired, asyncHandler(a
 // valida que el equipo esté inscrito en la rama antes de llegar aquí.
 router.get('/branches/:branchId/teams/:teamId/roster', authRequired, branchTeamOwnerRequired, asyncHandler(async (req, res) => {
   const roster = await db.prepare(`
-    SELECT p.id, p.first_name, p.last_name, p.birth_date, p.photo_url,
-           ptm.id AS membership_id, ptm.jersey_number, ptm.position, ptm.season, ptm.start_date
+    SELECT p.id, p.first_name, p.last_name, p.birth_date, p.photo_url, p.curp,
+           ptm.id AS membership_id, ptm.jersey_number,
+           COALESCE(ptm.position, p.position) AS position, ptm.season, ptm.start_date
     FROM player_team_memberships ptm
     JOIN players p ON p.id = ptm.player_id
     WHERE ptm.team_id = ? AND ptm.branch_id = ? AND ptm.end_date IS NULL
@@ -69,23 +149,26 @@ router.get('/branches/:branchId/teams/:teamId/roster', authRequired, branchTeamO
 // (la URL), tal como se decidió: "se sobreentiende que se subió en esa
 // rama de esa categoría".
 router.post('/branches/:branchId/teams/:teamId/roster', authRequired, branchTeamOwnerRequired, asyncHandler(async (req, res) => {
-  const { first_name, last_name, birth_date, position, jersey_number, photo_url, season } = req.body;
+  const { first_name, last_name, birth_date, position, jersey_number, photo_url, curp, season } = req.body;
 
   if (!isNonEmptyString(first_name) || !isNonEmptyString(last_name)) {
     return res.status(400).json({ error: 'Nombre y apellido son obligatorios' });
   }
 
   const player = await db.prepare(`
-    INSERT INTO players (first_name, last_name, birth_date, position, jersey_number, photo_url)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO players (first_name, last_name, birth_date, position, jersey_number, photo_url, curp)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     RETURNING *
-  `).get(first_name.trim(), last_name.trim(), birth_date || null, position || null, jersey_number || null, photo_url || null);
+  `).get(first_name.trim(), last_name.trim(), birth_date || null, position || null, jersey_number || null, photo_url || null, curp ? String(curp).trim().toUpperCase() : null);
 
+  // tournament_id se toma del contexto (rama -> categoría -> torneo): el
+  // roster "vive dentro de un torneo", así que se guarda explícito además
+  // del branch_id.
   const membership = await db.prepare(`
-    INSERT INTO player_team_memberships (player_id, team_id, branch_id, season, jersey_number, position)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO player_team_memberships (player_id, team_id, branch_id, tournament_id, season, jersey_number, position)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     RETURNING *
-  `).get(player.id, req.team.id, req.branch.id, season || null, jersey_number || null, position || null);
+  `).get(player.id, req.team.id, req.branch.id, req.category.tournament_id || null, season || null, jersey_number || null, position || null);
 
   res.status(201).json({ player, membership });
 }));
@@ -108,12 +191,276 @@ router.post('/branches/:branchId/teams/:teamId/roster/:playerId/move', authRequi
   `).run(playerId);
 
   const membership = await db.prepare(`
-    INSERT INTO player_team_memberships (player_id, team_id, branch_id, season, jersey_number, position)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO player_team_memberships (player_id, team_id, branch_id, tournament_id, season, jersey_number, position)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     RETURNING *
-  `).get(playerId, req.team.id, req.branch.id, season || null, jersey_number || null, position || null);
+  `).get(playerId, req.team.id, req.branch.id, req.category.tournament_id || null, season || null, jersey_number || null, position || null);
 
   res.status(201).json({ player, membership });
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ROSTER POR PLANTILLA DE EXCEL
+//
+// Flujo real de la liga: se le manda al equipo un Excel con el membrete de la
+// liga (logo de liga, logo de equipo, y de qué torneo/categoría/rama es el
+// roster); el equipo lo regresa lleno y la liga (o el dirigente del equipo, si
+// ya lo administra) lo vuelve a subir aquí mismo. El alta uno-por-uno de arriba
+// sigue existiendo para los equipos que prefieren capturarlos a mano.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Descarga la plantilla .xlsx ya personalizada para este equipo en esta rama.
+router.get('/branches/:branchId/teams/:teamId/roster/template', authRequired, branchTeamOwnerRequired, asyncHandler(async (req, res) => {
+  const tournament = req.category.tournament_id
+    ? await db.prepare('SELECT name, logo_url FROM tournaments WHERE id = ?').get(req.category.tournament_id)
+    : null;
+
+  const [leagueImg, teamImg] = await Promise.all([
+    fetchImageForXlsx(req.league.logo_url),
+    fetchImageForXlsx(req.team.logo_url),
+  ]);
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'LIFA App';
+  const ws = wb.addWorksheet('Roster');
+
+  // Membrete: logos en la esquina + datos de contexto. La tabla llenable
+  // arranca en la fila HEADER_ROW.
+  const HEADER_ROW = 9;
+
+  ROSTER_COLUMNS.forEach((col, i) => { ws.getColumn(i + 1).width = col.width; });
+
+  if (leagueImg) {
+    const id = wb.addImage(leagueImg);
+    ws.addImage(id, { tl: { col: 0.1, row: 0.1 }, ext: { width: 90, height: 90 } });
+  }
+  if (teamImg) {
+    const id = wb.addImage(teamImg);
+    ws.addImage(id, { tl: { col: 1.1, row: 0.1 }, ext: { width: 90, height: 90 } });
+  }
+
+  const infoRows = [
+    ['Liga', req.league.name],
+    ['Torneo', tournament?.name || '—'],
+    ['Categoría', req.category.name],
+    ['Rama', req.branch.name],
+    ['Equipo', req.team.name],
+  ];
+  infoRows.forEach(([label, value], i) => {
+    const r = ws.getRow(i + 2);
+    const labelCell = r.getCell(3);
+    const valueCell = r.getCell(4);
+    labelCell.value = label;
+    labelCell.font = { bold: true, color: { argb: 'FF666666' } };
+    valueCell.value = value;
+    valueCell.font = { bold: true };
+  });
+
+  ws.getRow(HEADER_ROW - 1).getCell(1).value = 'Llena una fila por jugador. Nombre y Apellido son obligatorios.';
+  ws.getRow(HEADER_ROW - 1).getCell(1).font = { italic: true, color: { argb: 'FF888888' } };
+
+  const headerRow = ws.getRow(HEADER_ROW);
+  ROSTER_COLUMNS.forEach((col, i) => {
+    const cell = headerRow.getCell(i + 1);
+    cell.value = col.header;
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3A8D3F' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+  });
+
+  const exampleRow = ws.getRow(HEADER_ROW + 1);
+  ['Juan', 'Pérez', '15/03/2001', 'QB', 12, '', ''].forEach((v, i) => {
+    const cell = exampleRow.getCell(i + 1);
+    cell.value = v;
+    cell.font = { color: { argb: 'FFAAAAAA' }, italic: true };
+  });
+
+  // Solo ASCII en el nombre de archivo, para no romper el header Content-Disposition.
+  const safe = (s) => String(s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'roster';
+  const filename = `roster_${safe(req.team.name)}_${safe(req.branch.name)}.xlsx`;
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  await wb.xlsx.write(res);
+  res.end();
+}));
+
+// Sube la plantilla llena. Solo agrega los jugadores que NO estén ya en el
+// roster activo de esta rama (compara por CURP si viene, si no por
+// nombre+apellido). Nunca borra a nadie.
+router.post('/branches/:branchId/teams/:teamId/roster/import', authRequired, branchTeamOwnerRequired, xlsxUpload.single('file'), asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No se recibió ningún archivo' });
+
+  const workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  // Fila real de Excel (1-based) para un índice del grid: sheet_to_json empieza
+  // a contar desde la primera fila con contenido, no siempre desde la 1.
+  const sheetStartRow = sheet['!ref'] ? XLSX.utils.decode_range(sheet['!ref']).s.r : 0;
+  const excelRow = (i) => sheetStartRow + i + 1;
+
+  // Localiza la fila de encabezados (la que trae "nombre" y "apellido"), para
+  // saltarnos el membrete de arriba.
+  const headerIdx = grid.findIndex((row) =>
+    Array.isArray(row) &&
+    row.some((c) => norm(c) === 'nombre') &&
+    row.some((c) => norm(c) === 'apellido')
+  );
+  if (headerIdx === -1) {
+    return res.status(400).json({ error: 'No se encontró la fila de encabezados (Nombre, Apellido, …). ¿Es la plantilla de roster?' });
+  }
+
+  const headerCells = grid[headerIdx].map(norm);
+  // Índice de cada columna conocida dentro del Excel (según sus alias).
+  const colIndex = {};
+  ROSTER_COLUMNS.forEach((col) => {
+    const idx = headerCells.findIndex((h) => col.keys.some((k) => norm(k) === h));
+    colIndex[col.header] = idx;
+  });
+
+  const cell = (row, header) => {
+    const idx = colIndex[header];
+    if (idx === undefined || idx < 0) return '';
+    return row[idx] ?? '';
+  };
+
+  // Roster activo actual, para deduplicar.
+  const current = await db.prepare(`
+    SELECT p.first_name, p.last_name, p.curp
+    FROM player_team_memberships ptm
+    JOIN players p ON p.id = ptm.player_id
+    WHERE ptm.team_id = ? AND ptm.branch_id = ? AND ptm.end_date IS NULL
+  `).all(req.team.id, req.branch.id);
+
+  const nameKey = (f, l) => `${norm(f)}|${norm(l)}`;
+  const existingCurps = new Set(current.filter((p) => p.curp).map((p) => norm(p.curp)));
+  const existingNames = new Set(current.map((p) => nameKey(p.first_name, p.last_name)));
+
+  const imported = [];
+  const skipped = [];
+  const warnings = [];
+  const seenNumbers = new Set();
+
+  for (let i = headerIdx + 1; i < grid.length; i++) {
+    const row = grid[i];
+    const rowN = excelRow(i);
+    if (!Array.isArray(row) || row.every((c) => String(c ?? '').trim() === '')) continue;
+
+    const firstName = String(cell(row, 'Nombre')).trim();
+    const lastName = String(cell(row, 'Apellido')).trim();
+
+    // Ignora la fila de ejemplo de la plantilla si quedó sin editar (coincide
+    // exacta con el ejemplo que genera la plantilla).
+    if (norm(firstName) === 'juan' && norm(lastName) === 'perez'
+      && norm(cell(row, 'Posición')) === 'qb'
+      && String(cell(row, 'Número')).trim() === '12') {
+      continue;
+    }
+
+    if (!firstName || !lastName) {
+      skipped.push({ row: rowN, reason: 'Faltan nombre o apellido' });
+      continue;
+    }
+
+    const curpRaw = String(cell(row, 'CURP')).trim().toUpperCase();
+    const curp = curpRaw || null;
+
+    if (curp && existingCurps.has(norm(curp))) {
+      warnings.push({ row: rowN, reason: `"${firstName} ${lastName}" (CURP ${curp}) ya está en el roster de esta rama — se omitió` });
+      continue;
+    }
+    if (!curp && existingNames.has(nameKey(firstName, lastName))) {
+      warnings.push({ row: rowN, reason: `"${firstName} ${lastName}" ya está en el roster de esta rama — se omitió` });
+      continue;
+    }
+
+    const birthDate = parseBirthDate(cell(row, 'Fecha de nacimiento (DD/MM/AAAA)'));
+    if (!birthDate && String(cell(row, 'Fecha de nacimiento (DD/MM/AAAA)')).trim()) {
+      warnings.push({ row: rowN, reason: `La fecha de nacimiento de "${firstName} ${lastName}" no se entendió (usa DD/MM/AAAA) — se importó sin fecha` });
+    }
+
+    const position = String(cell(row, 'Posición')).trim() || null;
+    const numRaw = String(cell(row, 'Número')).trim();
+    const jerseyNumber = numRaw && Number.isFinite(Number(numRaw)) ? Math.trunc(Number(numRaw)) : null;
+    const photoUrl = String(cell(row, 'Foto (URL)')).trim() || null;
+
+    if (jerseyNumber != null) {
+      if (seenNumbers.has(jerseyNumber)) {
+        warnings.push({ row: rowN, reason: `El número ${jerseyNumber} está repetido en la plantilla` });
+      }
+      seenNumbers.add(jerseyNumber);
+    }
+
+    const player = await db.prepare(`
+      INSERT INTO players (first_name, last_name, birth_date, position, jersey_number, photo_url, curp)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      RETURNING id
+    `).get(firstName, lastName, birthDate, position, jerseyNumber, photoUrl, curp);
+
+    await db.prepare(`
+      INSERT INTO player_team_memberships (player_id, team_id, branch_id, tournament_id, jersey_number, position)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(player.id, req.team.id, req.branch.id, req.category.tournament_id || null, jerseyNumber, position);
+
+    imported.push(player.id);
+    if (curp) existingCurps.add(norm(curp));
+    existingNames.add(nameKey(firstName, lastName));
+  }
+
+  res.status(201).json({
+    imported: imported.length,
+    skipped: skipped.length,
+    skippedRows: skipped,
+    warnings: warnings.length,
+    warningRows: warnings,
+  });
+}));
+
+// Edita datos sueltos de un jugador del roster (foto, CURP, fecha de
+// nacimiento, posición, número). Requiere que el jugador tenga membresía
+// activa en este equipo + rama.
+router.patch('/branches/:branchId/teams/:teamId/roster/:playerId', authRequired, branchTeamOwnerRequired, asyncHandler(async (req, res) => {
+  const playerId = Number(req.params.playerId);
+  const membership = await db.prepare(`
+    SELECT * FROM player_team_memberships
+    WHERE player_id = ? AND team_id = ? AND branch_id = ? AND end_date IS NULL
+  `).get(playerId, req.team.id, req.branch.id);
+  if (!membership) return res.status(404).json({ error: 'Ese jugador no está en el roster de esta rama' });
+
+  const { photo_url, curp, birth_date, position, jersey_number } = req.body;
+
+  await db.prepare(`
+    UPDATE players SET
+      photo_url  = COALESCE(?, photo_url),
+      curp       = COALESCE(?, curp),
+      birth_date = COALESCE(?, birth_date),
+      position   = COALESCE(?, position)
+    WHERE id = ?
+  `).run(
+    photo_url === undefined ? null : (photo_url || null),
+    curp === undefined ? null : (curp ? String(curp).trim().toUpperCase() : null),
+    birth_date === undefined ? null : (birth_date || null),
+    position === undefined ? null : (position || null),
+    playerId,
+  );
+
+  if (jersey_number !== undefined || position !== undefined) {
+    await db.prepare(`
+      UPDATE player_team_memberships SET
+        jersey_number = COALESCE(?, jersey_number),
+        position      = COALESCE(?, position)
+      WHERE id = ?
+    `).run(
+      jersey_number === undefined || jersey_number === '' ? null : Number(jersey_number),
+      position === undefined ? null : (position || null),
+      membership.id,
+    );
+  }
+
+  const player = await db.prepare('SELECT * FROM players WHERE id = ?').get(playerId);
+  res.json({ player });
 }));
 
 // OBSOLETO (corrección roster-por-rama): reemplazado por

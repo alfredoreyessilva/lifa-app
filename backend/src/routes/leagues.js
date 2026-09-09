@@ -100,6 +100,9 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
       v.institution AS venue_institution,
       v.address     AS venue_address,
       v.city        AS venue_city,
+      v.cover_url     AS venue_cover_url,
+      v.contact_phone AS venue_contact_phone,
+      v.contact_email AS venue_contact_email,
       g.name        AS group_name,
       g2.name       AS group_name_2,
       c.tournament_id AS tournament_id,
@@ -228,7 +231,7 @@ router.get('/:slug/venues', asyncHandler(async (req, res) => {
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
 
   const venues = await db.prepare(`
-    SELECT id, name, institution, cover_url, address, contact_phone, contact_email
+    SELECT id, name, institution, cover_url, address, city, contact_phone, contact_email
     FROM venues WHERE league_id = ?
     ORDER BY sort_order ASC, name ASC
   `).all(league.id);

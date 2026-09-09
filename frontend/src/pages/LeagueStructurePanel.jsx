@@ -115,6 +115,7 @@ export default function LeagueStructurePanel() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Link to={`/ligas/${league?.slug || ''}`} className="btn btn-outline btn-sm">Ver mi página</Link>
+          <Link to={`/panel/liga/${id}/cobranza`} className="btn btn-outline btn-sm">💵 Cobranza</Link>
           <button className="btn btn-outline btn-sm" onClick={() => setModal({ type: 'edit-league' })}>Editar liga</button>
           <button className="btn btn-flag btn-sm" onClick={() => setModal({ type: 'add-tournament' })}>+ Torneo</button>
         </div>
