@@ -1,6 +1,9 @@
+import './instrument.js';
+
 import dotenv from 'dotenv';
 dotenv.config();
 
+import * as Sentry from '@sentry/node';
 import express from 'express';
 import cors from 'cors';
 import { initSchema } from './config/db.js';
@@ -85,6 +88,11 @@ app.use('/api/broadcasts',    broadcastRoutes);
 app.use('/api/products',      productRoutes);
 app.use('/api/bot',           botRoutes);
 app.use('/api/billing',       billingRoutes);
+
+// Debe ir después de todas las rutas y antes de nuestro manejador de
+// errores propio: reporta el error a Sentry y lo deja pasar (next(err))
+// para que la respuesta al cliente siga siendo la misma de siempre.
+Sentry.setupExpressErrorHandler(app);
 
 app.use((err, req, res, next) => {
   console.error(err);

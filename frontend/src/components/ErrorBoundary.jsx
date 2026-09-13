@@ -1,4 +1,5 @@
 import { Component } from 'react';
+import * as Sentry from '@sentry/react';
 
 // Por defecto, si cualquier componente lanza un error no controlado durante
 // el render, React desmonta TODO el árbol desde la raíz hacia abajo — en
@@ -21,9 +22,8 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    // Punto único donde engancharíamos un reporte a un servicio de logging
-    // (Sentry, etc.) más adelante.
     console.error('[ErrorBoundary] error atrapado:', error, info);
+    Sentry.captureException(error, { extra: { componentStack: info?.componentStack } });
   }
 
   handleReload = () => {

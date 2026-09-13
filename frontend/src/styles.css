@@ -848,6 +848,57 @@ a { color: inherit; }
   height: auto;
   border-radius: 8px;
 }
+.footer-links {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  text-transform: none;
+  letter-spacing: normal;
+  font-family: inherit;
+}
+.footer-links a {
+  color: var(--ink-dim);
+  text-decoration: none;
+}
+.footer-links a:hover {
+  color: var(--flag);
+}
+
+/* ---------- Legal pages (Términos / Privacidad) ---------- */
+.legal-page {
+  max-width: 760px;
+  padding-top: 24px;
+  padding-bottom: 48px;
+}
+.legal-page h3 {
+  color: var(--paper);
+  font-size: 16px;
+  margin-top: 28px;
+  margin-bottom: 8px;
+}
+.legal-page p,
+.legal-page li {
+  color: var(--ink-dim);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.legal-page ul {
+  margin: 8px 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.legal-page a {
+  color: var(--flag);
+}
+.legal-updated {
+  font-size: 12px;
+  color: var(--ink-dim);
+  opacity: 0.8;
+  margin-top: 4px;
+}
 
 /* ---------- Breadcrumb ---------- */
 .crumb {

@@ -25,6 +25,8 @@ import Notifications from './pages/Notifications.jsx';
 import AdminPanel from './pages/AdminPanel.jsx';
 import InviteClaim from './pages/InviteClaim.jsx';
 import PoolJoinPage from './pages/PoolJoinPage.jsx';
+import TermsOfService from './pages/TermsOfService.jsx';
+import PrivacyPolicy from './pages/PrivacyPolicy.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AdminRoute from './components/AdminRoute.jsx';
 
@@ -69,6 +71,8 @@ export default function App() {
             <Route path="/crear-cuenta" element={<Register />} />
             <Route path="/invitaciones/:token" element={<InviteClaim />} />
             <Route path="/quiniela/:code" element={<PoolJoinPage />} />
+            <Route path="/terminos" element={<TermsOfService />} />
+            <Route path="/privacidad" element={<PrivacyPolicy />} />
             <Route
               path="/registrar-liga"
               element={<ProtectedRoute><RegisterLeague /></ProtectedRoute>}
@@ -129,6 +133,11 @@ export default function App() {
             src="/cfbamx.jpg"
             alt="CFBAMX — Calendarios de Football Americano México"
           />
+          <div className="footer-links">
+            <Link to="/terminos">Términos de Servicio</Link>
+            <span aria-hidden="true">·</span>
+            <Link to="/privacidad">Aviso de Privacidad</Link>
+          </div>
         </div>
       </footer>
     </>

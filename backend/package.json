@@ -12,6 +12,7 @@
     "node": ">=22.5.0"
   },
   "dependencies": {
+    "@sentry/node": "^10.74.0",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.5.1",
     "cors": "^2.8.5",
