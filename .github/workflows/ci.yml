@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  frontend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  backend-syntax-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      # Todavía no hay tests automatizados (ver roadmap, Fase 3) — mientras
+      # tanto, esto al menos revisa que cada archivo del backend tenga
+      # sintaxis válida antes de llegar a Render, sin necesitar base de
+      # datos ni variables de entorno reales.
+      - name: Verificar sintaxis de src/
+        run: find src -name "*.js" -print0 | xargs -0 -n1 node --check
