@@ -668,6 +668,10 @@ const ORG_TYPE_LABELS = {
   store: 'Tienda / proveedor',
   clinic: 'Clínica',
   brand: 'Marca',
+  // Solo entran aquí los equipos INDEPENDIENTES (sin liga) — ver
+  // GET /admin/organizations. Un equipo de liga se administra desde el
+  // panel de su propia liga, no desde esta pestaña.
+  team: 'Equipo independiente',
 };
 
 function OrganizationsTab({ token }) {

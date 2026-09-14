@@ -86,7 +86,7 @@ export default function Home() {
       {teams && teams.length === 0 && (
         <div className="empty-state">
           <h3>Todavía no hay equipos registrados</h3>
-          <p>En cuanto una liga publicada tenga equipos en su roster, van a aparecer aquí.</p>
+          <p>En cuanto una liga publicada tenga equipos en su roster, o un equipo independiente decida mostrarse, van a aparecer aquí.</p>
         </div>
       )}
 

@@ -20,6 +20,7 @@ import TeamStatementPanel from './pages/TeamStatementPanel.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import RegisterLeague from './pages/RegisterLeague.jsx';
+import RegisterTeamPage from './pages/RegisterTeamPage.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Notifications from './pages/Notifications.jsx';
 import AdminPanel from './pages/AdminPanel.jsx';
@@ -80,6 +81,10 @@ export default function App() {
             <Route
               path="/registrar-organizacion"
               element={<ProtectedRoute><RegisterOrganizationPage /></ProtectedRoute>}
+            />
+            <Route
+              path="/registrar-equipo"
+              element={<ProtectedRoute><RegisterTeamPage /></ProtectedRoute>}
             />
             <Route
               path="/panel"

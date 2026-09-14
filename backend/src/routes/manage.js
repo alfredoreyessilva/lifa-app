@@ -1377,6 +1377,44 @@ function validateTeamFields({ contact_email, facebook_url, instagram_url, twitte
   return null;
 }
 
+// slugify simple, mismo patrón que routes/leagues.js y routes/organizations.js.
+function slugify(str) {
+  return str
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+// Crea la fila de "organizations" (identidad/verificación, ver
+// organizations.is_verified) que le corresponde a un equipo — mismo shape
+// que el backfill de db.js, pero al crear el equipo, no hasta el próximo
+// arranque del servidor. El slug no se usa para navegación pública todavía,
+// solo cumple la restricción UNIQUE de organizations.slug.
+async function createTeamOrganization(name, { country_id, logo_url, description, website_url } = {}) {
+  let slug = slugify(name);
+  const existing = await db.prepare('SELECT id FROM organizations WHERE slug = ?').get(slug);
+  if (existing) slug = `${slug}-${Date.now().toString().slice(-5)}`;
+
+  return db.prepare(`
+    INSERT INTO organizations (name, slug, type, country_id, logo_url, description, website_url, status)
+    VALUES (?, ?, 'team', ?, ?, ?, ?, 'active')
+    RETURNING *
+  `).get(name, slug, country_id || null, logo_url || null, description || null, website_url || null);
+}
+
+// Mismo equipo, con country_id/description/is_verified pegados desde su
+// organización — esos tres campos viven en "organizations" (la capa de
+// identidad común), no se duplican en "teams".
+async function getTeamWithOrgFields(id) {
+  return db.prepare(`
+    SELECT t.*, o.country_id AS country_id, o.description AS description, o.is_verified AS is_verified
+    FROM teams t
+    LEFT JOIN organizations o ON o.id = t.organization_id
+    WHERE t.id = ?
+  `).get(id);
+}
+
 // Busca equipos de CUALQUIER liga por nombre — para inscribir a un
 // torneo un equipo que no sea de la liga dueña de ese torneo.
 router.get('/teams/search', authRequired, asyncHandler(async (req, res) => {
@@ -1428,7 +1466,77 @@ router.post('/leagues/:leagueId/teams', authRequired, leagueOwnerRequired, async
     JSON.stringify(Array.isArray(away_ticket_links) ? away_ticket_links.filter((u) => u && u.trim()) : []),
   );
 
-  res.status(201).json(await db.prepare('SELECT * FROM teams WHERE id = ?').get(result.lastInsertRowid));
+  // Le crea su organización de identidad de una vez (antes solo se generaba
+  // en el backfill del próximo arranque del servidor, ver initSchema en
+  // db.js) — así el equipo ya es verificable desde /admin sin esperar un
+  // redeploy, igual que un equipo independiente recién registrado.
+  const newTeam = await db.prepare('SELECT * FROM teams WHERE id = ?').get(result.lastInsertRowid);
+  const org = await createTeamOrganization(newTeam.name, { logo_url: newTeam.logo_url, website_url: newTeam.website_url });
+  await db.prepare('UPDATE teams SET organization_id = ? WHERE id = ?').run(org.id, newTeam.id);
+
+  res.status(201).json(await getTeamWithOrgFields(newTeam.id));
+}));
+
+// Registro de un equipo INDEPENDIENTE: sin liga, con el mismo mecanismo de
+// identidad/verificación que cualquier otra organización (ver
+// organizations.is_verified y PUT /admin/organizations/:id/verify). Quien
+// lo registra queda como 'owner' de inmediato — a diferencia de un equipo
+// creado por una liga (arriba), que nace sin representante hasta que
+// alguien reclama una invitación (ver routes/invites.js).
+router.post('/teams', authRequired, asyncHandler(async (req, res) => {
+  const {
+    name, logo_url, away_logo_url, cover_url, location, contact_email, contact_phone,
+    facebook_url, instagram_url, twitter_url, website_url, sort_order,
+    home_stream_links, away_stream_links, home_ticket_links, away_ticket_links,
+    country_id, description, show_on_platform,
+  } = req.body;
+
+  if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre del equipo es obligatorio' });
+
+  const validationError = validateTeamFields({ contact_email, facebook_url, instagram_url, twitter_url, website_url, logo_url, away_logo_url, cover_url, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links });
+  if (validationError) return res.status(400).json({ error: validationError });
+
+  if (country_id) {
+    const country = await db.prepare('SELECT id FROM countries WHERE id = ?').get(country_id);
+    if (!country) return res.status(400).json({ error: 'El país seleccionado no es válido' });
+  }
+
+  const trimmedName = name.trim().toUpperCase();
+  const org = await createTeamOrganization(trimmedName, { country_id, logo_url, description, website_url });
+
+  const result = await db.prepare(`
+    INSERT INTO teams (
+      league_id, organization_id, owner_user_id, name, logo_url, away_logo_url, cover_url, location,
+      contact_email, contact_phone, facebook_url, instagram_url, twitter_url, website_url, sort_order,
+      home_stream_links, away_stream_links, home_ticket_links, away_ticket_links, show_on_platform
+    )
+    VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    org.id, req.user.id, trimmedName,
+    logo_url      || null,
+    away_logo_url || null,
+    cover_url     || null,
+    location      ? location.trim().toUpperCase()      : null,
+    contact_email || null,
+    contact_phone ? contact_phone.trim().toUpperCase() : null,
+    facebook_url  || null,
+    instagram_url || null,
+    twitter_url   || null,
+    website_url   || null,
+    sort_order    || 0,
+    JSON.stringify(Array.isArray(home_stream_links) ? home_stream_links.filter((u) => u && u.trim()) : []),
+    JSON.stringify(Array.isArray(away_stream_links) ? away_stream_links.filter((u) => u && u.trim()) : []),
+    JSON.stringify(Array.isArray(home_ticket_links) ? home_ticket_links.filter((u) => u && u.trim()) : []),
+    JSON.stringify(Array.isArray(away_ticket_links) ? away_ticket_links.filter((u) => u && u.trim()) : []),
+    show_on_platform ? true : false,
+  );
+
+  await db.prepare(`
+    INSERT INTO organization_members (organization_id, user_id, role)
+    VALUES (?, ?, 'owner')
+  `).run(org.id, req.user.id);
+
+  res.status(201).json(await getTeamWithOrgFields(result.lastInsertRowid));
 }));
 
 router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
@@ -1436,6 +1544,7 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
     name, logo_url, away_logo_url, cover_url, location, contact_email, contact_phone,
     facebook_url, instagram_url, twitter_url, website_url, sort_order,
     home_stream_links, away_stream_links, home_ticket_links, away_ticket_links,
+    country_id, description, show_on_platform,
   } = req.body;
   const t = req.team;
 
@@ -1452,6 +1561,11 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
   };
   const validationError = validateTeamFields(resolved);
   if (validationError) return res.status(400).json({ error: validationError });
+
+  if (country_id) {
+    const country = await db.prepare('SELECT id FROM countries WHERE id = ?').get(country_id);
+    if (!country) return res.status(400).json({ error: 'El país seleccionado no es válido' });
+  }
 
   await db.prepare(`
     UPDATE teams SET
@@ -1470,7 +1584,8 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
       home_stream_links = COALESCE(?, home_stream_links),
       away_stream_links = COALESCE(?, away_stream_links),
       home_ticket_links = COALESCE(?, home_ticket_links),
-      away_ticket_links = COALESCE(?, away_ticket_links)
+      away_ticket_links = COALESCE(?, away_ticket_links),
+      show_on_platform  = COALESCE(?, show_on_platform)
     WHERE id = ?
   `).run(
     toNull(name),          toNull(logo_url),      toNull(away_logo_url), toNull(cover_url),
@@ -1479,10 +1594,24 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
     toNull(website_url),   toNull(sort_order),
     toLinksJson(home_stream_links), toLinksJson(away_stream_links),
     toLinksJson(home_ticket_links), toLinksJson(away_ticket_links),
+    toNull(show_on_platform),
     t.id,
   );
 
-  const updatedTeam = await db.prepare('SELECT * FROM teams WHERE id = ?').get(t.id);
+  // country_id/description viven en la organización del equipo (la capa de
+  // identidad común), no en "teams" — solo se tocan si el equipo ya tiene
+  // una (todo equipo nuevo desde ahora la tiene; uno viejo la recibe en el
+  // próximo arranque del servidor, ver backfill en db.js).
+  if (t.organization_id && (country_id !== undefined || description !== undefined)) {
+    await db.prepare(`
+      UPDATE organizations SET
+        country_id  = COALESCE(?, country_id),
+        description = COALESCE(?, description)
+      WHERE id = ?
+    `).run(toNull(country_id), toNull(description), t.organization_id);
+  }
+
+  const updatedTeam = await getTeamWithOrgFields(t.id);
   await syncTeamLinksToMatches(updatedTeam);
   res.json(updatedTeam);
 }));

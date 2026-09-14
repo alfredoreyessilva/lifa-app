@@ -17,10 +17,14 @@ function slugify(str) {
 
 // Tipos que se registran por este endpoint genérico. "league" y "team"
 // quedan fuera a propósito — esos siguen su flujo especializado de siempre
-// (POST /leagues, POST /manage/leagues/:id/teams), con sus propios campos
-// (venues, torneos, categorías...) que no tiene sentido generalizar. Este
-// endpoint es solo para los tipos de organización nuevos, que no necesitan
-// nada de esa estructura deportiva.
+// (POST /leagues, POST /manage/leagues/:id/teams para un equipo de liga,
+// POST /manage/teams para un equipo independiente sin liga), con sus
+// propios campos (venues, torneos, categorías...) que no tiene sentido
+// generalizar. Este endpoint es solo para los tipos de organización
+// nuevos, que no necesitan nada de esa estructura deportiva. Los tres
+// flujos de equipo/liga terminan creando la misma fila en "organizations"
+// por debajo (type='team'/'league'), así que comparten el mismo mecanismo
+// de verificación (is_verified) que estos tipos genéricos.
 const REGISTERABLE_TYPES = ['media', 'store', 'clinic', 'brand'];
 
 router.get('/types', (req, res) => {

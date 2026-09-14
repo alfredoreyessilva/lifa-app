@@ -89,6 +89,7 @@ export default function RegisterOrganizationPage() {
         )}
         <p style={{ color: 'var(--ink-dim)', fontSize: 12, marginTop: 20 }}>
           ¿Buscas registrar una liga? <a href="/registrar-liga">Ese formulario está aquí</a>.
+          {' '}¿O un equipo, sin pertenecer a ninguna liga? <a href="/registrar-equipo">Ese formulario está aquí</a>.
         </p>
       </div>
     );

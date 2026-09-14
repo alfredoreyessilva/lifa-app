@@ -239,10 +239,17 @@ router.get('/me', authRequired, asyncHandler(async (req, res) => {
   ).get(req.user.id);
   if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
   const leagues = await db.prepare('SELECT id, name, slug, logo_url, status FROM leagues WHERE owner_user_id = ?').all(user.id);
+  // LEFT JOIN a propósito: un equipo independiente (registrado sin liga,
+  // ver POST /manage/teams) tiene league_id NULL — con INNER JOIN
+  // simplemente desaparecía de "Mi panel" para su propio dueño.
+  // country_id/description/is_verified vienen de su organización (la capa
+  // de identidad común), no existen como columna propia de "teams".
   const teams = await db.prepare(`
-    SELECT t.*, l.name AS league_name, l.slug AS league_slug
+    SELECT t.*, l.name AS league_name, l.slug AS league_slug,
+           o.country_id AS country_id, o.description AS description, o.is_verified AS is_verified
     FROM teams t
-    JOIN leagues l ON l.id = t.league_id
+    LEFT JOIN leagues l        ON l.id = t.league_id
+    LEFT JOIN organizations o  ON o.id = t.organization_id
     WHERE t.owner_user_id = ?
   `).all(user.id);
   // Campo nuevo, aditivo: todas las organizaciones donde el usuario es

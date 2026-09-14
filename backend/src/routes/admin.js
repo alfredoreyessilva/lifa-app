@@ -232,12 +232,20 @@ router.put('/leagues/:id/unverify', authRequired, adminRequired, asyncHandler(as
 // Mismo patrón que arriba, para organizaciones (medio/proveedor/tienda/
 // clínica/marca). Para "medio" en particular, esto es lo que habilita
 // aparecer en el directorio público y autoasignarse a partidos.
+//
+// Los equipos de liga se excluyen a propósito (su liga ya los administra
+// desde su propio panel) — pero un equipo INDEPENDIENTE (sin liga, ver
+// POST /manage/teams) sí entra aquí: es exactamente el mismo mecanismo de
+// verificación de identidad que cualquier otra organización, porque no
+// tiene una liga que lo respalde.
 router.get('/organizations', authRequired, adminRequired, asyncHandler(async (req, res) => {
   const orgs = await db.prepare(`
     SELECT o.*, c.name AS country_name
     FROM organizations o
     LEFT JOIN countries c ON c.id = o.country_id
+    LEFT JOIN teams t ON t.organization_id = o.id
     WHERE o.type NOT IN ('league', 'team')
+       OR (o.type = 'team' AND t.league_id IS NULL)
     ORDER BY o.is_verified ASC, o.type, o.name
   `).all();
   res.json(orgs);

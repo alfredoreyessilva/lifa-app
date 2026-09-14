@@ -323,6 +323,9 @@ export const api = {
   getTeams: (slug) => request(`/leagues/${slug}/teams`),
   createTeam: (leagueId, payload, token) =>
     request(`/manage/leagues/${leagueId}/teams`, { method: 'POST', body: payload, token }),
+  // Equipo independiente: sin liga, se registra directo desde /registrar-equipo.
+  createIndependentTeam: (payload, token) =>
+    request('/manage/teams', { method: 'POST', body: payload, token }),
   updateTeam: (teamId, payload, token) =>
     request(`/manage/teams/${teamId}`, { method: 'PUT', body: payload, token }),
   deleteTeam: (teamId, token) =>

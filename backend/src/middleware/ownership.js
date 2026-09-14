@@ -103,19 +103,23 @@ export const teamOwnerRequired = asyncHandler(async (req, res, next) => {
   const teamId = Number(req.params.id);
   const team = await db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId);
   if (!team) return res.status(404).json({ error: 'Equipo no encontrado' });
-  const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(team.league_id);
+  // Un equipo independiente (registrado sin liga) no tiene league_id — no
+  // hay liga de la que preguntar membresía ni owner_user_id.
+  const league = team.league_id
+    ? await db.prepare('SELECT * FROM leagues WHERE id = ?').get(team.league_id)
+    : null;
   // El dueño directo del equipo (representante de medios) puede editar el
   // perfil de SU equipo, igual que el dueño de la liga o un admin. Ahora se
   // pregunta por membresía tanto en la organización de la liga como en la
   // del equipo (son organizaciones distintas) — cualquiera de las dos
   // formas de acceso, la nueva o la de owner_user_id, sigue funcionando.
-  const isLeagueMember = await isOrgMember(req.user.id, league.organization_id);
+  const isLeagueMember = league ? await isOrgMember(req.user.id, league.organization_id) : false;
   const isTeamMember = await isOrgMember(req.user.id, team.organization_id);
   if (
     req.user.role === 'admin' ||
     isLeagueMember ||
     isTeamMember ||
-    league.owner_user_id === req.user.id ||
+    (league && league.owner_user_id === req.user.id) ||
     team.owner_user_id === req.user.id
   ) {
     req.league = league;
@@ -133,6 +137,20 @@ export const teamLeagueOwnerRequired = asyncHandler(async (req, res, next) => {
   const teamId = Number(req.params.teamId || req.params.id);
   const team = await db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId);
   if (!team) return res.status(404).json({ error: 'Equipo no encontrado' });
+
+  // Un equipo independiente (sin liga) no tiene "liga dueña" a quien pedirle
+  // permiso — el dueño del equipo mismo (o un admin) es la máxima autoridad
+  // sobre sus propias invitaciones, a diferencia del caso normal donde a
+  // propósito no se le permite esto al representante del equipo.
+  if (!team.league_id) {
+    const isTeamMember = await isOrgMember(req.user.id, team.organization_id);
+    if (req.user.role === 'admin' || isTeamMember || team.owner_user_id === req.user.id) {
+      req.team = team;
+      return next();
+    }
+    return res.status(403).json({ error: 'No tienes permiso sobre este equipo' });
+  }
+
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(team.league_id);
   const isMember = await isOrgMember(req.user.id, league.organization_id);
   if (req.user.role === 'admin' || isMember || league.owner_user_id === req.user.id) {

@@ -575,13 +575,23 @@ function TeamOnlyPanel({ teams, token, onChange }) {
   const [mode, setMode] = useState('view'); // 'view' | 'edit'
   const [error, setError] = useState('');
   const [statement, setStatement] = useState(null);
+  const [countries, setCountries] = useState([]);
   const team = teams.find((t) => t.id === selectedTeamId) || teams[0];
+  const isIndependent = !team?.league_id;
 
+  // Un equipo independiente no tiene relación de cobranza con ninguna liga
+  // — no tiene sentido pedir su "estado de cuenta" (ver GET
+  // /billing/teams/:id/statement, es siempre liga -> equipo).
   useEffect(() => {
-    if (!team?.id || !token) return;
+    if (!team?.id || !token || isIndependent) { setStatement(null); return; }
     setStatement(null);
     api.getTeamStatement(team.id, token).then(setStatement).catch(() => setStatement(null));
-  }, [team?.id, token]);
+  }, [team?.id, token, isIndependent]);
+
+  useEffect(() => {
+    if (!isIndependent) return;
+    api.getCountries().then((d) => setCountries(d.countries)).catch(() => setCountries([]));
+  }, [isIndependent]);
 
   function selectTeam(id) {
     setSelectedTeamId(id);
@@ -596,7 +606,12 @@ function TeamOnlyPanel({ teams, token, onChange }) {
         <div>
           <span className="eyebrow">Panel de representante de equipo</span>
           <h1>{team.name}</h1>
-          <span style={{ fontSize: 12, color: 'var(--ink-dim)' }}>{team.league_name}</span>
+          <span style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
+            {isIndependent ? 'Equipo independiente (sin liga)' : team.league_name}
+            {team.is_verified && (
+              <span style={{ marginLeft: 8, color: 'var(--field)' }}>✓ Verificado</span>
+            )}
+          </span>
           {statement && (
             <div style={{ fontSize: 13, marginTop: 6 }}>
               <span style={{ color: balance < 0 ? 'var(--flag)' : balance > 0 ? 'var(--field)' : 'var(--ink-dim)', fontWeight: 600 }}>
@@ -626,12 +641,38 @@ function TeamOnlyPanel({ teams, token, onChange }) {
 
       {error && <div className="form-error">{error}</div>}
 
+      {isIndependent && (
+        <div className="form-error" style={{ background: team.show_on_platform ? 'rgba(58,141,63,0.12)' : 'rgba(255,210,63,0.12)', borderColor: team.show_on_platform ? 'var(--field)' : 'var(--flag)', color: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <span>
+            {team.show_on_platform
+              ? '✓ Tu equipo aparece en el home de LIFA App.'
+              : 'Tu equipo es privado por ahora — puedes usar todas las herramientas sin que nadie más lo vea.'}
+          </span>
+          <button
+            className={`btn btn-sm ${team.show_on_platform ? 'btn-ghost' : 'btn-flag'}`}
+            onClick={async () => {
+              setError('');
+              try {
+                await api.updateTeam(team.id, { show_on_platform: !team.show_on_platform }, token);
+                await onChange();
+              } catch (e) {
+                setError(e.message);
+              }
+            }}
+          >
+            {team.show_on_platform ? 'Ocultar del home' : 'Mostrar en el home'}
+          </button>
+        </div>
+      )}
+
       {mode === 'view' ? (
         <TeamProfileView team={team} onEdit={() => setMode('edit')} />
       ) : (
         <TeamForm
           key={team.id}
           initial={team}
+          independent={isIndependent}
+          countries={countries}
           submitLabel="Guardar cambios"
           onCancel={() => setMode('view')}
           onSubmit={async (payload) => {

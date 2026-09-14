@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS categories (
 
 CREATE TABLE IF NOT EXISTS teams (
   id SERIAL PRIMARY KEY,
-  league_id INTEGER NOT NULL REFERENCES leagues(id) ON DELETE CASCADE,
+  league_id INTEGER REFERENCES leagues(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   logo_url TEXT,
   cover_url TEXT,
@@ -1151,6 +1151,28 @@ export async function initSchema() {
     // (cargo por vencer / vencido). Nace apagado: la liga lo prende cuando ya
     // cargó a sus equipos y quiere que la plataforma les recuerde sola.
     await run(`ALTER TABLE leagues ADD COLUMN IF NOT EXISTS billing_reminders_enabled BOOLEAN NOT NULL DEFAULT FALSE`);
+
+    // Equipos independientes: un equipo ya no depende de pertenecer a una
+    // liga para existir en la plataforma (ej. equipos que buscan
+    // representación de medios/proveedores sin afiliarse a ninguna liga
+    // todavía). league_id se queda como está para todo equipo que ya tenga
+    // una liga de origen — solo se vuelve opcional para los que se registren
+    // sin una (ver POST /manage/teams). El CREATE TABLE de arriba ya no
+    // exige NOT NULL para bases nuevas; este ALTER es para las que ya
+    // existían con la restricción vieja.
+    await run(`ALTER TABLE teams ALTER COLUMN league_id DROP NOT NULL`);
+
+    // "¿Aparece en el home?" para un equipo INDEPENDIENTE es decisión propia
+    // del equipo, sin aprobación de nadie de por medio — mismo criterio que
+    // products.show_on_platform, no el de leagues.is_public/publish_requested
+    // (esos sí pasan por un admin). Un equipo que SÍ tiene liga sigue
+    // apareciendo exactamente igual que hoy (por ser miembro del roster de
+    // una liga pública, ver /leagues/all-teams) sin que este campo le afecte
+    // en nada. Nace en FALSO: un equipo independiente nuevo no aparece en el
+    // home hasta que su representante lo pida expresamente desde su panel —
+    // no se le limita ninguna otra función de la plataforma por seguir así.
+    await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS show_on_platform BOOLEAN NOT NULL DEFAULT FALSE`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_teams_show_on_platform ON teams(show_on_platform) WHERE league_id IS NULL`);
   } finally {
     // Se suelta el candado y se libera la conexión pase lo que pase
     await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY]).catch(() => {});

@@ -42,6 +42,7 @@ export default function OrgLogoBar({ selectedKind, selectedId }) {
         <h2>Organizaciones administradas</h2>
         <div style={{ display: 'flex', gap: 8 }}>
           <Link to="/registrar-liga" className="btn btn-outline btn-sm">Registrar liga</Link>
+          <Link to="/registrar-equipo" className="btn btn-outline btn-sm">Registrar equipo</Link>
           <Link to="/registrar-organizacion" className="btn btn-outline btn-sm">Registrar organización</Link>
         </div>
       </div>

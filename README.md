@@ -22,6 +22,8 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 - **Páginas legales**: Términos de Servicio (`/terminos`) y Aviso de Privacidad (`/privacidad`) — `frontend/src/pages/TermsOfService.jsx` y `PrivacyPolicy.jsx`, enlazadas desde el footer. **Ojo**: tienen placeholders (`[Razón social...]`, `[correo de contacto...]`, `[domicilio...]`) sin rellenar todavía — hacerlo antes de depender de ellas para cobros reales (ver "Roadmap de negocio" más abajo).
 - **CI en GitHub Actions** (`.github/workflows/ci.yml`): en cada push/PR a `main` corre el build del frontend (`npm run build`) y un chequeo de sintaxis de todo `backend/src` (`node --check`, no hay tests reales todavía). No bloquea el deploy de Render/Vercel si falla — son procesos independientes, esto solo te avisa.
 - **Cobranza liga → equipos ("estado de cuenta") — V1**: la liga registra desde `/panel/liga/:id/cobranza` lo que cobra cada semana a sus equipos (renta de campo, arbitraje, transmisión, inscripción, multas), lleva un **libro append-only** por equipo y ve el panorama de adeudos. El monto es **por equipo** (tabla con casilla por equipo + botón que lo calcula como cuota × # de partidos de ese equipo en la jornada). El representante del equipo ve su estado de cuenta **de solo lectura** en `/panel/equipo/:id/estado-de-cuenta` y recibe recordatorios (cargo nuevo / por vencer / vencido / pago registrado) en su bandeja. En esta V1 **solo la liga escribe** — no hay flujo de "el equipo reporta un pago". Detalle completo en la sección "Cobranza" más abajo.
+- **Roster por plantilla de Excel**: además del alta manual jugador por jugador que ya existía, ahora se puede descargar (desde el modal de roster de un equipo dentro de una rama) una plantilla `.xlsx` con el logo de la liga, el logo del equipo y el contexto (Liga/Torneo/Categoría/Rama/Equipo) ya incrustados, llenarla y volver a subirla — solo agrega a los jugadores que todavía no estén en esa rama, nunca borra a nadie. Se agregó CURP a `players` y un botón de foto por jugador (Cloudinary). Detalle completo en la sección "Roster de jugadores" más abajo.
+- **Equipos independientes (sin liga)**: un equipo ya se puede registrar directo desde `/registrar-equipo` sin pertenecer a ninguna liga de la plataforma (`teams.league_id` ahora es opcional). Usa el mismo mecanismo de verificación de identidad que cualquier otra organización (`organizations.is_verified`, admin desde `/admin`) — antes esa pestaña excluía a todos los equipos. Aparecer en el home es decisión propia del equipo (`show_on_platform`, interruptor sin aprobación de nadie, se prende/apaga desde su panel) y no limita ninguna otra función; un equipo de liga sigue apareciendo exactamente igual que antes, sin cambios. Detalle completo en la sección "Equipos independientes" más abajo.
 
 ## Cambios recientes importantes (agosto 2026)
 
@@ -67,11 +69,17 @@ lifa-app/
       routes/
         auth.js              Registro, login, /me (incluye las ligas y equipos que administra el usuario)
         leagues.js           Lectura pública: ligas, categorías, calendario, partidos
-        manage.js            CRUD protegido: ligas, categorías, grupos, equipos, partidos, sedes
+        manage.js            CRUD protegido: ligas, categorías, grupos, equipos (con o sin
+                              liga, ver "Equipos independientes"), partidos, sedes
+        organizations.js     Medio/Tienda/Clínica/Marca (registro genérico) + directorio
+                              público verificado — liga y equipo tienen su propio flujo
         upload.js             Subida de imágenes a Cloudinary
         invites.js           Invitaciones de un solo uso para entregar un equipo a otro usuario
         admin.js             Endpoints exclusivos para role = 'admin' (incluye aprobar ligas)
         notifications.js     Suscripción push + endpoint /trigger para el cronjob externo
+        players.js           Roster por equipo+rama: alta manual, plantilla de Excel (logos vía
+                              exceljs), foto/CURP por jugador, stats de partido y tarjeta pública
+        billing.js            Cobranza liga → equipos (ver sección "Cobranza")
       utils/                 Validaciones, manejo de errores async, zonas horarias
       seed.js                Datos de ejemplo para desarrollo local
       server.js              Arranque de Express: CORS, rate limiting, rutas, manejo de errores
@@ -80,8 +88,8 @@ lifa-app/
     src/
       pages/
         Home, LeaguePage, CalendarPage, MatchPage, Login, Register,
-        RegisterLeague, RegisterOrganization, Dashboard, Notifications,
-        AdminPanel, InviteClaim
+        RegisterLeague, RegisterOrganizationPage, RegisterTeamPage, Dashboard,
+        Notifications, AdminPanel, InviteClaim
       components/
         FlightSearchWidget.jsx   Botón "✈️ Vuelo" en MatchPage — despliega el
                                  widget de búsqueda de Aviasales (ver "Monetización")
@@ -265,6 +273,136 @@ Pendiente también, sin dueño todavía: una pasada de estilo a `BillingLeaguePa
 cobra a quién) a propósito, para poder reusarla casi igual en **equipo → jugador**
 (cuotas de jugador) sin rehacer el esquema — ver "Roadmap de producto" más abajo.
 
+## Roster de jugadores (plantilla de Excel)
+
+Reemplaza el flujo real de la liga ("le mando el Excel al equipo por WhatsApp y
+luego lo capturo a mano") por una plantilla que se genera y se vuelve a subir
+dentro de la plataforma, sin quitar el alta manual que ya existía.
+
+### Modelo
+
+El roster vive en **equipo + rama, dentro de un torneo** (`player_team_memberships`,
+`config/db.js`): `branch_id` dice en qué rama/categoría juega el jugador, y
+`tournament_id` se guarda explícito (se deriva de `branches.category_id →
+categories.tournament_id`, pero se duplica en la fila porque el roster "vive
+dentro de un torneo"). Un jugador que cambia de equipo o rama no se borra: se
+cierra su membresía (`end_date`) y se abre una nueva — el historial completo
+queda en la tabla. `players` tiene ahora una columna **`curp`** (opcional), que
+sirve como clave para no duplicar a un jugador al re-subir la plantilla.
+
+Requisito previo: el equipo debe estar **inscrito en la rama** (`branch_teams`,
+inscripción explícita, no se infiere de que ya tenga partidos programados) — lo
+exige el middleware `branchTeamOwnerRequired` (`middleware/ownership.js`), que
+deja pasar tanto al dueño/miembro de la liga como al dueño/miembro del equipo.
+
+### Dos formas de armar el roster (conviven, `routes/players.js`)
+
+1. **Alta manual, jugador por jugador** — `POST /api/players/branches/:branchId/teams/:teamId/roster`, formulario en `BranchRosterModal.jsx`. Existía desde antes; ahora también acepta CURP.
+2. **Plantilla de Excel**:
+   - `GET .../roster/template` — genera el `.xlsx` con **exceljs** (nueva dependencia del backend). Es la única librería del proyecto que puede *escribir* imágenes dentro de un Excel — `xlsx`/SheetJS, que ya se usa para leer los Excel de partidos en `manage.js`, no puede. Incrusta el logo real de la liga y del equipo (bajados de Cloudinary) más un membrete con Liga/Torneo/Categoría/Rama/Equipo. Columnas: Nombre\*, Apellido\*, Fecha de nacimiento, Posición, Número, CURP, Foto (URL).
+   - `POST .../roster/import` — sube la plantilla llena. Ubica la fila de encabezados aunque el membrete esté arriba, y **solo agrega a los jugadores que no estén ya** en el roster activo de esa rama (compara por CURP si vino, si no por nombre+apellido) — nunca borra a nadie. Responde `{ imported, skipped, skippedRows, warnings, warningRows }`, mismo formato que el import de partidos.
+   - `PATCH .../roster/:playerId` — edita foto, CURP, fecha de nacimiento, posición o número de un jugador ya en el roster.
+
+### Foto del jugador
+
+La plantilla trae una columna "Foto (URL)" — un link, no un archivo. Además,
+cada jugador en `BranchRosterModal.jsx` tiene un botón "+ Foto" que sube la
+imagen por `POST /api/upload` (Cloudinary, el mismo endpoint que los logos) y la
+guarda con el `PATCH` de arriba.
+
+**Limitación conocida, a propósito**: si el equipo pega una foto directo en una
+celda del Excel (en vez de escribir una URL), esa imagen **no se importa**. En
+formato `.xlsx` las imágenes "flotan" sobre la hoja sin quedar amarradas a una
+fila, así que no hay forma confiable de saber a qué jugador pertenece cada una
+al leer el archivo de vuelta — por eso la foto se resuelve con URL + botón de
+subida, nunca leyendo imágenes pegadas en el Excel.
+
+### Frontend
+
+`components/BranchRosterModal.jsx` (se abre desde la fila de un equipo inscrito
+en una rama, dentro de `pages/LeagueStructurePanel.jsx`): sección "Descargar
+plantilla / Subir plantilla llena" con el resumen de la importación, campo CURP
+en el alta manual, botón de foto por jugador. `api/client.js`:
+`downloadBranchRosterTemplate`, `importBranchRoster`, `updateBranchRosterPlayer`.
+
+### Fuera de esta versión / pendiente
+
+- El modal y los endpoints de roster **por equipo sin rama** (`TeamRosterModal.jsx`, `GET`/`POST /api/players/teams/:id/roster`) son la versión de antes de la corrección "roster por rama" — se dejaron sin tocar, ya marcados como obsoletos en el propio código y sin ninguna pantalla que los use.
+- No hay endpoint para **quitar** a un jugador del roster (solo "mover", que cierra la membresía vieja y abre una nueva en otro lado) — pendiente desde antes de esta plantilla, no resuelto aquí.
+- La deduplicación al re-subir solo compara contra el roster **de esa misma rama** — un jugador puede quedar duplicado a propósito si se da de alta por separado en otra rama o equipo (mismo comportamiento que el alta manual, que siempre crea un jugador nuevo).
+- Credencial digital de jugador con QR (ver "Roadmap de producto" más abajo): el roster ya existe con este nivel de detalle, la credencial/QR todavía no.
+
+## Equipos independientes (sin liga)
+
+Hasta ahora un equipo solo podía existir colgado de una liga (`teams.league_id
+NOT NULL`, lo creaba la liga desde su panel o lo reclamaba un representante por
+invitación). Ahora un equipo se puede registrar directo, sin pertenecer a
+ninguna liga de la plataforma — mismo mecanismo de verificación que cualquier
+otra organización, y sin que le falte ninguna función por no tener liga.
+
+### Modelo
+
+- `teams.league_id` es ahora **opcional** (`config/db.js`, `ALTER TABLE teams
+  ALTER COLUMN league_id DROP NOT NULL`). Un equipo de liga no cambia en nada;
+  solo un equipo nuevo sin liga nace con `league_id = NULL`.
+- Al registrarse, se crea de una vez su fila en `organizations` (`type =
+  'team'`) y su membresía en `organization_members` (`role = 'owner'`) — antes
+  esto solo pasaba para equipos de liga, y hasta el próximo arranque del
+  servidor (el backfill de `initSchema`). País y descripción viven en esa
+  organización, no en `teams` (misma idea que "organizations es la capa de
+  identidad común" ya documentada en `config/db.js`).
+- `teams.show_on_platform` (booleano, nace en `FALSE`): si el equipo aparece en
+  la sección "Equipos" del home. Es **autoservicio, sin aprobación de nadie**
+  — distinto al mecanismo de `leagues.is_public`/`publish_requested`, que sí
+  pasa por un admin. Solo aplica a un equipo sin liga: uno que ya es miembro
+  del roster de una liga pública sigue apareciendo igual que siempre,
+  sin que este campo le afecte (`GET /leagues/all-teams`, `routes/leagues.js`).
+
+### Endpoints nuevos/cambiados
+
+| Método | Ruta | Qué hace |
+|-|-|-|
+| `POST` | `/manage/teams` | Registra un equipo sin liga — crea `teams` + `organizations` + `organization_members` de un jalón. Owner = quien lo registra, de inmediato (a diferencia de un equipo de liga, que nace sin representante hasta que alguien reclama una invitación). |
+| `PUT` | `/manage/teams/:id` | Ahora también acepta `country_id`/`description` (se guardan en la organización del equipo) y `show_on_platform`. |
+| `GET` | `/admin/organizations` | Ya incluye a los equipos **independientes** (antes excluía `type = 'team'` por completo) — verificables con el mismo botón `is_verified` que medio/tienda/clínica/marca. Un equipo de liga sigue sin aparecer aquí (se administra desde el panel de su liga). |
+| `GET` | `/leagues/all-teams` | Suma, además del roster de ligas públicas, a los equipos independientes con `show_on_platform = TRUE`. |
+| `GET` | `/billing/teams/:id/statement` | Un equipo sin liga no tiene relación de cobranza con nadie — regresa un estado de cuenta vacío en vez de tronar. |
+
+### Frontend
+
+- `pages/RegisterTeamPage.jsx` — `/registrar-equipo`, enlazado desde
+  "Registrar Organización" y desde la barra de logos del panel
+  (`OrgLogoBar.jsx`). Reusa `TeamForm.jsx` en modo `independent` (nuevo prop):
+  ahí, y solo ahí, se muestran país/descripción y el interruptor de aparecer
+  en el home — un equipo de liga no ve estos campos.
+- `pages/Dashboard.jsx` (`TeamOnlyPanel`) — para un equipo sin liga, muestra
+  el badge "✓ Verificado" (si aplica) en vez del nombre de la liga, el mismo
+  patrón de banner que ya usan las ligas para pedir aparecer en público
+  (aquí es un solo botón, sin solicitud/aprobación), y ya no pide su estado
+  de cuenta (no aplica sin liga).
+
+### Bugs corregidos por volver `league_id` opcional
+
+Necesarios para que un equipo sin liga no rompiera nada que asumía que
+siempre había una:
+
+- `middleware/ownership.js` (`teamOwnerRequired`, `teamLeagueOwnerRequired`):
+  buscaban la liga del equipo sin validar que existiera — con `league_id`
+  NULL, `league.organization_id` tronaba. Ahora, sin liga, la máxima
+  autoridad sobre el equipo es su propio dueño (o un admin).
+- `routes/auth.js` (`GET /auth/me`): el `JOIN` con `leagues` era `INNER JOIN`
+  — un equipo sin liga simplemente desaparecía de "Mi panel" de su propio
+  dueño. Ahora es `LEFT JOIN` (y trae `country_id`/`description`/`is_verified`
+  desde su organización).
+
+### Pendiente / fuera de esta versión
+
+- El badge "✓ Verificado" solo se ve hoy en el panel del propio equipo, no en
+  su ficha pública (`TeamCard`/`TeamInfoPanel`).
+- No existe flujo de traspaso de dueño para un equipo independiente (sí existe
+  para uno de liga, vía invitación — `routes/invites.js`) — si el que lo
+  registró pierde acceso a su cuenta, hoy no hay forma de reclamarlo.
+
 ## Seguridad — decisiones ya tomadas
 
 - **CORS con whitelist**: solo los orígenes listados en `ALLOWED_ORIGINS` pueden llamar a la API desde un navegador. En local, `localhost:5173` siempre está permitido.
@@ -293,7 +431,7 @@ Estas dos siguen apareciendo en `npm audit` del frontend. No es que se nos olvid
 
 El modelo de "varias organizaciones por cuenta" ya está en marcha (ver "Cambios recientes" arriba). Lo que falta para completarlo:
 
-1. Agregar los tipos Equipo independiente, Empresa/Marca y Medio de comunicación a "Registrar Organización".
+1. ~~Agregar los tipos Equipo independiente, Empresa/Marca y Medio de comunicación a "Registrar Organización"~~ — **hecho**: los cuatro tipos ya se registran (Equipo independiente desde `/registrar-equipo`, ver sección "Equipos independientes"; Medio/Tienda/Clínica/Marca desde `/registrar-organizacion`).
 2. Más adelante: permisos de colaboración entre organizaciones — por ejemplo, que un Medio con permiso pueda actualizar directamente el link de transmisión de un partido registrado por una Liga, sin pasar por su dueño original.
 
 ## Roadmap de negocio — operar sin intervención constante (actualizado 2026-09-14)
@@ -344,7 +482,7 @@ adelantó al resto: es lo que hace que el admin de la liga vuelva cada semana.
 **Para ligas**
 - Tabla de posiciones automática (PG-PP-PE, desempates configurables) — hoy se arma a mano.
 - Generador de rol de juegos (round-robin por conferencias, respeta sedes compartidas y byes).
-- Credencial digital de jugador con QR — el registro de roster (alta, traspasos, importar desde Excel) **ya existe** en `players.js`/`BranchRosterModal.jsx`; falta la parte de credencial/QR para resolver disputas de elegibilidad en la cancha.
+- Credencial digital de jugador con QR — el registro de roster (alta manual, traspasos, plantilla de Excel con logos/CURP/foto) **ya existe**, ver sección "Roster de jugadores" más arriba; falta la parte de credencial/QR para resolver disputas de elegibilidad en la cancha.
 - Asignación de cuerpo arbitral (quién pita qué partido, disponibilidad, tarifa) — no existe.
 - Aviso de cambios de partido a quien lo sigue — ya existe vía `notifications.js`/web push.
 

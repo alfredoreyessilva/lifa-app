@@ -58,7 +58,12 @@ function UploadButton({ onUploaded, label, disabled }) {
 }
 
 // ─── componente principal ────────────────────────────────────────────────────
-export default function TeamForm({ initial, onSubmit, onCancel, submitLabel }) {
+// "independent" = true solo para un equipo SIN liga (registrado desde
+// /registrar-equipo o editado desde su propio panel sin liga de origen).
+// Ahí, y solo ahí, se muestran país/descripción (viven en la organización
+// del equipo, no en "teams") y el interruptor de aparecer en el home — un
+// equipo de liga sigue exactamente igual que antes, sin estos campos.
+export default function TeamForm({ initial, onSubmit, onCancel, submitLabel, independent = false, countries = [] }) {
   const [form, setForm] = useState({
     name:          initial?.name          || '',
     logo_url:      initial?.logo_url      || '',
@@ -75,6 +80,9 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel }) {
     away_stream_links: initial?.away_stream_links || [],
     home_ticket_links: initial?.home_ticket_links || [],
     away_ticket_links: initial?.away_ticket_links || [],
+    country_id:        initial?.country_id  || '',
+    description:       initial?.description || '',
+    show_on_platform:  initial?.show_on_platform ?? false,
   });
   const [error, setError]   = useState('');
   const [loading, setLoading] = useState(false);
@@ -274,6 +282,51 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel }) {
               <input value={form.website_url} onChange={(e) => update('website_url', e.target.value)} placeholder="https://…" />
             </div>
           </div>
+
+          {/* Identidad del equipo (país/descripción) — solo aplica a un
+              equipo independiente: viven en su organización, no en "teams",
+              y no tienen sentido para un equipo que ya hereda esos datos
+              de su liga. */}
+          {independent && (
+            <div className="team-profile-section" style={{ textAlign: 'left', marginBottom: 16 }}>
+              <div style={{ fontSize: 11, letterSpacing: '0.15em', color: 'var(--flag)', textTransform: 'uppercase', marginBottom: 10, fontFamily: 'var(--font-eyebrow)' }}>
+                Identidad del equipo
+              </div>
+              <div className="field">
+                <label>País</label>
+                <select value={form.country_id} onChange={(e) => update('country_id', e.target.value)}>
+                  <option value="">Selecciona…</option>
+                  {countries.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Descripción</label>
+                <CharField as="textarea" max={400} value={form.description} onChange={(e) => update('description', e.target.value)} />
+              </div>
+            </div>
+          )}
+
+          {/* Aparecer en el home — decisión personal del equipo, sin
+              aprobación de nadie: solo aplica a un equipo independiente
+              (uno de liga ya aparece si su liga es pública, sin este
+              interruptor). Se puede prender o apagar en cualquier momento. */}
+          {independent && (
+            <div className="team-profile-section" style={{ textAlign: 'left', marginBottom: 16 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={form.show_on_platform}
+                  onChange={(e) => update('show_on_platform', e.target.checked)}
+                />
+                <span>Mostrar mi equipo en el home de LIFA App</span>
+              </label>
+              <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: 6 }}>
+                Es tu decisión: puedes usar todas las herramientas de tu equipo sin aparecer aquí, y activarlo o desactivarlo cuando quieras desde tu panel.
+              </div>
+            </div>
+          )}
 
           {/* Links predeterminados de transmisión y boletos */}
           <div className="team-profile-section" style={{ textAlign: 'left', marginBottom: 16 }}>

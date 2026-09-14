@@ -493,6 +493,21 @@ router.patch('/leagues/:leagueId/settings', authRequired, leagueOwnerRequired, a
 // ─── Estado de cuenta del equipo (solo lectura) ─────────────────────────────
 
 router.get('/teams/:id/statement', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+  // Un equipo independiente (sin liga) no tiene ninguna relación de cobranza
+  // — ese libro es siempre liga -> equipo. No hay estado de cuenta que armar.
+  if (!req.team.league_id) {
+    return res.json({
+      team: { id: req.team.id, name: req.team.name },
+      league_name: null,
+      league_contact: null,
+      balance: 0,
+      currency: 'MXN',
+      next_due_date: null,
+      overdue_amount: 0,
+      entries: [],
+    });
+  }
+
   const leagueId = req.team.league_id;
   const teamId = req.team.id;
 
