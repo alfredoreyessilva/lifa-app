@@ -18,6 +18,9 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 
 ## Cambios recientes importantes (septiembre 2026)
 
+- **Monitoreo de errores (Sentry)**: integrado en frontend (`frontend/src/main.jsx` + `ErrorBoundary.jsx`, variable `VITE_SENTRY_DSN`) y backend (`backend/src/instrument.js`, importado antes que nada más en `server.js`; `Sentry.setupExpressErrorHandler(app)` justo antes del manejador de errores propio; variable `SENTRY_DSN`). Verificado en producción (Render + Vercel) forzando un error real y confirmando que llegó a Sentry.
+- **Páginas legales**: Términos de Servicio (`/terminos`) y Aviso de Privacidad (`/privacidad`) — `frontend/src/pages/TermsOfService.jsx` y `PrivacyPolicy.jsx`, enlazadas desde el footer. **Ojo**: tienen placeholders (`[Razón social...]`, `[correo de contacto...]`, `[domicilio...]`) sin rellenar todavía — hacerlo antes de depender de ellas para cobros reales (ver "Roadmap de negocio" más abajo).
+- **CI en GitHub Actions** (`.github/workflows/ci.yml`): en cada push/PR a `main` corre el build del frontend (`npm run build`) y un chequeo de sintaxis de todo `backend/src` (`node --check`, no hay tests reales todavía). No bloquea el deploy de Render/Vercel si falla — son procesos independientes, esto solo te avisa.
 - **Cobranza liga → equipos ("estado de cuenta") — V1**: la liga registra desde `/panel/liga/:id/cobranza` lo que cobra cada semana a sus equipos (renta de campo, arbitraje, transmisión, inscripción, multas), lleva un **libro append-only** por equipo y ve el panorama de adeudos. El monto es **por equipo** (tabla con casilla por equipo + botón que lo calcula como cuota × # de partidos de ese equipo en la jornada). El representante del equipo ve su estado de cuenta **de solo lectura** en `/panel/equipo/:id/estado-de-cuenta` y recibe recordatorios (cargo nuevo / por vencer / vencido / pago registrado) en su bandeja. En esta V1 **solo la liga escribe** — no hay flujo de "el equipo reporta un pago". Detalle completo en la sección "Cobranza" más abajo.
 
 ## Cambios recientes importantes (agosto 2026)
@@ -43,8 +46,8 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 
 ## En progreso — no terminado todavía
 
-- **Aprobación de Booking.com dentro de Travelpayouts**: el proyecto ya está verificado y Drive corriendo, pero el programa de Booking.com específicamente sigue en revisión ("we're reviewing your project"). Hasta que lo aprueben, el botón de Hotel funciona pero no genera comisión — no requiere ningún cambio de código, se activa solo cuando Travelpayouts lo confirme.
-- **Configurar método de pago (payout) en Travelpayouts**: sección Finance de la cuenta de Travelpayouts, pendiente de cargar cuenta de PayPal o bancaria. No depende de haber llegado al mínimo de pago ($50 USD vía PayPal) — hay que configurarlo antes de eso para no perderse el siguiente ciclo de pago.
+- **Aprobación de Booking.com dentro de Travelpayouts**: el proyecto ya está verificado y Drive corriendo, pero el programa de Booking.com específicamente fue rechazado por tráfico insuficiente. No requiere ningún cambio de código — hay que esperar a que el tráfico del sitio crezca (~3 meses desde el último rechazo) y volver a solicitar revisión.
+- ~~Configurar método de pago (payout) en Travelpayouts~~ — **hecho**: ya está configurado el payout a PayPal.
 - **Botón de "Rechazar" una liga pendiente**: hoy en `/admin` solo existe "Aprobar" y "Eliminar" (que borra todo permanentemente). Falta el endpoint y el botón correspondiente, y el aviso de "tu liga fue rechazada" en el panel del dueño.
 - **Contenido real de "Notificaciones"**: la página y el botón ya existen, pero todavía no muestra nada — falta decidir y construir qué información va ahí.
 - **Más tipos de organización**: "Registrar Organización" solo ofrece Liga por ahora. Equipo (fuera del flujo de invitación de una liga), Empresa/Marca y Medio de comunicación quedan pendientes.
@@ -166,8 +169,8 @@ Todo corre a través de una sola cuenta de **Travelpayouts** (red de afiliados d
 
 ### Pendiente del lado de la cuenta (no de código)
 
-- Aprobación de Booking.com dentro de Travelpayouts (ver "En progreso").
-- Configurar método de pago (payout) en la sección Finance de Travelpayouts — PayPal (mínimo $50 USD) es la opción más simple para persona física en México. Configurarlo no depende de haber llegado al mínimo; hacerlo antes evita perder un ciclo de pago completo.
+- Aprobación de Booking.com dentro de Travelpayouts (ver "En progreso") — esperando a que crezca el tráfico, sin acción inmediata.
+- ~~Configurar método de pago (payout)~~ — hecho, ya está configurado a PayPal.
 
 ## Cobranza (estado de cuenta liga → equipos)
 
@@ -285,3 +288,30 @@ El modelo de "varias organizaciones por cuenta" ya está en marcha (ver "Cambios
 
 1. Agregar los tipos Equipo independiente, Empresa/Marca y Medio de comunicación a "Registrar Organización".
 2. Más adelante: permisos de colaboración entre organizaciones — por ejemplo, que un Medio con permiso pueda actualizar directamente el link de transmisión de un partido registrado por una Liga, sin pasar por su dueño original.
+
+## Roadmap de negocio — operar sin intervención constante (actualizado 2026-09-14)
+
+Objetivo: que la plataforma genere flujo de cobro real sin que cada venta dependa de una acción manual del dueño. Progreso por fase:
+
+**Fase 0 — Cerrar lo que ya estaba a medias**
+- ✅ Payout de Travelpayouts a PayPal configurado.
+- ⏳ Aprobación de Booking.com: sin acción de código, solo esperar a que crezca el tráfico y volver a pedir revisión (ver "En progreso" arriba).
+
+**Fase 1 — Fundación de confiabilidad**
+- ✅ Páginas legales (`/terminos`, `/privacidad`) — placeholders de datos reales (razón social, domicilio, correo) sin llenar todavía.
+- ✅ Monitoreo de errores (Sentry) en frontend y backend, verificado en producción.
+- ✅ CI en GitHub Actions (build + chequeo de sintaxis en cada push).
+- ⏳ Pendiente: subir Render y Neon a un plan de pago (hoy se "duerme" en free tier — ver "Pendientes conocidos").
+- ⏳ Pendiente: rotar `CLOUDINARY_API_SECRET`.
+
+**Fase 2 — Automatizar el cobro (el bloqueador real de fondo)**
+No iniciado. Hoy `PUT /organizations/:id/plan` (`admin.js`) requiere que el admin active el plan "pro" a mano después de un pago fuera de la plataforma (transferencia/PayPal). Reemplazar por checkout self-serve + webhook (Conekta o Stripe — Conekta tiene ventaja en México por soportar OXXO/SPEI) que actualice `plan`/`plan_expires_at` solo, con downgrade automático si el pago falla. Después, evaluar extender el mismo mecanismo a `billing.js`: cobro en línea liga→equipo, y eventualmente equipo→jugador (para que los equipos cobren a sus propios jugadores).
+
+**Fase 3 — Red de seguridad técnica**
+No iniciado. Tests automatizados (hoy cero — empezar por auth y billing), monitoreo de uptime/alertas, y que el CI llegue a bloquear el deploy si algo falla (hoy Render/Vercel despliegan sin esperar al resultado del CI).
+
+**Fase 4 — Automatizar el ciclo de vida del cliente**
+No iniciado. Botón de "Rechazar" liga pendiente (hoy solo existe Aprobar/Eliminar permanente), onboarding automático por correo (Resend) para organizaciones nuevas, habilitar los tipos de organización pendientes en "Registrar Organización".
+
+**Fase 5 — Crecimiento sin esfuerzo manual**
+No iniciado. Página de precios pública para el plan "pro", analítica de conversión (hoy `track.js` solo cuenta vistas/clicks de sponsors), SEO/contenido más allá del sitemap actual.
