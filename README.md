@@ -255,8 +255,15 @@ del equipo (tabla `notifications`, tipos `billing_charge_new` / `billing_due_soo
 ### Fuera de la V1
 
 El equipo reportando pagos con comprobante para que la liga confirme/rechace; cobro
-en línea (pasarela); facturación/CFDI; pago de la liga a árbitros; desglose por
-jugador; suspender a un equipo por adeudo.
+en línea (pasarela — ver Fase 2 de "Roadmap de negocio" más abajo); facturación/CFDI;
+pago de la liga a árbitros; desglose por jugador; suspender a un equipo por adeudo.
+Pendiente también, sin dueño todavía: una pasada de estilo a `BillingLeaguePanel`
+(hoy la tabla es funcional pero simple, sin tarjeta de fondo).
+
+`team_ledger_entries` ya quedó modelada como un libro genérico "entre dos partes"
+(`created_by_side IN ('league','team')`, `kind`/`direction` sin acoplar a quién le
+cobra a quién) a propósito, para poder reusarla casi igual en **equipo → jugador**
+(cuotas de jugador) sin rehacer el esquema — ver "Roadmap de producto" más abajo.
 
 ## Seguridad — decisiones ya tomadas
 
@@ -315,3 +322,55 @@ No iniciado. Botón de "Rechazar" liga pendiente (hoy solo existe Aprobar/Elimin
 
 **Fase 5 — Crecimiento sin esfuerzo manual**
 No iniciado. Página de precios pública para el plan "pro", analítica de conversión (hoy `track.js` solo cuenta vistas/clicks de sponsors), SEO/contenido más allá del sitemap actual.
+
+## Roadmap de producto — herramientas para ligas y equipos (plan de sesión, sin construir salvo Cobranza)
+
+> Nota de procedencia: esta sección viene de una sesión de planeación con Claude
+> (8–14 sep 2026) sobre qué le da a LIFA App valor real para ligas y equipos —
+> el objetivo declarado del proyecto es ser "la casa del fútbol americano en
+> México". Es **estrategia de producto, no un compromiso de calendario** — a
+> diferencia de "Roadmap de negocio" (arriba), que es infraestructura/operación
+> y ya tiene fases en marcha. De esta lista, lo único construido hoy es
+> **Cobranza (liga → equipo) V1** — ver sección "Cobranza" arriba.
+
+Principio: **gratis** = quitarle a la liga/equipo el dolor operativo diario (que
+abandonen WhatsApp + Excel + Facebook). **De pago** = algo que le genera o le
+ahorra dinero real. Una liga se queda cuando (a) su historial vive en la
+plataforma, (b) su afición está ahí, (c) cobra por ahí — por eso Cobranza se
+adelantó al resto: es lo que hace que el admin de la liga vuelva cada semana.
+
+### Gratuitas — para enganchar
+
+**Para ligas**
+- Tabla de posiciones automática (PG-PP-PE, desempates configurables) — hoy se arma a mano.
+- Generador de rol de juegos (round-robin por conferencias, respeta sedes compartidas y byes).
+- Credencial digital de jugador con QR — el registro de roster (alta, traspasos, importar desde Excel) **ya existe** en `players.js`/`BranchRosterModal.jsx`; falta la parte de credencial/QR para resolver disputas de elegibilidad en la cancha.
+- Asignación de cuerpo arbitral (quién pita qué partido, disponibilidad, tarifa) — no existe.
+- Aviso de cambios de partido a quien lo sigue — ya existe vía `notifications.js`/web push.
+
+**Para equipos**
+- Convocatoria y confirmación de asistencia a partido/práctica (sustituye otro grupo de WhatsApp).
+- Lista de juego (game-day roster) exportable.
+- Página de equipo para reclutar ("únete a los X") — el perfil de equipo y la tarjeta de jugador compartible ya existen.
+
+### De pago — una vez que dependen de la plataforma
+
+**Para ligas**
+- **Inscripciones y pagos en línea** — el siguiente paso natural de Cobranza; ver Fase 2 de "Roadmap de negocio".
+- Estadísticas avanzadas / "Liga Pro": la captura por partido y jugador ya existe (`player_match_stats`, `MatchStatsModal.jsx`) — falta la capa agregada (líderes de liga, histórico multi-temporada, tablero para prensa).
+- Módulo de patrocinadores self-serve (ya hay tracking de impresiones/clics en `track.js`, falta el checkout).
+- Transmisión monetizada (PPV o pase de temporada).
+- Dominio propio sin marca LIFA; tienda oficial de la liga (`products.js`/bot de WhatsApp ya existen para tiendas tipo `store`, falta adaptarlo a mercancía de liga); módulo de disciplina (expulsión → suspensión automática); credenciales físicas impresas; seguro de jugadores vía aseguradora aliada.
+
+**Para equipos**
+- **Cobro de cuotas a jugadores** (equipo → jugador) — mismo modelo de `team_ledger_entries`, ver nota en "Fuera de la V1" de Cobranza.
+- Video/film del partido con recorte de jugadas (Hudl más barato).
+- Tienda del equipo (uniformes, fan gear); scouting de rivales de la misma liga; vitrina de reclutamiento para universidades/LFA.
+
+### Orden sugerido (revisar contra lo ya avanzado)
+
+Orden original propuesto: 1) tabla de posiciones + generador de calendario, 2) roster + credencial QR, 3) inscripciones/pagos en línea, 4) estadísticas por jugador, 5) patrocinadores self-serve. **En la práctica se adelantó Cobranza (liga→equipo) antes que el resto** porque resolvía el dolor más agudo hoy (cobranza semanal por WhatsApp) — orden válido, esto es una guía, no una secuencia obligatoria.
+
+### Estrategia de entrada (sin construir todavía)
+
+Todo lo operativo gratis el primer año; ofrecer migrar la temporada pasada desde su Excel; priorizar flag/tochito infantil-juvenil (menos herramientas legado que reemplazar, crecimiento fuerte de cara a LA 2028); conseguir una liga ancla bien montada y visible para que las demás sigan. El módulo de pagos (Cobranza → cobro en línea) es el punto de no retorno: en cuanto una liga cobra por la plataforma, no se va.
