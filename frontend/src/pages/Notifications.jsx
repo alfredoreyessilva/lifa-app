@@ -29,6 +29,16 @@ const TYPE_META = {
   billing_due_soon:         { icon: '⏰', label: 'Cargo por vencer', color: 'var(--ink-dim)' },
   billing_overdue:          { icon: '🔴', label: 'Cargo vencido',    color: 'var(--live)' },
   billing_payment_recorded: { icon: '✅', label: 'Pago registrado',  color: 'var(--field)' },
+  // El equipo le reporta un pago a su liga (bandeja de la LIGA), y el aviso de
+  // vuelta si se lo rechazan (bandeja del EQUIPO).
+  team_payment_reported:    { icon: '🧾', label: 'Pago por confirmar', color: 'var(--flag)' },
+  billing_payment_rejected: { icon: '⚠️', label: 'Pago rechazado',     color: 'var(--live)' },
+  // Cuotas del club a sus jugadores (routes/playerBilling.js). Los dos de
+  // vencimiento llegan agregados, uno por equipo y no uno por jugador —
+  // ver utils/billingReminders.js.
+  player_payment_reported:  { icon: '🧾', label: 'Pago por confirmar', color: 'var(--flag)' },
+  player_billing_due_soon:  { icon: '⏰', label: 'Cuotas por vencer',  color: 'var(--ink-dim)' },
+  player_billing_overdue:   { icon: '🔴', label: 'Cuotas vencidas',    color: 'var(--live)' },
 };
 
 function OrgNotificationItem({ notification }) {

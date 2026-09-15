@@ -229,7 +229,7 @@ export default function BranchRosterModal({ branchId, team, token, onClose }) {
         </div>
         <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Cerrar</button>
-          <button type="submit" className="btn btn-flag" disabled={saving}>
+          <button type="submit" className="btn btn-accent" disabled={saving}>
             {saving ? 'Guardando…' : '+ Agregar al roster'}
           </button>
         </div>

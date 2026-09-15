@@ -26,7 +26,8 @@ const RegisterOrganizationPage = lazy(() => import('./pages/RegisterOrganization
 const OrganizationDetailPage = lazy(() => import('./pages/OrganizationDetailPage.jsx'));
 const ProductsPanel = lazy(() => import('./pages/ProductsPanel.jsx'));
 const BillingLeaguePanel = lazy(() => import('./pages/BillingLeaguePanel.jsx'));
-const TeamStatementPanel = lazy(() => import('./pages/TeamStatementPanel.jsx'));
+const TeamPanel = lazy(() => import('./pages/TeamPanel.jsx'));
+const PlayerStatementPage = lazy(() => import('./pages/PlayerStatementPage.jsx'));
 const Login = lazy(() => import('./pages/Login.jsx'));
 const Register = lazy(() => import('./pages/Register.jsx'));
 const RegisterLeague = lazy(() => import('./pages/RegisterLeague.jsx'));
@@ -91,6 +92,11 @@ export default function App() {
             <Route path="/crear-cuenta" element={<Register />} />
             <Route path="/invitaciones/:token" element={<InviteClaim />} />
             <Route path="/quiniela/:code" element={<PoolJoinPage />} />
+            {/* Estado de cuenta de un jugador, SIN sesión: el papá lo abre
+                desde WhatsApp y el token de la URL es la credencial. Va fuera
+                de ProtectedRoute a propósito — exigir cuenta aquí es
+                exactamente la fricción que mata el cobro. */}
+            <Route path="/cuenta/:shareToken" element={<PlayerStatementPage />} />
             <Route path="/terminos" element={<TermsOfService />} />
             <Route path="/privacidad" element={<PrivacyPolicy />} />
             <Route
@@ -125,13 +131,33 @@ export default function App() {
               path="/panel/liga/:id/:year/torneo/:tournamentId/partidos"
               element={<ProtectedRoute><TournamentMatchesPanel /></ProtectedRoute>}
             />
+            {/* Panel de trabajo del equipo. Una página, seis secciones — ver
+                pages/TeamPanel.jsx. La ruta de estado de cuenta conserva su
+                URL de siempre porque ya viaja dentro de notificaciones
+                (data.url en routes/billing.js) y en links guardados. */}
             <Route
               path="/panel/equipo/:id"
-              element={<ProtectedRoute><Dashboard kind="equipo" /></ProtectedRoute>}
+              element={<ProtectedRoute><TeamPanel section="resumen" /></ProtectedRoute>}
+            />
+            <Route
+              path="/panel/equipo/:id/finanzas"
+              element={<ProtectedRoute><TeamPanel section="finanzas" /></ProtectedRoute>}
+            />
+            <Route
+              path="/panel/equipo/:id/jugadores"
+              element={<ProtectedRoute><TeamPanel section="jugadores" /></ProtectedRoute>}
             />
             <Route
               path="/panel/equipo/:id/estado-de-cuenta"
-              element={<ProtectedRoute><TeamStatementPanel /></ProtectedRoute>}
+              element={<ProtectedRoute><TeamPanel section="liga" /></ProtectedRoute>}
+            />
+            <Route
+              path="/panel/equipo/:id/perfil"
+              element={<ProtectedRoute><TeamPanel section="perfil" /></ProtectedRoute>}
+            />
+            <Route
+              path="/panel/equipo/:id/administradores"
+              element={<ProtectedRoute><TeamPanel section="administradores" /></ProtectedRoute>}
             />
             <Route
               path="/panel/organizacion/:id/inventario"

@@ -1,32 +1,25 @@
 import { useState } from 'react';
+import { money, periodLabelFor } from '../utils/money.js';
 
 const CATEGORY_LABELS = {
-  campo: 'Renta de campo',
-  arbitraje: 'Arbitraje',
-  transmision: 'Transmisión',
-  inscripcion: 'Inscripción',
-  multa: 'Multa',
-  fianza: 'Fianza',
-  otro: 'Otro',
+  mensualidad: 'Mensualidad', inscripcion: 'Inscripción', uniforme: 'Uniforme',
+  torneo: 'Torneo / viaje', equipamiento: 'Equipamiento', multa: 'Multa', otro: 'Otro',
 };
 
-function money(v) {
-  const n = Number(v);
-  return Number.isNaN(n) ? v : `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`;
-}
-
-// "$500.00" si todos pagan igual, "$500.00–$2,500.00" si difieren.
+// "$800.00" si todos pagan igual, "$400.00–$800.00" si difieren.
 function amountLabel(b) {
   const min = Number(b.min_amount), max = Number(b.max_amount);
   return min === max ? money(min) : `${money(min)}–${money(max)}`;
 }
 
-// Repite un lote de cargos anterior (misma categoría / concepto / monto,
-// mismos equipos) con una nueva fecha de vencimiento.
-export default function RepeatChargeModal({ batches, onSubmit, onCancel }) {
+// Repite un lote de cargos anterior con nueva fecha de vencimiento. Es la
+// acción de cada mes: "las cuotas de octubre igual que las de septiembre".
+// Respeta el monto que tenía cada jugador y salta a los que ya se dieron de
+// baja desde entonces.
+export default function RepeatPlayerChargeModal({ batches, onSubmit, onCancel }) {
   const [batchId, setBatchId] = useState(batches[0]?.batch_id || '');
   const [dueDate, setDueDate] = useState('');
-  const [weekLabel, setWeekLabel] = useState('');
+  const [periodLabel, setPeriodLabel] = useState(periodLabelFor());
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -43,7 +36,7 @@ export default function RepeatChargeModal({ batches, onSubmit, onCancel }) {
       await onSubmit({
         source_batch_id: batchId,
         due_date: dueDate,
-        week_label: weekLabel.trim() || null,
+        period_label: periodLabel.trim() || null,
       });
     } catch (err) {
       setError(err.message);
@@ -54,8 +47,9 @@ export default function RepeatChargeModal({ batches, onSubmit, onCancel }) {
   if (batches.length === 0) {
     return (
       <div>
-        <p style={{ color: 'var(--ink-dim)', fontSize: 14 }}>
-          Todavía no hay lotes de cobros para repetir. Registra un cobro en bloque primero.
+        <p style={{ color: 'var(--ws-ink-dim)', fontSize: 14 }}>
+          Todavía no hay cargos que repetir. Genera las cuotas de este mes primero y el mes
+          que entra las vuelves a crear desde aquí con un clic.
         </p>
         <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onCancel}>Cerrar</button>
@@ -69,20 +63,20 @@ export default function RepeatChargeModal({ batches, onSubmit, onCancel }) {
       {error && <div className="form-error">{error}</div>}
 
       <div className="field">
-        <label>Lote a repetir</label>
+        <label>Cargo a repetir</label>
         <select value={batchId} onChange={(e) => setBatchId(e.target.value)}>
           {batches.map((b) => (
             <option key={b.batch_id} value={b.batch_id}>
-              {(CATEGORY_LABELS[b.category] || b.category)} · {b.concept} · {amountLabel(b)} · {b.team_count} equipo{Number(b.team_count) === 1 ? '' : 's'}
+              {(CATEGORY_LABELS[b.category] || b.category)} · {b.concept} · {amountLabel(b)} · {b.player_count} jugador{Number(b.player_count) === 1 ? '' : 'es'}
             </option>
           ))}
         </select>
       </div>
 
       {selected && (
-        <p style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: -4 }}>
-          Se recrea ese lote ({amountLabel(selected)}, total {money(selected.total_amount)}) para los {selected.team_count} equipos
-          que sigan en la liga, respetando el monto de cada uno.
+        <p style={{ fontSize: 12, color: 'var(--ws-ink-faint)', marginTop: -4 }}>
+          Se vuelve a crear ese cargo ({amountLabel(selected)}, total {money(selected.total_amount)}) para
+          los {selected.player_count} jugadores que sigan en el plantel, respetando el monto de cada uno.
         </p>
       )}
 
@@ -92,8 +86,8 @@ export default function RepeatChargeModal({ batches, onSubmit, onCancel }) {
           <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
         </div>
         <div className="field">
-          <label>Jornada (opcional)</label>
-          <input value={weekLabel} onChange={(e) => setWeekLabel(e.target.value.toUpperCase())} placeholder="6" />
+          <label>Periodo (opcional)</label>
+          <input value={periodLabel} onChange={(e) => setPeriodLabel(e.target.value.toUpperCase())} placeholder="OCT-2026" />
         </div>
       </div>
 

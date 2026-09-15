@@ -469,4 +469,66 @@ export const api = {
     request(`/billing/leagues/${leagueId}/settings`, { method: 'PATCH', body: payload, token }),
   getTeamStatement: (teamId, token) =>
     request(`/billing/teams/${teamId}/statement`, { token }),
+  // El equipo le reporta a su liga un pago que ya hizo; nace pendiente y la
+  // liga lo confirma. Espejo de lo que el papá hace con su club.
+  reportTeamPayment: (teamId, payload, token) =>
+    request(`/billing/teams/${teamId}/report-payment`, { method: 'POST', body: payload, token }),
+  confirmTeamPayment: (entryId, token) =>
+    request(`/billing/entries/${entryId}/confirm`, { method: 'POST', token }),
+  withdrawTeamPayment: (teamId, token) =>
+    request(`/billing/teams/${teamId}/withdraw-payment`, { method: 'POST', token }),
+
+  getTeamBranches: (teamId, token) => request(`/players/teams/${teamId}/branches`, { token }),
+
+  // Cuotas del club (equipo → jugadores). Los dos últimos NO llevan token: el
+  // papá abre su estado de cuenta sin cuenta, el share_token es la credencial.
+  getPlayerBillingOverview: (teamId, token) =>
+    request(`/player-billing/teams/${teamId}/overview`, { token }),
+  getPlayerLedger: (teamId, playerId, token) =>
+    request(`/player-billing/teams/${teamId}/players/${playerId}/entries`, { token }),
+  createPlayerCharges: (teamId, payload, token) =>
+    request(`/player-billing/teams/${teamId}/charges`, { method: 'POST', body: payload, token }),
+  repeatPlayerCharges: (teamId, payload, token) =>
+    request(`/player-billing/teams/${teamId}/charges/repeat`, { method: 'POST', body: payload, token }),
+  recordPlayerPayment: (teamId, playerId, payload, token) =>
+    request(`/player-billing/teams/${teamId}/players/${playerId}/payments`, { method: 'POST', body: payload, token }),
+  confirmPlayerPayment: (entryId, token) =>
+    request(`/player-billing/entries/${entryId}/confirm`, { method: 'POST', token }),
+  voidPlayerLedgerEntry: (entryId, reason, token) =>
+    request(`/player-billing/entries/${entryId}/void`, { method: 'POST', body: { reason }, token }),
+  // Padrón del club: independiente de los rosters de torneo. Un equipo sin
+  // liga da de alta aquí a su gente y ya puede cobrarle.
+  addTeamMember: (teamId, payload, token) =>
+    request(`/player-billing/teams/${teamId}/members`, { method: 'POST', body: payload, token }),
+  removeTeamMember: (teamId, playerId, token) =>
+    request(`/player-billing/teams/${teamId}/members/${playerId}`, { method: 'DELETE', token }),
+  importRosterToMembers: (teamId, payload, token) =>
+    request(`/player-billing/teams/${teamId}/members/import-roster`, { method: 'POST', body: payload, token }),
+  // Edita persona y ficha de cobranza en una sola llamada.
+  updatePlayerAccount: (teamId, playerId, payload, token) =>
+    request(`/player-billing/teams/${teamId}/accounts/${playerId}`, { method: 'PATCH', body: payload, token }),
+  rotatePlayerShareToken: (teamId, playerId, token) =>
+    request(`/player-billing/teams/${teamId}/accounts/${playerId}/rotate-token`, { method: 'POST', token }),
+  updatePlayerBillingSettings: (teamId, payload, token) =>
+    request(`/player-billing/teams/${teamId}/settings`, { method: 'PATCH', body: payload, token }),
+  getPublicPlayerStatement: (shareToken) =>
+    request(`/player-billing/statement/${shareToken}`),
+  reportPlayerPayment: (shareToken, payload) =>
+    request(`/player-billing/statement/${shareToken}/report-payment`, { method: 'POST', body: payload }),
+  withdrawPlayerPayment: (shareToken) =>
+    request(`/player-billing/statement/${shareToken}/withdraw-payment`, { method: 'POST' }),
+
+  // Subida del comprobante por el papá — sin sesión, el share_token de la URL
+  // hace de credencial. No puede usar uploadImage(): ese manda Authorization.
+  uploadPaymentProof: async (shareToken, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${BASE}/player-billing/statement/${shareToken}/upload-proof`, {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'No se pudo subir el comprobante');
+    return data;
+  },
 };
