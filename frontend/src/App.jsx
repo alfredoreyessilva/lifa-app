@@ -1,35 +1,43 @@
-import { useLayoutEffect } from 'react';
+import { lazy, Suspense, useLayoutEffect } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import TopBar from './components/TopBar.jsx';
 import SponsorBar from './components/SponsorBar.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
+import Loading from './components/Loading.jsx';
 import Home from './pages/Home.jsx';
-import YearSelectPage from './pages/YearSelectPage.jsx';
-import TournamentMatchesPanel from './pages/TournamentMatchesPanel.jsx';
-import LeagueStructurePanel from './pages/LeagueStructurePanel.jsx';
-import LeaguePage from './pages/LeaguePage.jsx';
-import TournamentPage from './pages/TournamentPage.jsx';
-import CalendarPage from './pages/CalendarPage.jsx';
-import MatchPage from './pages/MatchPage.jsx';
-import PlayerCardPage from './pages/PlayerCardPage.jsx';
-import RegisterOrganizationPage from './pages/RegisterOrganizationPage.jsx';
-import OrganizationDetailPage from './pages/OrganizationDetailPage.jsx';
-import ProductsPanel from './pages/ProductsPanel.jsx';
-import BillingLeaguePanel from './pages/BillingLeaguePanel.jsx';
-import TeamStatementPanel from './pages/TeamStatementPanel.jsx';
-import Login from './pages/Login.jsx';
-import Register from './pages/Register.jsx';
-import RegisterLeague from './pages/RegisterLeague.jsx';
-import RegisterTeamPage from './pages/RegisterTeamPage.jsx';
-import Dashboard from './pages/Dashboard.jsx';
-import Notifications from './pages/Notifications.jsx';
-import AdminPanel from './pages/AdminPanel.jsx';
-import InviteClaim from './pages/InviteClaim.jsx';
-import PoolJoinPage from './pages/PoolJoinPage.jsx';
-import TermsOfService from './pages/TermsOfService.jsx';
-import PrivacyPolicy from './pages/PrivacyPolicy.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import AdminRoute from './components/AdminRoute.jsx';
+
+// Todo lo que no sea Home se carga bajo demanda (code-splitting) en vez de
+// venir en el bundle principal — así la primera visita (casi siempre a "/")
+// no descarga también el panel de admin, el dashboard, etc. Ver
+// vite.config.js: los chunks resultantes se nombran con hash genérico, no
+// con el nombre de la página, para no repetir el bloqueo de Brave Shields
+// que tuvimos con PrivacyPolicy.jsx en dev.
+const YearSelectPage = lazy(() => import('./pages/YearSelectPage.jsx'));
+const TournamentMatchesPanel = lazy(() => import('./pages/TournamentMatchesPanel.jsx'));
+const LeagueStructurePanel = lazy(() => import('./pages/LeagueStructurePanel.jsx'));
+const LeaguePage = lazy(() => import('./pages/LeaguePage.jsx'));
+const TournamentPage = lazy(() => import('./pages/TournamentPage.jsx'));
+const CalendarPage = lazy(() => import('./pages/CalendarPage.jsx'));
+const MatchPage = lazy(() => import('./pages/MatchPage.jsx'));
+const PlayerCardPage = lazy(() => import('./pages/PlayerCardPage.jsx'));
+const RegisterOrganizationPage = lazy(() => import('./pages/RegisterOrganizationPage.jsx'));
+const OrganizationDetailPage = lazy(() => import('./pages/OrganizationDetailPage.jsx'));
+const ProductsPanel = lazy(() => import('./pages/ProductsPanel.jsx'));
+const BillingLeaguePanel = lazy(() => import('./pages/BillingLeaguePanel.jsx'));
+const TeamStatementPanel = lazy(() => import('./pages/TeamStatementPanel.jsx'));
+const Login = lazy(() => import('./pages/Login.jsx'));
+const Register = lazy(() => import('./pages/Register.jsx'));
+const RegisterLeague = lazy(() => import('./pages/RegisterLeague.jsx'));
+const RegisterTeamPage = lazy(() => import('./pages/RegisterTeamPage.jsx'));
+const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
+const Notifications = lazy(() => import('./pages/Notifications.jsx'));
+const AdminPanel = lazy(() => import('./pages/AdminPanel.jsx'));
+const InviteClaim = lazy(() => import('./pages/InviteClaim.jsx'));
+const PoolJoinPage = lazy(() => import('./pages/PoolJoinPage.jsx'));
+const TermsOfService = lazy(() => import('./pages/TermsOfService.jsx'));
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy.jsx'));
 
 // Al navegar a otra ruta, React Router conserva el scroll de la página
 // anterior — así que al entrar a la MatchPage desde un calendario ya
@@ -59,6 +67,7 @@ export default function App() {
               fuera de este boundary, así que siguen visibles aunque una
               página específica truene. */}
           <ErrorBoundary key={location.pathname}>
+          <Suspense fallback={<Loading />}>
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/anios" element={<YearSelectPage />} />
@@ -128,6 +137,7 @@ export default function App() {
             />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
           </ErrorBoundary>
         </main>
       </div>

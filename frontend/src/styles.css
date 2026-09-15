@@ -707,6 +707,13 @@ a { color: inherit; }
 }
 
 /* ---------- Dashboard ---------- */
+.dashboard-panel {
+  background: #000;
+  border-radius: 16px;
+  padding: 28px 24px 32px;
+  margin-top: 8px;
+  margin-bottom: 40px;
+}
 .dash-header {
   display: flex;
   justify-content: space-between;
@@ -831,6 +838,7 @@ a { color: inherit; }
 
 /* ---------- Footer ---------- */
 .footer {
+  background: transparent;
   border-top: 1px solid var(--line);
   padding: 32px 0;
   text-align: center;
@@ -1759,6 +1767,10 @@ a { color: inherit; }
   /* Container con menos padding */
   .container {
     padding: 0 16px;
+  }
+
+  .dashboard-panel {
+    padding: 20px 16px 24px;
   }
 
   /* Modal ocupa más pantalla */

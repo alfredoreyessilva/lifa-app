@@ -34,18 +34,20 @@ export default function Dashboard({ kind }) {
 
   return (
     <div className="container">
-      <OrgLogoBar selectedKind={kind} selectedId={id} />
+      <div className="dashboard-panel">
+        <OrgLogoBar selectedKind={kind} selectedId={id} />
 
-      {/* Contenido personal ("de aficionado"): solo en "Mi panel" (sin liga ni
-          equipo seleccionado). Al entrar a una liga o equipo, la página es el
-          espacio de trabajo de ESA organización y nada más. */}
-      {!kind && <PredictionStats />}
-      {!kind && <MiCartelera />}
+        {/* Contenido personal ("de aficionado"): solo en "Mi panel" (sin liga ni
+            equipo seleccionado). Al entrar a una liga o equipo, la página es el
+            espacio de trabajo de ESA organización y nada más. */}
+        {!kind && <PredictionStats />}
+        {!kind && <MiCartelera />}
 
-      {selected?.kind === 'liga' && <LeagueWorkPanel leagueId={selected.id} />}
-      {selected?.kind === 'equipo' && (
-        <TeamOnlyPanel teams={[selected]} token={token} onChange={refreshLeagues} />
-      )}
+        {selected?.kind === 'liga' && <LeagueWorkPanel leagueId={selected.id} />}
+        {selected?.kind === 'equipo' && (
+          <TeamOnlyPanel teams={[selected]} token={token} onChange={refreshLeagues} />
+        )}
+      </div>
     </div>
   );
 }
@@ -107,7 +109,7 @@ function LeagueWorkPanel({ leagueId }) {
   }
 
   return (
-    <div className="container">
+    <div>
       <div className="dash-header">
         <div>
           <span className="eyebrow">Panel de representante</span>
@@ -601,7 +603,7 @@ function TeamOnlyPanel({ teams, token, onChange }) {
   const balance = statement ? Number(statement.balance || 0) : null;
 
   return (
-    <div className="container">
+    <div>
       <div className="dash-header">
         <div>
           <span className="eyebrow">Panel de representante de equipo</span>

@@ -101,6 +101,7 @@ export default function LeagueStructurePanel() {
 
   return (
     <div className="container">
+      <div className="dashboard-panel">
       <OrgLogoBar selectedKind="liga" selectedId={id} />
 
       <div className="dash-header">
@@ -323,6 +324,7 @@ export default function LeagueStructurePanel() {
           onLeagueChanged={() => { refreshLeagues(); refresh(); setModal(null); }}
         />
       )}
+      </div>
     </div>
   );
 }

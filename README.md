@@ -24,6 +24,11 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 - **Cobranza liga → equipos ("estado de cuenta") — V1**: la liga registra desde `/panel/liga/:id/cobranza` lo que cobra cada semana a sus equipos (renta de campo, arbitraje, transmisión, inscripción, multas), lleva un **libro append-only** por equipo y ve el panorama de adeudos. El monto es **por equipo** (tabla con casilla por equipo + botón que lo calcula como cuota × # de partidos de ese equipo en la jornada). El representante del equipo ve su estado de cuenta **de solo lectura** en `/panel/equipo/:id/estado-de-cuenta` y recibe recordatorios (cargo nuevo / por vencer / vencido / pago registrado) en su bandeja. En esta V1 **solo la liga escribe** — no hay flujo de "el equipo reporta un pago". Detalle completo en la sección "Cobranza" más abajo.
 - **Roster por plantilla de Excel**: además del alta manual jugador por jugador que ya existía, ahora se puede descargar (desde el modal de roster de un equipo dentro de una rama) una plantilla `.xlsx` con el logo de la liga, el logo del equipo y el contexto (Liga/Torneo/Categoría/Rama/Equipo) ya incrustados, llenarla y volver a subirla — solo agrega a los jugadores que todavía no estén en esa rama, nunca borra a nadie. Se agregó CURP a `players` y un botón de foto por jugador (Cloudinary). Detalle completo en la sección "Roster de jugadores" más abajo.
 - **Equipos independientes (sin liga)**: un equipo ya se puede registrar directo desde `/registrar-equipo` sin pertenecer a ninguna liga de la plataforma (`teams.league_id` ahora es opcional). Usa el mismo mecanismo de verificación de identidad que cualquier otra organización (`organizations.is_verified`, admin desde `/admin`) — antes esa pestaña excluía a todos los equipos. Aparecer en el home es decisión propia del equipo (`show_on_platform`, interruptor sin aprobación de nadie, se prende/apaga desde su panel) y no limita ninguna otra función; un equipo de liga sigue apareciendo exactamente igual que antes, sin cambios. Detalle completo en la sección "Equipos independientes" más abajo.
+- **Footer ya no se pinta negro por default**: `.footer` en `styles.css` tenía `background: #000` fijo, así que se veía como una barra negra sólida en cualquier página, sin importar si esa sección tenía o no un panel negro real detrás (ej. el Home, que no usa panel negro en ningún lado). Se cambió a `background: transparent` para que herede el fondo verde de cancha del `body`, igual que el resto del sitio.
+- **Travelpayouts Drive removido de `frontend/index.html`**: ese script reescribía automáticamente los links salientes a marcas de viaje y podía insertar ofertas/contenido propio en la página — se quitó a petición explícita (no se quieren anuncios ni contenido que "salte" en el sitio), y porque Brave Shields (y listas de bloqueo tipo EasyPrivacy) lo bloqueaban de cualquier forma. **Efecto directo: el botón 🏨 Hotel en `MatchPage` dejó de generar comisión** — era el único mecanismo que agregaba el marcador de afiliado al link de Booking.com. El botón ✈️ Vuelo (widget de Aviasales) no se afectó — trae su propio marcador embebido, independiente de Drive. Detalle y alternativa sin Drive en "Monetización" más abajo.
+- **Diagnóstico de pantalla en blanco en `localhost` (solo en dev, no afecta producción)**: `PrivacyPolicy.jsx` se importaba de forma estática en `App.jsx`. En dev, Vite sirve cada componente como su propio archivo (`/src/pages/PrivacyPolicy.jsx`), y Brave Shields bloquea por heurística cualquier URL que contenga la palabra "privacy" — al bloquearse ese import estático se rompía la carga de **toda** la app (pantalla en blanco). En producción no pasaba porque Vite empaqueta todo en un solo bundle sin nombres de archivo reconocibles, pero el riesgo estaba ahí para cualquier página que en el futuro se cargara distinto.
+- **Code-splitting por ruta** (`App.jsx` + `vite.config.js`): todas las páginas excepto `Home` ahora se cargan con `React.lazy()` dentro de un `<Suspense fallback={<Loading />}>`, y los chunks resultantes se nombran con hash genérico (`chunkFileNames: 'assets/chunk-[hash].js'` en `vite.config.js`) en vez del nombre real de cada página — así ningún bloqueador puede tumbar una página por su nombre. Efecto medido con `npm run build`: el bundle principal bajó de 946 KB a ~300 KB; el resto se reparte en ~40 chunks pequeños que se descargan solo al entrar a esa página. Bonus: si algún chunk llega a fallar (bloqueado, red lenta), el `ErrorBoundary`/`Suspense` ya existentes lo contienen a esa sola página — TopBar, SponsorBar y footer siguen funcionando.
+- **Panel negro (`dashboard-panel`) ahora envuelve el contenido de `Dashboard.jsx`, `LeagueStructurePanel.jsx` y `TournamentMatchesPanel.jsx`** — antes solo lo tenía `Dashboard.jsx` en parte de su contenido. **Sin verificar visualmente todavía**: revisar en el navegador que se vea bien en las tres pantallas antes de darlo por cerrado (en los dos últimos archivos el `<div>` nuevo no reindentó el contenido interno — cosmético en el código fuente, no afecta el render).
 
 ## Cambios recientes importantes (agosto 2026)
 
@@ -48,7 +53,8 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 
 ## En progreso — no terminado todavía
 
-- **Aprobación de Booking.com dentro de Travelpayouts**: el proyecto ya está verificado y Drive corriendo, pero el programa de Booking.com específicamente fue rechazado por tráfico insuficiente. No requiere ningún cambio de código — hay que esperar a que el tráfico del sitio crezca (~3 meses desde el último rechazo) y volver a solicitar revisión.
+- **Reactivar comisión de Hotel sin Drive**: desde que se quitó Travelpayouts Drive (ver "Cambios recientes" y "Monetización"), el botón 🏨 Hotel no genera comisión. Ya no depende de la aprobación de Booking.com dentro de Travelpayouts (ese flujo se fue junto con Drive) — la alternativa ya integrada en el código es configurar `VITE_HOTEL_AFFILIATE_ID` con un ID de afiliado directo de Booking.com. Falta conseguir/confirmar ese ID y configurarlo en Vercel.
+- **QA visual del panel negro en Dashboard/LeagueStructurePanel/TournamentMatchesPanel**: se terminó de envolver el contenido de las tres pantallas en `.dashboard-panel` (ver "Cambios recientes"), pero no se probó en el navegador — confirmar que se vea bien antes de darlo por cerrado.
 - ~~Configurar método de pago (payout) en Travelpayouts~~ — **hecho**: ya está configurado el payout a PayPal.
 - **Botón de "Rechazar" una liga pendiente**: hoy en `/admin` solo existe "Aprobar" y "Eliminar" (que borra todo permanentemente). Falta el endpoint y el botón correspondiente, y el aviso de "tu liga fue rechazada" en el panel del dueño.
 - **Contenido real de "Notificaciones"**: la página y el botón ya existen, pero todavía no muestra nada — falta decidir y construir qué información va ahí.
@@ -84,7 +90,8 @@ lifa-app/
       seed.js                Datos de ejemplo para desarrollo local
       server.js              Arranque de Express: CORS, rate limiting, rutas, manejo de errores
   frontend/
-    index.html               <head> con script de Travelpayouts Drive (ver "Monetización")
+    index.html               <head> con Google Identity Services (login con Google) —
+                              ya no tiene el script de Travelpayouts Drive, ver "Monetización"
     src/
       pages/
         Home, LeaguePage, CalendarPage, MatchPage, Login, Register,
@@ -159,12 +166,11 @@ La plataforma monetiza mediante comisión de afiliado en dos accesos de `MatchPa
 
 Todo corre a través de una sola cuenta de **Travelpayouts** (red de afiliados de viaje), sin necesidad de tener una empresa constituida — basta con RFC persona física con actividad empresarial para poder facturar la comisión más adelante.
 
-### Hotel — Drive + link limpio
+### Hotel — link limpio, sin comisión activa por ahora
 
 - `buildHotelSearchUrl()` en `matchServices.js` arma un link normal a `booking.com/searchresults.html` con la ciudad de la sede y la fecha del partido — sin ningún ID de afiliado hardcodeado.
-- El script de **Travelpayouts Drive** (pegado en `frontend/index.html`, dentro del `<head>`) detecta ese link en el navegador del usuario y le agrega el marcador de afiliado automáticamente, sin que el código de React sepa nada de esto.
-- **Requisito para que genere comisión**: estar aprobado en el programa de Booking.com dentro de Travelpayouts (Programs → Booking.com). A diferencia de otras marcas de la red, Booking.com pasa por revisión manual de su parte (puede tardar varios días) — mientras tanto el botón funciona igual, solo que sin comisión.
-- La variable de entorno `VITE_HOTEL_AFFILIATE_ID` existe en el código como alternativa (afiliado directo con Booking, sin pasar por Travelpayouts), pero **debe quedar sin configurar** mientras se use Drive — ambos sistemas escriben el mismo parámetro (`aid`) en la URL y competirían entre sí.
+- **Travelpayouts Drive se quitó de `frontend/index.html`** (septiembre 2026): era el script que detectaba ese link en el navegador del usuario y le agregaba el marcador de afiliado automáticamente. Se quitó porque también insertaba contenido/ofertas por su cuenta (anuncios, en la práctica) y Brave Shields lo bloqueaba de cualquier forma. **Efecto: el botón Hotel hoy no genera ninguna comisión** — el link sigue funcionando normal para el usuario, solo que sin marcador de afiliado.
+- La variable de entorno `VITE_HOTEL_AFFILIATE_ID` sigue en el código como alternativa: si se configura con un ID de afiliado **directo** de Booking.com (sin pasar por Travelpayouts ni por ningún script de terceros), `buildHotelSearchUrl()` le agrega el parámetro `aid` directo a la URL. Antes debía quedar vacío para no chocar con Drive; ahora que Drive no existe, ya se puede configurar sin conflicto. **Pendiente**: conseguir ese ID (ver "En progreso").
 
 ### Vuelo — widget embebido de Aviasales
 
@@ -177,7 +183,7 @@ Todo corre a través de una sola cuenta de **Travelpayouts** (red de afiliados d
 
 ### Pendiente del lado de la cuenta (no de código)
 
-- Aprobación de Booking.com dentro de Travelpayouts (ver "En progreso") — esperando a que crezca el tráfico, sin acción inmediata.
+- Conseguir un ID de afiliado directo de Booking.com y configurarlo en `VITE_HOTEL_AFFILIATE_ID` (ver "Hotel" arriba y "En progreso") — es lo único que falta para que el botón Hotel vuelva a generar comisión, ahora que ya no depende de Travelpayouts Drive ni de su aprobación de programa.
 - ~~Configurar método de pago (payout)~~ — hecho, ya está configurado a PayPal.
 
 ## Cobranza (estado de cuenta liga → equipos)

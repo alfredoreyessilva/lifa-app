@@ -95,6 +95,7 @@ export default function TournamentMatchesPanel() {
 
   return (
     <div className="container">
+      <div className="dashboard-panel">
       <OrgLogoBar selectedKind="liga" selectedId={id} />
       <div className="crumb">
         <Link to={`/panel/liga/${id}/estructura`}>← Liga</Link>
@@ -277,6 +278,7 @@ export default function TournamentMatchesPanel() {
       {modal?.type === 'stats' && (
         <MatchStatsModal match={modal.match} token={token} onClose={() => setModal(null)} />
       )}
+      </div>
     </div>
   );
 }
