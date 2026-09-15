@@ -161,6 +161,43 @@ export const teamLeagueOwnerRequired = asyncHandler(async (req, res, next) => {
   return res.status(403).json({ error: 'Solo el representante de la liga puede gestionar esto' });
 });
 
+// Para gestionar administradores de la organización detrás de una liga o un
+// equipo (invitar/listar/quitar vía organization_members) — a diferencia de
+// teamLeagueOwnerRequired (que solo deja a la liga entregar un equipo), aquí
+// sí se le permite esto a quien ya administra esa organización (owner o
+// admin), sea liga o equipo, porque a diferencia de "regalar" el equipo
+// completo, sumar a alguien más con el mismo acceso es una decisión que
+// cualquiera de los administradores actuales puede tomar por su cuenta.
+export const organizationAdminRequired = asyncHandler(async (req, res, next) => {
+  const organizationId = Number(req.params.organizationId || req.params.id);
+  const organization = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(organizationId);
+  if (!organization) return res.status(404).json({ error: 'Organización no encontrada' });
+
+  const isMember = await isOrgMember(req.user.id, organization.id, ['owner', 'admin']);
+  if (req.user.role === 'admin' || isMember) {
+    req.organization = organization;
+    return next();
+  }
+
+  // Respaldo mientras se completa la migración a organization_members: el
+  // owner_user_id de siempre (de la liga o el equipo detrás de esta
+  // organización) también puede invitar administradores nuevos.
+  const league = await db.prepare('SELECT * FROM leagues WHERE organization_id = ?').get(organization.id);
+  if (league && league.owner_user_id === req.user.id) {
+    req.organization = organization;
+    req.league = league;
+    return next();
+  }
+  const team = await db.prepare('SELECT * FROM teams WHERE organization_id = ?').get(organization.id);
+  if (team && team.owner_user_id === req.user.id) {
+    req.organization = organization;
+    req.team = team;
+    return next();
+  }
+
+  return res.status(403).json({ error: 'No tienes permiso sobre esta organización' });
+});
+
 export const venueOwnerRequired = asyncHandler(async (req, res, next) => {
   const venueId = Number(req.params.id);
   const venue = await db.prepare('SELECT * FROM venues WHERE id = ?').get(venueId);

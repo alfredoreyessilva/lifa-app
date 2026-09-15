@@ -12,6 +12,7 @@ import EditLeagueForm from '../components/EditLeagueForm.jsx';
 import MatchForm from '../components/MatchForm.jsx';
 import ExcelImport from '../components/ExcelImport.jsx';
 import InviteTeamModal from '../components/InviteTeamModal.jsx';
+import OrgAdminsPanel from '../components/OrgAdminsPanel.jsx';
 import TeamRosterModal from '../components/TeamRosterModal.jsx';
 import BranchRosterModal from '../components/BranchRosterModal.jsx';
 import MatchStatsModal from '../components/MatchStatsModal.jsx';
@@ -97,7 +98,6 @@ export default function LeagueStructurePanel() {
   const venues = data?.venues || [];
   const leagueTimezone = league?.timezone || 'America/Mexico_City';
   const tournaments = data?.tournaments || [];
-  const legacy = data?.legacy || { categories: 0, matches: 0 };
 
   return (
     <div className="container">
@@ -108,6 +108,7 @@ export default function LeagueStructurePanel() {
         <div>
           <span className="eyebrow">{sidebarLeague.name}</span>
           <h1>Liga</h1>
+          {league?.state && <span style={{ fontSize: 12, color: 'var(--ink-dim)' }}>{league.state}</span>}
           {league?.timezone && (
             <span style={{ fontSize: 11, color: 'var(--ink-dim)', display: 'block', marginTop: 2 }}>
               🕐 {getTimezoneLabel(league.timezone)}
@@ -164,12 +165,8 @@ export default function LeagueStructurePanel() {
         </div>
       )}
 
-      {legacy.matches > 0 && (
-        <div className="form-error" style={{ background: 'rgba(255,210,63,0.1)', borderColor: 'var(--flag)', color: 'var(--ink)' }}>
-          Tienes <strong>{legacy.matches} partido{legacy.matches === 1 ? '' : 's'}</strong> en el calendario anterior
-          (categorías sin torneo). Ese calendario se administra en la pantalla clásica.{' '}
-          <Link to={`/panel/liga/${id}`} style={{ color: 'var(--flag)', fontWeight: 700 }}>Abrir pantalla clásica →</Link>
-        </div>
+      {league?.organization_id && (
+        <OrgAdminsPanel organizationId={league.organization_id} organizationName={sidebarLeague.name} token={token} />
       )}
 
       <div className="tree-toolbar">

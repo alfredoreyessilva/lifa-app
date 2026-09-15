@@ -1173,6 +1173,16 @@ export async function initSchema() {
     // no se le limita ninguna otra función de la plataforma por seguir así.
     await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS show_on_platform BOOLEAN NOT NULL DEFAULT FALSE`);
     await run(`CREATE INDEX IF NOT EXISTS idx_teams_show_on_platform ON teams(show_on_platform) WHERE league_id IS NULL`);
+
+    // Invitaciones de tipo 'org_admin': a diferencia de 'team' (que
+    // REEMPLAZA al representante en teams.owner_user_id), esta agrega a
+    // quien la reclama como un miembro más de organization_members — así
+    // una liga o equipo puede tener varios administradores con acceso
+    // simultáneo, no solo un dueño único. organization_id apunta a la
+    // organización (de la liga o del equipo, ambas ya tienen una) que se
+    // está invitando a administrar.
+    await run(`ALTER TABLE invites ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_invites_organization ON invites(organization_id)`);
   } finally {
     // Se suelta el candado y se libera la conexión pase lo que pase
     await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY]).catch(() => {});

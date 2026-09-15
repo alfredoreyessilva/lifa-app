@@ -425,6 +425,15 @@ export const api = {
   claimInvite: (inviteToken, token) =>
     request(`/invites/${inviteToken}/claim`, { method: 'POST', token }),
 
+  // Invitaciones de administrador (varios administradores para una misma
+  // organización — liga o equipo — con el mismo acceso)
+  createOrgAdminInvite: (organizationId, token) =>
+    request(`/invites/organizations/${organizationId}/admins`, { method: 'POST', token }),
+  getOrganizationMembers: (organizationId, token) =>
+    request(`/organizations/${organizationId}/members`, { token }),
+  removeOrganizationMember: (organizationId, userId, token) =>
+    request(`/organizations/${organizationId}/members/${userId}`, { method: 'DELETE', token }),
+
   // Bandeja de notificaciones (pantalla "Notificaciones")
   getLeagueNotifications: (leagueId, token) => request(`/notifications/league/${leagueId}`, { token }),
   getTeamNotifications: (teamId, token) => request(`/notifications/team/${teamId}`, { token }),

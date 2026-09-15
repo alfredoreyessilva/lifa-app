@@ -238,7 +238,20 @@ router.get('/me', authRequired, asyncHandler(async (req, res) => {
     'SELECT id, name, email, role, email_verified FROM users WHERE id = ?'
   ).get(req.user.id);
   if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-  const leagues = await db.prepare('SELECT id, name, slug, logo_url, status FROM leagues WHERE owner_user_id = ?').all(user.id);
+  // Antes solo por owner_user_id (un único dueño). Ahora también cuentan
+  // como propias las ligas/equipos donde el usuario es administrador vía
+  // organization_members — así alguien que aceptó una invitación de
+  // administrador (ver POST /invites/organizations/:id/admins) también las
+  // ve en "Mi panel", no solo el dueño original.
+  const leagues = await db.prepare(`
+    SELECT id, name, slug, logo_url, status
+    FROM leagues l
+    WHERE l.owner_user_id = ?
+       OR EXISTS (
+         SELECT 1 FROM organization_members om
+         WHERE om.organization_id = l.organization_id AND om.user_id = ? AND om.status = 'active'
+       )
+  `).all(user.id, user.id);
   // LEFT JOIN a propósito: un equipo independiente (registrado sin liga,
   // ver POST /manage/teams) tiene league_id NULL — con INNER JOIN
   // simplemente desaparecía de "Mi panel" para su propio dueño.
@@ -251,13 +264,18 @@ router.get('/me', authRequired, asyncHandler(async (req, res) => {
     LEFT JOIN leagues l        ON l.id = t.league_id
     LEFT JOIN organizations o  ON o.id = t.organization_id
     WHERE t.owner_user_id = ?
-  `).all(user.id);
+       OR EXISTS (
+         SELECT 1 FROM organization_members om
+         WHERE om.organization_id = t.organization_id AND om.user_id = ? AND om.status = 'active'
+       )
+  `).all(user.id, user.id);
   // Campo nuevo, aditivo: todas las organizaciones donde el usuario es
   // miembro activo (owner/admin/editor), vía organization_members. "leagues"
-  // y "teams" arriba siguen calculándose igual que siempre (por
-  // owner_user_id) — el frontend todavía los usa así. "organizations" es la
-  // fuente que el panel va a adoptar en el siguiente paso, y a futuro es la
-  // única que va a poder mostrar organizaciones con más de un miembro.
+  // y "teams" arriba ya incluyen esto también (ver EXISTS de arriba), así
+  // que un administrador invitado aparece en ambos lados sin tener que
+  // migrar OrgLogoBar todavía. "organizations" sigue siendo la fuente que el
+  // panel va a adoptar en el siguiente paso para los tipos que no son liga
+  // ni equipo (medios, proveedores, tiendas, clínicas).
   const organizations = await db.prepare(`
     SELECT o.id, o.name, o.slug, o.type, o.logo_url, o.status, o.is_verified, om.role AS member_role
     FROM organization_members om

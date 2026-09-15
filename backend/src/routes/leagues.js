@@ -345,6 +345,23 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
   res.json({ category, matches });
 }));
 
+// Mismo patrón que createTeamOrganization en manage.js: cada liga necesita su
+// organización desde el momento en que se crea (no solo vía el backfill que
+// corre al arrancar el servidor) — si no, se queda con organization_id en
+// NULL hasta el siguiente reinicio, y mientras tanto cosas como "Invitar
+// administrador" (que dependen de esa organización) no tienen dónde vivir.
+async function createLeagueOrganization(name, { country_id, logo_url, description, website_url } = {}) {
+  let slug = slugify(name);
+  const existing = await db.prepare('SELECT id FROM organizations WHERE slug = ?').get(slug);
+  if (existing) slug = `${slug}-${Date.now().toString().slice(-5)}`;
+
+  return db.prepare(`
+    INSERT INTO organizations (name, slug, type, country_id, logo_url, description, website_url, status)
+    VALUES (?, ?, 'league', ?, ?, ?, ?, 'active')
+    RETURNING *
+  `).get(name, slug, country_id || null, logo_url || null, description || null, website_url || null);
+}
+
 // Un arreglo de estados a texto JSON para guardarlo en la columna jsonb
 // "states" — mismo patrón que toLinksJson en manage.js.
 function toStatesJson(value) {
@@ -389,10 +406,12 @@ router.post('/', authRequired, asyncHandler(async (req, res) => {
   const existing = await db.prepare('SELECT id FROM leagues WHERE slug = ?').get(slug);
   if (existing) slug = `${slug}-${Date.now().toString().slice(-5)}`;
 
+  const org = await createLeagueOrganization(name.trim(), { country_id, logo_url, description, website_url });
+
   const result = await db.prepare(`
     INSERT INTO leagues (name, slug, logo_url, cover_url, country_id, state, states, description, owner_user_id, timezone,
-      facebook_url, instagram_url, twitter_url, youtube_url, tiktok_url, website_url, whatsapp)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      facebook_url, instagram_url, twitter_url, youtube_url, tiktok_url, website_url, whatsapp, organization_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     name.trim(), slug, logo_url || null, cover_url || null, country_id || null,
     isMexico ? states.join(', ') : (state || null),
@@ -400,8 +419,18 @@ router.post('/', authRequired, asyncHandler(async (req, res) => {
     description || null, req.user.id,
     timezone || 'America/Mexico_City',
     facebook_url || null, instagram_url || null, twitter_url || null,
-    youtube_url || null, tiktok_url || null, website_url || null, whatsapp || null
+    youtube_url || null, tiktok_url || null, website_url || null, whatsapp || null,
+    org.id
   );
+
+  // Mismo patrón que POST /manage/teams: quien crea la liga queda de una vez
+  // como 'owner' en organization_members, no solo en leagues.owner_user_id —
+  // así "Invitar administrador" funciona desde el primer momento, sin
+  // esperar al backfill que corre al arrancar el servidor.
+  await db.prepare(`
+    INSERT INTO organization_members (organization_id, user_id, role)
+    VALUES (?, ?, 'owner')
+  `).run(org.id, req.user.id);
 
   res.status(201).json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(result.lastInsertRowid));
 }));

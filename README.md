@@ -29,6 +29,9 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 - **Diagnóstico de pantalla en blanco en `localhost` (solo en dev, no afecta producción)**: `PrivacyPolicy.jsx` se importaba de forma estática en `App.jsx`. En dev, Vite sirve cada componente como su propio archivo (`/src/pages/PrivacyPolicy.jsx`), y Brave Shields bloquea por heurística cualquier URL que contenga la palabra "privacy" — al bloquearse ese import estático se rompía la carga de **toda** la app (pantalla en blanco). En producción no pasaba porque Vite empaqueta todo en un solo bundle sin nombres de archivo reconocibles, pero el riesgo estaba ahí para cualquier página que en el futuro se cargara distinto.
 - **Code-splitting por ruta** (`App.jsx` + `vite.config.js`): todas las páginas excepto `Home` ahora se cargan con `React.lazy()` dentro de un `<Suspense fallback={<Loading />}>`, y los chunks resultantes se nombran con hash genérico (`chunkFileNames: 'assets/chunk-[hash].js'` en `vite.config.js`) en vez del nombre real de cada página — así ningún bloqueador puede tumbar una página por su nombre. Efecto medido con `npm run build`: el bundle principal bajó de 946 KB a ~300 KB; el resto se reparte en ~40 chunks pequeños que se descargan solo al entrar a esa página. Bonus: si algún chunk llega a fallar (bloqueado, red lenta), el `ErrorBoundary`/`Suspense` ya existentes lo contienen a esa sola página — TopBar, SponsorBar y footer siguen funcionando.
 - **Panel negro (`dashboard-panel`) ahora envuelve el contenido de `Dashboard.jsx`, `LeagueStructurePanel.jsx` y `TournamentMatchesPanel.jsx`** — antes solo lo tenía `Dashboard.jsx` en parte de su contenido. **Sin verificar visualmente todavía**: revisar en el navegador que se vea bien en las tres pantallas antes de darlo por cerrado (en los dos últimos archivos el `<div>` nuevo no reindentó el contenido interno — cosmético en el código fuente, no afecta el render).
+- **Varios administradores por liga o equipo ("Invitar administrador")**: una liga o un equipo ya puede tener más de una persona con acceso simultáneo a su panel, no solo un dueño único — mismo mecanismo que ya existía para "entregar" un equipo a su representante, pero sin reemplazar a nadie. Nuevo tipo de invitación `org_admin` (`routes/invites.js`, columna `invites.organization_id`) que, al reclamarse, agrega a esa persona como fila nueva en `organization_members` en vez de sustituir al dueño actual. Nuevas rutas `GET/DELETE /organizations/:id/members` para listar y quitar administradores (no deja quitar al último — evita dejar la organización sin nadie). Botón "+ Invitar administrador" y la lista correspondiente viven en el componente nuevo `OrgAdminsPanel.jsx`, presente en el panel de equipo (`Dashboard.jsx`) y en el panel de liga (`LeagueStructurePanel.jsx`). Por ahora todos los administradores tienen el mismo permiso — no hay jerarquía de roles todavía (`owner`/`admin`/`editor` no se distinguen, ver `isOrgMember`).
+- **Dos huecos corregidos para que lo anterior funcione de punta a punta**: (1) `GET /auth/me` calculaba `leagues`/`teams` solo por `owner_user_id` — alguien invitado como administrador nunca veía esa liga/equipo en "Mi panel" aunque el backend ya le diera permiso de editarla; ahora también cuenta la membresía activa en `organization_members`. (2) `POST /leagues` no creaba la fila en `organizations` ni el `organization_members` del dueño al momento de crear la liga (a diferencia de un equipo, que sí lo hacía desde siempre) — se quedaba así hasta el siguiente reinicio del servidor, que es cuando corre el backfill que lo completa; ahora una liga nueva nace con su organización y su dueño registrado de inmediato.
+- **Pantalla vieja de liga retirada (`/panel/liga/:id`, modelo plano sin torneos)**: todo lo que hacía ya vivía en `LeagueStructurePanel.jsx` (`/panel/liga/:id/estructura`), la pantalla que de verdad se usa desde hace tiempo — se confirmó contra la base de datos que ninguna liga tenía ya partidos en el modelo viejo antes de quitarla. `Dashboard.jsx` bajó de ~800 a ~250 líneas (ahora solo sirve "Mi panel" y el panel de equipo). La ruta vieja redirige automáticamente a `/estructura` (`RedirectToLeagueStructure` en `App.jsx`) para no romper links guardados; el aviso "Abrir pantalla clásica" que apuntaba ahí también se quitó de `LeagueStructurePanel.jsx`.
 
 ## Cambios recientes importantes (agosto 2026)
 
@@ -55,11 +58,12 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 
 - **Reactivar comisión de Hotel sin Drive**: desde que se quitó Travelpayouts Drive (ver "Cambios recientes" y "Monetización"), el botón 🏨 Hotel no genera comisión. Ya no depende de la aprobación de Booking.com dentro de Travelpayouts (ese flujo se fue junto con Drive) — la alternativa ya integrada en el código es configurar `VITE_HOTEL_AFFILIATE_ID` con un ID de afiliado directo de Booking.com. Falta conseguir/confirmar ese ID y configurarlo en Vercel.
 - **QA visual del panel negro en Dashboard/LeagueStructurePanel/TournamentMatchesPanel**: se terminó de envolver el contenido de las tres pantallas en `.dashboard-panel` (ver "Cambios recientes"), pero no se probó en el navegador — confirmar que se vea bien antes de darlo por cerrado.
+- **QA visual de "Invitar administrador"**: el flujo completo (generar link, reclamarlo con una segunda cuenta, ver la liga/equipo aparecer en su "Mi panel", quitar/quedar como último administrador) se verificó por API y directo contra la base de datos, pero no de punta a punta en el navegador — confirmar antes de darlo por cerrado.
 - ~~Configurar método de pago (payout) en Travelpayouts~~ — **hecho**: ya está configurado el payout a PayPal.
 - **Botón de "Rechazar" una liga pendiente**: hoy en `/admin` solo existe "Aprobar" y "Eliminar" (que borra todo permanentemente). Falta el endpoint y el botón correspondiente, y el aviso de "tu liga fue rechazada" en el panel del dueño.
 - **Contenido real de "Notificaciones"**: la página y el botón ya existen, pero todavía no muestra nada — falta decidir y construir qué información va ahí.
 - **Más tipos de organización**: "Registrar Organización" solo ofrece Liga por ahora. Equipo (fuera del flujo de invitación de una liga), Empresa/Marca y Medio de comunicación quedan pendientes.
-- Detalle cosmético menor: `LeagueWorkPanel` y `TeamOnlyPanel` traen su propio `<div className="container">` interno, que ahora queda anidado dentro del `container` de "Mi panel" — funciona bien, pero puede limpiarse más adelante.
+- Detalle cosmético menor: `TeamOnlyPanel` trae su propio `<div className="container">` interno, que ahora queda anidado dentro del `container` de "Mi panel" — funciona bien, pero puede limpiarse más adelante.
 
 ## Estructura
 
@@ -78,9 +82,12 @@ lifa-app/
         manage.js            CRUD protegido: ligas, categorías, grupos, equipos (con o sin
                               liga, ver "Equipos independientes"), partidos, sedes
         organizations.js     Medio/Tienda/Clínica/Marca (registro genérico) + directorio
-                              público verificado — liga y equipo tienen su propio flujo
+                              público verificado (liga y equipo tienen su propio flujo) +
+                              listar/quitar administradores de cualquier organización
         upload.js             Subida de imágenes a Cloudinary
-        invites.js           Invitaciones de un solo uso para entregar un equipo a otro usuario
+        invites.js           Invitaciones de un solo uso: entregar un equipo a otro usuario
+                              (reemplaza al representante), o sumar un administrador más a una
+                              liga/equipo (org_admin, agrega sin reemplazar a nadie)
         admin.js             Endpoints exclusivos para role = 'admin' (incluye aprobar ligas)
         notifications.js     Suscripción push + endpoint /trigger para el cronjob externo
         players.js           Roster por equipo+rama: alta manual, plantilla de Excel (logos vía
@@ -154,6 +161,7 @@ npm run dev      # http://localhost:5173
 4. De ahí en adelante, cada liga o equipo que administra (propio o entregado por invitación) aparece como un logo en "Mi panel". Un clic abre su panel de trabajo específico; otro clic sobre el mismo logo lo cierra.
 5. Dentro del panel de una liga: agrega categorías, grupos, equipos, sedes y partidos; define fecha, sede, jornada, link de transmisión, estado (programado/en vivo/finalizado) y marcador — todo esto funciona con normalidad aunque la liga siga pendiente de aprobación. También puede importar partidos en bloque desde un Excel (`manage.js`, endpoint `/import`).
 6. Puede generar una invitación (`invites.js`) para entregar un equipo específico a otra persona, que lo administra desde su propia cuenta — ese equipo aparece como su propio logo en el panel personal de quien lo recibe, no en el de quien registró la liga original.
+7. También puede invitar a alguien más a administrar esa misma liga o equipo con el mismo acceso (botón "+ Invitar administrador" en el panel), sin quitarle el acceso a nadie — a diferencia del punto anterior, aquí no hay reemplazo, puede haber varios administradores a la vez.
 
 **Admin (rol `admin`):**
 

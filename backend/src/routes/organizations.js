@@ -4,6 +4,7 @@ import { authRequired } from '../middleware/auth.js';
 import { isValidUrl, isNonEmptyString } from '../utils/validation.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isOrgMember } from '../utils/orgMembers.js';
+import { organizationAdminRequired } from '../middleware/ownership.js';
 
 const router = express.Router();
 
@@ -151,6 +152,41 @@ router.put('/:id', authRequired, asyncHandler(async (req, res) => {
   );
 
   res.json(updated);
+}));
+
+/* ===================== ADMINISTRADORES DE LA ORGANIZACIÓN ===================== */
+// Quiénes tienen acceso hoy al panel de esta liga/equipo/organización, vía
+// organization_members. Mismo permiso que para invitar a uno nuevo: cualquier
+// administrador actual puede ver la lista, no hace falta ser el owner.
+router.get('/:id/members', authRequired, organizationAdminRequired, asyncHandler(async (req, res) => {
+  const members = await db.prepare(`
+    SELECT om.id, om.user_id, om.role, om.created_at, u.name, u.email
+    FROM organization_members om
+    JOIN users u ON u.id = om.user_id
+    WHERE om.organization_id = ? AND om.status = 'active'
+    ORDER BY om.created_at ASC
+  `).all(req.organization.id);
+  res.json({ members });
+}));
+
+// Quita a alguien como administrador. No se deja vaciar la organización por
+// completo desde aquí — si solo queda un administrador, primero hay que
+// invitar a otro antes de poder quitar al último (evita que una liga o
+// equipo se quede sin nadie que la administre).
+router.delete('/:id/members/:userId', authRequired, organizationAdminRequired, asyncHandler(async (req, res) => {
+  const targetUserId = Number(req.params.userId);
+  const { count } = await db.prepare(
+    `SELECT COUNT(*)::int AS count FROM organization_members WHERE organization_id = ? AND status = 'active'`
+  ).get(req.organization.id);
+  if (count <= 1) {
+    return res.status(400).json({ error: 'No puedes quitar al único administrador — invita a alguien más antes de quitar este acceso' });
+  }
+
+  await db.prepare(
+    `DELETE FROM organization_members WHERE organization_id = ? AND user_id = ?`
+  ).run(req.organization.id, targetUserId);
+
+  res.json({ ok: true });
 }));
 
 export default router;

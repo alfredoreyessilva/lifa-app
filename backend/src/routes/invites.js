@@ -2,7 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
-import { teamLeagueOwnerRequired } from '../middleware/ownership.js';
+import { teamLeagueOwnerRequired, organizationAdminRequired } from '../middleware/ownership.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = express.Router();
@@ -35,6 +35,24 @@ router.delete('/teams/:teamId/owner', authRequired, teamLeagueOwnerRequired, asy
   res.json({ ok: true });
 }));
 
+/* ===================== GENERAR INVITACIÓN DE ADMINISTRADOR ===================== */
+// A diferencia de la de arriba (que REEMPLAZA al representante de un
+// equipo), esta AGREGA a quien la reclame como un administrador más de la
+// organización — liga o equipo, misma ruta para ambas, porque los dos ya
+// tienen su organización propia (leagues.organization_id / teams.organization_id).
+// Igual que con las de equipo, solo queda una invitación vigente a la vez.
+router.post('/organizations/:organizationId/admins', authRequired, organizationAdminRequired, asyncHandler(async (req, res) => {
+  await db.prepare(`DELETE FROM invites WHERE organization_id = ? AND type = 'org_admin' AND used_at IS NULL`).run(req.organization.id);
+
+  const token = generateToken();
+  await db.prepare(`
+    INSERT INTO invites (token, type, organization_id, created_by)
+    VALUES (?, 'org_admin', ?, ?)
+  `).run(token, req.organization.id, req.user.id);
+
+  res.status(201).json({ token });
+}));
+
 /* ===================== VER INFO PÚBLICA DE UNA INVITACIÓN ===================== */
 // Pública (sin sesión) — para mostrarle a la persona qué va a reclamar antes
 // de pedirle que inicie sesión o se registre.
@@ -43,10 +61,12 @@ router.get('/:token', asyncHandler(async (req, res) => {
     SELECT
       i.token, i.type, i.used_at,
       t.id AS team_id, t.name AS team_name, t.logo_url AS team_logo_url,
-      l.name AS league_name
+      l.name AS league_name,
+      o.id AS organization_id, o.name AS organization_name, o.logo_url AS organization_logo_url, o.type AS organization_type
     FROM invites i
-    LEFT JOIN teams t   ON t.id = i.team_id
-    LEFT JOIN leagues l ON l.id = t.league_id
+    LEFT JOIN teams t         ON t.id = i.team_id
+    LEFT JOIN leagues l       ON l.id = t.league_id
+    LEFT JOIN organizations o ON o.id = i.organization_id
     WHERE i.token = ?
   `).get(req.params.token);
 
@@ -66,6 +86,17 @@ router.post('/:token/claim', authRequired, asyncHandler(async (req, res) => {
 
   if (invite.type === 'team') {
     await db.prepare(`UPDATE teams SET owner_user_id = ? WHERE id = ?`).run(req.user.id, invite.team_id);
+  } else if (invite.type === 'org_admin') {
+    // A diferencia de 'team', aquí NO se reemplaza a nadie — se agrega a
+    // quien reclama como un administrador más, con el mismo acceso que los
+    // demás (ver organization_members.role: 'owner'/'admin'/'editor' no se
+    // distinguen todavía en isOrgMember). DO NOTHING por si la persona ya
+    // era miembro de esa organización por otro lado (ej. ya era su dueña).
+    await db.prepare(`
+      INSERT INTO organization_members (organization_id, user_id, role)
+      VALUES (?, ?, 'admin')
+      ON CONFLICT (organization_id, user_id) DO NOTHING
+    `).run(invite.organization_id, req.user.id);
   }
 
   await db.prepare(`UPDATE invites SET used_by = ?, used_at = CURRENT_TIMESTAMP WHERE id = ?`).run(req.user.id, invite.id);
@@ -89,7 +120,30 @@ router.post('/:token/claim', authRequired, asyncHandler(async (req, res) => {
     );
   }
 
-  res.json({ ok: true, team });
+  let organization = null;
+  if (invite.type === 'org_admin' && invite.organization_id) {
+    organization = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(invite.organization_id);
+
+    // Mismo aviso que arriba pero para el nuevo administrador de una
+    // organización: se manda a la bandeja de la liga o del equipo detrás
+    // de ella (notifications solo acepta esos dos recipient_type hoy).
+    const league = await db.prepare('SELECT id FROM leagues WHERE organization_id = ?').get(organization.id);
+    const orgTeam = league ? null : await db.prepare('SELECT id FROM teams WHERE organization_id = ?').get(organization.id);
+    if (league || orgTeam) {
+      await db.prepare(`
+        INSERT INTO notifications (recipient_type, recipient_id, type, title, body, data)
+        VALUES (?, ?, 'org_admin_claimed', ?, ?, ?)
+      `).run(
+        league ? 'league' : 'team',
+        league ? league.id : orgTeam.id,
+        `${req.user.name} ahora administra ${organization.name}`,
+        'Aceptó la invitación y ya tiene el mismo acceso que el resto de los administradores.',
+        JSON.stringify({ organization_id: organization.id, user_id: req.user.id, user_name: req.user.name })
+      );
+    }
+  }
+
+  res.json({ ok: true, team, organization });
 }));
 
 export default router;

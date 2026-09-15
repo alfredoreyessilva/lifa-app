@@ -1,5 +1,5 @@
 import { lazy, Suspense, useLayoutEffect } from 'react';
-import { Routes, Route, Link, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import TopBar from './components/TopBar.jsx';
 import SponsorBar from './components/SponsorBar.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
@@ -38,6 +38,16 @@ const InviteClaim = lazy(() => import('./pages/InviteClaim.jsx'));
 const PoolJoinPage = lazy(() => import('./pages/PoolJoinPage.jsx'));
 const TermsOfService = lazy(() => import('./pages/TermsOfService.jsx'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy.jsx'));
+
+// La pantalla clásica de liga (/panel/liga/:id, modelo plano sin torneos) se
+// retiró — todo lo que hacía ya vive en LeagueStructurePanel.jsx, y en
+// producción ninguna liga tenía ya partidos en el modelo viejo (se verificó
+// contra la base antes de quitarla). Este redirect es solo para no romper
+// links/bookmarks viejos que alguien todavía tenga guardados.
+function RedirectToLeagueStructure() {
+  const { id } = useParams();
+  return <Navigate to={`/panel/liga/${id}/estructura`} replace />;
+}
 
 // Al navegar a otra ruta, React Router conserva el scroll de la página
 // anterior — así que al entrar a la MatchPage desde un calendario ya
@@ -101,7 +111,7 @@ export default function App() {
             />
             <Route
               path="/panel/liga/:id"
-              element={<ProtectedRoute><Dashboard kind="liga" /></ProtectedRoute>}
+              element={<ProtectedRoute><RedirectToLeagueStructure /></ProtectedRoute>}
             />
             <Route
               path="/panel/liga/:id/estructura"

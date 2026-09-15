@@ -45,12 +45,20 @@ export default function InviteClaim() {
 
   if (!invite) return <div className="container"><Loading /></div>;
 
+  const isOrgAdmin = invite.type === 'org_admin';
+  const name = isOrgAdmin ? invite.organization_name : invite.team_name;
+  const logoUrl = isOrgAdmin ? invite.organization_logo_url : invite.team_logo_url;
+
   if (claimed) {
     return (
       <div className="container">
         <div className="empty-state">
-          <h3>¡Listo! Ya administras {invite.team_name}</h3>
-          <p>Desde tu panel puedes editar el logo, contacto, redes y links de transmisión de tu equipo.</p>
+          <h3>¡Listo! Ya administras {name}</h3>
+          <p>
+            {isOrgAdmin
+              ? 'Tienes el mismo acceso que el resto de los administradores — desde tu panel puedes editar todo igual que ellos.'
+              : 'Desde tu panel puedes editar el logo, contacto, redes y links de transmisión de tu equipo.'}
+          </p>
           <div style={{ marginTop: 16 }}>
             <Link to="/panel" className="btn btn-flag">Ir a mi panel</Link>
           </div>
@@ -62,20 +70,25 @@ export default function InviteClaim() {
   return (
     <div className="container">
       <div className="empty-state" style={{ maxWidth: 440, margin: '40px auto', textAlign: 'center' }}>
-        {invite.team_logo_url && (
+        {logoUrl && (
           <div style={{ width: 80, height: 80, borderRadius: '50%', overflow: 'hidden', margin: '0 auto 16px' }}>
-            <img src={invite.team_logo_url} alt={invite.team_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img src={logoUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
         )}
-        <h3 style={{ marginBottom: 4 }}>Vas a administrar el equipo</h3>
-        <p style={{ fontSize: 22, fontFamily: 'var(--font-display)', margin: '4px 0' }}>{invite.team_name}</p>
+        <h3 style={{ marginBottom: 4 }}>{isOrgAdmin ? 'Vas a administrar' : 'Vas a administrar el equipo'}</h3>
+        <p style={{ fontSize: 22, fontFamily: 'var(--font-display)', margin: '4px 0' }}>{name}</p>
         {invite.league_name && <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>{invite.league_name}</p>}
+        {isOrgAdmin && (
+          <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>
+            Vas a tener el mismo acceso que sus demás administradores, no reemplazas a nadie.
+          </p>
+        )}
 
         {user ? (
           <div style={{ marginTop: 20 }}>
             <p style={{ fontSize: 13 }}>Sesión iniciada como <strong>{user.name}</strong>.</p>
             <button className="btn btn-flag" onClick={handleClaimWithSession} disabled={claiming} style={{ marginTop: 8 }}>
-              {claiming ? 'Asignando…' : 'Aceptar y administrar este equipo'}
+              {claiming ? 'Asignando…' : isOrgAdmin ? 'Aceptar y administrar' : 'Aceptar y administrar este equipo'}
             </button>
           </div>
         ) : (
