@@ -17,6 +17,50 @@
   --font-display: 'Anton', sans-serif;
   --font-eyebrow: 'Oswald', sans-serif;
   --font-body: 'Inter', sans-serif;
+
+  /* ---- Tokens del workspace administrativo (paneles de trabajo) ----
+     La paleta de la app pública se detiene en color y tipografía, y sus dos
+     acentos ya están ocupados semánticamente: --flag amarillo = "debe",
+     --field verde = "a favor". Una tabla de dinero necesita además grises
+     neutros (el --ink-dim de la app tira a verde y sobre negro se ve sucio) y
+     un azul informativo que no se confunda con ninguno de esos dos estados.
+     Todo esto vive sobre el panel negro (.dashboard-panel), no sobre la
+     cancha verde. */
+  --ws-surface: #0d0e0f;
+  --ws-surface-2: #16181a;
+  --ws-surface-3: #1e2124;
+  --ws-line: rgba(255, 255, 255, 0.09);
+  --ws-line-strong: rgba(255, 255, 255, 0.18);
+  --ws-ink: #f2f4f5;
+  --ws-ink-dim: #9aa3a8;
+  --ws-ink-faint: #6b7378;
+  --info: #5aa9e6;
+  --danger: #ef4444;
+  --positive: #4ade80;
+
+  /* Acento del workspace. Por defecto el amarillo de CFBAMX; el panel de un
+     equipo lo sobreescribe en línea con teams.brand_color para que se sienta
+     suyo. Se define aquí para que cualquier componente pueda usar var(--accent)
+     sin saber si el equipo puso color o no. */
+  --accent: #ffd23f;
+  --accent-ink: #1a1300;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
 }
 
 * { box-sizing: border-box; }
@@ -2940,4 +2984,440 @@ a.match-card-new {
 @media (max-width: 640px) {
   .tree-row { flex-wrap: wrap; min-height: 0; }
   .tree-actions { width: 100%; padding-left: 30px; }
+}
+
+/* ==========================================================================
+   Workspace administrativo (panel de trabajo de un equipo)
+   --------------------------------------------------------------------------
+   Vive dentro de .dashboard-panel (fondo negro), no sobre la cancha verde.
+   La regla de fondo: el dinero manda. Números tabulares y alineados a la
+   derecha, etiquetas calladas, una sola cosa acentuada por pantalla.
+   El acento (--accent) lo pone cada equipo con su brand_color.
+   ========================================================================== */
+
+.ws {
+  /* Cada panel de equipo sobreescribe --accent en línea. Si el club no puso
+     color, hereda el amarillo de CFBAMX definido en :root. */
+  color: var(--ws-ink);
+}
+
+/* ---------- Encabezado ---------- */
+.ws-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) 0 var(--space-5);
+  border-bottom: 1px solid var(--ws-line);
+  margin-bottom: var(--space-5);
+}
+.ws-head-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  background: var(--ws-surface-2);
+  border: 1px solid var(--ws-line-strong);
+  flex-shrink: 0;
+}
+.ws-head-logo-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--accent);
+}
+.ws-head-text { min-width: 0; flex: 1; }
+.ws-head .eyebrow {
+  font-family: var(--font-eyebrow);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: block;
+  margin-bottom: 4px;
+}
+.ws-head h1 {
+  font-family: var(--font-display);
+  font-size: 32px;
+  line-height: 1.1;
+  color: var(--ws-ink);
+  margin: 0;
+  /* Nombres largos de club no deben empujar el selector fuera de pantalla */
+  overflow-wrap: anywhere;
+}
+.ws-head-meta {
+  font-size: 12px;
+  color: var(--ws-ink-dim);
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ---------- Navegación de secciones ---------- */
+.ws-nav {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  /* En teléfono la barra se desliza; sin esto las secciones se apilan y el
+     panel deja de leerse como una sola herramienta. */
+  scrollbar-width: none;
+  margin-bottom: var(--space-5);
+  border-bottom: 1px solid var(--ws-line);
+}
+.ws-nav::-webkit-scrollbar { display: none; }
+.ws-nav-link {
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ws-ink-dim);
+  text-decoration: none;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ws-nav-link:hover { color: var(--ws-ink); }
+.ws-nav-link.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+/* ---------- Tira de KPIs ---------- */
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+.stat-tile {
+  background: var(--ws-surface);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+.stat-tile-label {
+  font-family: var(--font-eyebrow);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ws-ink-faint);
+  margin-bottom: var(--space-2);
+}
+.stat-tile-value {
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 1;
+  color: var(--ws-ink);
+  font-variant-numeric: tabular-nums;
+}
+.stat-tile-value.is-accent   { color: var(--accent); }
+.stat-tile-value.is-owed     { color: var(--flag); }
+.stat-tile-value.is-overdue  { color: var(--danger); }
+.stat-tile-value.is-positive { color: var(--positive); }
+.stat-tile-sub {
+  font-size: 11px;
+  color: var(--ws-ink-faint);
+  margin-top: 6px;
+}
+
+/* ---------- Tabla de datos ----------
+   La app tenía UNA sola <table> (BillingLeaguePanel) con estilos en línea y
+   una clase .billing-table que no existía en ningún lado. Esto es esa tabla,
+   con nombre y reglas de verdad: encabezado pegajoso, cebra discreta, y toda
+   columna de dinero a la derecha con cifras de ancho fijo. */
+.table-wrap {
+  overflow-x: auto;
+  background: var(--ws-surface);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-md);
+}
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  /* Sin esto los nombres largos hacen que la tabla "salte" de ancho entre
+     una carga y otra. */
+  table-layout: auto;
+}
+.data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--ws-surface-2);
+  font-family: var(--font-eyebrow);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ws-ink-faint);
+  text-align: left;
+  padding: var(--space-3) var(--space-3);
+  border-bottom: 1px solid var(--ws-line-strong);
+  white-space: nowrap;
+}
+.data-table tbody td {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--ws-line);
+  vertical-align: middle;
+  color: var(--ws-ink);
+}
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.015); }
+.data-table tbody tr:hover { background: rgba(255, 255, 255, 0.045); }
+.data-table .col-num,
+.data-table th.col-num { text-align: right; }
+.data-table .col-actions { text-align: right; white-space: nowrap; }
+.data-table .row-muted { opacity: 0.45; }
+
+/* Dinero: ancho de dígito fijo para que las columnas se puedan comparar de un
+   vistazo sin que los números "bailen" de una fila a otra. */
+.money {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.money.is-owed     { color: var(--flag); }
+.money.is-positive { color: var(--positive); }
+.money.is-zero     { color: var(--ws-ink-faint); font-weight: 500; }
+.money.is-overdue  { color: var(--danger); }
+
+.cell-player {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.cell-player img {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--ws-surface-3);
+  flex-shrink: 0;
+}
+.cell-player-name { font-weight: 500; }
+.cell-player-sub {
+  font-size: 11px;
+  color: var(--ws-ink-faint);
+}
+
+/* ---------- Pastillas de estado ---------- */
+.pill {
+  display: inline-block;
+  font-family: var(--font-eyebrow);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.pill.is-ok       { color: var(--positive); }
+.pill.is-owed     { color: var(--flag); }
+.pill.is-overdue  { color: var(--danger); }
+.pill.is-muted    { color: var(--ws-ink-faint); }
+.pill.is-info     { color: var(--info); }
+
+/* ---------- Barra de acciones ---------- */
+.ws-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.ws-toolbar .spacer { margin-left: auto; }
+.ws-section-title {
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ws-ink-dim);
+  margin: var(--space-6) 0 var(--space-3);
+}
+
+/* Botón que toma el color del club. Se usa solo para la acción principal de
+   cada pantalla — si todo es acento, nada lo es. */
+.btn-accent {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+.btn-accent:hover { filter: brightness(1.1); }
+.btn-ws {
+  background: var(--ws-surface-2);
+  color: var(--ws-ink);
+  border-color: var(--ws-line-strong);
+}
+.btn-ws:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---------- Bandeja de conciliación ----------
+   Los pagos que el papá reportó y el club todavía no confirma. Va arriba de
+   todo y con borde de aviso a propósito: es la única cosa de la pantalla que
+   le pide una acción al tesorero hoy. */
+.pending-tray {
+  border: 1px solid var(--info);
+  background: rgba(90, 169, 230, 0.07);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.pending-tray-head {
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--info);
+  margin-bottom: var(--space-3);
+}
+.pending-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--ws-line);
+}
+.pending-row:first-of-type { border-top: none; }
+.pending-row-main { flex: 1; min-width: 180px; }
+.pending-row-sub {
+  font-size: 11px;
+  color: var(--ws-ink-dim);
+  margin-top: 2px;
+}
+
+/* ---------- Movimientos del libro ---------- */
+.ledger-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-sm);
+  background: var(--ws-surface);
+}
+.ledger-row + .ledger-row { margin-top: 6px; }
+.ledger-row.is-void { opacity: 0.45; }
+.ledger-row-main { min-width: 0; }
+.ledger-row-concept { font-size: 13px; }
+.ledger-row.is-void .ledger-row-concept { text-decoration: line-through; }
+.ledger-row-meta {
+  font-size: 11px;
+  color: var(--ws-ink-faint);
+  margin-top: 2px;
+}
+.ledger-row-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  white-space: nowrap;
+}
+
+/* ---------- Estado vacío que enseña ----------
+   "Sin movimientos todavía" no le dice a nadie qué hacer. Estos llevan el
+   siguiente paso concreto y su botón. */
+.empty-teach {
+  text-align: center;
+  padding: var(--space-7) var(--space-4);
+  border: 1px dashed var(--ws-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--ws-surface);
+}
+.empty-teach-icon { font-size: 32px; margin-bottom: var(--space-3); }
+.empty-teach h3 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  margin: 0 0 var(--space-2);
+  color: var(--ws-ink);
+}
+.empty-teach p {
+  font-size: 13px;
+  color: var(--ws-ink-dim);
+  margin: 0 auto var(--space-4);
+  max-width: 420px;
+  line-height: 1.6;
+}
+
+/* ---------- Gráfica de flujo (SVG hecho a mano, sin librería) ---------- */
+.ws-chart {
+  background: var(--ws-surface);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+.ws-chart svg { display: block; width: 100%; height: auto; }
+.ws-chart-axis { font-size: 10px; fill: var(--ws-ink-faint); font-family: 'Inter', sans-serif; }
+.ws-chart-grid { stroke: var(--ws-line); stroke-width: 1; }
+.ws-chart-bar { fill: var(--accent); transition: opacity 0.12s ease; }
+.ws-chart-bar:hover { opacity: 0.75; }
+
+/* ---------- Diálogo de confirmación ---------- */
+.confirm-body { font-size: 14px; color: var(--ws-ink); line-height: 1.6; }
+.confirm-detail {
+  background: var(--ws-surface-2);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  margin: var(--space-3) 0;
+  font-size: 13px;
+}
+.confirm-warn {
+  font-size: 12px;
+  color: var(--ws-ink-dim);
+  margin-top: var(--space-2);
+}
+
+/* ---------- Estado de cuenta público (lo abre el papá desde WhatsApp) ----- */
+.statement-page {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) var(--space-7);
+}
+.statement-hero {
+  background: var(--ws-surface);
+  border: 1px solid var(--ws-line);
+  border-top: 3px solid var(--accent);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  text-align: center;
+  margin-bottom: var(--space-4);
+}
+.statement-hero-logo {
+  width: 52px; height: 52px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  margin-bottom: var(--space-3);
+}
+.statement-balance {
+  font-family: var(--font-display);
+  font-size: 40px;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  margin: var(--space-2) 0;
+}
+.statement-label {
+  font-family: var(--font-eyebrow);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ws-ink-faint);
+}
+
+@media (max-width: 720px) {
+  .ws-head { gap: var(--space-3); padding-bottom: var(--space-4); }
+  .ws-head h1 { font-size: 24px; }
+  .ws-head-logo { width: 44px; height: 44px; }
+  .stat-tile-value { font-size: 24px; }
+  .data-table { font-size: 12px; }
+  .data-table thead th,
+  .data-table tbody td { padding: var(--space-2); }
 }

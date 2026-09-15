@@ -27,3 +27,28 @@ export const trackLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Demasiadas peticiones. Intenta de nuevo en un momento.' },
 });
+
+// Límite para el estado de cuenta público del jugador (/api/player-billing/
+// statement/:shareToken). A diferencia de authLimiter, aquí no hay contraseña
+// que adivinar — el token es un UUID v4, así que la fuerza bruta no es la
+// amenaza real. Lo que sí importa es que un endpoint SIN sesión no se pueda
+// usar para inundar la base (el papá lo abre desde WhatsApp, refresca un par
+// de veces y ya). 30 por minuto deja pasar el uso normal de una familia
+// completa detrás de la misma IP y corta cualquier script.
+export const publicStatementLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas peticiones. Intenta de nuevo en un momento.' },
+});
+
+// El reporte de pago sí escribe en el libro, así que va mucho más cerrado:
+// un papá reporta un pago al mes, no seis por minuto.
+export const reportPaymentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiados intentos. Espera unos minutos e intenta de nuevo.' },
+});

@@ -83,6 +83,7 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel, ind
     country_id:        initial?.country_id  || '',
     description:       initial?.description || '',
     show_on_platform:  initial?.show_on_platform ?? false,
+    brand_color:       initial?.brand_color   || '',
   });
   const [error, setError]   = useState('');
   const [loading, setLoading] = useState(false);
@@ -120,6 +121,9 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel, ind
         twitter_url:   form.twitter_url.trim(),
         website_url:   form.website_url.trim(),
         cover_url:     form.cover_url.trim(),
+        // Vacío se manda como null para que el panel caiga de vuelta al
+        // amarillo de CFBAMX en vez de guardar una cadena vacía.
+        brand_color:   form.brand_color.trim() || null,
       });
     } catch (e) {
       setError(e.message);
@@ -258,6 +262,39 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel, ind
                 <CharField max={20} uppercase value={form.contact_phone} onChange={(e) => update('contact_phone', e.target.value)} />
               </div>
             </div>
+          </div>
+
+          {/* Color del club — identidad, no contacto. Solo pinta el panel de
+              trabajo del equipo (ver utils/color.js); el sitio público no
+              cambia de color. */}
+          <div className="team-profile-section" style={{ textAlign: 'left', marginBottom: 16 }}>
+            <div style={{ fontSize: 11, letterSpacing: '0.15em', color: 'var(--flag)', textTransform: 'uppercase', marginBottom: 10, fontFamily: 'var(--font-eyebrow)' }}>
+              Color del club
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <input
+                type="color"
+                value={form.brand_color || '#ffd23f'}
+                onChange={(e) => update('brand_color', e.target.value)}
+                style={{ width: 48, height: 36, padding: 2, cursor: 'pointer' }}
+                aria-label="Color del club"
+              />
+              <input
+                value={form.brand_color}
+                onChange={(e) => update('brand_color', e.target.value)}
+                placeholder="#1B5E20"
+                style={{ flex: 1 }}
+              />
+              {form.brand_color && (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => update('brand_color', '')}>
+                  Quitar
+                </button>
+              )}
+            </div>
+            <small style={{ color: 'var(--ink-dim)' }}>
+              Pinta tu panel de trabajo y el estado de cuenta que ven tus jugadores. Si lo dejas
+              vacío se usa el amarillo de CFBAMX.
+            </small>
           </div>
 
           {/* Redes sociales */}

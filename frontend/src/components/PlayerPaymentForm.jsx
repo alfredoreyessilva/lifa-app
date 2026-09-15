@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { required, minValue, maxLength, runValidations } from '../utils/validation.js';
 import CharField from './CharField.jsx';
 import LogoField from './LogoField.jsx';
+import { money } from '../utils/money.js';
 
 const METHOD_LABELS = {
   transferencia: 'Transferencia',
@@ -10,10 +11,11 @@ const METHOD_LABELS = {
   otro: 'Otro',
 };
 
-// La liga registra un pago que YA recibió de un equipo (efectivo en la
-// cancha, transferencia, etc.). En la V1 el pago nace confirmado — no hay
-// flujo de "el equipo reporta y la liga aprueba".
-export default function PaymentForm({ teamName, methods, suggestedAmount, onSubmit, onCancel }) {
+// El club registra un pago que YA recibió de un jugador (efectivo en la
+// práctica, transferencia que ya vio en su cuenta). Nace confirmado y baja el
+// saldo de inmediato — a diferencia del que reporta el papá desde su link
+// público, que nace pendiente y espera revisión.
+export default function PlayerPaymentForm({ playerName, methods, suggestedAmount, onSubmit, onCancel }) {
   const [form, setForm] = useState({
     amount: suggestedAmount != null && suggestedAmount > 0 ? String(suggestedAmount) : '',
     payment_method: 'transferencia',
@@ -58,15 +60,16 @@ export default function PaymentForm({ teamName, methods, suggestedAmount, onSubm
     <form onSubmit={submit}>
       {error && <div className="form-error">{error}</div>}
 
-      <p style={{ fontSize: 13, color: 'var(--ink-dim)', marginTop: 0 }}>
-        Registra un pago recibido de <strong>{teamName}</strong>. Se aplica de inmediato a su saldo.
+      <p style={{ fontSize: 13, color: 'var(--ws-ink-dim)', marginTop: 0 }}>
+        Registra un pago recibido de <strong>{playerName}</strong>. Se aplica de inmediato a su estado de cuenta.
+        {suggestedAmount > 0 && <> Debe {money(suggestedAmount)}.</>}
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div className="field">
           <label>Monto (MXN)</label>
           <input type="number" min="0" step="0.01" value={form.amount}
-            onChange={(e) => update('amount', e.target.value)} placeholder="1200" />
+            onChange={(e) => update('amount', e.target.value)} placeholder="800" />
         </div>
         <div className="field">
           <label>Método</label>
@@ -90,7 +93,7 @@ export default function PaymentForm({ teamName, methods, suggestedAmount, onSubm
         <label>Nota (opcional)</label>
         <CharField as="textarea" rows={2} max={200} value={form.note}
           onChange={(e) => update('note', e.target.value)}
-          placeholder="Abono parcial, resto queda pendiente" />
+          placeholder="Abono parcial, el resto queda pendiente" />
       </div>
 
       <div className="modal-actions">

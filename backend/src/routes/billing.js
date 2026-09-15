@@ -10,7 +10,9 @@ import { leagueOwnerRequired, teamOwnerRequired } from '../middleware/ownership.
 const router = express.Router();
 
 // Cobranza liga → equipos ("estado de cuenta"). Libro append-only por
-// (liga, equipo): la liga registra cargos y pagos, el equipo solo consulta.
+// (liga, equipo): la liga registra los cargos, y los pagos los puede registrar
+// la liga (nacen confirmados) o reportarlos el equipo con su comprobante
+// (nacen 'pending' y no mueven el saldo hasta que la liga los confirma).
 // El saldo NUNCA se guarda — se calcula sumando los movimientos.
 //
 // Cancelar un movimiento = 2 escrituras: (1) status='void' en el original
@@ -34,9 +36,24 @@ function formatDate(value) {
 }
 
 // Suma de movimientos = saldo. Negativo = el equipo le debe a la liga.
+//
+// Los tres estados de un pago que NUNCA entró al saldo se descartan juntos, y
+// el caso general de 'payment' sigue sin filtrar por status a propósito:
+//
+//   pending    reportado, esperando confirmación        → 0
+//   rejected   el cobrador no lo reconoció              → 0
+//   withdrawn  quien lo reportó lo retiró               → 0
+//   void       un pago CONFIRMADO que se canceló        → suma +amount
+//
+// Ese último suma porque su cancelación ya metió una fila 'adjustment' de signo
+// contrario; excluirlo restaría el monto dos veces. Los otros tres no llevan
+// ajuste (nunca se abonaron), y por eso necesitan estado propio: si se les
+// pusiera 'void' como al cancelado, empezarían a sumar un dinero que no existe.
+// Ese fue justo el bug que cazó la prueba de punta a punta.
 const BALANCE_SUM_SQL = `
   COALESCE(SUM(
     CASE
+      WHEN kind = 'payment' AND status IN ('pending', 'rejected', 'withdrawn') THEN 0
       WHEN kind = 'payment' THEN amount
       WHEN kind = 'adjustment' AND direction = 'credit' THEN amount
       WHEN kind = 'adjustment' AND direction = 'debit'  THEN -amount
@@ -212,6 +229,19 @@ router.get('/leagues/:leagueId/overview', authRequired, leagueOwnerRequired, asy
     LIMIT 12
   `).all(leagueId);
 
+  // Pagos que los equipos reportaron y la liga todavía no confirma. Van aparte
+  // de la tabla de saldos porque son lo único de la pantalla que pide una
+  // acción hoy.
+  const pendingPayments = await db.prepare(`
+    SELECT e.id, e.team_id, e.amount, e.currency, e.payment_method, e.reference,
+           e.proof_url, e.note, e.created_at,
+           t.name AS team_name
+    FROM team_ledger_entries e
+    JOIN teams t ON t.id = e.team_id
+    WHERE e.league_id = ? AND e.kind = 'payment' AND e.status = 'pending'
+    ORDER BY e.created_at ASC
+  `).all(leagueId);
+
   const tournaments = await db.prepare(
     'SELECT id, name, year FROM tournaments WHERE league_id = ? ORDER BY year DESC, sort_order ASC, name ASC'
   ).all(leagueId);
@@ -226,6 +256,7 @@ router.get('/leagues/:leagueId/overview', authRequired, leagueOwnerRequired, asy
   res.json({
     league: { id: req.league.id, name: req.league.name, billing_reminders_enabled: req.league.billing_reminders_enabled },
     teams: rows,
+    pending_payments: pendingPayments,
     recent_batches: recentBatches,
     tournaments,
     week_labels: sortWeekLabels(weekRows.map((r) => r.week_label)),
@@ -438,31 +469,41 @@ router.post('/entries/:id/void', authRequired, asyncHandler(async (req, res) => 
   }
 
   const reason = isNonEmptyString(req.body?.reason) ? req.body.reason.trim() : null;
-  const direction = entry.kind === 'charge' ? 'credit' : 'debit';
 
-  // Idempotente: si ya existe el ajuste que lo revierte, no se crea otro.
-  const existingReversal = await db.prepare(
-    'SELECT id FROM team_ledger_entries WHERE reverses_entry_id = ?'
-  ).get(entry.id);
+  // Rechazar un pago PENDIENTE no lleva ajuste: ese pago nunca entró al saldo
+  // (ver BALANCE_SUM_SQL), así que no hay nada que revertir. Meterle un ajuste
+  // le restaría al equipo un dinero que nunca se le abonó.
+  const isPendingPayment = entry.kind === 'payment' && entry.status === 'pending';
 
-  if (!existingReversal) {
-    await db.prepare(`
-      INSERT INTO team_ledger_entries
-        (league_id, team_id, kind, concept, amount, direction, note, reverses_entry_id, status, created_by_user_id, created_by_side)
-      VALUES (?, ?, 'adjustment', ?, ?, ?, ?, ?, 'applied', ?, 'league')
-    `).run(
-      entry.league_id, entry.team_id,
-      `Cancelación: ${entry.concept}`,
-      entry.amount, direction, reason, entry.id, req.user.id
-    );
+  if (!isPendingPayment) {
+    const direction = entry.kind === 'charge' ? 'credit' : 'debit';
+
+    // Idempotente: si ya existe el ajuste que lo revierte, no se crea otro.
+    const existingReversal = await db.prepare(
+      'SELECT id FROM team_ledger_entries WHERE reverses_entry_id = ?'
+    ).get(entry.id);
+
+    if (!existingReversal) {
+      await db.prepare(`
+        INSERT INTO team_ledger_entries
+          (league_id, team_id, kind, concept, amount, direction, note, reverses_entry_id, status, created_by_user_id, created_by_side)
+        VALUES (?, ?, 'adjustment', ?, ?, ?, ?, ?, 'applied', ?, 'league')
+      `).run(
+        entry.league_id, entry.team_id,
+        `Cancelación: ${entry.concept}`,
+        entry.amount, direction, reason, entry.id, req.user.id
+      );
+    }
   }
 
-  if (entry.status !== 'void') {
+  // 'rejected' en vez de 'void' para un pendiente: ver BALANCE_SUM_SQL.
+  const nextStatus = isPendingPayment ? 'rejected' : 'void';
+  if (entry.status !== nextStatus) {
     await db.prepare(`
       UPDATE team_ledger_entries
-      SET status = 'void', voided_at = NOW(), voided_by_user_id = ?, updated_at = NOW()
+      SET status = ?, voided_at = NOW(), voided_by_user_id = ?, updated_at = NOW()
       WHERE id = ?
-    `).run(req.user.id, entry.id);
+    `).run(nextStatus, req.user.id, entry.id);
   }
 
   const balance = await settleIfPaid(entry.league_id, entry.team_id);
@@ -478,6 +519,149 @@ router.post('/entries/:id/void', authRequired, asyncHandler(async (req, res) => 
         + `Saldo actual: ${formatMoney(balance)}.`
     );
   }
+
+  // Si se rechazó un pago que el equipo había reportado, tiene que enterarse —
+  // si no, se queda creyendo que ya quedó.
+  if (isPendingPayment) {
+    await notifyTeam(
+      entry.team_id,
+      entry.league_id,
+      'billing_payment_rejected',
+      'Tu liga no pudo confirmar tu pago ⚠️',
+      `${league.name} rechazó el pago de ${formatMoney(entry.amount)} que reportaste`
+        + `${reason ? ` (${reason})` : ''}. Revisa tu estado de cuenta y vuelve a reportarlo.`
+    );
+  }
+
+  res.json({ ok: true, balance });
+}));
+
+// ─── El equipo reporta un pago (y la liga lo confirma) ──────────────────────
+//
+// El espejo de lo que el papá hace con su club, un nivel arriba. Antes la liga
+// era la única que escribía en este libro, así que un equipo que ya había
+// transferido le mandaba la captura por WhatsApp y alguien la capturaba a mano
+// — o se le olvidaba. Ahora el equipo lo reporta desde su panel y la liga
+// confirma con un clic.
+//
+// El pago nace 'pending' y NO baja el saldo hasta que la liga lo confirma. Eso
+// es a propósito: quien cobra es quien decide cuándo el dinero está en su
+// cuenta, no quien dice haberlo mandado.
+//
+// El comprobante se sube con POST /api/upload de siempre — aquí sí hay sesión
+// (a diferencia del papá, que no tiene cuenta y necesitó un endpoint aparte).
+router.post('/teams/:id/report-payment', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+  if (!req.team.league_id) {
+    return res.status(400).json({ error: 'Tu equipo no pertenece a ninguna liga, así que no hay a quién reportarle un pago' });
+  }
+
+  const { amount, payment_method, reference, proof_url, note } = req.body;
+  if (amount === undefined || amount === null || amount === '' || Number.isNaN(Number(amount)) || Number(amount) <= 0) {
+    return res.status(400).json({ error: 'El monto debe ser un número mayor a cero' });
+  }
+  if (!PAYMENT_METHODS.includes(payment_method)) return res.status(400).json({ error: 'Método de pago no válido' });
+  if (proof_url && !isValidUrl(proof_url)) return res.status(400).json({ error: 'El comprobante no es una dirección web válida' });
+
+  // Un pendiente a la vez por equipo: si le dan dos veces al botón, o reportan
+  // de nuevo antes de que la liga revise, no se le llena la bandeja de
+  // duplicados que luego tiene que rechazar uno por uno.
+  const alreadyPending = await db.prepare(`
+    SELECT id FROM team_ledger_entries
+    WHERE league_id = ? AND team_id = ? AND kind = 'payment' AND status = 'pending'
+  `).get(req.team.league_id, req.team.id);
+  if (alreadyPending) {
+    return res.status(409).json({ error: 'Ya tienes un pago esperando confirmación de tu liga. Espera a que lo revisen.' });
+  }
+
+  await db.prepare(`
+    INSERT INTO team_ledger_entries
+      (league_id, team_id, kind, concept, amount, payment_method, reference, proof_url, note, status, created_by_user_id, created_by_side)
+    VALUES (?, ?, 'payment', ?, ?, ?, ?, ?, ?, 'pending', ?, 'team')
+  `).run(
+    req.team.league_id, req.team.id,
+    'Pago reportado por el equipo',
+    Number(amount),
+    payment_method,
+    isNonEmptyString(reference) ? reference.trim() : null,
+    proof_url || null,
+    isNonEmptyString(note) ? note.trim() : null,
+    req.user.id
+  );
+
+  // A la bandeja de la LIGA, no a la del equipo — el que tiene que actuar es
+  // quien cobra. recipient_type='league' ya está permitido por el CHECK.
+  await db.prepare(`
+    INSERT INTO notifications (recipient_type, recipient_id, type, title, body, data)
+    VALUES ('league', ?, ?, ?, ?, ?)
+  `).run(
+    req.team.league_id,
+    'team_payment_reported',
+    'Un pago espera tu confirmación 🧾',
+    `${req.team.name} reportó un pago de ${formatMoney(amount)} (${payment_method}). `
+      + `Revísalo en Cobranza para que se aplique a su estado de cuenta.`,
+    JSON.stringify({
+      league_id: req.team.league_id,
+      team_id: req.team.id,
+      url: `/panel/liga/${req.team.league_id}/cobranza`,
+    })
+  );
+
+  res.status(201).json({ ok: true });
+}));
+
+// Retirar el pago que uno mismo reportó y todavía no le confirman.
+//
+// Sin esto, la regla de "un pendiente a la vez" se vuelve una trampa: quien
+// tecleó 500 en vez de 5000 se queda atorado hasta que del otro lado se lo
+// rechacen. No lleva ajuste ni recalcula nada — un pendiente nunca entró al
+// saldo (ver BALANCE_SUM_SQL).
+//
+// Solo se puede retirar lo que reportó el EQUIPO (created_by_side='team'): un
+// pago que capturó la liga no es del equipo para quitarlo.
+router.post('/teams/:id/withdraw-payment', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+  const pending = await db.prepare(`
+    SELECT id FROM team_ledger_entries
+    WHERE team_id = ? AND kind = 'payment' AND status = 'pending' AND created_by_side = 'team'
+  `).get(req.team.id);
+
+  if (!pending) return res.status(404).json({ error: 'No tienes ningún pago esperando confirmación' });
+
+  await db.prepare(`
+    UPDATE team_ledger_entries
+    SET status = 'withdrawn', voided_at = NOW(), voided_by_user_id = ?,
+        note = 'Retirado por el equipo antes de confirmarse', updated_at = NOW()
+    WHERE id = ?
+  `).run(req.user.id, pending.id);
+
+  res.json({ ok: true });
+}));
+
+// La liga confirma un pago reportado: pasa a 'confirmed' y ahí sí mueve el saldo.
+router.post('/entries/:id/confirm', authRequired, asyncHandler(async (req, res) => {
+  const access = await assertLedgerLeagueAccess(req, res, Number(req.params.id));
+  if (!access) return;
+  const { entry, league } = access;
+
+  if (entry.kind !== 'payment' || entry.status !== 'pending') {
+    return res.status(400).json({ error: 'Solo se puede confirmar un pago pendiente' });
+  }
+
+  await db.prepare(`
+    UPDATE team_ledger_entries
+    SET status = 'confirmed', updated_at = NOW()
+    WHERE id = ? AND status = 'pending'
+  `).run(entry.id);
+
+  const balance = await settleIfPaid(entry.league_id, entry.team_id);
+
+  await notifyTeam(
+    entry.team_id,
+    entry.league_id,
+    'billing_payment_recorded',
+    'Tu liga confirmó tu pago ✅',
+    `${league.name} confirmó el pago de ${formatMoney(entry.amount)} que reportaste. `
+      + `Saldo actual: ${formatMoney(balance)}.`
+  );
 
   res.json({ ok: true, balance });
 }));
@@ -504,6 +688,8 @@ router.get('/teams/:id/statement', authRequired, teamOwnerRequired, asyncHandler
       currency: 'MXN',
       next_due_date: null,
       overdue_amount: 0,
+      has_pending_payment: false,
+      payment_methods: PAYMENT_METHODS,
       entries: [],
     });
   }
@@ -529,9 +715,12 @@ router.get('/teams/:id/statement', authRequired, teamOwnerRequired, asyncHandler
   `).get(leagueId, teamId);
 
   const balance = Number(agg?.balance || 0);
+  const hasPending = entries.some((e) => e.kind === 'payment' && e.status === 'pending');
 
   res.json({
     team: { id: teamId, name: req.team.name },
+    has_pending_payment: hasPending,
+    payment_methods: PAYMENT_METHODS,
     league_name: req.league.name,
     league_contact: {
       whatsapp: req.league.whatsapp || null,

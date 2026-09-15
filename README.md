@@ -18,9 +18,14 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 
 ## Cambios recientes importantes (septiembre 2026)
 
+- **Panel de trabajo del equipo (workspace) + cuotas del club a sus jugadores**: `/panel/equipo/:id` dejó de ser un editor de perfil y pasó a ser un espacio de trabajo con seis secciones (Resumen, Finanzas, Jugadores, Con la liga, Perfil, Administradores), con el logo y el **color del club** (`teams.brand_color`) como acento. Lo nuevo de fondo es **Finanzas**: el libro de cuotas **equipo → jugador** (`player_ledger_entries`) y el **flujo de conciliación** que faltaba — el papá abre un **estado de cuenta público sin cuenta** (`/cuenta/:token`), sube su comprobante, y el club lo confirma con un clic. Pieza clave: el **padrón del club** (`team_player_accounts`) es **independiente de los rosters de torneo** — un equipo sin liga, o al que su liga todavía no inscribe en ninguna rama, da de alta a su gente y le cobra igual. Detalle completo en la sección "Cuotas del club" más abajo.
 - **Monitoreo de errores (Sentry)**: integrado en frontend (`frontend/src/main.jsx` + `ErrorBoundary.jsx`, variable `VITE_SENTRY_DSN`) y backend (`backend/src/instrument.js`, importado antes que nada más en `server.js`; `Sentry.setupExpressErrorHandler(app)` justo antes del manejador de errores propio; variable `SENTRY_DSN`). Verificado en producción (Render + Vercel) forzando un error real y confirmando que llegó a Sentry.
 - **Páginas legales**: Términos de Servicio (`/terminos`) y Aviso de Privacidad (`/privacidad`) — `frontend/src/pages/TermsOfService.jsx` y `PrivacyPolicy.jsx`, enlazadas desde el footer. **Ojo**: tienen placeholders (`[Razón social...]`, `[correo de contacto...]`, `[domicilio...]`) sin rellenar todavía — hacerlo antes de depender de ellas para cobros reales (ver "Roadmap de negocio" más abajo).
 - **CI en GitHub Actions** (`.github/workflows/ci.yml`): en cada push/PR a `main` corre el build del frontend (`npm run build`) y un chequeo de sintaxis de todo `backend/src` (`node --check`, no hay tests reales todavía). No bloquea el deploy de Render/Vercel si falla — son procesos independientes, esto solo te avisa.
+- **Bug corregido: registrar una liga daba 500.** `POST /leagues` (`routes/leagues.js`) tenía **19 placeholders para 18 columnas** en su `INSERT`, así que Postgres la rechazaba con "INSERT has more expressions than target columns" y ninguna liga nueva se podía crear. Preexistente y sin relación con la cobranza — se topó de frente al intentar crear una liga de prueba para el recorrido de punta a punta. **Revisar si alguien intentó registrar una liga y no pudo.**
+- **Dos suites de punta a punta** (`backend/tests/`, ver su README): ejercitan los dos libros contra un backend vivo apuntado a una rama de Neon, nunca a producción. No corren en el CI. Cubren lo único que no se puede revisar leyendo el código — que el saldo cuadre después de cancelar, rechazar y retirar. Fueron las que cazaron los dos bugs de arriba.
+- **Conciliación en los dos libros**: quien paga ahora puede reportar su pago con comprobante y quien cobra lo confirma con un clic — el equipo hacia su liga (`POST /billing/teams/:id/report-payment`) y el jugador hacia su club. El pago nace `pending` y **no mueve el saldo** hasta que lo confirman; rechazarlo no genera ajuste (nunca entró al saldo) y quien lo reportó lo puede retirar si se equivocó. Esto era lo que quedaba "Fuera de la V1" de Cobranza.
+- **Pasada de estilo al panel de cobranza de la liga**: `BillingLeaguePanel` adoptó las piezas que nacieron para el panel del equipo (`.data-table`, `ConfirmDialog`, `LedgerEntryList`, `utils/money.js`) y borró su copia de cada una — incluido el `window.confirm` del navegador para cancelar un movimiento contable y la clase `billing-table`, que no existía en ninguna hoja de estilo. Se le agregó la tira de KPIs (por cobrar, vencido, % al corriente) derivada de datos que el overview ya devolvía.
 - **Cobranza liga → equipos ("estado de cuenta") — V1**: la liga registra desde `/panel/liga/:id/cobranza` lo que cobra cada semana a sus equipos (renta de campo, arbitraje, transmisión, inscripción, multas), lleva un **libro append-only** por equipo y ve el panorama de adeudos. El monto es **por equipo** (tabla con casilla por equipo + botón que lo calcula como cuota × # de partidos de ese equipo en la jornada). El representante del equipo ve su estado de cuenta **de solo lectura** en `/panel/equipo/:id/estado-de-cuenta` y recibe recordatorios (cargo nuevo / por vencer / vencido / pago registrado) en su bandeja. En esta V1 **solo la liga escribe** — no hay flujo de "el equipo reporta un pago". Detalle completo en la sección "Cobranza" más abajo.
 - **Roster por plantilla de Excel**: además del alta manual jugador por jugador que ya existía, ahora se puede descargar (desde el modal de roster de un equipo dentro de una rama) una plantilla `.xlsx` con el logo de la liga, el logo del equipo y el contexto (Liga/Torneo/Categoría/Rama/Equipo) ya incrustados, llenarla y volver a subirla — solo agrega a los jugadores que todavía no estén en esa rama, nunca borra a nadie. Se agregó CURP a `players` y un botón de foto por jugador (Cloudinary). Detalle completo en la sección "Roster de jugadores" más abajo.
 - **Equipos independientes (sin liga)**: un equipo ya se puede registrar directo desde `/registrar-equipo` sin pertenecer a ninguna liga de la plataforma (`teams.league_id` ahora es opcional). Usa el mismo mecanismo de verificación de identidad que cualquier otra organización (`organizations.is_verified`, admin desde `/admin`) — antes esa pestaña excluía a todos los equipos. Aparecer en el home es decisión propia del equipo (`show_on_platform`, interruptor sin aprobación de nadie, se prende/apaga desde su panel) y no limita ninguna otra función; un equipo de liga sigue apareciendo exactamente igual que antes, sin cambios. Detalle completo en la sección "Equipos independientes" más abajo.
@@ -56,14 +61,34 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 
 ## En progreso — no terminado todavía
 
+- **QA visual del panel de trabajo del equipo y del estado de cuenta público**: la
+  sesión del 15-sep-2026 (panel del equipo + cuotas del club, ver "Cambios
+  recientes") se verificó **por API de punta a punta contra una rama de Neon** —
+  46 aserciones, 0 fallas, con las suites que quedaron en `backend/tests/`. Lo
+  que **no** se probó es cómo se ve: nadie abrió `/panel/equipo/:id` ni
+  `/cuenta/:token` en un navegador. Revisar antes de darlo por cerrado,
+  especialmente:
+  - el estado de cuenta público a 390px de ancho, que es como lo abre el papá
+    desde WhatsApp;
+  - que el color del club (`teams.brand_color`) se vea bien también dentro de los
+    modales (se aplica a `:root` con `useAccentColor` justo por eso);
+  - la tabla `.data-table` con muchos jugadores y nombres largos.
+- **Nadie ha mandado un WhatsApp de verdad desde el panel.** El link `wa.me` se
+  arma en el cliente y no pasa por el backend, así que no lo cubre ninguna
+  prueba. Confirmar con un teléfono real que el mensaje llega con el link bien
+  formado y que `last_reminded_at` se marca.
+- **Revisar si alguien no pudo registrar su liga.** `POST /leagues` daba 500 por
+  un bug preexistente (19 placeholders para 18 columnas); ya está corregido, pero
+  desde afuera solo se veía "Error interno del servidor". Ver "Cambios
+  recientes".
+
 - **Reactivar comisión de Hotel sin Drive**: desde que se quitó Travelpayouts Drive (ver "Cambios recientes" y "Monetización"), el botón 🏨 Hotel no genera comisión. Ya no depende de la aprobación de Booking.com dentro de Travelpayouts (ese flujo se fue junto con Drive) — la alternativa ya integrada en el código es configurar `VITE_HOTEL_AFFILIATE_ID` con un ID de afiliado directo de Booking.com. Falta conseguir/confirmar ese ID y configurarlo en Vercel.
-- **QA visual del panel negro en Dashboard/LeagueStructurePanel/TournamentMatchesPanel**: se terminó de envolver el contenido de las tres pantallas en `.dashboard-panel` (ver "Cambios recientes"), pero no se probó en el navegador — confirmar que se vea bien antes de darlo por cerrado.
+- **QA visual del panel negro en LeagueStructurePanel/TournamentMatchesPanel**: se envolvió su contenido en `.dashboard-panel` pero no se probó en el navegador. (`Dashboard.jsx` ya no entra aquí: quedó en 22 líneas y el panel del equipo se rehizo completo.)
 - **QA visual de "Invitar administrador"**: el flujo completo (generar link, reclamarlo con una segunda cuenta, ver la liga/equipo aparecer en su "Mi panel", quitar/quedar como último administrador) se verificó por API y directo contra la base de datos, pero no de punta a punta en el navegador — confirmar antes de darlo por cerrado.
 - ~~Configurar método de pago (payout) en Travelpayouts~~ — **hecho**: ya está configurado el payout a PayPal.
 - **Botón de "Rechazar" una liga pendiente**: hoy en `/admin` solo existe "Aprobar" y "Eliminar" (que borra todo permanentemente). Falta el endpoint y el botón correspondiente, y el aviso de "tu liga fue rechazada" en el panel del dueño.
-- **Contenido real de "Notificaciones"**: la página y el botón ya existen, pero todavía no muestra nada — falta decidir y construir qué información va ahí.
+- **"Notificaciones" ya muestra contenido real** (cobranza en los dos libros, avisos de partidos, aprobaciones) — lo que falta es que el jugador/tutor tenga bandeja propia. Hoy no puede: `notifications` tiene `CHECK (recipient_type IN ('league','team'))` y los jugadores no tienen cuenta. Por eso los recordatorios de cuotas llegan **agregados a la bandeja del equipo** y el aviso al papá lo dispara el tesorero por WhatsApp.
 - **Más tipos de organización**: "Registrar Organización" solo ofrece Liga por ahora. Equipo (fuera del flujo de invitación de una liga), Empresa/Marca y Medio de comunicación quedan pendientes.
-- Detalle cosmético menor: `TeamOnlyPanel` trae su propio `<div className="container">` interno, que ahora queda anidado dentro del `container` de "Mi panel" — funciona bien, pero puede limpiarse más adelante.
 
 ## Estructura
 
@@ -93,8 +118,15 @@ lifa-app/
         players.js           Roster por equipo+rama: alta manual, plantilla de Excel (logos vía
                               exceljs), foto/CURP por jugador, stats de partido y tarjeta pública
         billing.js            Cobranza liga → equipos (ver sección "Cobranza")
-      utils/                 Validaciones, manejo de errores async, zonas horarias
+        playerBilling.js     Cuotas equipo → jugadores + estado de cuenta público del papá
+                              (sin sesión, token en la URL) — ver "Cuotas del club"
+      utils/                 Validaciones, manejo de errores async, zonas horarias,
+                              Cloudinary (compartido por upload.js y playerBilling.js),
+                              billingReminders.js (los dos libros de cobranza)
       seed.js                Datos de ejemplo para desarrollo local
+    tests/                   Recorridos de punta a punta de cobranza (NO corren en
+                              el CI: necesitan un backend vivo apuntado a una rama
+                              de Neon). Ver backend/tests/README.md
       server.js              Arranque de Express: CORS, rate limiting, rutas, manejo de errores
   frontend/
     index.html               <head> con Google Identity Services (login con Google) —
@@ -104,6 +136,10 @@ lifa-app/
         Home, LeaguePage, CalendarPage, MatchPage, Login, Register,
         RegisterLeague, RegisterOrganizationPage, RegisterTeamPage, Dashboard,
         Notifications, AdminPanel, InviteClaim
+        TeamPanel.jsx            Panel de trabajo del equipo: una página, seis
+                                 secciones (ver "Cuotas del club")
+        PlayerStatementPage.jsx  /cuenta/:token — estado de cuenta del jugador,
+                                 público y sin sesión
       components/
         FlightSearchWidget.jsx   Botón "✈️ Vuelo" en MatchPage — despliega el
                                  widget de búsqueda de Aviasales (ver "Monetización")
@@ -144,6 +180,12 @@ cd frontend
 npm install
 npm run dev      # http://localhost:5173
 ```
+
+### 3. Pruebas de cobranza (opcional)
+
+Dos recorridos de punta a punta en `backend/tests/`. **Nunca contra producción**
+— se corren apuntando a una rama de Neon. Instrucciones en
+`backend/tests/README.md`.
 
 ## Flujo de la app
 
@@ -243,13 +285,70 @@ del lote original.
 | `POST` | `/leagues/:leagueId/charges` | liga — crea 1..N cargos con monto por equipo (`items`), un `batch_id`, notifica a cada equipo |
 | `POST` | `/leagues/:leagueId/charges/repeat` | liga — repite un `batch_id` con nueva fecha, respetando el monto de cada equipo |
 | `POST` | `/leagues/:leagueId/teams/:teamId/payments` | liga — registra un pago recibido |
-| `POST` | `/entries/:id/void` | liga — cancela un cargo/pago (2 escrituras) |
+| `POST` | `/entries/:id/void` | liga — cancela un cargo/pago (2 escrituras); rechaza un pago reportado (1 escritura, sin ajuste) |
+| `POST` | `/entries/:id/confirm` | liga — confirma un pago que reportó el equipo |
 | `PATCH` | `/leagues/:leagueId/settings` | liga — prende/apaga los recordatorios automáticos |
-| `GET` | `/teams/:id/statement` | equipo (o la liga) — estado de cuenta de solo lectura |
+| `GET` | `/teams/:id/statement` | equipo (o la liga) — su estado de cuenta |
+| `POST` | `/teams/:id/report-payment` | equipo — reporta un pago con comprobante (nace `pending`) |
+| `POST` | `/teams/:id/withdraw-payment` | equipo — retira su propio reporte antes de que se lo confirmen |
 
-Permisos: los endpoints de liga usan `leagueOwnerRequired`; el estado de cuenta usa
+Permisos: los endpoints de liga usan `leagueOwnerRequired`; los del equipo usan
 `teamOwnerRequired` (deja pasar al rep del equipo **y** a la liga). Un equipo nunca
-puede ver la cuenta de otro. Nada de cobranza aparece en el sitio público.
+puede ver la cuenta de otro, y solo puede retirar lo que reportó él mismo
+(`created_by_side = 'team'`), no lo que capturó la liga. Nada de cobranza aparece
+en el sitio público.
+
+### Conciliación — el equipo reporta, la liga confirma
+
+Ya no solo escribe la liga. Los **cargos** siguen siendo suyos, pero un **pago**
+lo puede registrar ella (nace `confirmed`) o reportarlo el equipo con su
+comprobante (nace `pending`). Es el mismo mecanismo que un papá con su club, un
+nivel arriba, y resuelve el mismo problema: dejar de perseguir capturas de
+pantalla en WhatsApp para capturarlas a mano.
+
+- `POST /billing/teams/:id/report-payment` (`teamOwnerRequired`) — el equipo
+  reporta. El comprobante sube por el `POST /api/upload` de siempre, porque aquí
+  sí hay sesión (el papá no tiene cuenta y por eso necesitó su propio endpoint).
+- `POST /billing/entries/:id/confirm` — la liga confirma; ahí sí mueve el saldo.
+- `POST /billing/teams/:id/withdraw-payment` — el equipo retira su propio
+  reporte. Existe porque solo se permite **un pendiente a la vez** (para no
+  llenarle la bandeja a la liga de duplicados), y sin poder retirarlo quien
+  tecleó 500 en vez de 5000 se quedaba atorado esperando un rechazo ajeno. Lo
+  mismo se agregó del lado del papá
+  (`POST /player-billing/statement/:shareToken/withdraw-payment`).
+- Rechazar dispara `billing_payment_rejected` a la bandeja del equipo con el
+  motivo — si no, se queda creyendo que ya quedó.
+
+Los cuatro estados de un pago, que es donde está todo el cuidado:
+
+| status | ¿suma al saldo? | ¿lleva ajuste de reversa? |
+|---|---|---|
+| `pending` | no | — |
+| `rejected` | no | **no** |
+| `withdrawn` | no | **no** |
+| `confirmed` / `settled` | sí | — |
+| `void` (un confirmado que se canceló) | **sí** | **sí** |
+
+Ese último renglón es el que engaña: un pago cancelado sigue sumando `+amount`
+porque su cancelación ya metió un `adjustment` de signo contrario; excluirlo
+restaría el monto dos veces.
+
+**Por eso `rejected` y `withdrawn` necesitan estado propio y no pueden compartir
+`void`.** La primera versión les ponía `void` y el saldo se inflaba por el monto
+completo: dejaban de contar como `pending`, empezaban a sumar como pago, y nadie
+había creado el ajuste que los revirtiera (correctamente, porque nunca se
+abonaron). El recorrido de punta a punta lo cazó — a Carlos le rechazaban un
+pago de 1,500 y su adeudo pasaba de 1,500 a cero.
+
+Retirar, además, solo alcanza a lo que reportó uno mismo (`created_by_side`), no
+a lo que capturó el cobrador.
+
+En el frontend: bandeja "pagos por confirmar" arriba de todo en
+`BillingLeaguePanel` (es lo único de la pantalla que pide una acción hoy), y
+botón "Ya pagué — reportar pago" en la sección "Con la liga" del panel del
+equipo. `ReportPaymentForm` se generalizó para servir a los dos niveles: recibe
+`uploadProof` y `submitPayment` como funciones, en vez de existir dos
+formularios casi idénticos que se desincronizan en cuanto se toca uno.
 
 ### Recordatorios
 
@@ -276,17 +375,244 @@ del equipo (tabla `notifications`, tipos `billing_charge_new` / `billing_due_soo
 
 ### Fuera de la V1
 
-El equipo reportando pagos con comprobante para que la liga confirme/rechace; cobro
-en línea (pasarela — ver Fase 2 de "Roadmap de negocio" más abajo); facturación/CFDI;
-pago de la liga a árbitros; desglose por jugador; suspender a un equipo por adeudo.
-Pendiente también, sin dueño todavía: una pasada de estilo a `BillingLeaguePanel`
-(hoy la tabla es funcional pero simple, sin tarjeta de fondo).
+Cobro en línea (pasarela — ver Fase 2 de "Roadmap de negocio" más abajo);
+facturación/CFDI; pago de la liga a árbitros; desglose por jugador; suspender a
+un equipo por adeudo.
 
-`team_ledger_entries` ya quedó modelada como un libro genérico "entre dos partes"
-(`created_by_side IN ('league','team')`, `kind`/`direction` sin acoplar a quién le
-cobra a quién) a propósito, para poder reusarla casi igual en **equipo → jugador**
-(cuotas de jugador) sin rehacer el esquema — ver "Roadmap de producto" más abajo.
+~~El equipo reportando pagos con comprobante para que la liga confirme/rechace~~
+— **hecho**, ver "Conciliación" aquí abajo.
 
+~~Pendiente: una pasada de estilo a `BillingLeaguePanel`~~ — **hecho**. La pantalla
+adoptó las piezas que nacieron para el panel del equipo y borró su copia de cada
+una: `.data-table` (en vez de la clase `billing-table`, que no existía en ninguna
+hoja de estilo), `LedgerEntryList` (en vez de un `LedgerList` interno que pintaba
+lo mismo con otros estilos), `utils/money.js` (en vez de `money`/`fmtDate`/
+`balanceColor`/`balanceText` repetidos ahí) y `ConfirmDialog` en lugar del
+`window.confirm` del navegador, que no podía decir qué movimiento se estaba
+cancelando ni pedir el motivo. Se le agregó además la tira de KPIs (por cobrar,
+vencido, % al corriente), derivada de las filas que el overview ya devolvía, sin
+pedirle nada nuevo al backend.
+
+La forma de este libro **sí** se reusó en **equipo → jugador** (ver "Cuotas del
+club" más abajo), pero en una tabla hermana (`player_ledger_entries`), no en
+esta: aquí `league_id`/`team_id` son `NOT NULL`, los índices están afinados para
+liga→equipo y `billingReminders.js` barre esta tabla completa. Lo que se reusó
+fue el modelo — append-only, cancelación por reversa, saldo calculado — no las
+filas. Dos cosas que allá sí existen y aquí siguen pendientes: **el pagador
+reporta su pago con comprobante** y el cobrador lo confirma, y una pasada de
+estilo al panel (`BillingLeaguePanel` ya puede adoptar `.data-table`,
+`ConfirmDialog` y `LedgerEntryList`, que nacieron para el panel del equipo).
+
+## Cuotas del club (equipo → jugadores)
+
+El otro lado de la cobranza: la liga le cobra al equipo (sección anterior) y el
+equipo le cobra a sus jugadores. Reemplaza el flujo real de un club amateur —
+Excel del tesorero + capturas de SPEI sueltas en el grupo de WhatsApp — sin
+pedirle cuenta a nadie de la familia.
+
+### Modelo
+
+Tabla **hermana** de `team_ledger_entries`, no la misma: allá `league_id` y
+`team_id` son `NOT NULL`, sus índices están afinados para liga→equipo y
+`billingReminders.js` la barre completa. La nota del README sobre "reusar el
+modelo" siempre se refirió a la FORMA del libro, no a compartir filas.
+
+- **`player_ledger_entries`** (`config/db.js`) — mismo libro append-only: un
+  movimiento no se edita ni se borra; cancelar es `status='void'` en el original
+  **más** una fila `adjustment` que revierte el monto (idempotente vía
+  `reverses_entry_id`). El saldo nunca se guarda, se suma.
+- **`team_player_accounts`** — **el padrón del club**, y la pieza que hace que
+  todo esto funcione sin liga. Una fila por (equipo, persona): su cuota
+  (`monthly_amount`), su categoría interna (`group_label`), a quién se le cobra
+  (`tutor_name` / `tutor_phone` / `tutor_email`), su situación (`activo` /
+  `beca` / `baja`), el token de su estado de cuenta público (`share_token`) y
+  cuándo se le recordó por última vez (`last_reminded_at`).
+- **`teams.brand_color`** y **`teams.player_billing_reminders_enabled`** —
+  color de acento del panel (solo UI) e interruptor de recordatorios, equivalente
+  a `leagues.billing_reminders_enabled`.
+
+### El padrón del club NO es el roster de torneo
+
+Esto se corrigió después de la primera versión y es la decisión más importante de
+toda la sección. La V1 creaba las cuentas a partir de `player_team_memberships`
+(el roster por rama). Eso ataba la contabilidad a que **la liga** inscribiera al
+equipo en una rama, con dos consecuencias inaceptables: un equipo independiente
+no podía cobrarle a nadie **nunca**, y uno con liga se quedaba esperando a que lo
+inscribieran para poder registrar una mensualidad que ya estaba cobrando por
+fuera. Se inhabilitaban funciones de un equipo por algo que no depende de él.
+
+Son dos padrones distintos y ninguno manda sobre el otro:
+
+| | `player_team_memberships` | `team_player_accounts` |
+|---|---|---|
+| Qué es | Quién puede jugar en qué rama de qué torneo | Quién entrena aquí y a quién le cobra el club |
+| Quién lo arma | La liga, al inscribir al equipo | El club, siempre |
+| Para qué sirve | Elegibilidad | Cobranza (y más adelante, asistencia a entrenamientos) |
+| Sin liga | No existe | Existe igual |
+| Agrupación | Rama y categoría de la liga | `group_label`, texto libre del club ("U17", "Femenil") |
+
+**No se sincronizan.** Dar de alta a alguien en uno no lo da de alta en el otro,
+y editar uno no toca al otro. Lo único que comparten es la tabla `players` como
+identidad de una persona, que es invisible para quien usa el panel — evita
+inventar un segundo concepto de "jugador", nada más.
+
+Lo único que los cruza es un botón opcional, **"Importar de un roster de
+torneo"**: copia los nombres una vez para que un club que ya subió 40 jugadores
+por la plantilla de Excel no los tenga que volver a teclear. Crea filas
+**nuevas** en `players`, no referencias — si la liga después da de baja a alguien
+de su roster, el club lo sigue teniendo y cobrándole sin enterarse. Salta a quien
+ya esté en el padrón (por CURP, si no por nombre + apellido), así que se puede
+correr dos veces sin duplicar.
+
+### Dos diferencias de fondo con el libro de la liga
+
+**1. El papá escribe.** Reporta su pago con comprobante desde un link público,
+sin cuenta y sin sesión — la mayoría de los jugadores no tiene usuario
+(`players.user_id` es nullable y sigue sin existir un flujo para reclamarlo).
+Ese pago nace en `status='pending'` y **no baja el saldo** hasta que el club lo
+confirma. De ahí el `created_by_side='player'`.
+
+Ojo con el orden de los `CASE` en `BALANCE_SUM_SQL`: `'pending'` se descarta
+antes del caso general de `payment`, y ese caso general **no** filtra por status
+a propósito. Un pago cancelado sigue sumando `+amount` porque su cancelación ya
+metió un `adjustment` de signo contrario — si además se excluyera, el monto se
+restaría dos veces. Por la misma razón, **rechazar un pago pendiente no genera
+ajuste**: nunca entró al saldo, así que no hay nada que revertir.
+
+**2. El aviso al papá lo dispara un humano.** El panel arma el mensaje de
+WhatsApp (`wa.me/...`, sin API y sin costo) con nombre, monto, vencimiento y el
+link del estado de cuenta; el tesorero lo manda y puede editarlo antes. La
+plataforma solo registra cuándo (`last_reminded_at`), y la tabla muestra
+"recordado hace 3 días".
+
+### Endpoints — `routes/playerBilling.js` (`/api/player-billing`)
+
+Todos los privados van con `teamOwnerRequired`, que ya existía y ya deja pasar
+tanto a la organización del equipo como a la de su liga.
+
+| Método | Ruta | Para qué |
+|---|---|---|
+| GET | `/teams/:id/overview` | KPIs, padrón con saldo, pagos por confirmar, flujo mensual, lotes repetibles |
+| POST | `/teams/:id/members` | Alta en el padrón del club (crea la persona y su ficha) |
+| PATCH | `/teams/:id/accounts/:playerId` | Edita persona **y** ficha de cobranza en una llamada |
+| DELETE | `/teams/:id/members/:playerId` | Baja si ya tiene movimientos; borrado real solo si nunca tuvo |
+| POST | `/teams/:id/members/import-roster` | Copia (una vez) de un roster de torneo |
+| GET | `/teams/:id/players/:playerId/entries` | Libro de un jugador |
+| POST | `/teams/:id/charges` | Cargos en bloque, monto por jugador |
+| POST | `/teams/:id/charges/repeat` | Repetir un lote anterior |
+| POST | `/teams/:id/players/:playerId/payments` | Pago capturado por el club (nace confirmado) |
+| POST | `/entries/:entryId/confirm` | Confirmar un pago reportado por el papá |
+| POST | `/entries/:entryId/void` | Cancelar / rechazar |
+| POST | `/teams/:id/accounts/:playerId/rotate-token` | Regenerar el link (si se filtró) |
+| PATCH | `/teams/:id/settings` | Interruptor de recordatorios |
+| **GET** | **`/statement/:shareToken`** | **Público, sin sesión** |
+| **POST** | **`/statement/:shareToken/report-payment`** | **Público** — un pendiente a la vez por jugador |
+| **POST** | **`/statement/:shareToken/upload-proof`** | **Público** — subida del comprobante |
+
+En los tres públicos el token **es** la credencial. La respuesta del estado de
+cuenta se arma campo por campo en vez de devolver la fila: de ahí nunca debe
+salir el teléfono del tutor, el id interno del jugador, ni rastro de ningún otro
+jugador. Van con su propio limitador (`publicStatementLimiter` /
+`reportPaymentLimiter` en `middleware/rateLimit.js`).
+
+El comprobante no puede pasar por `POST /api/upload` porque ese exige sesión; la
+configuración de Cloudinary se sacó a **`utils/cloudinary.js`** en cuanto hubo un
+segundo llamador, y el comprobante va a `lifa-app/comprobantes` sin el recorte
+cuadrado de los logos (una captura de SPEI es alta y angosta, y a 800x800 el
+monto queda ilegible). **Nota de privacidad**: la URL de Cloudinary es pública
+para quien la tenga — mismo trato que `proof_url` en la cobranza liga→equipo.
+
+### Recordatorios
+
+`utils/billingReminders.js` ahora exporta **dos** funciones, llamadas ambas al
+final de `POST /api/notifications/trigger`: la de siempre (liga→equipo) y
+`runPlayerBillingReminders`. Misma cadencia (por vencer una vez a ≤3 días;
+vencido cada 3 días, hasta 4 veces) y mismas banderas por fila.
+
+La diferencia: el aviso va **agregado, uno por equipo y por corrida**
+("3 jugadores tienen cuotas vencidas — $2,400 en total"), no uno por movimiento.
+Un equipo de 40 jugadores generaría 40 avisos idénticos y volvería inservible la
+bandeja; y quien lo lee es el tesorero, que necesita saber a quién perseguir
+hoy, no el detalle fila por fila (ese ya está en el panel).
+
+**El aviso nunca le llega al papá**: `notifications` tiene
+`CHECK (recipient_type IN ('league','team'))` y los jugadores no tienen cuenta.
+Tipos nuevos: `player_payment_reported`, `player_billing_due_soon`,
+`player_billing_overdue`.
+
+### Frontend — el panel de trabajo
+
+`/panel/equipo/:id` pasó de 256 líneas de editor de perfil a un workspace. Una
+sola página (`pages/TeamPanel.jsx`) resuelve el equipo y el permiso una vez y
+monta la sección que pide la ruta, en vez de seis páginas repitiendo lo mismo.
+`components/TeamWorkspace.jsx` pone el encabezado y la navegación.
+
+| Ruta | Sección |
+|---|---|
+| `/panel/equipo/:id` | Resumen — KPIs, gráfica de cobranza, actividad reciente |
+| `/panel/equipo/:id/finanzas` | **Cuotas** — bandeja de conciliación, tabla de jugadores, WhatsApp |
+| `/panel/equipo/:id/jugadores` | **Padrón del club** (alta/baja) + rosters de torneo, separados |
+| `/panel/equipo/:id/estado-de-cuenta` | Con la liga (solo lectura; conserva su URL de siempre) |
+| `/panel/equipo/:id/perfil` | Perfil público + color del club |
+| `/panel/equipo/:id/administradores` | `OrgAdminsPanel` |
+| `/cuenta/:shareToken` | **Público, fuera de `ProtectedRoute`** — lo abre el papá |
+
+`Dashboard.jsx` quedó en 22 líneas: ya solo sirve "Mi panel". `TeamStatementPanel.jsx`
+se retiró — su contenido vive en `components/TeamLeagueStatementSection.jsx`.
+
+La sección **Jugadores** muestra los dos padrones, uno debajo del otro y con los
+nombres bien puestos, para que nadie los confunda: arriba el padrón del club (con
+alta, edición y baja) y abajo los rosters de torneo. Los rosters de torneo
+siguen usando el `BranchRosterModal` de siempre, con su plantilla de Excel — el
+backend de roster no se tocó; solo se agregó
+`GET /api/players/teams/:id/branches` para poder listarlos, porque hasta ahora la
+única puerta de entrada al roster era el panel de la LIGA aunque
+`branchTeamOwnerRequired` ya le diera acceso al equipo.
+
+### Pasada de estilo (lo que hacía falta para que se vea de herramienta de paga)
+
+`styles.css` se detenía en color y tipografía. Se agregaron tokens de espaciado,
+radio y sombra, una rampa de grises neutros y un azul informativo — los dos
+acentos que había (`--flag` amarillo, `--field` verde) ya estaban ocupados
+semánticamente por debe / a favor. El acento del workspace (`--accent`) lo pone
+cada club con su `brand_color`, y `utils/color.js` calcula la luminancia para
+decidir si el texto encima va negro o blanco.
+
+Ese acento se aplica a `:root` con el hook `useAccentColor`, no al contenedor
+del panel: los modales se montan con `createPortal` en `document.body` (ver
+`Modal.jsx`), o sea fuera del árbol del workspace, así que puesto en el
+contenedor los botones del modal salían amarillos aunque el club tuviera otro
+color. Se restaura al desmontar. Por lo mismo, los formularios compartidos
+(`ChargeForm`, `PaymentForm`, `RepeatChargeModal`, `BranchRosterModal`) usan
+`btn-accent` en vez de `btn-flag`: así siguen al acento que esté activo, y en la
+liga —que no tiene color propio— se siguen viendo amarillos como siempre.
+
+Piezas nuevas con nombre, en vez de `style={{}}` repetido: `.data-table`
+(encabezado pegajoso, cebra, dinero a la derecha con `tabular-nums`),
+`.stat-strip`, `.ledger-row`, `.pending-tray`, `.empty-teach`, `.ws-*`. La clase
+`billing-table` que no existía en ningún lado quedó reemplazada por `.data-table`,
+que `BillingLeaguePanel` también puede adoptar.
+
+Componentes compartidos nuevos: **`ConfirmDialog.jsx`** (adiós `window.confirm`
+sobre movimientos contables — ahora muestra qué se cancela y pide el motivo, que
+queda asentado en el libro), **`LedgerEntryList.jsx`** (la misma lista de
+movimientos que estaba copiada dos veces en línea, ahora sirve a los tres
+libros), **`MonthlyFlowChart.jsx`** (SVG a mano, sin librería, mismo criterio que
+`UserGrowthChart` en `AdminPanel.jsx`) y **`utils/money.js`** (el formateo de
+pesos que estaba duplicado en cuatro archivos).
+
+### Fuera de esta versión
+
+Pasarela de pago en línea — el esquema ya tiene las columnas (`provider`,
+`provider_payment_id`, `fee_amount`) para que un pago de pasarela entre como un
+movimiento más, pero no se construyó: en México estas cuotas ya son
+transferencias SPEI, y resolver la **conciliación** valía más hoy que cobrar con
+tarjeta. También fuera: CFDI/facturación, cuenta propia para el papá,
+recordatorio automático por WhatsApp/correo (hoy el disparo es humano, con el
+mensaje ya armado), inscripciones en línea, convocatorias, y el bloque de
+"oportunidades para el club" (proveedores) — ese último no se construye hasta
+que haya oferta real registrada, porque con espacios vacíos se lee como
+publicidad y abarata justo la pantalla que se quería ver seria.
 ## Roster de jugadores (plantilla de Excel)
 
 Reemplaza el flujo real de la liga ("le mando el Excel al equipo por WhatsApp y
@@ -467,7 +793,9 @@ Objetivo: que la plataforma genere flujo de cobro real sin que cada venta depend
 No iniciado. Hoy `PUT /organizations/:id/plan` (`admin.js`) requiere que el admin active el plan "pro" a mano después de un pago fuera de la plataforma (transferencia/PayPal). Reemplazar por checkout self-serve + webhook (Conekta o Stripe — Conekta tiene ventaja en México por soportar OXXO/SPEI) que actualice `plan`/`plan_expires_at` solo, con downgrade automático si el pago falla. Después, evaluar extender el mismo mecanismo a `billing.js`: cobro en línea liga→equipo, y eventualmente equipo→jugador (para que los equipos cobren a sus propios jugadores).
 
 **Fase 3 — Red de seguridad técnica**
-No iniciado. Tests automatizados (hoy cero — empezar por auth y billing), monitoreo de uptime/alertas, y que el CI llegue a bloquear el deploy si algo falla (hoy Render/Vercel despliegan sin esperar al resultado del CI).
+Apenas empezada: ya existen dos recorridos de punta a punta de cobranza
+(`backend/tests/`), pero se corren a mano contra una rama de Neon y **no** están
+en el CI. Faltan tests que sí corran solos (empezar por auth), monitoreo de uptime/alertas, y que el CI llegue a bloquear el deploy si algo falla (hoy Render/Vercel despliegan sin esperar al resultado del CI).
 
 **Fase 4 — Automatizar el ciclo de vida del cliente**
 No iniciado. Botón de "Rechazar" liga pendiente (hoy solo existe Aprobar/Eliminar permanente), onboarding automático por correo (Resend) para organizaciones nuevas, habilitar los tipos de organización pendientes en "Registrar Organización".
@@ -475,8 +803,13 @@ No iniciado. Botón de "Rechazar" liga pendiente (hoy solo existe Aprobar/Elimin
 **Fase 5 — Crecimiento sin esfuerzo manual**
 No iniciado. Página de precios pública para el plan "pro", analítica de conversión (hoy `track.js` solo cuenta vistas/clicks de sponsors), SEO/contenido más allá del sitemap actual.
 
-## Roadmap de producto — herramientas para ligas y equipos (plan de sesión, sin construir salvo Cobranza)
+## Roadmap de producto — herramientas para ligas y equipos
 
+> **De esta lista ya están construidos**: Cobranza liga→equipo, cuotas del club
+> equipo→jugador con su padrón propio, y la conciliación (quien paga reporta con
+> comprobante, quien cobra confirma) en los dos libros. Lo demás sigue siendo
+> estrategia, no compromiso de calendario.
+>
 > Nota de procedencia: esta sección viene de una sesión de planeación con Claude
 > (8–14 sep 2026) sobre qué le da a LIFA App valor real para ligas y equipos —
 > el objetivo declarado del proyecto es ser "la casa del fútbol americano en
@@ -515,7 +848,7 @@ adelantó al resto: es lo que hace que el admin de la liga vuelva cada semana.
 - Dominio propio sin marca LIFA; tienda oficial de la liga (`products.js`/bot de WhatsApp ya existen para tiendas tipo `store`, falta adaptarlo a mercancía de liga); módulo de disciplina (expulsión → suspensión automática); credenciales físicas impresas; seguro de jugadores vía aseguradora aliada.
 
 **Para equipos**
-- **Cobro de cuotas a jugadores** (equipo → jugador) — mismo modelo de `team_ledger_entries`, ver nota en "Fuera de la V1" de Cobranza.
+- ~~**Cobro de cuotas a jugadores** (equipo → jugador)~~ — **hecho**, y resultó ser gratuito y no de pago: es lo que engancha al club (su historial de cobranza vive en la plataforma y no se va con el tesorero que sale cada año). Ver sección "Cuotas del club" más arriba. Lo monetizable de encima sigue pendiente: pasarela con comisión, y los servicios alrededor (uniformes, seguro, viajes).
 - Video/film del partido con recorte de jugadas (Hudl más barato).
 - Tienda del equipo (uniformes, fan gear); scouting de rivales de la misma liga; vitrina de reclutamiento para universidades/LFA.
 

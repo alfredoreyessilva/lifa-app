@@ -411,7 +411,7 @@ router.post('/', authRequired, asyncHandler(async (req, res) => {
   const result = await db.prepare(`
     INSERT INTO leagues (name, slug, logo_url, cover_url, country_id, state, states, description, owner_user_id, timezone,
       facebook_url, instagram_url, twitter_url, youtube_url, tiktok_url, website_url, whatsapp, organization_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     name.trim(), slug, logo_url || null, cover_url || null, country_id || null,
     isMexico ? states.join(', ') : (state || null),

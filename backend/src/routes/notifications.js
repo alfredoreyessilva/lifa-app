@@ -5,7 +5,7 @@ import db from '../config/db.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { authRequired } from '../middleware/auth.js';
 import { leagueOwnerRequired, teamOwnerRequired } from '../middleware/ownership.js';
-import { runBillingReminders } from '../utils/billingReminders.js';
+import { runBillingReminders, runPlayerBillingReminders } from '../utils/billingReminders.js';
 
 const router = express.Router();
 
@@ -455,6 +455,13 @@ router.post('/trigger', asyncHandler(async (req, res) => {
   // mezclar el modelo de cobranza con este archivo; es idempotente y no lanza.
   // ─────────────────────────────────────────────────────────────────────────
   await runBillingReminders(db);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Fase 5 — recordatorios de cuotas (equipo → jugadores). Va aparte de la
+  // fase anterior porque es otro libro (player_ledger_entries) y otro criterio
+  // de aviso: uno agregado por equipo, no uno por movimiento.
+  // ─────────────────────────────────────────────────────────────────────────
+  await runPlayerBillingReminders(db);
 
   res.json({ ok: true });
 }));

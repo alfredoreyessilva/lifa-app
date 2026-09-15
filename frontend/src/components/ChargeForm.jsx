@@ -272,7 +272,7 @@ export default function ChargeForm({ teams, categories, tournaments = [], weekLa
 
       <div className="modal-actions">
         <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancelar</button>
-        <button className="btn btn-flag" disabled={loading}>
+        <button className="btn btn-accent" disabled={loading}>
           {loading ? 'Registrando…' : `Registrar cobro a ${items.length} equipo${items.length === 1 ? '' : 's'}`}
         </button>
       </div>

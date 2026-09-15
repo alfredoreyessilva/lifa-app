@@ -1183,6 +1183,146 @@ export async function initSchema() {
     // está invitando a administrar.
     await run(`ALTER TABLE invites ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE`);
     await run(`CREATE INDEX IF NOT EXISTS idx_invites_organization ON invites(organization_id)`);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Cobranza equipo → jugador ("cuotas del club").
+    //
+    // Tabla HERMANA de team_ledger_entries, no la misma: allá league_id y
+    // team_id son NOT NULL, sus índices están afinados para liga→equipo, y
+    // billingReminders.js la barre completa. El comentario del README sobre
+    // "reusar el modelo" se refiere a la FORMA del libro, no a compartir filas.
+    //
+    // Mismas reglas del libro que el de liga:
+    //  - Un movimiento no se edita ni se borra nunca.
+    //  - Cancelar = status='void' en el original + una fila 'adjustment' que
+    //    revierte el monto (idempotente vía reverses_entry_id).
+    //  - El saldo NUNCA se guarda: se calcula sumando movimientos.
+    //
+    // Dos diferencias a propósito respecto al libro de liga:
+    //  - created_by_side admite 'player': aquí el papá SÍ escribe (reporta su
+    //    pago con comprobante desde el link público, sin cuenta).
+    //  - status admite 'pending' para ese pago reportado y todavía no
+    //    confirmado por el club. Un pago 'pending' NO cuenta en el saldo.
+    // ─────────────────────────────────────────────────────────────────────────
+    await run(`
+      CREATE TABLE IF NOT EXISTS player_ledger_entries (
+        id SERIAL PRIMARY KEY,
+        team_id    INTEGER NOT NULL REFERENCES teams(id)   ON DELETE CASCADE,
+        player_id  INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        kind       TEXT NOT NULL CHECK (kind IN ('charge', 'payment', 'adjustment')),
+        category   TEXT,
+        concept    TEXT NOT NULL,
+        amount     NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+        currency   TEXT NOT NULL DEFAULT 'MXN',
+        due_date   DATE,
+        period_label TEXT,
+        status     TEXT NOT NULL DEFAULT 'open',
+        direction  TEXT CHECK (direction IN ('credit', 'debit')),
+        payment_method TEXT,
+        reference  TEXT,
+        proof_url  TEXT,
+        note       TEXT,
+        batch_id   TEXT,
+        reverses_entry_id  INTEGER REFERENCES player_ledger_entries(id) ON DELETE SET NULL,
+        created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_by_side    TEXT NOT NULL DEFAULT 'team' CHECK (created_by_side IN ('team', 'player')),
+        provider            TEXT,
+        provider_payment_id TEXT,
+        fee_amount          NUMERIC(12,2),
+        voided_by_user_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        voided_at  TIMESTAMP,
+        reminded_due_soon        BOOLEAN NOT NULL DEFAULT FALSE,
+        overdue_reminder_count   INTEGER NOT NULL DEFAULT 0,
+        last_overdue_reminder_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_player_ledger_team   ON player_ledger_entries(team_id, created_at)`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_player_ledger_player ON player_ledger_entries(player_id, created_at)`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_player_ledger_batch  ON player_ledger_entries(batch_id)`);
+    await run(`
+      CREATE INDEX IF NOT EXISTS idx_player_ledger_due
+      ON player_ledger_entries(due_date)
+      WHERE kind = 'charge' AND status = 'open'
+    `);
+    await run(`
+      CREATE INDEX IF NOT EXISTS idx_player_ledger_pending
+      ON player_ledger_entries(team_id)
+      WHERE kind = 'payment' AND status = 'pending'
+    `);
+
+    // La "cuenta" de un jugador dentro de un club: su cuota, a quién se le
+    // cobra (tutor) y el token de su estado de cuenta público.
+    //
+    // No vive en player_team_memberships a propósito: esa es tabla de
+    // HISTORIAL (las filas se cierran con end_date al cambiar de rama o
+    // temporada, no se borran). El token que el papá ya tiene guardado en su
+    // WhatsApp tiene que sobrevivir esos cambios, así que la cuenta se ancla a
+    // (equipo, jugador) y nada más.
+    //
+    // Las filas se crean perezosamente al abrir el panel de Finanzas — no hay
+    // backfill ni cambios en el alta de roster.
+    await run(`
+      CREATE TABLE IF NOT EXISTS team_player_accounts (
+        id SERIAL PRIMARY KEY,
+        team_id   INTEGER NOT NULL REFERENCES teams(id)   ON DELETE CASCADE,
+        player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        monthly_amount NUMERIC(12,2),
+        status TEXT NOT NULL DEFAULT 'activo' CHECK (status IN ('activo', 'baja', 'beca')),
+        tutor_name  TEXT,
+        tutor_phone TEXT,
+        tutor_email TEXT,
+        share_token TEXT UNIQUE NOT NULL,
+        last_reminded_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        UNIQUE (team_id, player_id)
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_team_player_accounts_team ON team_player_accounts(team_id)`);
+
+    // Interruptor por equipo para los recordatorios automáticos de cuotas,
+    // equivalente a leagues.billing_reminders_enabled. Nace apagado: el club
+    // lo prende cuando ya cargó sus cuotas y quiere que la plataforma le
+    // avise sola de los vencidos.
+    await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS player_billing_reminders_enabled BOOLEAN NOT NULL DEFAULT FALSE`);
+
+    // Color de marca del club, para que su panel de trabajo se sienta suyo y
+    // no una pantalla genérica. Nullable: en NULL el panel usa el amarillo de
+    // CFBAMX (--flag). Es solo acento de UI — no se usa en el sitio público.
+    await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS brand_color TEXT`);
+
+    // Corrección de fondo: el padrón de jugadores del CLUB es independiente de
+    // los rosters de torneo.
+    //
+    // La primera versión creaba las cuentas a partir de player_team_memberships
+    // (el roster por rama). Eso ataba la contabilidad a que la LIGA inscribiera
+    // al equipo en una rama: un equipo independiente no podía cobrarle a nadie
+    // nunca, y uno con liga quedaba esperando a que lo inscribieran para poder
+    // cobrar una mensualidad que ya estaba cobrando por fuera. Son dos cosas
+    // distintas y no deben compartir origen:
+    //
+    //   player_team_memberships → quién juega en qué rama de qué torneo (lo
+    //                             arma la liga, sirve para elegibilidad)
+    //   team_player_accounts    → a quién le cobra el club y a quién entrena
+    //                             (lo arma el club, existe aunque no haya liga)
+    //
+    // Siguen compartiendo la tabla `players` como identidad de la persona —
+    // eso no las acopla, solo evita inventar un segundo concepto de "jugador".
+    // No hay sincronización entre las dos: dar de alta a alguien en una no lo
+    // da de alta en la otra.
+    //
+    // group_label es la agrupación PROPIA del club ("U17", "Femenil",
+    // "Infantil"), texto libre. Reemplaza a la rama como filtro en el alta de
+    // cuotas: un club que no está en ninguna liga igual necesita separar a sus
+    // categorías para cobrarles distinto.
+    await run(`ALTER TABLE team_player_accounts ADD COLUMN IF NOT EXISTS group_label TEXT`);
+
+    // Datos que el club necesita de su propio padrón y que no son del jugador
+    // como tal, sino de su relación con ESTE club.
+    await run(`ALTER TABLE team_player_accounts ADD COLUMN IF NOT EXISTS joined_date DATE`);
+    await run(`ALTER TABLE team_player_accounts ADD COLUMN IF NOT EXISTS note TEXT`);
   } finally {
     // Se suelta el candado y se libera la conexión pase lo que pase
     await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY]).catch(() => {});

@@ -1544,7 +1544,7 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
     name, logo_url, away_logo_url, cover_url, location, contact_email, contact_phone,
     facebook_url, instagram_url, twitter_url, website_url, sort_order,
     home_stream_links, away_stream_links, home_ticket_links, away_ticket_links,
-    country_id, description, show_on_platform,
+    country_id, description, show_on_platform, brand_color,
   } = req.body;
   const t = req.team;
 
@@ -1597,6 +1597,19 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
     toNull(show_on_platform),
     t.id,
   );
+
+  // brand_color va aparte del UPDATE de arriba porque ese usa COALESCE(?, col)
+  // en todas sus columnas — con ese patrón un campo nunca se puede vaciar, y
+  // aquí sí hace falta: el botón "Quitar" del selector de color manda null
+  // para que el panel regrese al amarillo de CFBAMX. Solo se toca si la clave
+  // viene en el cuerpo, así que un PUT que no la mencione no borra el color.
+  if (Object.prototype.hasOwnProperty.call(req.body, 'brand_color')) {
+    const color = isNonEmptyString(brand_color) ? brand_color.trim() : null;
+    if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) {
+      return res.status(400).json({ error: 'El color del club debe ser un hexadecimal tipo #1B5E20' });
+    }
+    await db.prepare('UPDATE teams SET brand_color = ? WHERE id = ?').run(color, t.id);
+  }
 
   // country_id/description viven en la organización del equipo (la capa de
   // identidad común), no en "teams" — solo se tocan si el equipo ya tiene

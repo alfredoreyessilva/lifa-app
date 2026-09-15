@@ -128,6 +128,35 @@ router.post('/teams/:id/roster', authRequired, teamOwnerRequired, asyncHandler(a
   res.status(201).json({ player, membership });
 }));
 
+// Ramas donde está inscrito un equipo, con su contexto completo (torneo →
+// categoría → rama) y cuántos jugadores lleva en cada una.
+//
+// Existe porque el roster siempre vivió a nivel rama y la única forma de
+// llegar a él era el panel de la LIGA: el representante del equipo tenía
+// permiso por API (branchTeamOwnerRequired) pero ninguna pantalla desde donde
+// entrar. Esto es lo que le da al club la lista de "tus planteles" en su
+// propio panel, sin pasar por la liga.
+router.get('/teams/:id/branches', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+  const branches = await db.prepare(`
+    SELECT b.id AS branch_id, b.name AS branch_name,
+           c.id AS category_id, c.name AS category_name, c.season, c.year,
+           tn.id AS tournament_id, tn.name AS tournament_name, tn.year AS tournament_year,
+           (
+             SELECT COUNT(*)::int
+             FROM player_team_memberships ptm
+             WHERE ptm.branch_id = b.id AND ptm.team_id = ? AND ptm.end_date IS NULL
+           ) AS roster_count
+    FROM branch_teams bt
+    JOIN branches b   ON b.id = bt.branch_id
+    JOIN categories c ON c.id = b.category_id
+    LEFT JOIN tournaments tn ON tn.id = c.tournament_id
+    WHERE bt.team_id = ?
+    ORDER BY tn.year DESC NULLS LAST, tn.name ASC, c.sort_order ASC, b.sort_order ASC
+  `).all(req.team.id, req.team.id);
+
+  res.json({ branches });
+}));
+
 // Roster de un equipo DENTRO DE UNA RAMA específica — el reemplazo correcto
 // de los dos endpoints obsoletos de arriba. branchTeamOwnerRequired ya
 // valida que el equipo esté inscrito en la rama antes de llegar aquí.
