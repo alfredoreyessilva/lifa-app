@@ -23,6 +23,7 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 - **Páginas legales**: Términos de Servicio (`/terminos`) y Aviso de Privacidad (`/privacidad`) — `frontend/src/pages/TermsOfService.jsx` y `PrivacyPolicy.jsx`, enlazadas desde el footer. **Ojo**: tienen placeholders (`[Razón social...]`, `[correo de contacto...]`, `[domicilio...]`) sin rellenar todavía — hacerlo antes de depender de ellas para cobros reales (ver "Roadmap de negocio" más abajo).
 - **CI en GitHub Actions** (`.github/workflows/ci.yml`): en cada push/PR a `main` corre el build del frontend (`npm run build`) y un chequeo de sintaxis de todo `backend/src` (`node --check`, no hay tests reales todavía). No bloquea el deploy de Render/Vercel si falla — son procesos independientes, esto solo te avisa.
 - **Bug corregido: registrar una liga daba 500.** `POST /leagues` (`routes/leagues.js`) tenía **19 placeholders para 18 columnas** en su `INSERT`, así que Postgres la rechazaba con "INSERT has more expressions than target columns" y ninguna liga nueva se podía crear. Preexistente y sin relación con la cobranza — se topó de frente al intentar crear una liga de prueba para el recorrido de punta a punta. **Revisar si alguien intentó registrar una liga y no pudo.**
+- **Verificación de la sesión**: las dos suites de punta a punta corrieron contra una rama de Neon con **46 aserciones y 0 fallas**, y encima se hizo la **QA visual en navegador** — se revisó el panel del equipo, se confirmó que la tarjeta del estado de cuenta público se ve bien, y se mandó un **WhatsApp real** desde el panel (ese link se arma en el cliente y no pasa por el backend, así que ninguna prueba automática lo cubre). La rama de prueba se borró al terminar.
 - **Dos suites de punta a punta** (`backend/tests/`, ver su README): ejercitan los dos libros contra un backend vivo apuntado a una rama de Neon, nunca a producción. No corren en el CI. Cubren lo único que no se puede revisar leyendo el código — que el saldo cuadre después de cancelar, rechazar y retirar. Fueron las que cazaron los dos bugs de arriba.
 - **Conciliación en los dos libros**: quien paga ahora puede reportar su pago con comprobante y quien cobra lo confirma con un clic — el equipo hacia su liga (`POST /billing/teams/:id/report-payment`) y el jugador hacia su club. El pago nace `pending` y **no mueve el saldo** hasta que lo confirman; rechazarlo no genera ajuste (nunca entró al saldo) y quien lo reportó lo puede retirar si se equivocó. Esto era lo que quedaba "Fuera de la V1" de Cobranza.
 - **Pasada de estilo al panel de cobranza de la liga**: `BillingLeaguePanel` adoptó las piezas que nacieron para el panel del equipo (`.data-table`, `ConfirmDialog`, `LedgerEntryList`, `utils/money.js`) y borró su copia de cada una — incluido el `window.confirm` del navegador para cancelar un movimiento contable y la clase `billing-table`, que no existía en ninguna hoja de estilo. Se le agregó la tira de KPIs (por cobrar, vencido, % al corriente) derivada de datos que el overview ya devolvía.
@@ -61,27 +62,10 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 
 ## En progreso — no terminado todavía
 
-- **QA visual del panel de trabajo del equipo y del estado de cuenta público**: la
-  sesión del 15-sep-2026 (panel del equipo + cuotas del club, ver "Cambios
-  recientes") se verificó **por API de punta a punta contra una rama de Neon** —
-  46 aserciones, 0 fallas, con las suites que quedaron en `backend/tests/`. Lo
-  que **no** se probó es cómo se ve: nadie abrió `/panel/equipo/:id` ni
-  `/cuenta/:token` en un navegador. Revisar antes de darlo por cerrado,
-  especialmente:
-  - el estado de cuenta público a 390px de ancho, que es como lo abre el papá
-    desde WhatsApp;
-  - que el color del club (`teams.brand_color`) se vea bien también dentro de los
-    modales (se aplica a `:root` con `useAccentColor` justo por eso);
-  - la tabla `.data-table` con muchos jugadores y nombres largos.
-- **Nadie ha mandado un WhatsApp de verdad desde el panel.** El link `wa.me` se
-  arma en el cliente y no pasa por el backend, así que no lo cubre ninguna
-  prueba. Confirmar con un teléfono real que el mensaje llega con el link bien
-  formado y que `last_reminded_at` se marca.
 - **Revisar si alguien no pudo registrar su liga.** `POST /leagues` daba 500 por
   un bug preexistente (19 placeholders para 18 columnas); ya está corregido, pero
   desde afuera solo se veía "Error interno del servidor". Ver "Cambios
   recientes".
-
 - **Reactivar comisión de Hotel sin Drive**: desde que se quitó Travelpayouts Drive (ver "Cambios recientes" y "Monetización"), el botón 🏨 Hotel no genera comisión. Ya no depende de la aprobación de Booking.com dentro de Travelpayouts (ese flujo se fue junto con Drive) — la alternativa ya integrada en el código es configurar `VITE_HOTEL_AFFILIATE_ID` con un ID de afiliado directo de Booking.com. Falta conseguir/confirmar ese ID y configurarlo en Vercel.
 - **QA visual del panel negro en LeagueStructurePanel/TournamentMatchesPanel**: se envolvió su contenido en `.dashboard-panel` pero no se probó en el navegador. (`Dashboard.jsx` ya no entra aquí: quedó en 22 líneas y el panel del equipo se rehizo completo.)
 - **QA visual de "Invitar administrador"**: el flujo completo (generar link, reclamarlo con una segunda cuenta, ver la liga/equipo aparecer en su "Mi panel", quitar/quedar como último administrador) se verificó por API y directo contra la base de datos, pero no de punta a punta en el navegador — confirmar antes de darlo por cerrado.
