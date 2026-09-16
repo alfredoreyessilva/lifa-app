@@ -20,6 +20,22 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+
+      # Las pruebas van ANTES del build a propósito: tardan medio segundo y
+      # el build casi un minuto, así que si algo se rompió, se sabe antes.
+      #
+      # Corren con el runner que trae Node (`node --test`), sin Jest, Vitest
+      # ni ninguna dependencia nueva. Cubren las funciones puras de
+      # src/utils/ — dinero, estado de partido, validación y presentación —
+      # que son las que se pueden probar sin navegador ni base de datos.
+      #
+      # Nota: tests/unit/matchDisplay.test.mjs importa también un archivo del
+      # backend, a propósito, para verificar que las dos listas de zonas
+      # horarias (la que el backend acepta y la que el frontend sabe
+      # nombrar) no se separen. No necesita node_modules del backend.
+      - name: Pruebas unitarias del frontend
+        run: npm test
+
       - run: npm run build
 
   backend-syntax-check:
@@ -35,10 +51,10 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
-      # Todavía no hay tests automatizados (ver roadmap, Fase 3) — mientras
-      # tanto, esto al menos revisa que cada archivo del backend tenga
-      # sintaxis válida antes de llegar a Render, sin necesitar base de
-      # datos ni variables de entorno reales.
+
+      # Chequeo de sintaxis: no necesita base de datos ni variables de
+      # entorno reales, así que atrapa un archivo roto antes de que llegue a
+      # Render aunque no haya prueba que lo cubra.
       #
       # Cubre src/, scripts/ y tests/, y tanto .js como .mjs: los recorridos
       # de punta a punta y los scripts de diagnóstico son .mjs y antes se
@@ -47,3 +63,11 @@ jobs:
       # verifica que no tengan un error de sintaxis.
       - name: Verificar sintaxis del backend
         run: find src scripts tests \( -name "*.js" -o -name "*.mjs" \) -print0 | xargs -0 -n1 node --check
+
+      # Pruebas unitarias de utils/ (zonas horarias y validación). Lo que NO
+      # está aquí son las dos suites de punta a punta de cobranza
+      # (tests/billing-*.e2e.mjs): ésas necesitan un backend vivo contra una
+      # rama de Neon y se siguen corriendo a mano — ver backend/tests/README.md.
+      # El patrón `tests/unit/*.test.mjs` las deja fuera por construcción.
+      - name: Pruebas unitarias del backend
+        run: npm test

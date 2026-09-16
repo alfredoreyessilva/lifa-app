@@ -40,6 +40,10 @@ const PoolJoinPage = lazy(() => import('./pages/PoolJoinPage.jsx'));
 const TermsOfService = lazy(() => import('./pages/TermsOfService.jsx'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy.jsx'));
 
+// Las páginas legales solo se publican cuando hay datos reales de quien
+// opera el Servicio. Se llenan en un solo lugar: src/config/legal.js.
+import { LEGAL_DATA_READY, PRIVACY_PUBLISHED } from './config/legal.js';
+
 // La pantalla clásica de liga (/panel/liga/:id, modelo plano sin torneos) se
 // retiró — todo lo que hacía ya vive en LeagueStructurePanel.jsx, y en
 // producción ninguna liga tenía ya partidos en el modelo viejo (se verificó
@@ -97,8 +101,14 @@ export default function App() {
                 de ProtectedRoute a propósito — exigir cuenta aquí es
                 exactamente la fricción que mata el cobro. */}
             <Route path="/cuenta/:shareToken" element={<PlayerStatementPage />} />
-            <Route path="/terminos" element={<TermsOfService />} />
-            <Route path="/privacidad" element={<PrivacyPolicy />} />
+            {/* Mientras falten los datos de src/config/legal.js, /terminos
+                no existe y cae en la pantalla de "no encontrado": unos
+                Términos sin saber quién los emite ni ante qué tribunales
+                se reclaman no obligan a nada. El Aviso de Privacidad sí se
+                queda publicado — el login con Google exige que ese link
+                funcione. */}
+            {LEGAL_DATA_READY && <Route path="/terminos" element={<TermsOfService />} />}
+            {PRIVACY_PUBLISHED && <Route path="/privacidad" element={<PrivacyPolicy />} />}
             <Route
               path="/registrar-liga"
               element={<ProtectedRoute><RegisterLeague /></ProtectedRoute>}
@@ -184,11 +194,13 @@ export default function App() {
             src="/cfbamx.jpg"
             alt="CFBAMX — Calendarios de Football Americano México"
           />
-          <div className="footer-links">
-            <Link to="/terminos">Términos de Servicio</Link>
-            <span aria-hidden="true">·</span>
-            <Link to="/privacidad">Aviso de Privacidad</Link>
-          </div>
+          {(LEGAL_DATA_READY || PRIVACY_PUBLISHED) && (
+            <div className="footer-links">
+              {LEGAL_DATA_READY && <Link to="/terminos">Términos de Servicio</Link>}
+              {LEGAL_DATA_READY && PRIVACY_PUBLISHED && <span aria-hidden="true">·</span>}
+              {PRIVACY_PUBLISHED && <Link to="/privacidad">Aviso de Privacidad</Link>}
+            </div>
+          )}
         </div>
       </footer>
     </>

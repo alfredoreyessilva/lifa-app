@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 
+import { LEGAL, PRIVACY_PUBLISHED } from '../config/legal.js';
+
 const LAST_UPDATED = '13 de septiembre de 2026';
 
 export default function TermsOfService() {
@@ -12,7 +14,7 @@ export default function TermsOfService() {
 
       <p>
         Estos Términos de Servicio ("Términos") rigen el uso de CFBAMX — Calendarios de Football
-        Americano México (el "Servicio"), operado por [Razón social / nombre de quien opera CFBAMX]
+        Americano México (el "Servicio"), operado por {LEGAL.razonSocial}
         ("nosotros"). Al crear una cuenta o usar el Servicio aceptas estos Términos. Si no estás de
         acuerdo, no debes usar el Servicio.
       </p>
@@ -127,18 +129,20 @@ export default function TermsOfService() {
       <h3>14. Ley aplicable</h3>
       <p>
         Estos Términos se rigen por las leyes de México. Cualquier controversia se someterá a los
-        tribunales competentes de [ciudad/estado], salvo que la ley aplicable disponga otra cosa.
+        tribunales competentes de {LEGAL.jurisdiccion}, salvo que la ley aplicable disponga otra cosa.
       </p>
 
       <h3>15. Contacto</h3>
       <p>
-        Dudas sobre estos Términos: <a href="mailto:[correo de contacto de CFBAMX]">[correo de
-        contacto de CFBAMX]</a>.
+        Dudas sobre estos Términos:{' '}
+        <a href={`mailto:${LEGAL.correoContacto}`}>{LEGAL.correoContacto}</a>.
       </p>
 
-      <p className="legal-updated">
-        Ver también nuestro <Link to="/privacidad">Aviso de Privacidad</Link>.
-      </p>
+      {PRIVACY_PUBLISHED && (
+        <p className="legal-updated">
+          Ver también nuestro <Link to="/privacidad">Aviso de Privacidad</Link>.
+        </p>
+      )}
     </div>
   );
 }

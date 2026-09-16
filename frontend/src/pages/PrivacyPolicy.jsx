@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 
+import { LEGAL, LEGAL_DATA_READY } from '../config/legal.js';
+
 const LAST_UPDATED = '13 de septiembre de 2026';
 
 export default function PrivacyPolicy() {
@@ -11,10 +13,11 @@ export default function PrivacyPolicy() {
       <p className="legal-updated">Última actualización: {LAST_UPDATED}</p>
 
       <p>
-        [Razón social / nombre de quien opera CFBAMX], responsable de CFBAMX — Calendarios de
-        Football Americano México (el "Servicio"), con domicilio en [domicilio fiscal o de
-        contacto], es responsable del tratamiento de tus datos personales conforme a la Ley Federal
-        de Protección de Datos Personales en Posesión de los Particulares.
+        {LEGAL.razonSocial ? `${LEGAL.razonSocial}, responsable de ` : 'El responsable de '}
+        CFBAMX — Calendarios de Football Americano México (el "Servicio")
+        {LEGAL.domicilio ? `, con domicilio en ${LEGAL.domicilio},` : ''} trata tus datos
+        personales conforme a la Ley Federal de Protección de Datos Personales en Posesión de
+        los Particulares.
       </p>
 
       <h3>1. Datos que recabamos</h3>
@@ -88,8 +91,10 @@ export default function PrivacyPolicy() {
       <h3>7. Tus derechos (ARCO)</h3>
       <p>
         Puedes solicitar Acceso, Rectificación, Cancelación u Oposición (derechos ARCO) sobre tus
-        datos personales, así como revocar tu consentimiento, escribiendo a{' '}
-        <a href="mailto:[correo de contacto de CFBAMX]">[correo de contacto de CFBAMX]</a>. Podemos
+        datos personales, así como revocar tu consentimiento
+        {LEGAL.correoContacto
+          ? <>, escribiendo a <a href={`mailto:${LEGAL.correoContacto}`}>{LEGAL.correoContacto}</a></>
+          : ', contactando al responsable del Servicio'}. Podemos
         pedirte información para verificar tu identidad antes de atender la solicitud. Algunos datos
         (como el registro de cobranza de una liga en la que participas) pueden estar sujetos a
         conservación mientras la organización correspondiente los necesite para su propio registro
@@ -116,9 +121,11 @@ export default function PrivacyPolicy() {
         fecha de la última actualización en esta misma página.
       </p>
 
-      <p className="legal-updated">
-        Ver también nuestros <Link to="/terminos">Términos de Servicio</Link>.
-      </p>
+      {LEGAL_DATA_READY && (
+        <p className="legal-updated">
+          Ver también nuestros <Link to="/terminos">Términos de Servicio</Link>.
+        </p>
+      )}
     </div>
   );
 }
