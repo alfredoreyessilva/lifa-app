@@ -18,7 +18,18 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 
 ## Cambios recientes importantes (septiembre 2026)
 
-- **Panel de trabajo del equipo (workspace) + cuotas del club a sus jugadores**: `/panel/equipo/:id` dejó de ser un editor de perfil y pasó a ser un espacio de trabajo con seis secciones (Resumen, Finanzas, Jugadores, Con la liga, Perfil, Administradores), con el logo y el **color del club** (`teams.brand_color`) como acento. Lo nuevo de fondo es **Finanzas**: el libro de cuotas **equipo → jugador** (`player_ledger_entries`) y el **flujo de conciliación** que faltaba — el papá abre un **estado de cuenta público sin cuenta** (`/cuenta/:token`), sube su comprobante, y el club lo confirma con un clic. Pieza clave: el **padrón del club** (`team_player_accounts`) es **independiente de los rosters de torneo** — un equipo sin liga, o al que su liga todavía no inscribe en ninguna rama, da de alta a su gente y le cobra igual. Detalle completo en la sección "Cuotas del club" más abajo.
+- **Pasada de limpieza de deuda técnica (2026-09-15)**: cuatro cosas chicas que estaban anotadas como pendientes y no dependían de nada externo. (1) **Pool de Postgres con valores explícitos** y, lo importante, el manejador `pool.on('error')` que faltaba — sin él un error en una conexión **ociosa** (exactamente lo que pasa cuando Neon se duerme y corta del otro lado) se emitía sin escucha y **tiraba el proceso entero de Node**; ver "Pendientes conocidos". (2) **Código muerto de vuelos borrado** de `matchServices.js` (`buildFlightSearchUrl`, `ORIGIN_CITY_OPTIONS`): nada los importaba desde que el widget embebido reemplazó el approach de link directo. (3) **Reindentado** del contenido dentro del `.dashboard-panel` de `LeagueStructurePanel.jsx` y `TournamentMatchesPanel.jsx` — cosmético del fuente, el render no cambió; **la QA visual de esas dos pantallas sigue pendiente**. (4) **`backend/scripts/diagnose-failed-leagues.mjs`**, para el pendiente de las ligas que no se pudieron registrar: escrito, **sin correr todavía**. Se corrigieron además dos cosas del propio README que ya no eran ciertas: el bullet que decía que "Registrar Organización" solo ofrecía Liga (los cuatro tipos se registran desde hace tiempo, `routes/organizations.js`) y el que decía que el código muerto de vuelos se había dejado a propósito.
+- **Badge "✓ Verificado" en la ficha pública del equipo**: antes solo se veía en el panel del propio equipo. Lo que faltaba era del lado del backend — `is_verified` vive en `organizations`, no en `teams`, y **ninguno** de los cuatro endpoints públicos que alimentan `TeamCard`/`TeamInfoPanel` lo traía: `/leagues/all-teams` (Home), `/leagues/:slug/teams` (página de liga), `/leagues/tournaments/:id/public` (torneo) y los `home_team_details`/`away_team_details` de `/leagues/matches/:id` (página de partido). A los cuatro se les agregó el `LEFT JOIN organizations` con el mismo patrón que ya usaban `manage.js` y `auth.js`. En el frontend: palomita sola en la tarjeta (es chica y va en cuadrícula, con el texto en `title`/`aria-label`) y la pastilla completa `.pill is-ok` en la ficha, la misma que ya usaba `TeamWorkspace`. Si el equipo no está verificado no se dice nada — a diferencia de la página pública de liga, aquí no hay un "espacio no administrado oficialmente" que aclarar.
+- **El CI ya cubre `scripts/` y `tests/`, y los `.mjs`**: el paso de sintaxis del backend corría `find src -name "*.js"`, así que los dos recorridos de punta a punta y los scripts de diagnóstico (todos `.mjs`) quedaban fuera del chequeo. Ahora son 38 archivos en vez de 36. Sigue sin *correr* los tests — eso necesita un backend vivo y una rama de Neon.
+- **Cerrada una fuga de datos en la tarjeta pública de jugador, y arrancada la separación de las dos poblaciones.** `GET /api/players/:id/card` es público y hacía `SELECT * FROM players` sin exigir nada más: servía **cualquier** fila de `players`, incluidos los clientes del padrón de un club —nombre, fecha de nacimiento, CURP y foto, en buena parte menores de edad— a cualquiera que adivinara un id. Ahora exige **al menos una membresía de torneo** (un cliente del padrón responde 404, no 403: desde afuera no se debe distinguir "existe pero no te lo muestro" de "no existe") y devuelve solo los cinco campos que la tarjeta pinta — el CURP es identificación oficial y tampoco tenía por qué salir para los jugadores reales. La causa de raíz era compartir tabla, y de ahí sale el cambio de fondo: **`club_members` + `club_ledger_entries`** (ver "Dos poblaciones distintas" más abajo). El esquema ya está; **el código de cobranza todavía no se ha movido a las tablas nuevas.**
+- **Dos poblaciones distintas: el cliente del club dejó de ser un `players` (fase A).** Antes, dar de alta a alguien en el padrón de cobranza creaba una fila en `players`, la misma tabla del roster de torneo. En cuanto a filas ya eran independientes (importar del roster copiaba, no enlazaba), pero compartir tabla traía tres problemas reales: nada distinguía a un cliente de un atleta, la tarjeta pública servía **cualquier** fila de `players` (ver la fuga de arriba), y `first_name`/`last_name NOT NULL` obligaba al club a inventarle un apellido a quien solo conoce por su apodo. Ahora el padrón vive en **`club_members`** —con **un solo `display_name`**, así que "El Güero" es un nombre válido— y su libro en **`club_ledger_entries`**, colgado del miembro y no del jugador. `players` se queda para lo único que es: quién puede jugar en qué rama de qué torneo.
+  Se hizo en dos fases a propósito. Esta, la A, **cambia dónde viven los datos sin tocar el contrato de la API**: sigue respondiendo `player_id`, `first_name` y `last_name` (derivados del `display_name`), así que el frontend no se movió ni una línea. Eso permitió usar las suites de punta a punta como juez: **46 aserciones, 0 fallas antes y 46, 0 después**, con el único cambio en las pruebas siendo una consulta que lee la tabla directo. Si se hubieran renombrado las URLs al mismo tiempo, habría habido que editar las pruebas, y una prueba editada ya no demuestra que nada se rompió. La fase B —renombrar la superficie y poner un solo campo de nombre en el formulario— queda pendiente y no toca saldos.
+  Efecto colateral bueno: el borrado de un jugador del roster (`DELETE .../roster/:playerId?hard=true`) ya **no** tiene que revisar si esa persona tiene cuenta en algún padrón o movimientos de cuotas. No puede tenerlos. Esa comprobación existía solo porque las dos poblaciones compartían tabla.
+  **Las tablas viejas ya no se crean.** Sus `CREATE TABLE` se quitaron de `db.js`: mientras estuvieran, cada arranque del servidor las volvía a crear vacías después de borrarlas y nunca se acababa de limpiar. Una base nueva ya no las tiene. En una que ya existía siguen ahí con sus datos hasta que se corra `scripts/cleanup-legacy-club-padron.mjs`, que **simula por defecto**, enseña fila por fila con el dueño de cada equipo, y solo dropea con `--confirm` — una tabla de dinero no se borra como efecto secundario de reiniciar un servidor. Probado en la rama: dropeadas, servidor reiniciado, **no se recrearon**, y las 46 aserciones siguieron pasando.
+- **Quitar un jugador del roster, y rechazar una solicitud de publicación**: los dos huecos que quedaban en "En progreso" y que no dependían de nada externo. Detalle del roster en "Roster de jugadores"; el rechazo es `PUT /api/admin/leagues/:id/decline-publish`, con botón "Rechazar solicitud" en `/admin` que **solo aparece si hay una solicitud pendiente** (`!is_public && publish_requested`) y pide un **motivo obligatorio**, porque el punto de rechazar en vez de ignorar es que el dueño sepa qué arreglar. No toca `is_public` ni borra nada: apaga `publish_requested`, le manda el motivo a la bandeja del dueño (tipo nuevo `league_publish_declined`, distinto de `league_unapproved`, que es ocultar una liga que ya era pública) y así el dueño puede volver a solicitarlo cuando corrija — el ciclo se cierra sin que nadie mande un WhatsApp. `ConfirmDialog` ganó una casilla opcional (`checkboxLabel`) para la acción con dos variantes; los cuatro llamadores que ya tenía no la pasan y no cambian en nada.
+- **Borrado el roster "por equipo sin rama", que no era código muerto sino una trampa.** El panel de la liga tenía un botón "Roster" por equipo (del modelo de antes de la corrección "roster por rama") que daba de alta al jugador con `player_team_memberships.branch_id = NULL` — invisible después para **todas** las consultas del modelo actual, mientras el `GET` obsoleto sí lo mostraba. Se borró el botón en vez de repuntarlo porque el camino correcto ya existía en la misma pantalla: el chip "roster" del árbol Torneo → Categoría → Rama, que abre `BranchRosterModal` de esa rama. Se fueron con él `TeamRosterModal.jsx`, los tres endpoints obsoletos de `players.js` y sus tres funciones en `api/client.js` (81 líneas de backend). Detalle completo en "Roster de jugadores → Fuera de esta versión / pendiente". Las membresías huérfanas que ya existan siguen en la base: `backend/scripts/find-orphan-roster-players.mjs` las encuentra, **falta correrlo**.
+
+- **Panel de trabajo del equipo (workspace) + cuotas del club a sus jugadores**: `/panel/equipo/:id` dejó de ser un editor de perfil y pasó a ser un espacio de trabajo con seis secciones (Resumen, Finanzas, Jugadores, Con la liga, Perfil, Administradores), con el logo y el **color del club** (`teams.brand_color`) como acento. Lo nuevo de fondo es **Finanzas**: el libro de cuotas **equipo → jugador** (`player_ledger_entries`) y el **flujo de conciliación** que faltaba — el papá abre un **estado de cuenta público sin cuenta** (`/cuenta/:token`), sube su comprobante, y el club lo confirma con un clic. Pieza clave: el **padrón del club** (`team_player_accounts`) es **independiente de los rosters de torneo** — un equipo sin liga, o al que su liga todavía no inscribe en ninguna rama, da de alta a su gente y le cobra igual. Detalle completo en la sección "Cuotas del club" más abajo. **Nota**: las tablas que este bullet nombra (`player_ledger_entries`, `team_player_accounts`) se reemplazaron después por `club_ledger_entries` y `club_members` — ver "Dos poblaciones distintas" en la misma sección.
 - **Monitoreo de errores (Sentry)**: integrado en frontend (`frontend/src/main.jsx` + `ErrorBoundary.jsx`, variable `VITE_SENTRY_DSN`) y backend (`backend/src/instrument.js`, importado antes que nada más en `server.js`; `Sentry.setupExpressErrorHandler(app)` justo antes del manejador de errores propio; variable `SENTRY_DSN`). Verificado en producción (Render + Vercel) forzando un error real y confirmando que llegó a Sentry.
 - **Páginas legales**: Términos de Servicio (`/terminos`) y Aviso de Privacidad (`/privacidad`) — `frontend/src/pages/TermsOfService.jsx` y `PrivacyPolicy.jsx`, enlazadas desde el footer. **Ojo**: tienen placeholders (`[Razón social...]`, `[correo de contacto...]`, `[domicilio...]`) sin rellenar todavía — hacerlo antes de depender de ellas para cobros reales (ver "Roadmap de negocio" más abajo).
 - **CI en GitHub Actions** (`.github/workflows/ci.yml`): en cada push/PR a `main` corre el build del frontend (`npm run build`) y un chequeo de sintaxis de todo `backend/src` (`node --check`, no hay tests reales todavía). No bloquea el deploy de Render/Vercel si falla — son procesos independientes, esto solo te avisa.
@@ -45,7 +56,7 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 - **Travelpayouts Drive instalado** (`frontend/index.html`, `<script>` al inicio del `<head>`): convierte automáticamente los links salientes a marcas de viaje soportadas (ej. Booking.com) en links de afiliado, sin tocar el código de React que genera esos links.
 - **Función de Vuelos construida** (antes solo era un comentario de "a futuro" en el código): nuevo componente `frontend/src/components/FlightSearchWidget.jsx` y utilidades nuevas en `matchServices.js` (`IATA_BY_CITY`, `iataForCity`). Al hacer clic en "✈️ Vuelo" en la tarjeta de un partido, se despliega un formulario de búsqueda de Aviasales embebido (vía Travelpayouts), con el destino ya puesto según la ciudad de la sede — el origen lo detecta Aviasales por la IP del usuario, y las fechas las ajusta el usuario a mano (el widget no acepta fecha por default; se le muestra la fecha del partido como referencia).
 - El botón de Hotel (`buildHotelSearchUrl`) no cambió de código — sigue generando un link limpio a `booking.com/searchresults.html`; ahora es Drive quien le agrega el marcador de afiliado en el navegador del usuario.
-- `buildFlightSearchUrl` y `ORIGIN_CITY_OPTIONS` en `matchServices.js` quedaron sin uso (eran de un primer approach con link directo + selector de ciudad de origen, reemplazado por el widget embebido). Se dejaron en el archivo por si se necesitan de referencia; no afectan nada en producción.
+- `buildFlightSearchUrl` y `ORIGIN_CITY_OPTIONS` en `matchServices.js` quedaron sin uso (eran de un primer approach con link directo + selector de ciudad de origen, reemplazado por el widget embebido). **Borrados en septiembre 2026** — nada los importaba. Lo que sí sigue vivo de ese archivo para vuelos es `IATA_BY_CITY` e `iataForCity()`, que es lo que `FlightSearchWidget` usa para resolver el destino.
 
 ## Cambios recientes importantes (julio 2026)
 
@@ -62,17 +73,42 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 
 ## En progreso — no terminado todavía
 
-- **Revisar si alguien no pudo registrar su liga.** `POST /leagues` daba 500 por
-  un bug preexistente (19 placeholders para 18 columnas); ya está corregido, pero
-  desde afuera solo se veía "Error interno del servidor". Ver "Cambios
-  recientes".
+**Lo primero al retomar** (no es código, son dos comandos contra la base real —
+ambos simulan por defecto, ninguno escribe sin `--confirm`):
+
+```
+cd backend
+node scripts/delete-orphan-roster-players.mjs            # jugador sin rama (ZHAMIS TOLEDO)
+node scripts/delete-orphan-roster-players.mjs --confirm
+node scripts/cleanup-legacy-club-padron.mjs              # tablas viejas del padrón
+node scripts/cleanup-legacy-club-padron.mjs --confirm
+```
+
+Los dos se probaron de punta a punta contra una rama de Neon: encontraron lo que
+debían, lo borraron, y la reverificación quedó limpia. Falta correrlos donde
+importa. Lo que hay ahí es de prueba y está confirmado como tal.
+
+- **Fase B de la separación del padrón** — ver "Fase B" al final de "Cuotas del
+  club". Es lo único grande que queda abierto de esta línea de trabajo, y está
+  especificado con detalle para poder arrancarlo en frío.
 - **Reactivar comisión de Hotel sin Drive**: desde que se quitó Travelpayouts Drive (ver "Cambios recientes" y "Monetización"), el botón 🏨 Hotel no genera comisión. Ya no depende de la aprobación de Booking.com dentro de Travelpayouts (ese flujo se fue junto con Drive) — la alternativa ya integrada en el código es configurar `VITE_HOTEL_AFFILIATE_ID` con un ID de afiliado directo de Booking.com. Falta conseguir/confirmar ese ID y configurarlo en Vercel.
-- **QA visual del panel negro en LeagueStructurePanel/TournamentMatchesPanel**: se envolvió su contenido en `.dashboard-panel` pero no se probó en el navegador. (`Dashboard.jsx` ya no entra aquí: quedó en 22 líneas y el panel del equipo se rehizo completo.)
-- **QA visual de "Invitar administrador"**: el flujo completo (generar link, reclamarlo con una segunda cuenta, ver la liga/equipo aparecer en su "Mi panel", quitar/quedar como último administrador) se verificó por API y directo contra la base de datos, pero no de punta a punta en el navegador — confirmar antes de darlo por cerrado.
-- ~~Configurar método de pago (payout) en Travelpayouts~~ — **hecho**: ya está configurado el payout a PayPal.
-- **Botón de "Rechazar" una liga pendiente**: hoy en `/admin` solo existe "Aprobar" y "Eliminar" (que borra todo permanentemente). Falta el endpoint y el botón correspondiente, y el aviso de "tu liga fue rechazada" en el panel del dueño.
+- **Rellenar los datos de las páginas legales** (`/terminos`, `/privacidad`): razón social o nombre de quien opera, domicilio fiscal y correo de contacto. Están como placeholders en `TermsOfService.jsx` y `PrivacyPolicy.jsx`. Es lo único que bloquea cerrar la Fase 1 del roadmap de negocio, y son tres datos.
+- **QA visual del panel negro en LeagueStructurePanel/TournamentMatchesPanel**: se envolvió su contenido en `.dashboard-panel` pero no se probó en el navegador.
+- **QA visual de "Invitar administrador"**: el flujo completo (generar link, reclamarlo con una segunda cuenta, ver la liga/equipo aparecer en su "Mi panel", quitar/quedar como último administrador) se verificó por API y directo contra la base de datos, pero no de punta a punta en el navegador.
 - **"Notificaciones" ya muestra contenido real** (cobranza en los dos libros, avisos de partidos, aprobaciones) — lo que falta es que el jugador/tutor tenga bandeja propia. Hoy no puede: `notifications` tiene `CHECK (recipient_type IN ('league','team'))` y los jugadores no tienen cuenta. Por eso los recordatorios de cuotas llegan **agregados a la bandeja del equipo** y el aviso al papá lo dispara el tesorero por WhatsApp.
-- **Más tipos de organización**: "Registrar Organización" solo ofrece Liga por ahora. Equipo (fuera del flujo de invitación de una liga), Empresa/Marca y Medio de comunicación quedan pendientes.
+- **Permisos de colaboración entre organizaciones** — ver punto 2 de "Roadmap —
+  en construcción". Los cuatro tipos de organización **ya se registran** (eso
+  era el punto 1 y quedó hecho); lo que sigue pendiente es que una organización
+  pueda darle permiso a otra.
+- ~~Revisar si alguien no pudo registrar su liga~~ — **cerrado**. El bug de
+  `POST /leagues` (19 placeholders para 18 columnas) está corregido.
+  `scripts/diagnose-failed-leagues.mjs` quedó, pero **no sirve para contar
+  intentos fallidos**: su primera versión listaba a los usuarios sin
+  organización como sospechosos, y eso es ruido — en esta app la mayoría de las
+  cuentas son de aficionados que entran por el calendario o la quiniela, y no
+  tienen por qué administrar nada. El script ya no los lista.
+- ~~Configurar método de pago (payout) en Travelpayouts~~ — **hecho**: ya está configurado el payout a PayPal.
+- ~~Botón de "Rechazar" una liga pendiente~~ — **hecho (septiembre 2026)**, ver "Cambios recientes".
 
 ## Estructura
 
@@ -108,6 +144,16 @@ lifa-app/
                               Cloudinary (compartido por upload.js y playerBilling.js),
                               billingReminders.js (los dos libros de cobranza)
       seed.js                Datos de ejemplo para desarrollo local
+    scripts/                 Scripts de diagnóstico y limpieza de un solo uso.
+                              Los de SOLO LECTURA usan `pg` directo y sin
+                              migraciones, seguros contra producción:
+                              diagnose-failed-leagues.mjs,
+                              find-orphan-roster-players.mjs y
+                              report-legacy-club-padron.mjs. Los que ESCRIBEN
+                              simulan por defecto y solo actúan con --confirm:
+                              delete-orphan-roster-players.mjs (jugadores dados
+                              de alta sin rama) y cleanup-legacy-club-padron.mjs
+                              (tira las tablas viejas del padrón del club).
     tests/                   Recorridos de punta a punta de cobranza (NO corren en
                               el CI: necesitan un backend vivo apuntado a una rama
                               de Neon). Ver backend/tests/README.md
@@ -378,8 +424,8 @@ vencido, % al corriente), derivada de las filas que el overview ya devolvía, si
 pedirle nada nuevo al backend.
 
 La forma de este libro **sí** se reusó en **equipo → jugador** (ver "Cuotas del
-club" más abajo), pero en una tabla hermana (`player_ledger_entries`), no en
-esta: aquí `league_id`/`team_id` son `NOT NULL`, los índices están afinados para
+club" más abajo), pero en una tabla hermana (`club_ledger_entries`), no en esta:
+aquí `league_id`/`team_id` son `NOT NULL`, los índices están afinados para
 liga→equipo y `billingReminders.js` barre esta tabla completa. Lo que se reusó
 fue el modelo — append-only, cancelación por reversa, saldo calculado — no las
 filas. Dos cosas que allá sí existen y aquí siguen pendientes: **el pagador
@@ -401,16 +447,23 @@ Tabla **hermana** de `team_ledger_entries`, no la misma: allá `league_id` y
 `billingReminders.js` la barre completa. La nota del README sobre "reusar el
 modelo" siempre se refirió a la FORMA del libro, no a compartir filas.
 
-- **`player_ledger_entries`** (`config/db.js`) — mismo libro append-only: un
+- **`club_ledger_entries`** (`config/db.js`) — mismo libro append-only: un
   movimiento no se edita ni se borra; cancelar es `status='void'` en el original
   **más** una fila `adjustment` que revierte el monto (idempotente vía
-  `reverses_entry_id`). El saldo nunca se guarda, se suma.
-- **`team_player_accounts`** — **el padrón del club**, y la pieza que hace que
-  todo esto funcione sin liga. Una fila por (equipo, persona): su cuota
-  (`monthly_amount`), su categoría interna (`group_label`), a quién se le cobra
-  (`tutor_name` / `tutor_phone` / `tutor_email`), su situación (`activo` /
-  `beca` / `baja`), el token de su estado de cuenta público (`share_token`) y
-  cuándo se le recordó por última vez (`last_reminded_at`).
+  `reverses_entry_id`). El saldo nunca se guarda, se suma. Cuelga de
+  `club_members` (`member_id`), no de `players`.
+- **`club_members`** — **el padrón del club**, y la pieza que hace que todo esto
+  funcione sin liga. Una fila por persona en un equipo, con **identidad propia**:
+  su nombre (`display_name`, un solo campo y lo único obligatorio) y, opcionales,
+  `birth_date` / `curp` / `photo_url` / `position` / `jersey_number`. Más su
+  relación comercial con este club: su cuota (`monthly_amount`), su categoría
+  interna (`group_label`), a quién se le cobra (`tutor_name` / `tutor_phone` /
+  `tutor_email`), su situación (`activo` / `beca` / `baja`), el token de su estado
+  de cuenta público (`share_token`) y cuándo se le recordó por última vez
+  (`last_reminded_at`).
+  > Las tablas anteriores, `team_player_accounts` y `player_ledger_entries`, ya
+  > no las crea ni las usa nadie. Se tiran con
+  > `scripts/cleanup-legacy-club-padron.mjs` (simula por defecto).
 - **`teams.brand_color`** y **`teams.player_billing_reminders_enabled`** —
   color de acento del panel (solo UI) e interruptor de recordatorios, equivalente
   a `leagues.billing_reminders_enabled`.
@@ -425,28 +478,48 @@ no podía cobrarle a nadie **nunca**, y uno con liga se quedaba esperando a que 
 inscribieran para poder registrar una mensualidad que ya estaba cobrando por
 fuera. Se inhabilitaban funciones de un equipo por algo que no depende de él.
 
-Son dos padrones distintos y ninguno manda sobre el otro:
+Son dos poblaciones distintas y ninguna manda sobre la otra:
 
-| | `player_team_memberships` | `team_player_accounts` |
+| | Roster de torneo | Padrón del club |
 |---|---|---|
+| Tablas | `players` + `player_team_memberships` | `club_members` |
 | Qué es | Quién puede jugar en qué rama de qué torneo | Quién entrena aquí y a quién le cobra el club |
 | Quién lo arma | La liga, al inscribir al equipo | El club, siempre |
 | Para qué sirve | Elegibilidad | Cobranza (y más adelante, asistencia a entrenamientos) |
 | Sin liga | No existe | Existe igual |
 | Agrupación | Rama y categoría de la liga | `group_label`, texto libre del club ("U17", "Femenil") |
+| Nombre | `first_name` + `last_name`, los dos obligatorios | **Un solo `display_name`** |
+| Ficha pública | Sí (`/jugador/:id`) | **Nunca** |
+
+**Desde septiembre 2026 no comparten ni tabla.** Antes las dos vivían en
+`players`, y aunque las filas ya eran independientes (importar copiaba, no
+enlazaba), compartir tabla traía tres problemas concretos:
+
+1. Nada en la fila decía a qué mundo pertenecía. La separación existía solo
+   porque ninguna consulta los cruzaba — un acuerdo tácito, no una regla.
+2. `GET /players/:id/card` es **público** y servía cualquier fila de `players`,
+   así que los clientes del padrón —nombre, fecha de nacimiento, CURP y foto, en
+   buena parte menores de edad— eran consultables adivinando un id.
+3. `players.first_name`/`last_name` son `NOT NULL`, lo que le imponía al club una
+   formalidad que no tiene: cuando registra a alguien puede conocerlo nada más
+   por su apodo, y el tesorero tenía que inventarle un apellido para guardarlo.
+
+Por eso el padrón tiene ahora su propia tabla y su propia forma. Lo obligatorio
+de una persona aquí es **un solo campo**: `display_name`. "Juan Pérez", "El
+Güero" y "Sofía (hija de Marta)" son todos nombres válidos. Fecha de nacimiento,
+CURP y foto son opcionales de verdad.
 
 **No se sincronizan.** Dar de alta a alguien en uno no lo da de alta en el otro,
-y editar uno no toca al otro. Lo único que comparten es la tabla `players` como
-identidad de una persona, que es invisible para quien usa el panel — evita
-inventar un segundo concepto de "jugador", nada más.
+y editar uno no toca al otro — ahora por construcción, no por convención:
+`club_members` no tiene ninguna columna que apunte a `players`.
 
 Lo único que los cruza es un botón opcional, **"Importar de un roster de
 torneo"**: copia los nombres una vez para que un club que ya subió 40 jugadores
-por la plantilla de Excel no los tenga que volver a teclear. Crea filas
-**nuevas** en `players`, no referencias — si la liga después da de baja a alguien
-de su roster, el club lo sigue teniendo y cobrándole sin enterarse. Salta a quien
-ya esté en el padrón (por CURP, si no por nombre + apellido), así que se puede
-correr dos veces sin duplicar.
+por la plantilla de Excel no los tenga que volver a teclear. **Copia texto, no
+enlaza filas** — si la liga después da de baja a alguien de su roster, el club lo
+sigue teniendo y cobrándole sin enterarse, y al revés también. Salta a quien ya
+esté en el padrón (por CURP, si no por nombre completo), así que se puede correr
+dos veces sin duplicar.
 
 ### Dos diferencias de fondo con el libro de la liga
 
@@ -477,7 +550,7 @@ tanto a la organización del equipo como a la de su liga.
 | Método | Ruta | Para qué |
 |---|---|---|
 | GET | `/teams/:id/overview` | KPIs, padrón con saldo, pagos por confirmar, flujo mensual, lotes repetibles |
-| POST | `/teams/:id/members` | Alta en el padrón del club (crea la persona y su ficha) |
+| POST | `/teams/:id/members` | Alta en el padrón del club (una fila en `club_members`: persona y ficha juntas) |
 | PATCH | `/teams/:id/accounts/:playerId` | Edita persona **y** ficha de cobranza en una llamada |
 | DELETE | `/teams/:id/members/:playerId` | Baja si ya tiene movimientos; borrado real solo si nunca tuvo |
 | POST | `/teams/:id/members/import-roster` | Copia (una vez) de un roster de torneo |
@@ -498,6 +571,11 @@ cuenta se arma campo por campo en vez de devolver la fila: de ahí nunca debe
 salir el teléfono del tutor, el id interno del jugador, ni rastro de ningún otro
 jugador. Van con su propio limitador (`publicStatementLimiter` /
 `reportPaymentLimiter` en `middleware/rateLimit.js`).
+
+> **Nombres en la API.** Las rutas y campos todavía dicen `player` /
+> `player_id`, y las respuestas siguen trayendo `first_name` / `last_name`
+> derivados del `display_name`. Es compatibilidad deliberada de la fase A, no un
+> descuido: ver "Fase B" más abajo.
 
 El comprobante no puede pasar por `POST /api/upload` porque ese exige sesión; la
 configuración de Cloudinary se sacó a **`utils/cloudinary.js`** en cuanto hubo un
@@ -585,6 +663,74 @@ libros), **`MonthlyFlowChart.jsx`** (SVG a mano, sin librería, mismo criterio q
 `UserGrowthChart` en `AdminPanel.jsx`) y **`utils/money.js`** (el formateo de
 pesos que estaba duplicado en cuatro archivos).
 
+### Fase B — renombrar la superficie (PENDIENTE)
+
+> Escrito para poder arrancarlo en frío, sin contexto de la sesión en que se
+> hizo la fase A.
+
+**Dónde quedó la fase A.** Los datos ya están separados: el padrón vive en
+`club_members` y su libro en `club_ledger_entries`, sin ninguna columna que
+apunte a `players`. Lo que **no** se movió fue el contrato de la API: sigue
+respondiendo `player_id`, `first_name` y `last_name`, estos dos derivados del
+`display_name` partiéndolo por el primer espacio. Por eso el frontend no se tocó
+ni una línea.
+
+**Por qué se dejó a medias a propósito.** Las dos suites de punta a punta
+(`backend/tests/`) asumen ese contrato. Al no moverlo, sirvieron de juez del
+refactor: **46 aserciones y 0 fallas antes, 46 y 0 después**, con el único cambio
+en las pruebas siendo una consulta que lee la tabla directo. Si se hubieran
+renombrado las URLs al mismo tiempo, habría habido que editar las pruebas — y una
+prueba editada ya no demuestra que nada se rompió. La fase B sí necesita editar
+las pruebas, y por eso va después y aparte.
+
+**Qué falta hacer:**
+
+1. **Un solo campo de nombre en el formulario.** `ClubMemberForm.jsx` pide
+   nombre y apellido y exige los dos (`if (!form.first_name.trim() ||
+   !form.last_name.trim())`). Debe pedir **un** campo, "Nombre", que se mande
+   como `display_name`. El backend ya lo acepta desde la fase A: si viene
+   `display_name` lo usa tal cual, y si no, arma uno juntando first/last. Este
+   punto es el que le da sentido a todo lo demás — es lo que permite registrar a
+   alguien como "El Güero" sin inventarle un apellido.
+2. **Que el frontend lea `display_name`** en vez de `first_name`/`last_name`.
+   Los consumidores son `TeamRosterSection.jsx`, `TeamFinancesSection.jsx`,
+   `TeamOverviewSection.jsx` y `PlayerStatementPage.jsx` (el estado de cuenta
+   público del papá). La API ya devuelve `display_name` junto a los derivados, así
+   que este paso se puede hacer y verificar antes de quitar nada.
+3. **Quitar la compatibilidad del backend** una vez que (2) esté hecho:
+   `nameCompatSql`, `splitDisplayName` y `memberAsPlayer` en
+   `routes/playerBilling.js`, más los `AS first_name` / `AS last_name` de las
+   consultas. Están marcados en el código con el comentario que dice que se
+   borran en esta fase.
+4. **Renombrar URLs y campos** para que dejen de decir "player" donde quieren
+   decir "miembro del club": `/teams/:id/players/:playerId/entries`,
+   `/teams/:id/accounts/:playerId`, `/teams/:id/members/:playerId`, el campo
+   `player_id` de las respuestas y el `items: [{ player_id, amount }]` de crear
+   cargos. Es puro renombre, pero toca las dos puntas a la vez.
+5. **Actualizar las suites** al contrato nuevo. Aquí sí hay que editarlas; el
+   valor que conservan es que las aserciones de saldo (cancelar, rechazar,
+   retirar, confirmar) sigan cuadrando.
+
+**Cómo verificarlo.** Igual que la fase A, y es la parte que no se debe saltar:
+crear una rama en Neon (Branches → New branch, es copia instantánea y no toca
+producción), levantar el backend contra ella en el puerto 4100 y correr las dos
+suites — antes de empezar, para tener el verde de partida, y después. Ver
+`backend/tests/README.md`. **Nunca contra producción**: las suites crean
+usuarios, equipos y movimientos de cobranza reales.
+
+**Advertencia de la fase A, para no repetirla.** Al escribir el esquema nuevo se
+"mejoró" un valor de `created_by_side` de `'player'` a `'member'` sin cambiar el
+código que lo escribe, y eso tiraba **todo pago reportado desde el link del
+papá** contra el CHECK. Lo cazaron las suites. En esta fase hay mucho renombre de
+ese tipo: cada valor que viaje en la API (`created_by_side`, `status`, `kind`)
+hay que cambiarlo en el esquema **y** en el código **y** en el frontend, o no
+cambiarlo en ninguno.
+
+**Lo que NO hay que tocar en esta fase:** nada del cálculo de saldo
+(`BALANCE_SUM_SQL`), ni los estados de un pago (`pending` / `rejected` /
+`withdrawn` / `void`), ni `reverses_entry_id`. Esa lógica ya está probada y el
+refactor de la fase A no la movió. La fase B es renombre de superficie.
+
 ### Fuera de esta versión
 
 Pasarela de pago en línea — el esquema ya tiene las columnas (`provider`,
@@ -651,8 +797,50 @@ en el alta manual, botón de foto por jugador. `api/client.js`:
 
 ### Fuera de esta versión / pendiente
 
-- El modal y los endpoints de roster **por equipo sin rama** (`TeamRosterModal.jsx`, `GET`/`POST /api/players/teams/:id/roster`) son la versión de antes de la corrección "roster por rama" — se dejaron sin tocar, ya marcados como obsoletos en el propio código y sin ninguna pantalla que los use.
-- No hay endpoint para **quitar** a un jugador del roster (solo "mover", que cierra la membresía vieja y abre una nueva en otro lado) — pendiente desde antes de esta plantilla, no resuelto aquí.
+- ~~El modal y los endpoints de roster **por equipo sin rama**~~ — **borrados
+  (septiembre 2026)**, y no eran código muerto como decía este README: el panel
+  de la liga tenía un botón "Roster" vivo por equipo que abría `TeamRosterModal`.
+  El problema de fondo era el alta: `player_team_memberships.branch_id` es
+  nullable (se agregó por `ALTER`, sin `NOT NULL`), así que ese `POST` daba de
+  alta al jugador con `branch_id = NULL`, y **las cuatro** consultas del modelo
+  actual filtran por `ptm.branch_id` — el jugador no aparecía en el roster de
+  ninguna rama, ni en la plantilla de Excel, ni en el conteo de "tus planteles".
+  El `GET` obsoleto sí lo mostraba (no filtra por rama), lo que completaba el
+  engaño: quien lo daba de alta lo veía ahí y suponía que había quedado bien.
+  Se borró el botón en vez de repuntarlo porque **el camino correcto ya existía
+  en la misma pantalla**: en el árbol Torneo → Categoría → Rama, cada equipo
+  inscrito en una rama tiene un chip "roster" que abre `BranchRosterModal` de esa
+  rama. La liga no perdió nada; solo dejó de haber una entrada que producía
+  jugadores huérfanos. Se fueron con él `TeamRosterModal.jsx`, los tres endpoints
+  obsoletos de `players.js` (`GET`/`POST /teams/:id/roster` y
+  `POST /:playerId/move-to-team/:id`, este último sí sin usar) y sus tres
+  funciones en `api/client.js`.
+  **Las membresías huérfanas que ya existan siguen ahí**: no se pueden crear
+  nuevas, pero las viejas siguen invisibles. Dos scripts para eso:
+  `find-orphan-roster-players.mjs` las lista (solo lectura) y
+  `delete-orphan-roster-players.mjs` las borra — **simula por defecto**, sin
+  `--confirm` no escribe nada. El borrado no es un `DELETE` de una línea a
+  propósito: otras tablas apuntan a `players(id)` con `ON DELETE CASCADE`, así
+  que la fila del jugador se borra **solo** si no queda referenciada en ningún
+  otro lado — otra membresía con rama, estadísticas de partido, o haber
+  reclamado su perfil (`players.user_id`). Si tiene aunque sea una, se borra nada
+  más la membresía rota y el jugador se queda. **Falta correrlo.**
+- ~~No hay endpoint para **quitar** a un jugador del roster~~ — **hecho
+  (septiembre 2026)**: `DELETE /api/players/branches/:branchId/teams/:teamId/roster/:playerId`,
+  con botón "Quitar" en `BranchRosterModal`. Tiene dos comportamientos porque
+  confundirlos ensucia el historial del jugador: por default **da de baja**
+  (cierra la membresía, y el paso por el equipo se sigue viendo en su
+  trayectoria, `GET /players/:id/card`), y con `?hard=true` **borra sin dejar
+  rastro**, para el alta mal capturada — ese es el caso que la casilla "Fue un
+  error de captura" prende en el diálogo. En el modo `hard`, si al jugador no le
+  queda ninguna otra referencia se borra también su fila en `players`, para no
+  dejar otro jugador huérfano invisible; y **solo** si está limpio en las tablas
+  que lo referencian con `ON DELETE CASCADE` y no ha reclamado su perfil — mismo
+  criterio que `scripts/delete-orphan-roster-players.mjs`. Ya **no** se revisa el
+  padrón ni el libro de cuotas de ningún club: desde la separación esas tablas no
+  cuelgan de `players`, así que esto no puede tocar la cobranza de nadie. Siempre
+  acotado a este equipo + esta rama: si está dado de alta en otra rama, ahí se
+  queda.
 - La deduplicación al re-subir solo compara contra el roster **de esa misma rama** — un jugador puede quedar duplicado a propósito si se da de alta por separado en otra rama o equipo (mismo comportamiento que el alta manual, que siempre crea un jugador nuevo).
 - Credencial digital de jugador con QR (ver "Roadmap de producto" más abajo): el roster ya existe con este nivel de detalle, la credencial/QR todavía no.
 
@@ -748,7 +936,14 @@ Estas dos siguen apareciendo en `npm audit` del frontend. No es que se nos olvid
 - Rotar `CLOUDINARY_API_SECRET` (ver sección "En progreso" arriba para el resto de pendientes funcionales).
 - **El verdadero límite hoy es la infraestructura gratuita, no el código**: Render (plan gratuito) corre una sola instancia y se "duerme" tras ~15 min sin tráfico; Neon (plan gratuito) tiene un comportamiento similar. Se resuelve pasando a un plan de pago barato en ambos — decisión pendiente, no técnica.
 - No hay ninguna capa de caché todavía; cada visita al calendario consulta Postgres directo.
-- El tamaño del pool de conexiones de Postgres (`config/db.js`) usa el valor por defecto de la librería `pg` — revisar si el tráfico crece mucho.
+- El pool de conexiones de Postgres (`config/db.js`) ya no usa los valores de
+  fábrica de `pg`: `max` 10 (configurable con `PG_POOL_MAX`),
+  `connectionTimeoutMillis` 10s — el default era esperar para siempre, que con
+  Neon durmiéndose dejaba peticiones colgadas sin respuesta — e
+  `idleTimeoutMillis` 30s. Se le agregó también un manejador `pool.on('error')`
+  que faltaba: un error en una conexión **ociosa** (justo lo que pasa cuando
+  Neon corta del otro lado al dormirse) se emitía sin escucha y eso tiraba el
+  proceso entero de Node.
 - JWT guardado en `localStorage` (no en cookie `httpOnly`): trade-off aceptado por simplicidad de configuración entre dominios distintos (Vercel + Render).
 
 ## Roadmap — en construcción
@@ -782,7 +977,7 @@ Apenas empezada: ya existen dos recorridos de punta a punta de cobranza
 en el CI. Faltan tests que sí corran solos (empezar por auth), monitoreo de uptime/alertas, y que el CI llegue a bloquear el deploy si algo falla (hoy Render/Vercel despliegan sin esperar al resultado del CI).
 
 **Fase 4 — Automatizar el ciclo de vida del cliente**
-No iniciado. Botón de "Rechazar" liga pendiente (hoy solo existe Aprobar/Eliminar permanente), onboarding automático por correo (Resend) para organizaciones nuevas, habilitar los tipos de organización pendientes en "Registrar Organización".
+No iniciado, salvo el rechazo de solicitud de publicación (ya hecho, ver "Cambios recientes"). Falta: onboarding automático por correo para organizaciones nuevas — `RESEND_API_KEY`/`EMAIL_FROM` ya están configurados para los códigos de verificación, así que no hace falta cuenta nueva, solo construir los correos. Los tipos de organización pendientes ya se habilitaron (los cuatro se registran).
 
 **Fase 5 — Crecimiento sin esfuerzo manual**
 No iniciado. Página de precios pública para el plan "pro", analítica de conversión (hoy `track.js` solo cuenta vistas/clicks de sponsors), SEO/contenido más allá del sitemap actual.

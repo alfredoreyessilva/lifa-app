@@ -147,86 +147,11 @@ const IATA_BY_CITY = {
   'NUEVO LAREDO': 'NLD',
 };
 
-// Lista para poblar un <select> de "ciudad de origen" en la UI — mismas
-// llaves que IATA_BY_CITY pero solo una entrada por código, con nombre
-// legible para mostrar.
-export const ORIGIN_CITY_OPTIONS = [
-  { label: 'Ciudad de México', city: 'CIUDAD DE MEXICO' },
-  { label: 'Guadalajara', city: 'GUADALAJARA' },
-  { label: 'Monterrey', city: 'MONTERREY' },
-  { label: 'Tijuana', city: 'TIJUANA' },
-  { label: 'Chihuahua', city: 'CHIHUAHUA' },
-  { label: 'Ciudad Juárez', city: 'CIUDAD JUAREZ' },
-  { label: 'Hermosillo', city: 'HERMOSILLO' },
-  { label: 'Culiacán', city: 'CULIACAN' },
-  { label: 'Mexicali', city: 'MEXICALI' },
-  { label: 'Saltillo', city: 'SALTILLO' },
-  { label: 'Torreón', city: 'TORREON' },
-  { label: 'Puebla', city: 'PUEBLA' },
-  { label: 'Querétaro', city: 'QUERETARO' },
-  { label: 'León', city: 'LEON' },
-  { label: 'Mérida', city: 'MERIDA' },
-  { label: 'Cancún', city: 'CANCUN' },
-  { label: 'Veracruz', city: 'VERACRUZ' },
-  { label: 'Aguascalientes', city: 'AGUASCALIENTES' },
-  { label: 'San Luis Potosí', city: 'SAN LUIS POTOSI' },
-  { label: 'Toluca', city: 'TOLUCA' },
-  { label: 'Oaxaca', city: 'OAXACA' },
-  { label: 'Villahermosa', city: 'VILLAHERMOSA' },
-  { label: 'Tuxtla Gutiérrez', city: 'TUXTLA GUTIERREZ' },
-  { label: 'Durango', city: 'DURANGO' },
-  { label: 'Zacatecas', city: 'ZACATECAS' },
-  { label: 'Morelia', city: 'MORELIA' },
-  { label: 'Colima', city: 'COLIMA' },
-  { label: 'Tampico', city: 'TAMPICO' },
-  { label: 'Acapulco', city: 'ACAPULCO' },
-  { label: 'Puerto Vallarta', city: 'PUERTO VALLARTA' },
-];
-
 // Regresa el código IATA para una ciudad, o null si no está en el
-// diccionario. Exportada para que la UI pueda decidir, por ejemplo, si
-// vale la pena mostrar el selector de origen para este partido en particular
-// (si el destino no resuelve, de nada sirve pedirle el origen al usuario).
+// diccionario. La usa FlightSearchWidget para decidir si muestra el botón de
+// Vuelo: si la ciudad de la sede no resuelve a un IATA, el componente no se
+// renderiza — nunca le mandamos al widget un destino adivinado.
 export function iataForCity(city) {
   if (!city) return null;
   return IATA_BY_CITY[normalizeCityKey(city)] || null;
-}
-
-// Arma el link de búsqueda de vuelo para un partido dado un origen que ya
-// capturó la UI (ver ORIGIN_CITY_OPTIONS). Regresa null si falta cualquier
-// dato, si la fecha es inválida, o si no podemos resolver el IATA del
-// origen o del destino — nunca mandamos al usuario a una búsqueda vacía
-// o mal armada.
-export function buildFlightSearchUrl(match, originCity) {
-  if (!match?.venue_city || !match?.match_date || !originCity) return null;
-
-  const originIata      = iataForCity(originCity);
-  const destinationIata  = iataForCity(match.venue_city);
-  if (!originIata || !destinationIata) return null;
-
-  const tz = match.timezone || match.league_timezone || DEFAULT_TZ;
-  const matchDate = new Date(match.match_date);
-  if (Number.isNaN(matchDate.getTime())) return null;
-
-  const departDate = toISODateInTZ(matchDate, tz);
-
-  const params = new URLSearchParams({
-    origin_iata: originIata,
-    destination_iata: destinationIata,
-    depart_date: departDate,
-    adults: '1',
-    children: '0',
-    infants: '0',
-    trip_class: '0',
-    one_way: 'true',
-    locale: 'es',
-  });
-
-  // Mismo patrón que Hotel: si algún día se aprueba un marker propio de
-  // Travelpayouts vía variable de entorno, se agrega aquí. Mientras tanto
-  // el link sale limpio y Drive se encarga de la conversión (ver README).
-  const affiliateMarker = import.meta.env.VITE_FLIGHT_AFFILIATE_MARKER;
-  if (affiliateMarker) params.set('marker', affiliateMarker);
-
-  return `https://search.aviasales.com/flights/?${params.toString()}`;
 }

@@ -192,6 +192,48 @@ router.put('/leagues/:id/unpublish', authRequired, adminRequired, asyncHandler(a
   res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id));
 }));
 
+// Rechaza la SOLICITUD de publicación de una liga. Era el hueco del panel de
+// admin: ante una liga que pidió publicarse solo había "Publicar" o "Eliminar"
+// (que la borra para siempre, con todo su calendario), y no había manera de
+// decir "todavía no, y esto es lo que falta".
+//
+// No toca `is_public` — la liga simplemente sigue sin publicarse. Lo que apaga
+// es `publish_requested`, o sea la señal que el dueño le mandó al admin. Al
+// apagarse, el dueño puede volver a solicitarlo cuando haya corregido lo que
+// se le pidió (`PUT /leagues/:id/request-publish`), así que el ciclo se cierra
+// sin intervención manual de nadie más.
+//
+// El motivo es OBLIGATORIO: el punto de rechazar en vez de ignorar es que el
+// dueño sepa qué arreglar. Un rechazo sin explicación deja al dueño esperando
+// y al admin contestando WhatsApps, que es justo lo que se quiere evitar.
+router.put('/leagues/:id/decline-publish', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id);
+  if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
+
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+  if (!reason) {
+    return res.status(400).json({ error: 'Escribe el motivo del rechazo — el dueño de la liga lo va a leer.' });
+  }
+
+  if (!league.publish_requested) {
+    return res.status(400).json({ error: 'Esa liga no tiene ninguna solicitud de publicación pendiente.' });
+  }
+
+  await db.prepare('UPDATE leagues SET publish_requested = FALSE WHERE id = ?').run(req.params.id);
+
+  await db.prepare(`
+    INSERT INTO notifications (recipient_type, recipient_id, type, title, body, data)
+    VALUES ('league', ?, 'league_publish_declined', ?, ?, ?)
+  `).run(
+    league.id,
+    'Tu solicitud de publicación no fue aprobada todavía',
+    `${reason}\n\nCuando lo tengas listo, vuelve a solicitar la publicación desde tu panel.`,
+    JSON.stringify({ league_id: league.id, league_slug: league.slug, reason, url: `/panel/liga/${league.id}/estructura` })
+  );
+
+  res.json(await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id));
+}));
+
 router.put('/leagues/:id/verify', authRequired, adminRequired, asyncHandler(async (req, res) => {
   const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(req.params.id);
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });

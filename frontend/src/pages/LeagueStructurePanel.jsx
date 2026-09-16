@@ -13,7 +13,6 @@ import MatchForm from '../components/MatchForm.jsx';
 import ExcelImport from '../components/ExcelImport.jsx';
 import InviteTeamModal from '../components/InviteTeamModal.jsx';
 import OrgAdminsPanel from '../components/OrgAdminsPanel.jsx';
-import TeamRosterModal from '../components/TeamRosterModal.jsx';
 import BranchRosterModal from '../components/BranchRosterModal.jsx';
 import MatchStatsModal from '../components/MatchStatsModal.jsx';
 import { getTimezoneLabel } from '../utils/timezones.js';
@@ -102,225 +101,224 @@ export default function LeagueStructurePanel() {
   return (
     <div className="container">
       <div className="dashboard-panel">
-      <OrgLogoBar selectedKind="liga" selectedId={id} />
+        <OrgLogoBar selectedKind="liga" selectedId={id} />
 
-      <div className="dash-header">
-        <div>
-          <span className="eyebrow">{sidebarLeague.name}</span>
-          <h1>Liga</h1>
-          {league?.state && <span style={{ fontSize: 12, color: 'var(--ink-dim)' }}>{league.state}</span>}
-          {league?.timezone && (
-            <span style={{ fontSize: 11, color: 'var(--ink-dim)', display: 'block', marginTop: 2 }}>
-              🕐 {getTimezoneLabel(league.timezone)}
+        <div className="dash-header">
+          <div>
+            <span className="eyebrow">{sidebarLeague.name}</span>
+            <h1>Liga</h1>
+            {league?.state && <span style={{ fontSize: 12, color: 'var(--ink-dim)' }}>{league.state}</span>}
+            {league?.timezone && (
+              <span style={{ fontSize: 11, color: 'var(--ink-dim)', display: 'block', marginTop: 2 }}>
+                🕐 {getTimezoneLabel(league.timezone)}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Link to={`/ligas/${league?.slug || ''}`} className="btn btn-outline btn-sm">Ver mi página</Link>
+            <Link to={`/panel/liga/${id}/cobranza`} className="btn btn-outline btn-sm">💵 Cobranza</Link>
+            <button className="btn btn-outline btn-sm" onClick={() => setModal({ type: 'edit-league' })}>Editar liga</button>
+            <button className="btn btn-flag btn-sm" onClick={() => setModal({ type: 'add-tournament' })}>+ Torneo</button>
+          </div>
+        </div>
+
+        {error && <div className="form-error">{error}</div>}
+
+        {league && (
+          <div
+            className="form-error"
+            style={{
+              background: league.is_public ? 'rgba(58,141,63,0.12)' : 'rgba(255,210,63,0.12)',
+              borderColor: league.is_public ? 'var(--field)' : 'var(--flag)',
+              color: 'var(--ink)', display: 'flex', alignItems: 'center',
+              justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
+            }}
+          >
+            <span>
+              {league.is_public
+                ? '✓ Tu liga es pública — cualquiera puede verla en el sitio.'
+                : league.publish_requested
+                  ? '⏳ Ya solicitaste aparecer en el panel de ligas. Un administrador va a revisarlo.'
+                  : 'Tu liga es privada por ahora — puedes usar todas las herramientas sin que nadie más la vea.'}
             </span>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Link to={`/ligas/${league?.slug || ''}`} className="btn btn-outline btn-sm">Ver mi página</Link>
-          <Link to={`/panel/liga/${id}/cobranza`} className="btn btn-outline btn-sm">💵 Cobranza</Link>
-          <button className="btn btn-outline btn-sm" onClick={() => setModal({ type: 'edit-league' })}>Editar liga</button>
-          <button className="btn btn-flag btn-sm" onClick={() => setModal({ type: 'add-tournament' })}>+ Torneo</button>
-        </div>
-      </div>
+            <span style={{ display: 'flex', gap: 8 }}>
+              {league.is_public && (
+                <button className="btn btn-ghost btn-sm" disabled={visibilityBusy}
+                  onClick={() => setVisibility(() => api.unpublishOwnLeague(id, token))}>
+                  Ocultar mi liga
+                </button>
+              )}
+              {!league.is_public && !league.publish_requested && (
+                <button className="btn btn-flag btn-sm" disabled={visibilityBusy}
+                  onClick={() => setVisibility(() => api.requestPublishLeague(id, token))}>
+                  Solicitar aparecer en el panel de ligas
+                </button>
+              )}
+              {!league.is_public && league.publish_requested && (
+                <button className="btn btn-ghost btn-sm" disabled={visibilityBusy}
+                  onClick={() => setVisibility(() => api.cancelPublishRequest(id, token))}>
+                  Cancelar solicitud
+                </button>
+              )}
+            </span>
+          </div>
+        )}
 
-      {error && <div className="form-error">{error}</div>}
+        {league?.organization_id && (
+          <OrgAdminsPanel organizationId={league.organization_id} organizationName={sidebarLeague.name} token={token} />
+        )}
 
-      {league && (
-        <div
-          className="form-error"
-          style={{
-            background: league.is_public ? 'rgba(58,141,63,0.12)' : 'rgba(255,210,63,0.12)',
-            borderColor: league.is_public ? 'var(--field)' : 'var(--flag)',
-            color: 'var(--ink)', display: 'flex', alignItems: 'center',
-            justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
-          }}
-        >
-          <span>
-            {league.is_public
-              ? '✓ Tu liga es pública — cualquiera puede verla en el sitio.'
-              : league.publish_requested
-                ? '⏳ Ya solicitaste aparecer en el panel de ligas. Un administrador va a revisarlo.'
-                : 'Tu liga es privada por ahora — puedes usar todas las herramientas sin que nadie más la vea.'}
-          </span>
-          <span style={{ display: 'flex', gap: 8 }}>
-            {league.is_public && (
-              <button className="btn btn-ghost btn-sm" disabled={visibilityBusy}
-                onClick={() => setVisibility(() => api.unpublishOwnLeague(id, token))}>
-                Ocultar mi liga
-              </button>
-            )}
-            {!league.is_public && !league.publish_requested && (
-              <button className="btn btn-flag btn-sm" disabled={visibilityBusy}
-                onClick={() => setVisibility(() => api.requestPublishLeague(id, token))}>
-                Solicitar aparecer en el panel de ligas
-              </button>
-            )}
-            {!league.is_public && league.publish_requested && (
-              <button className="btn btn-ghost btn-sm" disabled={visibilityBusy}
-                onClick={() => setVisibility(() => api.cancelPublishRequest(id, token))}>
-                Cancelar solicitud
-              </button>
-            )}
-          </span>
-        </div>
-      )}
-
-      {league?.organization_id && (
-        <OrgAdminsPanel organizationId={league.organization_id} organizationName={sidebarLeague.name} token={token} />
-      )}
-
-      <div className="tree-toolbar">
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar torneo, categoría, rama, grupo, equipo…"
-        />
-        <button className="btn btn-outline btn-sm" onClick={() => setExpanded(Object.fromEntries(allKeys.map((k) => [k, true])))}>Expandir todo</button>
-        <button className="btn btn-outline btn-sm" onClick={() => setExpanded({})}>Colapsar todo</button>
-      </div>
-
-      {data === null && <p>Cargando…</p>}
-
-      {data && (
-        <div className="tree">
-          {/* ── Equipos de la liga ── */}
-          <Section
-            kind="Equipos"
-            name={`Equipos (${teams.length})`}
-            open={isOpen('sec:equipos')}
-            onToggle={() => toggle('sec:equipos')}
-            actions={<button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'add-team' })}>+ Equipo</button>}
+        <div className="tree-toolbar">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar torneo, categoría, rama, grupo, equipo…"
           />
-          {isOpen('sec:equipos') && (teams.length === 0
-            ? <Empty pad={28}>Sin equipos. Agrega el primero.</Empty>
-            : teams.map((tm) => (
-              <div key={`tm${tm.id}`} className="tree-row" style={{ paddingLeft: 28 }}>
-                {tm.logo_url && <img src={tm.logo_url} alt="" style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }} />}
-                <span className="tree-name">{tm.name}</span>
-                <span className="tree-badge">{tm.owner_user_id ? '👤 con representante' : 'sin representante'}</span>
-                <span className="tree-spacer" />
-                <span className="tree-actions">
-                  <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'edit-team', team: tm })}>Editar</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'team-roster', team: tm })}>Roster</button>
-                  {tm.owner_user_id
-                    ? <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'remove-team-owner', team: tm })}>Quitar rep.</button>
-                    : <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'invite-team', team: tm })}>Invitar rep.</button>}
-                  <IconBtn danger title="Eliminar equipo" onClick={() => setModal({ type: 'delete-team', team: tm })}>🗑</IconBtn>
-                </span>
-              </div>
-            )))}
+          <button className="btn btn-outline btn-sm" onClick={() => setExpanded(Object.fromEntries(allKeys.map((k) => [k, true])))}>Expandir todo</button>
+          <button className="btn btn-outline btn-sm" onClick={() => setExpanded({})}>Colapsar todo</button>
+        </div>
 
-          {/* ── Sedes de la liga ── */}
-          <Section
-            kind="Sedes"
-            name={`Sedes (${venues.length})`}
-            open={isOpen('sec:sedes')}
-            onToggle={() => toggle('sec:sedes')}
-            actions={<button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'add-venue' })}>+ Sede</button>}
-          />
-          {isOpen('sec:sedes') && (venues.length === 0
-            ? <Empty pad={28}>Sin sedes. Agrega la primera.</Empty>
-            : venues.map((v) => (
-              <div key={`v${v.id}`} className="tree-row" style={{ paddingLeft: 28 }}>
-                <span className="tree-name">{v.name}</span>
-                <span className="tree-badge">{v.institution || v.address || 'sin más detalles'}</span>
-                <span className="tree-spacer" />
-                <span className="tree-actions">
-                  <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'edit-venue', venue: v })}>Editar</button>
-                  <IconBtn danger title="Eliminar sede" onClick={() => setModal({ type: 'delete-venue', venue: v })}>🗑</IconBtn>
-                </span>
-              </div>
-            )))}
+        {data === null && <p>Cargando…</p>}
 
-          {/* ── Torneos ── */}
-          {tournaments.length === 0 && (
-            <Empty pad={12}>Esta liga todavía no tiene torneos. Crea el primero con "+ Torneo".</Empty>
-          )}
-
-          {tournaments.map((t) => {
-            if (!tournamentMatches(t, q)) return null;
-            const key = `t${t.id}`;
-            const opened = isOpen(key);
-            return (
-              <div key={key}>
-                <div className="tree-row">
-                  <Caret open={opened} onClick={() => toggle(key)} />
-                  <span className="tree-kind">Torneo</span>
-                  <span className="tree-name"><Highlight text={t.name} q={q} /></span>
-                  <span className="tree-badge">
-                    {t.year} · {t.categories.length === 0 ? 'sin categorías' : `${t.categories.length} categoría${t.categories.length === 1 ? '' : 's'}`}
-                  </span>
+        {data && (
+          <div className="tree">
+            {/* ── Equipos de la liga ── */}
+            <Section
+              kind="Equipos"
+              name={`Equipos (${teams.length})`}
+              open={isOpen('sec:equipos')}
+              onToggle={() => toggle('sec:equipos')}
+              actions={<button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'add-team' })}>+ Equipo</button>}
+            />
+            {isOpen('sec:equipos') && (teams.length === 0
+              ? <Empty pad={28}>Sin equipos. Agrega el primero.</Empty>
+              : teams.map((tm) => (
+                <div key={`tm${tm.id}`} className="tree-row" style={{ paddingLeft: 28 }}>
+                  {tm.logo_url && <img src={tm.logo_url} alt="" style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }} />}
+                  <span className="tree-name">{tm.name}</span>
+                  <span className="tree-badge">{tm.owner_user_id ? '👤 con representante' : 'sin representante'}</span>
                   <span className="tree-spacer" />
                   <span className="tree-actions">
-                    <button className="btn btn-ghost btn-sm" onClick={() => { setModal({ type: 'add-category', t }); open(key); }}>+ categoría</button>
-                    <IconBtn title="Renombrar torneo" onClick={() => setModal({ type: 'rename-tournament', t })}>✎</IconBtn>
-                    <IconBtn danger title="Eliminar torneo" onClick={() => setModal({ type: 'delete-tournament', t })}>🗑</IconBtn>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'edit-team', team: tm })}>Editar</button>
+                    {tm.owner_user_id
+                      ? <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'remove-team-owner', team: tm })}>Quitar rep.</button>
+                      : <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'invite-team', team: tm })}>Invitar rep.</button>}
+                    <IconBtn danger title="Eliminar equipo" onClick={() => setModal({ type: 'delete-team', team: tm })}>🗑</IconBtn>
                   </span>
                 </div>
+              )))}
 
-                {opened && t.categories.map((c) => {
-                  if (!categoryMatches(c, q)) return null;
-                  const ckey = `c${c.id}`;
-                  const copened = isOpen(ckey);
-                  return (
-                    <div key={ckey}>
-                      <div className={`tree-row${c.is_placeholder ? ' is-dim' : ''}`} style={{ paddingLeft: 28 }}>
-                        <Caret open={copened} onClick={() => toggle(ckey)} />
-                        <span className="tree-kind">Categoría</span>
-                        <span className="tree-name"><Highlight text={c.name} q={q} /></span>
-                        <span className="tree-badge">
-                          {c.branches.length === 0 ? 'sin ramas' : `${c.branches.length} rama${c.branches.length === 1 ? '' : 's'}`}
-                        </span>
-                        <span className="tree-spacer" />
-                        <span className="tree-actions">
-                          <button className="btn btn-ghost btn-sm" onClick={() => { setModal({ type: 'add-branch', c }); open(ckey); }}>+ rama</button>
-                          {!c.is_placeholder && (
-                            <>
-                              <IconBtn title="Renombrar categoría" onClick={() => setModal({ type: 'rename-category', c })}>✎</IconBtn>
-                              <IconBtn danger title="Eliminar categoría" onClick={() => setModal({ type: 'delete-category', c })}>🗑</IconBtn>
-                            </>
-                          )}
-                        </span>
+            {/* ── Sedes de la liga ── */}
+            <Section
+              kind="Sedes"
+              name={`Sedes (${venues.length})`}
+              open={isOpen('sec:sedes')}
+              onToggle={() => toggle('sec:sedes')}
+              actions={<button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'add-venue' })}>+ Sede</button>}
+            />
+            {isOpen('sec:sedes') && (venues.length === 0
+              ? <Empty pad={28}>Sin sedes. Agrega la primera.</Empty>
+              : venues.map((v) => (
+                <div key={`v${v.id}`} className="tree-row" style={{ paddingLeft: 28 }}>
+                  <span className="tree-name">{v.name}</span>
+                  <span className="tree-badge">{v.institution || v.address || 'sin más detalles'}</span>
+                  <span className="tree-spacer" />
+                  <span className="tree-actions">
+                    <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'edit-venue', venue: v })}>Editar</button>
+                    <IconBtn danger title="Eliminar sede" onClick={() => setModal({ type: 'delete-venue', venue: v })}>🗑</IconBtn>
+                  </span>
+                </div>
+              )))}
+
+            {/* ── Torneos ── */}
+            {tournaments.length === 0 && (
+              <Empty pad={12}>Esta liga todavía no tiene torneos. Crea el primero con "+ Torneo".</Empty>
+            )}
+
+            {tournaments.map((t) => {
+              if (!tournamentMatches(t, q)) return null;
+              const key = `t${t.id}`;
+              const opened = isOpen(key);
+              return (
+                <div key={key}>
+                  <div className="tree-row">
+                    <Caret open={opened} onClick={() => toggle(key)} />
+                    <span className="tree-kind">Torneo</span>
+                    <span className="tree-name"><Highlight text={t.name} q={q} /></span>
+                    <span className="tree-badge">
+                      {t.year} · {t.categories.length === 0 ? 'sin categorías' : `${t.categories.length} categoría${t.categories.length === 1 ? '' : 's'}`}
+                    </span>
+                    <span className="tree-spacer" />
+                    <span className="tree-actions">
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setModal({ type: 'add-category', t }); open(key); }}>+ categoría</button>
+                      <IconBtn title="Renombrar torneo" onClick={() => setModal({ type: 'rename-tournament', t })}>✎</IconBtn>
+                      <IconBtn danger title="Eliminar torneo" onClick={() => setModal({ type: 'delete-tournament', t })}>🗑</IconBtn>
+                    </span>
+                  </div>
+
+                  {opened && t.categories.map((c) => {
+                    if (!categoryMatches(c, q)) return null;
+                    const ckey = `c${c.id}`;
+                    const copened = isOpen(ckey);
+                    return (
+                      <div key={ckey}>
+                        <div className={`tree-row${c.is_placeholder ? ' is-dim' : ''}`} style={{ paddingLeft: 28 }}>
+                          <Caret open={copened} onClick={() => toggle(ckey)} />
+                          <span className="tree-kind">Categoría</span>
+                          <span className="tree-name"><Highlight text={c.name} q={q} /></span>
+                          <span className="tree-badge">
+                            {c.branches.length === 0 ? 'sin ramas' : `${c.branches.length} rama${c.branches.length === 1 ? '' : 's'}`}
+                          </span>
+                          <span className="tree-spacer" />
+                          <span className="tree-actions">
+                            <button className="btn btn-ghost btn-sm" onClick={() => { setModal({ type: 'add-branch', c }); open(ckey); }}>+ rama</button>
+                            {!c.is_placeholder && (
+                              <>
+                                <IconBtn title="Renombrar categoría" onClick={() => setModal({ type: 'rename-category', c })}>✎</IconBtn>
+                                <IconBtn danger title="Eliminar categoría" onClick={() => setModal({ type: 'delete-category', c })}>🗑</IconBtn>
+                              </>
+                            )}
+                          </span>
+                        </div>
+
+                        {copened && c.branches.map((b) => (
+                          <BranchBlock
+                            key={`b${b.id}`}
+                            t={t} c={c} b={b} q={q}
+                            open={isOpen(`b${b.id}`)}
+                            onToggle={() => toggle(`b${b.id}`)}
+                            isOpen={isOpen}
+                            onToggleKey={toggle}
+                            openKey={open}
+                            teams={teams}
+                            setModal={setModal}
+                          />
+                        ))}
                       </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-                      {copened && c.branches.map((b) => (
-                        <BranchBlock
-                          key={`b${b.id}`}
-                          t={t} c={c} b={b} q={q}
-                          open={isOpen(`b${b.id}`)}
-                          onToggle={() => toggle(`b${b.id}`)}
-                          isOpen={isOpen}
-                          onToggleKey={toggle}
-                          openKey={open}
-                          teams={teams}
-                          setModal={setModal}
-                        />
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {modal && (
-        <TreeModal
-          modal={modal}
-          token={token}
-          leagueId={id}
-          league={league}
-          leagueTimezone={leagueTimezone}
-          teams={teams}
-          venues={venues}
-          onClose={() => setModal(null)}
-          onDone={closeAndRefresh}
-          onRefresh={refresh}
-          onLeagueChanged={() => { refreshLeagues(); refresh(); setModal(null); }}
-        />
-      )}
+        {modal && (
+          <TreeModal
+            modal={modal}
+            token={token}
+            leagueId={id}
+            league={league}
+            leagueTimezone={leagueTimezone}
+            teams={teams}
+            venues={venues}
+            onClose={() => setModal(null)}
+            onDone={closeAndRefresh}
+            onRefresh={refresh}
+            onLeagueChanged={() => { refreshLeagues(); refresh(); setModal(null); }}
+          />
+        )}
       </div>
     </div>
   );
@@ -617,9 +615,6 @@ function TreeModal({ modal, token, leagueId, league, leagueTimezone, teams, venu
   }
   if (type === 'invite-team') {
     return <InviteTeamModal team={modal.team} token={token} onClose={onClose} onDone={onDone} />;
-  }
-  if (type === 'team-roster') {
-    return <TeamRosterModal team={modal.team} token={token} onClose={onClose} />;
   }
 
   // Sedes

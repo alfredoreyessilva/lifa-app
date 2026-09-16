@@ -19,6 +19,9 @@ function formatWhen(isoDate) {
 const TYPE_META = {
   league_approved:   { icon: '🎉', label: 'Liga aprobada', color: 'var(--flag)' },
   league_unapproved: { icon: '⚠️', label: 'Publicación', color: 'var(--ink-dim)' },
+  // Rechazo de la SOLICITUD de publicación (admin.js, decline-publish). No es
+  // lo mismo que league_unapproved, que es ocultar una liga que ya era pública.
+  league_publish_declined: { icon: '📝', label: 'Solicitud rechazada', color: 'var(--live)' },
   league_verified:   { icon: '⭐', label: 'Verificada', color: 'var(--field)' },
   league_unverified: { icon: '⚠️', label: 'Verificación retirada', color: 'var(--ink-dim)' },
   team_claimed:      { icon: '🤝', label: 'Equipo reclamado', color: 'var(--flag)' },

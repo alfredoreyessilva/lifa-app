@@ -38,7 +38,7 @@ ok(!!TEAM && mine && mine.league_id === null, 'equipo creado sin liga');
 const overview = () => call(`/player-billing/teams/${TEAM}/overview`, { token: T });
 const balOf = (ov, id) => Number(ov.data.players.find((p) => p.player_id === id).balance);
 const rowsOf = async (id) => (await pool.query(
-  'SELECT id, kind, status, amount, direction, reverses_entry_id FROM player_ledger_entries WHERE team_id=$1 AND player_id=$2 ORDER BY id', [TEAM, id]
+  'SELECT id, kind, status, amount, direction, reverses_entry_id FROM club_ledger_entries WHERE team_id=$1 AND member_id=$2 ORDER BY id', [TEAM, id]
 )).rows;
 
 console.log('\n=== 2. Alta en el padrón (sin pasar por ninguna liga) ===');

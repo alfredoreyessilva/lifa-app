@@ -39,5 +39,11 @@ jobs:
       # tanto, esto al menos revisa que cada archivo del backend tenga
       # sintaxis válida antes de llegar a Render, sin necesitar base de
       # datos ni variables de entorno reales.
-      - name: Verificar sintaxis de src/
-        run: find src -name "*.js" -print0 | xargs -0 -n1 node --check
+      #
+      # Cubre src/, scripts/ y tests/, y tanto .js como .mjs: los recorridos
+      # de punta a punta y los scripts de diagnóstico son .mjs y antes se
+      # quedaban fuera de este chequeo por el patrón del `find`. No los
+      # *corre* (eso necesita un backend vivo y una rama de Neon), solo
+      # verifica que no tengan un error de sintaxis.
+      - name: Verificar sintaxis del backend
+        run: find src scripts tests \( -name "*.js" -o -name "*.mjs" \) -print0 | xargs -0 -n1 node --check

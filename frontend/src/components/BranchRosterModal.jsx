@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import Modal from './Modal.jsx';
+import ConfirmDialog from './ConfirmDialog.jsx';
 
 // Roster de un equipo en una rama (branch_id viene del contexto, la URL de la
 // rama). Dos formas de armarlo: por plantilla de Excel (se descarga con el
@@ -16,6 +17,7 @@ export default function BranchRosterModal({ branchId, team, token, onClose }) {
   const [tplBusy, setTplBusy] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [photoBusyId, setPhotoBusyId] = useState(null);
+  const [removing, setRemoving] = useState(null);
   const fileRef = useRef(null);
   const photoRef = useRef(null);
   const photoPlayerId = useRef(null);
@@ -112,6 +114,14 @@ export default function BranchRosterModal({ branchId, team, token, onClose }) {
     }
   }
 
+  // `hard` viene de la casilla del diálogo: apagada da de baja (queda el paso
+  // por el equipo en el historial del jugador), prendida borra sin rastro.
+  async function handleRemove(hard) {
+    await api.removePlayerFromBranchRoster(branchId, team.id, removing.id, { hard }, token);
+    setRemoving(null);
+    await load();
+  }
+
   return (
     <Modal title={`Roster — ${team.name}`} onClose={onClose}>
       {error && <div className="form-error">{error}</div>}
@@ -195,6 +205,9 @@ export default function BranchRosterModal({ branchId, team, token, onClose }) {
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => pickPhoto(p.id)} disabled={photoBusyId === p.id}>
                   {photoBusyId === p.id ? 'Subiendo…' : (p.photo_url ? 'Cambiar foto' : '+ Foto')}
                 </button>
+                <button type="button" className="btn btn-danger btn-sm" onClick={() => setRemoving(p)}>
+                  Quitar
+                </button>
               </div>
             </div>
           ))}
@@ -234,6 +247,23 @@ export default function BranchRosterModal({ branchId, team, token, onClose }) {
           </button>
         </div>
       </form>
+
+      {/* Va dentro del Modal en el árbol de React, pero Modal.jsx monta con
+          createPortal en document.body, así que el diálogo sale encima y no
+          anidado dentro de esta tarjeta. */}
+      {removing && (
+        <ConfirmDialog
+          danger
+          title="Quitar del roster"
+          message={`${removing.first_name} ${removing.last_name} saldrá del roster de esta rama.`}
+          detail="Solo afecta a esta rama. Si está dado de alta en otra rama o en otro equipo, ahí se queda."
+          confirmLabel="Quitar del roster"
+          checkboxLabel="Fue un error de captura"
+          checkboxHint="Bórralo sin dejar rastro. Si no marcas esto, queda como baja y su paso por el equipo se sigue viendo en su historial de jugador."
+          onConfirm={(_reason, hard) => handleRemove(hard)}
+          onClose={() => setRemoving(null)}
+        />
+      )}
     </Modal>
   );
 }

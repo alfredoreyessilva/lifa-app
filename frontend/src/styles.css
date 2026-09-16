@@ -1019,6 +1019,13 @@ a { color: inherit; }
   margin: 0;
   letter-spacing: 0.02em;
 }
+/* Palomita de "equipo verificado" en la tarjeta. Solo el símbolo: el texto
+   completo vive en el title/aria-label del span y en la pastilla de la ficha. */
+.team-card-verified {
+  color: var(--positive);
+  font-size: 12px;
+  margin-left: 4px;
+}
 
 /* ---------- Team profile modal ---------- */
 .team-profile-modal {
@@ -1092,6 +1099,11 @@ a { color: inherit; }
   color: var(--paper);
   margin: 8px 0 16px;
 }
+/* Verificado en la ficha pública del equipo. Cuando la pastilla está presente,
+   el nombre le cede su margen inferior para que las dos se lean como un solo
+   bloque; si el navegador no soporta :has(), solo queda un poco más de aire. */
+.team-profile-name:has(+ .team-profile-verified) { margin-bottom: 8px; }
+.team-profile-verified { margin-bottom: 16px; }
 .team-profile-section {
   margin-bottom: 16px;
   text-align: left;
@@ -3374,6 +3386,26 @@ a.match-card-new {
   font-size: 12px;
   color: var(--ws-ink-dim);
   margin-top: var(--space-2);
+}
+/* Casilla opcional del ConfirmDialog, para la acción con dos variantes. El
+   input no se encoge (flex-shrink: 0) y el texto envuelve a su lado, así que
+   la casilla no se deforma con una etiqueta larga en pantalla angosta. */
+.confirm-check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  font-size: 13px;
+  color: var(--ws-ink);
+  cursor: pointer;
+}
+.confirm-check input { flex-shrink: 0; margin-top: 2px; }
+.confirm-check-hint {
+  display: block;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--ws-ink-dim);
+  margin-top: 2px;
 }
 
 /* ---------- Estado de cuenta público (lo abre el papá desde WhatsApp) ----- */

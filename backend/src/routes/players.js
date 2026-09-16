@@ -87,47 +87,6 @@ async function fetchImageForXlsx(url) {
   }
 }
 
-// OBSOLETO (corrección roster-por-rama): este endpoint da el roster de TODO
-// el equipo mezclado, sin separar por rama/categoría — eso es justo lo que
-// se corrigió. Se deja vivo por ahora, sin que nada lo llame ya, y se retira
-// en el siguiente paso una vez que la pantalla nueva esté conectada.
-router.get('/teams/:id/roster', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
-  const teamId = req.team.id;
-  const roster = await db.prepare(`
-    SELECT p.id, p.first_name, p.last_name, p.birth_date, p.photo_url,
-           ptm.id AS membership_id, ptm.jersey_number, ptm.position, ptm.season, ptm.start_date
-    FROM player_team_memberships ptm
-    JOIN players p ON p.id = ptm.player_id
-    WHERE ptm.team_id = ? AND ptm.end_date IS NULL
-    ORDER BY ptm.jersey_number NULLS LAST, p.last_name
-  `).all(teamId);
-  res.json({ roster });
-}));
-
-// OBSOLETO, mismo motivo que el de arriba.
-router.post('/teams/:id/roster', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
-  const teamId = req.team.id;
-  const { first_name, last_name, birth_date, position, jersey_number, photo_url, season } = req.body;
-
-  if (!isNonEmptyString(first_name) || !isNonEmptyString(last_name)) {
-    return res.status(400).json({ error: 'Nombre y apellido son obligatorios' });
-  }
-
-  const player = await db.prepare(`
-    INSERT INTO players (first_name, last_name, birth_date, position, jersey_number, photo_url)
-    VALUES (?, ?, ?, ?, ?, ?)
-    RETURNING *
-  `).get(first_name.trim(), last_name.trim(), birth_date || null, position || null, jersey_number || null, photo_url || null);
-
-  const membership = await db.prepare(`
-    INSERT INTO player_team_memberships (player_id, team_id, season, jersey_number, position)
-    VALUES (?, ?, ?, ?, ?)
-    RETURNING *
-  `).get(player.id, teamId, season || null, jersey_number || null, position || null);
-
-  res.status(201).json({ player, membership });
-}));
-
 // Ramas donde está inscrito un equipo, con su contexto completo (torneo →
 // categoría → rama) y cuántos jugadores lleva en cada una.
 //
@@ -492,44 +451,69 @@ router.patch('/branches/:branchId/teams/:teamId/roster/:playerId', authRequired,
   res.json({ player });
 }));
 
-// OBSOLETO (corrección roster-por-rama): reemplazado por
-// /branches/:branchId/teams/:teamId/roster/:playerId/move de arriba, que sí
-// registra en qué rama queda el jugador. Se deja vivo, sin uso, mismo
-// criterio que los otros dos endpoints obsoletos de este archivo.
+// Quita a un jugador del roster de ESTA rama. Dos casos distintos, porque
+// confundirlos ensucia el historial del jugador:
 //
-// Mueve a un jugador al equipo :id (el de la URL), cerrando cualquier
-// membresía activa que tuviera en otro equipo (end_date = hoy) y abriendo
-// una nueva en el equipo destino — sin borrar la fila vieja, así el
-// historial ("2024 Lobos, 2025 Borregos") queda completo.
+//   Por default (baja): cierra la membresía (`end_date = CURRENT_DATE`,
+//     `status = 'ended'`), igual que hace "mover". El jugador desaparece del
+//     roster —todas las consultas filtran `end_date IS NULL`— pero el paso por
+//     este equipo queda asentado en su trayectoria (`GET /:id/card`). Esto es
+//     lo correcto cuando de verdad jugó aquí y ya no.
 //
-// LIMITACIÓN CONOCIDA, a propósito: solo valida permiso sobre el equipo
-// DESTINO (vía teamOwnerRequired), no sobre el equipo de origen. Hoy es
-// seguro porque una sola persona administra todos los equipos de prueba.
-// El día que dos equipos con dueños distintos necesiten un traspaso real,
-// esto necesita convertirse en un flujo de solicitud/aprobación entre
-// ambas organizaciones (ver organization_relationships, semanas 5-6) — no
-// construirlo ahora es deliberado, no un descuido.
-router.post('/:playerId/move-to-team/:id', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+//   Con `?hard=true` (me equivoqué): borra la fila de la membresía. Es para el
+//     alta mal hecha —un nombre repetido, el equipo equivocado— que no debería
+//     dejar rastro en la trayectoria de nadie. Además, si al jugador no le
+//     queda NINGUNA otra referencia, se borra también su fila en `players`:
+//     si no, quedaría un jugador sin ninguna membresía, invisible en la app y
+//     sin forma de llegar a él (justo lo que dejó el botón "Roster" viejo del
+//     panel de la liga, ver README).
+//
+// El borrado de la fila del jugador NO es un DELETE directo a propósito: sigue
+// habiendo tablas que apuntan a `players(id)` con ON DELETE CASCADE, así que se
+// exige que esté limpio en todas. Si tiene aunque sea una estadística de partido
+// o una membresía en otra rama, el jugador se queda y la respuesta lo dice
+// (`player_deleted: false`).
+//
+// Ya NO se revisa el padrón ni el libro de cuotas del club: desde la separación
+// (`club_members` / `club_ledger_entries`, ver README) el dinero del club no
+// cuelga de `players`, así que borrar a alguien del roster de torneo no puede
+// tocar la cobranza de ningún club, ni al revés. Esa comprobación existía
+// justamente porque las dos poblaciones compartían tabla.
+//
+// Siempre acotado a este equipo + esta rama: un jugador puede estar dado de alta
+// en otra rama por separado, y eso no se toca.
+router.delete('/branches/:branchId/teams/:teamId/roster/:playerId', authRequired, branchTeamOwnerRequired, asyncHandler(async (req, res) => {
   const playerId = Number(req.params.playerId);
-  const destinationTeamId = req.team.id;
-  const { season, jersey_number, position } = req.body;
-
-  const player = await db.prepare('SELECT * FROM players WHERE id = ?').get(playerId);
-  if (!player) return res.status(404).json({ error: 'Jugador no encontrado' });
-
-  await db.prepare(`
-    UPDATE player_team_memberships
-    SET end_date = CURRENT_DATE, status = 'ended'
-    WHERE player_id = ? AND end_date IS NULL
-  `).run(playerId);
+  const hard = req.query.hard === 'true' || req.query.hard === '1';
 
   const membership = await db.prepare(`
-    INSERT INTO player_team_memberships (player_id, team_id, season, jersey_number, position)
-    VALUES (?, ?, ?, ?, ?)
-    RETURNING *
-  `).get(playerId, destinationTeamId, season || null, jersey_number || null, position || null);
+    SELECT * FROM player_team_memberships
+    WHERE player_id = ? AND team_id = ? AND branch_id = ? AND end_date IS NULL
+  `).get(playerId, req.team.id, req.branch.id);
+  if (!membership) return res.status(404).json({ error: 'Ese jugador no está en el roster de esta rama' });
 
-  res.status(201).json({ player, membership });
+  if (!hard) {
+    await db.prepare(`
+      UPDATE player_team_memberships
+      SET end_date = CURRENT_DATE, status = 'ended'
+      WHERE id = ?
+    `).run(membership.id);
+    return res.json({ removed: 'membership_closed', player_deleted: false });
+  }
+
+  await db.prepare('DELETE FROM player_team_memberships WHERE id = ?').run(membership.id);
+
+  // Las condiciones van en el propio DELETE (no en un SELECT previo) para que
+  // Postgres las evalúe en el mismo momento del borrado.
+  const { changes } = await db.prepare(`
+    DELETE FROM players p
+     WHERE p.id = ?
+       AND p.user_id IS NULL
+       AND NOT EXISTS (SELECT 1 FROM player_team_memberships m WHERE m.player_id = p.id)
+       AND NOT EXISTS (SELECT 1 FROM player_match_stats     s WHERE s.player_id = p.id)
+  `).run(playerId);
+
+  res.json({ removed: 'membership_deleted', player_deleted: changes > 0 });
 }));
 
 const STAT_FIELDS = [
@@ -599,8 +583,16 @@ router.put('/matches/:id/stats/:playerId', authRequired, matchOwnerRequired, asy
 // liga hoy, no solo por quien administra su equipo.
 router.get('/:id/card', asyncHandler(async (req, res) => {
   const playerId = Number(req.params.id);
-  const player = await db.prepare('SELECT * FROM players WHERE id = ?').get(playerId);
-  if (!player) return res.status(404).json({ error: 'Jugador no encontrado' });
+
+  // Solo los campos que la tarjeta pinta, nunca `SELECT *`: en `players` también
+  // viven `curp` y `birth_date`, que no tienen por qué salir en una página
+  // pública. `user_id` se lee pero NO se responde — sirve nada más para saber si
+  // esta persona ya reclamó su perfil.
+  const row = await db.prepare(`
+    SELECT id, first_name, last_name, position, jersey_number, photo_url, user_id
+    FROM players WHERE id = ?
+  `).get(playerId);
+  if (!row) return res.status(404).json({ error: 'Jugador no encontrado' });
 
   const trajectory = await db.prepare(`
     SELECT ptm.id AS membership_id, ptm.season, ptm.position, ptm.jersey_number,
@@ -611,6 +603,17 @@ router.get('/:id/card', asyncHandler(async (req, res) => {
     WHERE ptm.player_id = ?
     ORDER BY ptm.start_date DESC
   `).all(playerId);
+
+  // Una tarjeta pública existe SOLO para quien ha estado en el roster de algún
+  // torneo. Sin este corte, cualquier fila de `players` era consultable
+  // adivinando el id — incluidos los clientes del padrón de un club, que se
+  // capturan para cobrarles y no para publicarlos, y que en buena parte son
+  // menores de edad. Se responde 404 y no 403 a propósito: desde afuera no se
+  // debe poder distinguir "existe pero no te lo muestro" de "no existe".
+  if (trajectory.length === 0) return res.status(404).json({ error: 'Jugador no encontrado' });
+
+  // `user_id` se queda fuera de la respuesta.
+  const { user_id: claimedByUserId, ...player } = row;
 
   const statsRow = await db.prepare(`
     SELECT
@@ -636,13 +639,13 @@ router.get('/:id/card', asyncHandler(async (req, res) => {
   `).get(playerId);
 
   // Predicciones y quinielas solo existen si el jugador ya reclamó su
-  // perfil (player.user_id lleno) — un jugador dado de alta por su equipo,
+  // perfil (`players.user_id` lleno) — un jugador dado de alta por su equipo,
   // sin cuenta propia todavía, simplemente no tiene esta parte de la
   // tarjeta (queda en null, no en 0 — son cosas distintas: "no aplica" vs
   // "aplica pero en cero").
   let predictions = null;
   let pools = null;
-  if (player.user_id) {
+  if (claimedByUserId) {
     const predRow = await db.prepare(`
       SELECT
         COUNT(*) AS total,
@@ -652,7 +655,7 @@ router.get('/:id/card', asyncHandler(async (req, res) => {
       JOIN matches m ON m.id = p.match_id
       JOIN categories c ON c.id = m.category_id
       WHERE p.user_id = ?
-    `).get(player.user_id);
+    `).get(claimedByUserId);
     const total = Number(predRow.total);
     const graded = Number(predRow.graded);
     const correct = Number(predRow.correct);
@@ -662,7 +665,7 @@ router.get('/:id/card', asyncHandler(async (req, res) => {
       accuracyPct: graded > 0 ? Math.round((correct / graded) * 100) : null,
     };
 
-    const poolRow = await db.prepare('SELECT COUNT(*) AS total FROM pool_members WHERE user_id = ?').get(player.user_id);
+    const poolRow = await db.prepare('SELECT COUNT(*) AS total FROM pool_members WHERE user_id = ?').get(claimedByUserId);
     pools = { participations: Number(poolRow.total) };
   }
 

@@ -11,6 +11,13 @@ import Modal from './Modal.jsx';
 // `reason`: si se pasa un `reasonLabel`, el diálogo pide un motivo y lo manda
 // en onConfirm(reason). El motivo se guarda en el movimiento de cancelación,
 // así que dentro de seis meses se puede saber por qué se revirtió un cargo.
+// `checkbox`: si se pasa un `checkboxLabel`, el diálogo muestra una casilla y
+// manda su estado como segundo argumento, onConfirm(reason, checked). Es para
+// la acción que tiene dos variantes y no ameritan dos botones — hoy, quitar a
+// un jugador del roster: por default se le da de baja (queda el paso por el
+// equipo en su historial) y con la casilla se borra sin dejar rastro, para el
+// alta mal capturada. Los cuatro llamadores que ya existían no la pasan, así
+// que para ellos no cambia nada.
 export default function ConfirmDialog({
   title,
   message,
@@ -21,10 +28,13 @@ export default function ConfirmDialog({
   danger = false,
   reasonLabel,
   reasonRequired = false,
+  checkboxLabel,
+  checkboxHint,
   onConfirm,
   onClose,
 }) {
   const [reason, setReason] = useState('');
+  const [checked, setChecked] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -36,7 +46,7 @@ export default function ConfirmDialog({
     setError('');
     setLoading(true);
     try {
-      await onConfirm(reason.trim() || null);
+      await onConfirm(reason.trim() || null, checked);
     } catch (e) {
       setError(e.message);
       setLoading(false);
@@ -63,6 +73,19 @@ export default function ConfirmDialog({
           </div>
         )}
 
+        {checkboxLabel && (
+          <label className="confirm-check">
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={(e) => setChecked(e.target.checked)}
+            />
+            <span>
+              {checkboxLabel}
+              {checkboxHint && <em className="confirm-check-hint">{checkboxHint}</em>}
+            </span>
+          </label>
+        )}
         {warning && <div className="confirm-warn">{warning}</div>}
       </div>
 

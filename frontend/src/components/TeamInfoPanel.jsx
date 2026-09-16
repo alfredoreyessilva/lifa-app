@@ -44,6 +44,18 @@ export default function TeamInfoPanel({ team, leagueId, onClose, inline = false,
       <div className="team-profile-body">
         <h3 className="team-profile-name">{team.name}</h3>
 
+        {/* Misma pastilla que el equipo ve en su propio panel de trabajo
+            (TeamWorkspace) — la verificación la pone únicamente el admin desde
+            /admin, sobre organizations.is_verified. Si el equipo no está
+            verificado no se dice nada: a diferencia de la página pública de
+            liga, aquí no hay un "espacio no administrado oficialmente" que
+            aclarar, porque la ficha de un equipo siempre la llenó el equipo. */}
+        {team.is_verified && (
+          <div className="team-profile-verified">
+            <span className="pill is-ok">✓ Verificado</span>
+          </div>
+        )}
+
         {hasContact && (
           <div className="team-profile-section">
             {team.location && (

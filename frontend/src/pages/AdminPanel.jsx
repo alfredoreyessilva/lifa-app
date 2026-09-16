@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
 
 export default function AdminPanel() {
   const { token } = useAuth();
@@ -631,6 +632,18 @@ function LeaguesTab({ token }) {
               <a href={`/ligas/${lg.slug}`} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
                 Ver
               </a>
+              {/* Solo tiene sentido ante una solicitud pendiente: rechazar una
+                  liga que nadie pidió publicar no significa nada, y el backend
+                  lo rechaza con 400. */}
+              {!lg.is_public && lg.publish_requested && (
+                <button
+                  className="btn btn-outline btn-sm"
+                  disabled={busyId === lg.id}
+                  onClick={() => setModal({ type: 'decline-league', league: lg })}
+                >
+                  Rechazar solicitud
+                </button>
+              )}
               <button
                 className="btn btn-ghost btn-sm"
                 style={{ color: 'var(--flag)' }}
@@ -643,6 +656,23 @@ function LeaguesTab({ token }) {
         ))
       )}
 
+
+      {modal?.type === 'decline-league' && (
+        <ConfirmDialog
+          title="Rechazar solicitud de publicación"
+          message={`${modal.league.name} seguirá sin aparecer en el sitio público, pero no se borra nada: su calendario y su configuración quedan intactos.`}
+          detail="El dueño recibe el motivo en su bandeja y puede volver a solicitarlo cuando lo corrija."
+          confirmLabel="Rechazar y avisar"
+          reasonLabel="Motivo (lo va a leer el dueño de la liga)"
+          reasonRequired
+          onConfirm={async (reason) => {
+            await api.adminDeclineLeaguePublish(modal.league.id, reason, token);
+            await load();
+            setModal(null);
+          }}
+          onClose={() => setModal(null)}
+        />
+      )}
       {modal?.type === 'delete-league' && (
         <Modal title="Eliminar liga" onClose={() => setModal(null)}>
           <p>¿Seguro que quieres eliminar <strong>{modal.league.name}</strong> y todos sus datos? Esta acción no se puede deshacer.</p>

@@ -168,6 +168,14 @@ export const api = {
     request(`/players/branches/${branchId}/teams/${teamId}/roster`, { method: 'POST', body: payload, token }),
   movePlayerToBranchTeam: (branchId, teamId, playerId, payload, token) =>
     request(`/players/branches/${branchId}/teams/${teamId}/roster/${playerId}/move`, { method: 'POST', body: payload, token }),
+  // Quita a un jugador del roster de esta rama. Por default lo da de baja
+  // (cierra la membresía y el paso por el equipo queda en su historial); con
+  // `hard` borra la membresía sin dejar rastro, para el alta mal capturada.
+  removePlayerFromBranchRoster: (branchId, teamId, playerId, { hard = false } = {}, token) =>
+    request(
+      `/players/branches/${branchId}/teams/${teamId}/roster/${playerId}${hard ? '?hard=true' : ''}`,
+      { method: 'DELETE', token },
+    ),
 
   // Roster por plantilla de Excel: descarga la plantilla ya personalizada
   // (membrete de liga + equipo + torneo/categoría/rama) y sube la plantilla
@@ -331,13 +339,9 @@ export const api = {
   deleteTeam: (teamId, token) =>
     request(`/manage/teams/${teamId}`, { method: 'DELETE', token }),
 
-  // Jugadores / roster (semana 3 del refactor a organizations/players)
-  getTeamRoster: (teamId, token) =>
-    request(`/players/teams/${teamId}/roster`, { token }),
-  addPlayerToRoster: (teamId, payload, token) =>
-    request(`/players/teams/${teamId}/roster`, { method: 'POST', body: payload, token }),
-  movePlayerToTeam: (playerId, teamId, payload, token) =>
-    request(`/players/${playerId}/move-to-team/${teamId}`, { method: 'POST', body: payload, token }),
+  // Jugadores / roster. El roster vive SIEMPRE a nivel rama, así que aquí solo
+  // hay funciones con branchId; las tres que pegaban a /players/teams/:id/roster
+  // y /move-to-team se borraron junto con sus endpoints (ver README).
   getPlayerCard: (playerId) =>
     request(`/players/${playerId}/card`),
   getMatchStats: (matchId, token) =>
@@ -386,6 +390,10 @@ export const api = {
     request(`/admin/leagues/${id}/publish`, { method: 'PUT', token }),
   adminUnpublishLeague: (id, token) =>
     request(`/admin/leagues/${id}/unpublish`, { method: 'PUT', token }),
+  // Rechaza la solicitud de publicación: apaga publish_requested y le manda al
+  // dueño el motivo a su bandeja. El motivo es obligatorio del lado del backend.
+  adminDeclineLeaguePublish: (id, reason, token) =>
+    request(`/admin/leagues/${id}/decline-publish`, { method: 'PUT', body: { reason }, token }),
   adminVerifyLeague: (id, token) =>
     request(`/admin/leagues/${id}/verify`, { method: 'PUT', token }),
   adminUnverifyLeague: (id, token) =>

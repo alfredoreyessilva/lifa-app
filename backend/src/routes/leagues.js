@@ -86,6 +86,7 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
         'location', th.location, 'contact_email', th.contact_email, 'contact_phone', th.contact_phone,
         'facebook_url', th.facebook_url, 'instagram_url', th.instagram_url,
         'twitter_url', th.twitter_url, 'website_url', th.website_url,
+        'is_verified', COALESCE(tho.is_verified, FALSE),
         'league_id', l.id
       ) END AS home_team_details,
       CASE WHEN ta.id IS NOT NULL THEN json_build_object(
@@ -94,6 +95,7 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
         'location', ta.location, 'contact_email', ta.contact_email, 'contact_phone', ta.contact_phone,
         'facebook_url', ta.facebook_url, 'instagram_url', ta.instagram_url,
         'twitter_url', ta.twitter_url, 'website_url', ta.website_url,
+        'is_verified', COALESCE(tao.is_verified, FALSE),
         'league_id', l.id
       ) END AS away_team_details,
       v.name        AS venue_name,
@@ -116,6 +118,8 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
     LEFT JOIN teams ta       ON ta.id = COALESCE(m.away_team_id, (
       SELECT t.id FROM teams t WHERE t.league_id = l.id AND UPPER(t.name) = UPPER(m.away_team) LIMIT 1
     ))
+    LEFT JOIN organizations tho ON tho.id = th.organization_id
+    LEFT JOIN organizations tao ON tao.id = ta.organization_id
     LEFT JOIN venues v       ON v.id = m.venue_id
     LEFT JOIN groups g       ON g.id = m.group_id
     LEFT JOIN groups g2      ON g2.id = m.group_id_2
@@ -166,8 +170,10 @@ router.get('/all-teams', asyncHandler(async (req, res) => {
     SELECT DISTINCT ON (t.id)
       t.id, t.name, t.logo_url, t.cover_url, t.location, t.contact_email, t.contact_phone,
       t.facebook_url, t.instagram_url, t.twitter_url, t.website_url,
+      o.is_verified AS is_verified,
       l.id AS league_id
     FROM teams t
+    LEFT JOIN organizations o ON o.id = t.organization_id
     LEFT JOIN league_teams lt ON lt.team_id = t.id
     LEFT JOIN leagues l       ON l.id = lt.league_id AND l.is_public = TRUE
     WHERE l.id IS NOT NULL
@@ -219,9 +225,11 @@ router.get('/:slug/teams', asyncHandler(async (req, res) => {
   // ligas a la vez con el modelo nuevo).
   const teams = await db.prepare(`
     SELECT t.id, t.name, t.logo_url, t.cover_url, t.location, t.contact_email, t.contact_phone,
-           t.facebook_url, t.instagram_url, t.twitter_url, t.website_url
+           t.facebook_url, t.instagram_url, t.twitter_url, t.website_url,
+           o.is_verified AS is_verified
     FROM league_teams lt
     JOIN teams t ON t.id = lt.team_id
+    LEFT JOIN organizations o ON o.id = t.organization_id
     WHERE lt.league_id = ?
     ORDER BY t.sort_order ASC, t.name ASC
   `).all(league.id);
@@ -993,8 +1001,9 @@ router.get('/tournaments/:tournamentId/public', asyncHandler(async (req, res) =>
   `).all(tournament.id);
 
   const teams = await db.prepare(`
-    SELECT DISTINCT t.id, t.name, t.logo_url
+    SELECT DISTINCT t.id, t.name, t.logo_url, o.is_verified AS is_verified
     FROM teams t
+    LEFT JOIN organizations o ON o.id = t.organization_id
     WHERE t.id IN (
       SELECT m.home_team_id FROM matches m
       JOIN categories c ON c.id = m.category_id

@@ -179,9 +179,9 @@ export async function runPlayerBillingReminders(db) {
     // (1) Cuotas por vencer — una sola vez por movimiento.
     const dueSoon = await db.prepare(`
       SELECT e.team_id,
-             COUNT(DISTINCT e.player_id) AS player_count,
+             COUNT(DISTINCT e.member_id) AS player_count,
              SUM(e.amount) AS total_amount
-      FROM player_ledger_entries e
+      FROM club_ledger_entries e
       JOIN teams t ON t.id = e.team_id
       WHERE e.kind = 'charge'
         AND e.status = 'open'
@@ -204,7 +204,7 @@ export async function runPlayerBillingReminders(db) {
       // Se vuelve a filtrar con las mismas condiciones para marcar exactamente
       // los movimientos que se acaban de contar.
       await db.prepare(`
-        UPDATE player_ledger_entries e
+        UPDATE club_ledger_entries e
         SET reminded_due_soon = TRUE, updated_at = NOW()
         WHERE e.team_id = ?
           AND e.kind = 'charge'
@@ -232,9 +232,9 @@ export async function runPlayerBillingReminders(db) {
 
     const overdue = await db.prepare(`
       SELECT e.team_id,
-             COUNT(DISTINCT e.player_id) AS player_count,
+             COUNT(DISTINCT e.member_id) AS player_count,
              SUM(e.amount) AS total_amount
-      FROM player_ledger_entries e
+      FROM club_ledger_entries e
       JOIN teams t ON t.id = e.team_id
       WHERE ${overdueWindow}
         AND t.player_billing_reminders_enabled = TRUE
@@ -251,7 +251,7 @@ export async function runPlayerBillingReminders(db) {
           + `${formatAmount(row.total_amount)} en total. Revisa quiénes en Finanzas.`
       );
       await db.prepare(`
-        UPDATE player_ledger_entries e
+        UPDATE club_ledger_entries e
         SET overdue_reminder_count = e.overdue_reminder_count + 1,
             last_overdue_reminder_at = NOW(),
             updated_at = NOW()
