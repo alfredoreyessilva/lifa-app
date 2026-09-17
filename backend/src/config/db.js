@@ -1372,6 +1372,37 @@ export async function initSchema() {
       ADD CONSTRAINT club_ledger_entries_created_by_side_check
       CHECK (created_by_side IN ('team', 'player'))
     `);
+
+    // ── La conferencia/grupo deja de capturarse partido por partido ──
+    //
+    // Hasta aquí, cada partido guardaba a mano su conference_id/group_id: el
+    // mismo dato se volvía a elegir en cada juego (en ONEFA, 133 partidos =
+    // cientos de selecciones repetidas). Pero eso es dato DERIVADO: el hecho
+    // estable es "este equipo juega en esta conferencia", y la pertenencia
+    // del partido es consecuencia de qué equipos lo juegan.
+    //
+    // Se registra entonces en branch_teams, que ya es la tabla que dice qué
+    // equipos participan en cada rama. Queda naturalmente separado por
+    // temporada sin trabajo extra: una rama cuelga de categoría -> torneo, y
+    // el torneo tiene año, así que cambiar a un equipo de conferencia el año
+    // que entra NO reescribe a qué conferencia perteneció el año pasado.
+    await run(`ALTER TABLE branch_teams ADD COLUMN IF NOT EXISTS conference_id INTEGER REFERENCES conferences(id) ON DELETE SET NULL`);
+    await run(`ALTER TABLE branch_teams ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES groups(id) ON DELETE SET NULL`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_branch_teams_conference ON branch_teams(conference_id)`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_branch_teams_group ON branch_teams(group_id)`);
+
+    // Excepción explícita: "este partido va en ESTA conferencia aunque sus
+    // equipos digan otra cosa". Nace en NULL para todo lo que ya existe, así
+    // que hoy no cambia nada — es la válvula de escape para un partido que de
+    // verdad no sigue la regla (una final, un amistoso contra un invitado).
+    //
+    // Es columna NUEVA a propósito, en vez de reutilizar matches.conference_id:
+    // esa columna vieja guarda lo que se capturó a mano durante la temporada
+    // (incluidos los errores de dedo) y se conserva intacta como respaldo, no
+    // se pisa ni se borra. Pasa a ser el ÚLTIMO recurso cuando no hay de dónde
+    // derivar — ver resolveScopeSql() en utils/matchScope.js.
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS conference_override_id INTEGER REFERENCES conferences(id) ON DELETE SET NULL`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_matches_conference_override ON matches(conference_override_id)`);
   } finally {
     // Se suelta el candado y se libera la conexión pase lo que pase
     await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY]).catch(() => {});

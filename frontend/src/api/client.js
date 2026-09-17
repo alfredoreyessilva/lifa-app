@@ -155,8 +155,20 @@ export const api = {
   // tener partidos ahí, ahora es explícito)
   getBranchTeams: (branchId, token) =>
     request(`/manage/branches/${branchId}/teams`, { token }),
-  enrollTeamInBranch: (branchId, teamId, token) =>
-    request(`/manage/branches/${branchId}/teams`, { method: 'POST', body: { team_id: teamId }, token }),
+  // scope = { conference_id, group_id } — opcional. Es donde se dice UNA vez a
+  // qué conferencia pertenece el equipo; de ahí lo deducen todos sus partidos.
+  enrollTeamInBranch: (branchId, teamId, token, scope = {}) =>
+    request(`/manage/branches/${branchId}/teams`, {
+      method: 'POST',
+      body: { team_id: teamId, conference_id: scope.conference_id || null, group_id: scope.group_id || null },
+      token,
+    }),
+  updateBranchTeamScope: (branchId, teamId, scope, token) =>
+    request(`/manage/branches/${branchId}/teams/${teamId}`, {
+      method: 'PUT',
+      body: { conference_id: scope.conference_id || null, group_id: scope.group_id || null },
+      token,
+    }),
   removeTeamFromBranch: (branchId, teamId, token) =>
     request(`/manage/branches/${branchId}/teams/${teamId}`, { method: 'DELETE', token }),
 

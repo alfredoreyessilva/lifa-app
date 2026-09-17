@@ -16,6 +16,7 @@ import OrgAdminsPanel from '../components/OrgAdminsPanel.jsx';
 import BranchRosterModal from '../components/BranchRosterModal.jsx';
 import MatchStatsModal from '../components/MatchStatsModal.jsx';
 import { getTimezoneLabel } from '../utils/timezones.js';
+import { scopeName, matchScopeLabel } from '../utils/matchScope.js';
 
 // Panel unificado de una liga: TODO en una sola página, sin salir a ninguna
 // otra pantalla. Acordeón Torneo → Categoría → Rama → (Conferencia) → Grupo
@@ -324,6 +325,60 @@ export default function LeagueStructurePanel() {
   );
 }
 
+/* ---------- Conferencia/grupo de un equipo dentro de una rama ---------- */
+
+// Los destinos a los que se puede asignar un equipo de esta rama. Una
+// conferencia con grupos ofrece las dos cosas: la conferencia a secas (el
+// equipo cuelga directo de ella) y cada uno de sus grupos.
+function scopeOptions(b) {
+  const opts = [];
+  for (const cf of (b.conferences || [])) {
+    opts.push({ value: `c${cf.id}`, label: cf.name, conference_id: cf.id, group_id: null });
+    for (const g of (cf.groups || [])) {
+      opts.push({ value: `g${g.id}`, label: `${cf.name} — ${g.name}`, conference_id: cf.id, group_id: g.id });
+    }
+  }
+  for (const g of (b.directGroups || [])) {
+    opts.push({ value: `g${g.id}`, label: g.name, conference_id: null, group_id: g.id });
+  }
+  return opts;
+}
+
+// Una rama sin conferencias ni grupos no tiene nada que asignar: ahí el botón
+// de conferencia ni siquiera aparece, para no ensuciar a las ligas que no se
+// dividen (LFA, por ejemplo, juega todos contra todos).
+function hasScopeOptions(b) {
+  return scopeOptions(b).length > 0;
+}
+
+function currentScopeValue(team) {
+  if (team.group_id) return `g${team.group_id}`;
+  if (team.conference_id) return `c${team.conference_id}`;
+  return '';
+}
+
+// Equipos agrupados para mostrarlos bajo el encabezado de su conferencia. Los
+// que todavía no tienen ninguna quedan hasta abajo, visibles a propósito: son
+// justo los que hay que asignar para que sus partidos dejen de depender de lo
+// que se haya capturado a mano.
+function groupTeamsByScope(b) {
+  const teams = b.teams || [];
+  if (!hasScopeOptions(b)) return [{ key: 'todos', label: null, teams }];
+
+  const bloques = new Map();
+  for (const tm of teams) {
+    const label = scopeName(tm);
+    const key = label || '__sin__';
+    if (!bloques.has(key)) bloques.set(key, { key, label: label || 'Sin conferencia asignada', teams: [] });
+    bloques.get(key).teams.push(tm);
+  }
+  return [...bloques.values()].sort((a, b2) => {
+    if (a.key === '__sin__') return 1;
+    if (b2.key === '__sin__') return -1;
+    return a.label.localeCompare(b2.label);
+  });
+}
+
 /* ---------- Rama: bloque con su calendario, equipos y estructura ---------- */
 
 function BranchBlock({ t, c, b, q, open, onToggle, isOpen, onToggleKey, openKey, teams, setModal }) {
@@ -390,24 +445,43 @@ function BranchBlock({ t, c, b, q, open, onToggle, isOpen, onToggleKey, openKey,
               onDelete={() => setModal({ type: 'delete-group', g })} />
           ))}
 
-          {/* Equipos inscritos en la rama */}
+          {/* Equipos inscritos en la rama, repartidos por conferencia/grupo.
+              Ese reparto es el que dice a qué conferencia pertenece cada
+              partido: se declara aquí una vez por equipo, y ya no se vuelve a
+              elegir en cada juego. */}
           <div className="tree-row" style={{ paddingLeft: 84, alignItems: 'flex-start' }}>
             <span className="tree-caret is-leaf">▸</span>
             <span className="tree-kind">Equipos</span>
             <div style={{ flex: 1 }}>
               {(b.teams || []).length === 0
                 ? <span style={{ fontSize: 13, color: 'var(--ink-dim)' }}>Sin equipos inscritos.</span>
-                : (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {b.teams.map((tm) => (
-                      <span key={tm.id} className="tree-chip">
-                        {tm.name}
-                        <button className="tree-chip-btn" title="Ver roster" onClick={() => setModal({ type: 'branch-roster', b, team: tm })}>roster</button>
-                        <button className="tree-chip-btn is-danger" title="Quitar de la rama" onClick={() => setModal({ type: 'unenroll-team', b, team: tm })}>✕</button>
-                      </span>
-                    ))}
+                : groupTeamsByScope(b).map((bloque) => (
+                  <div key={bloque.key} style={{ marginBottom: 8 }}>
+                    {bloque.label && (
+                      <div style={{ fontSize: 11, color: 'var(--ink-dim)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>
+                        {bloque.label} · {bloque.teams.length}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {bloque.teams.map((tm) => (
+                        <span key={tm.id} className="tree-chip">
+                          {tm.name}
+                          {hasScopeOptions(b) && (
+                            <button
+                              className="tree-chip-btn"
+                              title={tm.conference_name || tm.group_name ? 'Cambiar de conferencia' : 'Asignar conferencia'}
+                              onClick={() => setModal({ type: 'team-scope', b, team: tm })}
+                            >
+                              {tm.conference_name || tm.group_name ? 'conf.' : '+ conf.'}
+                            </button>
+                          )}
+                          <button className="tree-chip-btn" title="Ver roster" onClick={() => setModal({ type: 'branch-roster', b, team: tm })}>roster</button>
+                          <button className="tree-chip-btn is-danger" title="Quitar de la rama" onClick={() => setModal({ type: 'unenroll-team', b, team: tm })}>✕</button>
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                )}
+                ))}
               {availableToEnroll.length > 0 && (
                 <select
                   value=""
@@ -431,15 +505,10 @@ function BranchBlock({ t, c, b, q, open, onToggle, isOpen, onToggleKey, openKey,
 
 function BranchMatches({ t, c, b, setModal }) {
   const matches = b.matches || [];
-  const groupName = (gid) => {
-    if (!gid) return null;
-    for (const cf of b.conferences) {
-      const g = cf.groups.find((x) => x.id === gid);
-      if (g) return `${cf.name} — ${g.name}`;
-    }
-    const dg = b.directGroups.find((x) => x.id === gid);
-    return dg ? dg.name : null;
-  };
+
+  // El backend ya manda conferencia y grupo resueltos desde los equipos, así
+  // que el panel muestra exactamente lo mismo que verá el calendario público y
+  // la página del partido — los tres usan matchScopeLabel.
 
   if (matches.length === 0) {
     return <Empty pad={84}>Sin partidos. Agrégalos con "+ partido" o "📥 Excel".</Empty>;
@@ -455,7 +524,8 @@ function BranchMatches({ t, c, b, setModal }) {
       <span className="tree-badge">
         {fmtDate(m.match_date, m.timezone)}
         {m.week_label ? ` · ${/^\d+$/.test(m.week_label) ? 'J' + m.week_label : m.week_label}` : ''}
-        {groupName(m.group_id) ? ` · ${groupName(m.group_id)}` : ''}
+        {matchScopeLabel(m) ? ` · ${matchScopeLabel(m)}` : ''}
+        {m.conference_is_override ? ' · conf. manual' : ''}
         {m.status === 'live' ? ' · EN VIVO' : m.status === 'finished' ? ' · final' : ''}
       </span>
       <span className="tree-spacer" />
@@ -761,11 +831,28 @@ function TreeModal({ modal, token, leagueId, league, leagueTimezone, teams, venu
 
   // Equipos de la rama
   if (type === 'enroll-team') {
+    const teamName = teams.find((x) => String(x.id) === String(modal.teamId))?.name || 'el equipo';
     return (
-      <ConfirmModal title="Inscribir equipo a la rama"
-        body="El equipo queda inscrito en esta rama y puedes capturarle su roster."
-        confirmLabel="Inscribir" onClose={onClose}
-        onConfirm={async () => { await api.enrollTeamInBranch(modal.b.id, modal.teamId, token); onDone(); }} />
+      <TeamScopeModal
+        title={`Inscribir "${teamName}" a la rama`}
+        branch={modal.b}
+        team={null}
+        submitLabel="Inscribir"
+        onClose={onClose}
+        onSubmit={async (scope) => { await api.enrollTeamInBranch(modal.b.id, modal.teamId, token, scope); onDone(); }}
+      />
+    );
+  }
+  if (type === 'team-scope') {
+    return (
+      <TeamScopeModal
+        title={`Conferencia de "${modal.team.name}"`}
+        branch={modal.b}
+        team={modal.team}
+        submitLabel="Guardar"
+        onClose={onClose}
+        onSubmit={async (scope) => { await api.updateBranchTeamScope(modal.b.id, modal.team.id, scope, token); onDone(); }}
+      />
     );
   }
   if (type === 'unenroll-team') {
@@ -792,6 +879,10 @@ function TreeModal({ modal, token, leagueId, league, leagueTimezone, teams, venu
           venues={venues}
           groups={[]}
           conferences={modal.b.conferences}
+          // Los equipos inscritos en ESTA rama, cada uno con su conferencia.
+          // Es de donde el formulario deduce la conferencia del partido en vez
+          // de pedir que se elija a mano.
+          branchTeams={modal.b.teams || []}
           leagueTimezone={leagueTimezone}
           token={token}
           leagueId={leagueId}
@@ -906,6 +997,61 @@ function BranchAddModal({ onClose, onSubmit }) {
         <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
           <button className="btn btn-flag" disabled={busy || !name.trim()}>{busy ? 'Guardando…' : 'Agregar rama'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// Dice a qué conferencia (o grupo) pertenece un equipo dentro de una rama.
+// Sirve para las dos puertas de entrada: al inscribirlo por primera vez y al
+// corregirlo después. Es UNA decisión por equipo, y de ella cuelgan todos sus
+// partidos — el aviso de abajo lo deja explícito porque cambiarla aquí mueve
+// el calendario entero de ese equipo, no un partido suelto.
+function TeamScopeModal({ title, branch, team, submitLabel, onClose, onSubmit }) {
+  const opciones = scopeOptions(branch);
+  const [value, setValue] = useState(team ? currentScopeValue(team) : '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(e) {
+    e.preventDefault();
+    const elegida = opciones.find((o) => o.value === value);
+    setBusy(true); setError('');
+    try {
+      await onSubmit({
+        conference_id: elegida ? elegida.conference_id : null,
+        group_id:      elegida ? elegida.group_id      : null,
+      });
+    } catch (err) { setError(err.message); setBusy(false); }
+  }
+
+  return (
+    <Modal title={title} onClose={onClose}>
+      <form onSubmit={submit}>
+        {error && <div className="form-error">{error}</div>}
+        {opciones.length === 0 ? (
+          <p style={{ color: 'var(--ink-dim)', fontSize: 14 }}>
+            Esta rama no se divide en conferencias ni grupos, así que no hay nada que elegir.
+            {team ? '' : ' El equipo queda inscrito y puedes capturarle su roster.'}
+          </p>
+        ) : (
+          <div className="field">
+            <label>Conferencia o grupo</label>
+            <select value={value} onChange={(e) => setValue(e.target.value)} autoFocus>
+              <option value="">— Sin conferencia —</option>
+              {opciones.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: 6 }}>
+              Se dice una sola vez, aquí. Todos los partidos de este equipo toman su
+              conferencia de este dato, así que ya no hay que elegirla en cada juego.
+              Si lo cambias, sus partidos se reacomodan solos.
+            </div>
+          </div>
+        )}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+          <button className="btn btn-flag" disabled={busy}>{busy ? 'Guardando…' : submitLabel}</button>
         </div>
       </form>
     </Modal>

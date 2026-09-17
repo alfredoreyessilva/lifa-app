@@ -14,6 +14,7 @@ import ShareImageButton from '../components/ShareImageButton.jsx';
 import MatchBroadcasters from '../components/MatchBroadcasters.jsx';
 import MediaBroadcastControl from '../components/MediaBroadcastControl.jsx';
 import { buildHotelSearchUrl } from '../utils/matchServices.js';
+import { matchScopeLabel } from '../utils/matchScope.js';
 import FlightSearchWidget from '../components/FlightSearchWidget.jsx';
 import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
 import VenueInfoPanel from '../components/VenueInfoPanel.jsx';
@@ -147,6 +148,10 @@ export default function MatchPage() {
   const isLive         = status === 'live';
   const isScheduled    = status === 'scheduled';
   const categoryLabel  = [match.season, match.year].filter(Boolean).join(' ');
+  // A qué conferencia/grupo pertenece el partido. Ya no se captura en el
+  // partido: se deduce de la que tienen asignada sus equipos, y el backend la
+  // manda ya resuelta (ver backend/src/utils/matchScope.js).
+  const scopeLabel     = matchScopeLabel(match);
   const hotelUrl       = buildHotelSearchUrl(match);
   // El usuario ve "Editar" solo si es dueño de la liga de este partido —
   // "leagues" en AuthContext ya viene filtrado a las ligas de las que es
@@ -229,9 +234,10 @@ export default function MatchPage() {
           </div>
         </div>
 
-        {(match.venue_name || match.week_label || categoryLabel) && (
+        {(match.venue_name || match.week_label || categoryLabel || scopeLabel) && (
           <div className="match-card-meta">
             {match.week_label && <span>{/^\d+$/.test(match.week_label) ? `Jornada ${match.week_label}` : match.week_label}</span>}
+            {scopeLabel && <span>{scopeLabel}</span>}
             {match.venue_name && <span>{match.venue_name}</span>}
             {categoryLabel && <span>{categoryLabel}</span>}
           </div>

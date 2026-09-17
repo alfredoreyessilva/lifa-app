@@ -6,6 +6,7 @@ import { isValidUrl, isNonEmptyString } from '../utils/validation.js';
 import { isValidTimezone } from '../utils/timezones.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { MEXICO_STATES } from '../utils/mexicoStates.js';
+import { MATCH_SCOPE_JOINS, MATCH_SCOPE_COLUMNS } from '../utils/matchScope.js';
 
 const router = express.Router();
 
@@ -105,8 +106,7 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
       v.cover_url     AS venue_cover_url,
       v.contact_phone AS venue_contact_phone,
       v.contact_email AS venue_contact_email,
-      g.name        AS group_name,
-      g2.name       AS group_name_2,
+      ${MATCH_SCOPE_COLUMNS},
       c.tournament_id AS tournament_id,
       tr.name       AS tournament_name
     FROM matches m
@@ -121,9 +121,8 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
     LEFT JOIN organizations tho ON tho.id = th.organization_id
     LEFT JOIN organizations tao ON tao.id = ta.organization_id
     LEFT JOIN venues v       ON v.id = m.venue_id
-    LEFT JOIN groups g       ON g.id = m.group_id
-    LEFT JOIN groups g2      ON g2.id = m.group_id_2
     LEFT JOIN tournaments tr ON tr.id = c.tournament_id
+    ${MATCH_SCOPE_JOINS}
     WHERE m.id = ? AND m.is_draft = FALSE
   `).get(req.params.matchId);
 
@@ -296,13 +295,11 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
   `).get(req.params.categoryId);
   if (!category) return res.status(404).json({ error: 'Categoría no encontrada' });
 
-  // La conferencia de un partido se sabe de dos formas posibles (igual que
-  // en /tournaments/:tournamentId/public): directo en el partido
-  // (m.conference_id) o indirecto vía su grupo (g.conference_id). Antes
-  // esta consulta (a diferencia de la de torneo) no resolvía ninguna de
-  // las dos, así que el calendario al que se regresa desde MatchPage
-  // nunca mostraba la opción "Ver por conferencia" aunque el partido sí
-  // tuviera una asignada.
+  // Conferencia y grupo los resuelve MATCH_SCOPE_COLUMNS desde los equipos
+  // que juegan (ver utils/matchScope.js), igual que en las otras dos consultas
+  // públicas. Ojo: aquí los equipos se unen por NOMBRE, no por id, pero la
+  // derivación sí usa m.home_team_id/m.away_team_id — un partido viejo sin
+  // esas llaves cae al valor capturado a mano, que es justo el respaldo.
   const rows = await db.prepare(`
     SELECT
       m.*,
@@ -314,10 +311,7 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
       v.institution AS venue_institution,
       v.address     AS venue_address,
       v.city        AS venue_city,
-      g.name        AS group_name,
-      g2.name       AS group_name_2,
-      COALESCE(confDirect.id, confViaGroup.id)     AS conference_id,
-      COALESCE(confDirect.name, confViaGroup.name) AS conference_name
+      ${MATCH_SCOPE_COLUMNS}
     FROM matches m
     LEFT JOIN categories c  ON c.id  = m.category_id
     LEFT JOIN teams th      ON th.league_id = c.league_id
@@ -325,10 +319,7 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
     LEFT JOIN teams ta      ON ta.league_id = c.league_id
                            AND UPPER(ta.name) = UPPER(m.away_team)
     LEFT JOIN venues v      ON v.id = m.venue_id
-    LEFT JOIN groups g      ON g.id = m.group_id
-    LEFT JOIN groups g2     ON g2.id = m.group_id_2
-    LEFT JOIN conferences confViaGroup ON confViaGroup.id = g.conference_id
-    LEFT JOIN conferences confDirect   ON confDirect.id = m.conference_id
+    ${MATCH_SCOPE_JOINS}
     WHERE m.category_id = ? AND m.is_draft = FALSE
     ORDER BY m.match_date ASC
   `).all(category.id);
@@ -650,20 +641,25 @@ router.get('/:leagueId/tree', authRequired, leagueOwnerRequired, asyncHandler(as
       ORDER BY g.sort_order ASC, g.name ASC
     `).all(leagueId),
     db.prepare(`
-      SELECT m.* FROM matches m
+      SELECT m.*, ${MATCH_SCOPE_COLUMNS} FROM matches m
       JOIN branches b ON b.id = m.branch_id
       JOIN categories c ON c.id = b.category_id
       JOIN tournaments t ON t.id = c.tournament_id
+      ${MATCH_SCOPE_JOINS}
       WHERE t.league_id = ?
       ORDER BY m.match_date ASC, m.id ASC
     `).all(leagueId),
     db.prepare(`
-      SELECT bt.branch_id, t.id, t.name, t.logo_url
+      SELECT bt.branch_id, t.id, t.name, t.logo_url,
+             bt.conference_id, cf.name AS conference_name,
+             bt.group_id,      g.name  AS group_name
       FROM branch_teams bt
       JOIN teams t ON t.id = bt.team_id
       JOIN branches b ON b.id = bt.branch_id
       JOIN categories c ON c.id = b.category_id
       JOIN tournaments tn ON tn.id = c.tournament_id
+      LEFT JOIN conferences cf ON cf.id = bt.conference_id
+      LEFT JOIN groups      g  ON g.id  = bt.group_id
       WHERE tn.league_id = ?
       ORDER BY t.name ASC
     `).all(leagueId),
@@ -954,10 +950,8 @@ router.patch('/:leagueId/roster/sync-matches', authRequired, leagueOwnerRequired
 // el torneo, sus partidos PUBLICADOS (is_draft = FALSE) con el nombre de
 // categoría/rama/grupo/conferencia ya pegado, y los equipos que jugaron.
 //
-// La conferencia de un partido hoy solo se sabe indirectamente (partido ->
-// grupo -> conferencia); un partido colgado directo de una conferencia sin
-// grupos todavía no es posible de asignar desde MatchForm.jsx, así que ese
-// caso simplemente no aparece agrupado en "ver por conferencia" por ahora.
+// La conferencia y el grupo ya no se leen crudos de la fila: los resuelve
+// MATCH_SCOPE_COLUMNS a partir de los equipos que juegan (ver utils/matchScope.js).
 router.get('/tournaments/:tournamentId/public', asyncHandler(async (req, res) => {
   const tournament = await db.prepare(`
     SELECT t.id, t.name, t.year, t.logo_url,
@@ -982,20 +976,14 @@ router.get('/tournaments/:tournamentId/public', asyncHandler(async (req, res) =>
       v.institution AS venue_institution,
       v.address     AS venue_address,
       v.city        AS venue_city,
-      g.name        AS group_name,
-      g2.name       AS group_name_2,
-      COALESCE(confDirect.id, confViaGroup.id)     AS conference_id,
-      COALESCE(confDirect.name, confViaGroup.name) AS conference_name
+      ${MATCH_SCOPE_COLUMNS}
     FROM matches m
     JOIN categories c       ON c.id = m.category_id
     LEFT JOIN branches b    ON b.id = m.branch_id
     LEFT JOIN teams th      ON th.id = m.home_team_id
     LEFT JOIN teams ta      ON ta.id = m.away_team_id
     LEFT JOIN venues v      ON v.id = m.venue_id
-    LEFT JOIN groups g      ON g.id = m.group_id
-    LEFT JOIN groups g2     ON g2.id = m.group_id_2
-    LEFT JOIN conferences confViaGroup ON confViaGroup.id = g.conference_id
-    LEFT JOIN conferences confDirect   ON confDirect.id = m.conference_id
+    ${MATCH_SCOPE_JOINS}
     WHERE c.tournament_id = ? AND m.is_draft = FALSE
     ORDER BY m.match_date ASC
   `).all(tournament.id);

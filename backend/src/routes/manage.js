@@ -495,34 +495,104 @@ router.get('/branches/:branchId/groups', authRequired, branchOwnerRequired, asyn
 // Equipos inscritos en esta rama. Antes era una conclusión implícita (el
 // equipo aparecía porque ya tenía partidos); ahora es explícito, para poder
 // subirle su roster desde antes de que exista el calendario.
+//
+// Trae además la conferencia/grupo del equipo dentro de esta rama: es el dato
+// del que los partidos deducen su conferencia, en vez de capturarla uno por
+// uno (ver utils/matchScope.js).
 router.get('/branches/:branchId/teams', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
   const teams = await db.prepare(`
-    SELECT bt.id AS branch_team_id, t.id, t.name, t.logo_url
+    SELECT bt.id AS branch_team_id, t.id, t.name, t.logo_url,
+           bt.conference_id, cf.name AS conference_name,
+           bt.group_id,      g.name  AS group_name
     FROM branch_teams bt
     JOIN teams t ON t.id = bt.team_id
+    LEFT JOIN conferences cf ON cf.id = bt.conference_id
+    LEFT JOIN groups      g  ON g.id  = bt.group_id
     WHERE bt.branch_id = ?
     ORDER BY t.name
   `).all(req.branch.id);
   res.json(teams);
 }));
 
+// Valida que la conferencia y el grupo que se quieren asignar a un equipo
+// pertenezcan de verdad a ESTA rama. Sin esto se podría colar el id de una
+// conferencia de otra liga y los partidos quedarían derivando hacia una
+// estructura que no les corresponde. Devuelve el error, o null si todo bien.
+async function validateScopeForBranch(branch, conferenceId, groupId) {
+  if (conferenceId) {
+    const conference = await db.prepare('SELECT * FROM conferences WHERE id = ? AND branch_id = ?')
+      .get(conferenceId, branch.id);
+    if (!conference) return 'La conferencia indicada no pertenece a esta rama';
+  }
+  if (groupId) {
+    const group = await db.prepare(`
+      SELECT g.* FROM groups g
+      WHERE g.id = ?
+        AND (g.branch_id = ? OR g.conference_id IN (SELECT id FROM conferences WHERE branch_id = ?))
+    `).get(groupId, branch.id, branch.id);
+    if (!group) return 'El grupo indicado no pertenece a esta rama';
+    // Si vienen los dos, tienen que ser coherentes entre sí: un grupo que
+    // cuelga de la conferencia B no puede representar al equipo en la A.
+    if (conferenceId && group.conference_id && Number(group.conference_id) !== Number(conferenceId)) {
+      return 'El grupo elegido no pertenece a esa conferencia';
+    }
+  }
+  return null;
+}
+
 // Inscribe un equipo a esta rama. Solo la liga puede hacerlo (branchOwnerRequired
 // da acceso por dueño de LIGA, no de equipo) — se decidió explícitamente no
 // permitir que un equipo se auto-inscriba.
+//
+// conference_id/group_id son opcionales: una rama que no se divide en
+// conferencias simplemente no los manda. Cuando sí vienen, es el momento en
+// que se dice UNA vez lo que antes se repetía en cada partido.
 router.post('/branches/:branchId/teams', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
-  const { team_id } = req.body;
+  const { team_id, conference_id, group_id } = req.body;
   if (!team_id) return res.status(400).json({ error: 'team_id es obligatorio' });
 
   const team = await db.prepare('SELECT * FROM teams WHERE id = ?').get(team_id);
   if (!team) return res.status(404).json({ error: 'Equipo no encontrado' });
 
-  const branchTeam = await db.prepare(`
-    INSERT INTO branch_teams (branch_id, team_id) VALUES (?, ?)
-    ON CONFLICT (branch_id, team_id) DO NOTHING
-    RETURNING *
-  `).get(req.branch.id, team_id);
+  const scopeError = await validateScopeForBranch(req.branch, conference_id, group_id);
+  if (scopeError) return res.status(400).json({ error: scopeError });
 
-  res.status(201).json(branchTeam || { branch_id: req.branch.id, team_id: Number(team_id), already: true });
+  // DO UPDATE en vez de DO NOTHING: volver a inscribir un equipo que ya
+  // estaba, ahora con conferencia, tiene que poder corregirla y no salir en
+  // silencio sin haber hecho nada.
+  const branchTeam = await db.prepare(`
+    INSERT INTO branch_teams (branch_id, team_id, conference_id, group_id)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT (branch_id, team_id) DO UPDATE
+      SET conference_id = EXCLUDED.conference_id,
+          group_id      = EXCLUDED.group_id
+    RETURNING *
+  `).get(req.branch.id, team_id, conference_id || null, group_id || null);
+
+  res.status(201).json(branchTeam);
+}));
+
+// Cambia la conferencia/grupo de un equipo YA inscrito, sin tener que darlo
+// de baja y volverlo a inscribir. Al cambiarla, todos los partidos de ese
+// equipo en esta rama pasan a derivar la conferencia nueva de inmediato: no
+// hay nada que actualizar partido por partido.
+router.put('/branches/:branchId/teams/:teamId', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  const { conference_id, group_id } = req.body;
+
+  const existing = await db.prepare('SELECT * FROM branch_teams WHERE branch_id = ? AND team_id = ?')
+    .get(req.branch.id, req.params.teamId);
+  if (!existing) return res.status(404).json({ error: 'Ese equipo no está inscrito en esta rama' });
+
+  const scopeError = await validateScopeForBranch(req.branch, conference_id, group_id);
+  if (scopeError) return res.status(400).json({ error: scopeError });
+
+  const updated = await db.prepare(`
+    UPDATE branch_teams SET conference_id = ?, group_id = ?
+    WHERE branch_id = ? AND team_id = ?
+    RETURNING *
+  `).get(conference_id || null, group_id || null, req.branch.id, req.params.teamId);
+
+  res.json(updated);
 }));
 
 router.delete('/branches/:branchId/teams/:teamId', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
@@ -613,7 +683,7 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
   // navegador. La única conversión a UTC autoritativa ocurre aquí, en el
   // backend, usando la zona horaria explícita del partido (nunca la zona
   // ambiente del servidor ni la del navegador de quien lo captura).
-  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, conference_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, branch_id } = req.body;
+  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, conference_id, conference_override_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, branch_id } = req.body;
   if (!isNonEmptyString(home_team) || !isNonEmptyString(away_team) || !match_date_local) {
     return res.status(400).json({ error: 'Se requieren equipo local, visitante y fecha' });
   }
@@ -632,8 +702,8 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
   const awayTeamId = await resolveTeamId(req.category, away_team);
 
   const result = await db.prepare(`
-    INSERT INTO matches (category_id, branch_id, home_team, away_team, home_team_id, away_team_id, match_date, venue_id, group_id, group_id_2, conference_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO matches (category_id, branch_id, home_team, away_team, home_team_id, away_team_id, match_date, venue_id, group_id, group_id_2, conference_id, conference_override_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.category.id,
     branch_id || null,
@@ -647,7 +717,15 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
     group_id_2 || null,
     // Si el partido sí tiene grupo, la conferencia se sabe por ahí — no se
     // guardan las dos cosas a la vez, para no tener dos fuentes de verdad.
+    //
+    // Normalmente esto ya ni llega: el formulario dejó de mandar conference_id
+    // porque la conferencia se deduce de los equipos. Se sigue aceptando para
+    // la liga que todavía no le puso conferencia a sus equipos — ahí este
+    // valor es el único que hay, y sirve de respaldo (ver utils/matchScope.js).
     group_id ? null : (conference_id || null),
+    // La excepción explícita: "este partido va en ESTA conferencia aunque sus
+    // equipos digan otra". Casi siempre null.
+    conference_override_id || null,
     JSON.stringify(Array.isArray(stream_links) ? stream_links.filter((u) => u && u.trim()) : []),
     JSON.stringify(Array.isArray(ticket_links) ? ticket_links.filter((u) => u && u.trim()) : []),
     week_label  ? week_label.trim().toUpperCase() : null,
@@ -911,14 +989,24 @@ router.post(
         // (botón "Ver partido", edición manual) solo lee las columnas nuevas
         // — guardar aquí en las viejas dejaba el link invisible para todo lo
         // demás, aunque sí quedara guardado en la base de datos.
+        // home_team_id/away_team_id: el importador guardaba SOLO el nombre en
+        // texto, así que un partido importado no sabía contra qué fila de
+        // `teams` corresponde. Eso dejaba fuera de la derivación de
+        // conferencia (utils/matchScope.js) a todo calendario cargado por
+        // Excel — justo el camino por el que entran los calendarios grandes.
+        // Cuando el nombre no coincide con ningún equipo registrado queda en
+        // null, igual que antes, y el partido se importa de todos modos (ya
+        // se avisa de eso en `warnings`).
         const result = await db.prepare(`
-          INSERT INTO matches (category_id, branch_id, home_team, away_team, match_date, venue, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO matches (category_id, branch_id, home_team, away_team, home_team_id, away_team_id, match_date, venue, venue_id, group_id, group_id_2, stream_links, ticket_links, week_label, status, home_score, away_score, timezone)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           req.category.id,
           branchId,
           homeTeam,
           awayTeam,
+          homeTeamMatch ? homeTeamMatch.id : null,
+          awayTeamMatch ? awayTeamMatch.id : null,
           matchDate     || null,
           venueRaw      ? venueRaw.toUpperCase() : null,
           venueId,
@@ -1201,7 +1289,7 @@ router.post(
 router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
   // match_date_local: igual que en creación, el string crudo del input
   // <datetime-local> (o ausente, si esta edición no toca la fecha/hora).
-  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, conference_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, branch_id, category_id, is_draft } = req.body;
+  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, conference_id, conference_override_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, branch_id, category_id, is_draft } = req.body;
   const m = req.match;
 
   const effectiveCategoryId = category_id || m.category_id;
@@ -1290,6 +1378,7 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
       group_id     = ?,
       group_id_2   = ?,
       conference_id = ?,
+      conference_override_id = ?,
       branch_id    = ?,
       category_id  = COALESCE(?, category_id),
       is_draft     = COALESCE(?, is_draft),
@@ -1309,6 +1398,7 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
     group_id  !== undefined ? (group_id  || null) : m.group_id,
     group_id_2 !== undefined ? (group_id_2 || null) : m.group_id_2,
     effectiveConferenceId,
+    conference_override_id !== undefined ? (conference_override_id || null) : m.conference_override_id,
     branch_id !== undefined ? (branch_id || null) : m.branch_id,
     toNull(category_id),
     toNull(is_draft),

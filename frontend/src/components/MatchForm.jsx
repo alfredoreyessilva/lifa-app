@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from '../api/client.js';
 import { required, differentFrom, validUrl, minValue, runValidations } from '../utils/validation.js';
 import Modal from './Modal.jsx';
@@ -8,6 +8,7 @@ import GroupForm from './GroupForm.jsx';
 import TimezoneSelect from './TimezoneSelect.jsx';
 import LinkListField from './LinkListField.jsx';
 import { utcIsoToLocalInputValue } from '../utils/timezones.js';
+import { inheritedConference } from '../utils/matchScope.js';
 
 function initials(name) {
   return (name || '')
@@ -79,6 +80,10 @@ function linksValid(links, label) {
 
 export default function MatchForm({
   initial, onSubmit, onCancel, submitLabel, teams, venues, groups, conferences,
+  // Equipos inscritos en la rama, cada uno con la conferencia/grupo que se le
+  // asignó UNA vez al inscribirlo. De aquí sale la conferencia del partido:
+  // ya no se elige juego por juego (ver backend utils/matchScope.js).
+  branchTeams,
   leagueTimezone, token, leagueId, categoryId, onVenueCreated, onTeamCreated, onGroupCreated,
   // Nuevo: cuando el formulario NO recibe una Categoría/Rama ya decidida
   // (como pasa en la pantalla "Partidos del Torneo"), se le puede pasar
@@ -120,6 +125,9 @@ export default function MatchForm({
     group_id:    initial?.group_id    || null,
     group_id_2:  initial?.group_id_2  || null,
     conference_id: initial?.conference_id || null,
+    // Excepción explícita para ESTE partido. Normalmente null: la conferencia
+    // se hereda de los equipos y no hace falta tocar nada.
+    conference_override_id: initial?.conference_override_id || null,
     stream_links: initial?.stream_links || [],
     ticket_links: initial?.ticket_links || [],
     week_label:  parseWeekNumber(initial?.week_label),
@@ -172,20 +180,26 @@ export default function MatchForm({
     ? localConferences.flatMap((c) => (c.groups || []).map((g) => ({ id: g.id, name: `${c.name} — ${g.name}` })))
     : localGroups;
 
-  const [primaryConferenceId, setPrimaryConferenceId] = useState(null);
-  useEffect(() => {
-    if (!conferencesModeEnabled) return;
-    if (form.group_id) {
-      const conf = localConferences.find((c) => (c.groups || []).some((g) => g.id === form.group_id));
-      if (conf) setPrimaryConferenceId(conf.id);
-    } else if (form.conference_id) {
-      setPrimaryConferenceId(form.conference_id);
-    }
-  }, [localConferences]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ── La conferencia ya no se captura aquí: se hereda de los equipos ──
+  //
+  // Se declara una sola vez, al inscribir al equipo en la rama, y de ahí la
+  // toman todos sus partidos. Este bloque solo LEE ese dato para mostrar de
+  // dónde salió; el backend lo vuelve a resolver por su cuenta al guardar y al
+  // leer (utils/matchScope.js), así que no depende de lo que mande el navegador.
+  // `pendientes` son los equipos elegidos a los que todavía no se les asignó
+  // conferencia: se nombran para saber exactamente a cuál hay que ir a
+  // arreglarle el dato en la rama (una vez, no en este partido).
+  const inherited = useMemo(
+    () => inheritedConference(form.home_team, form.away_team, branchTeams),
+    [form.home_team, form.away_team, branchTeams],
+  );
 
-  const groupsOfSelectedConference = conferencesModeEnabled
-    ? (localConferences.find((c) => c.id === primaryConferenceId)?.groups || [])
-    : [];
+  // El selector manual queda escondido detrás de un "cambiar": es la excepción,
+  // no el camino normal. Si el partido ya traía un override guardado, se abre
+  // solo para que se vea que está puesto.
+  const [showConferenceOverride, setShowConferenceOverride] = useState(
+    !!initial?.conference_override_id
+  );
 
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -329,15 +343,39 @@ export default function MatchForm({
     if (validationError) { setError(validationError); return; }
 
     setLoading(true);
+
+    // En modo conferencias el formulario NO manda conference_id ni group_id:
+    // los dos se deducen de los equipos. Se OMITEN las llaves en vez de
+    // mandarlas en null, y eso es deliberado por dos razones.
+    //
+    // Una: así el backend conserva intacto lo que se hubiera capturado a mano
+    // antes de este cambio, que queda como respaldo para el partido que no
+    // tenga de dónde derivar.
+    //
+    // Dos, y es la que muerde: el partido llega al formulario con el group_id
+    // ya DERIVADO. Si se lo devolviéramos, el backend lo guardaría como si
+    // fuera una elección manual y —al ver que el partido "tiene grupo"— pondría
+    // conference_id en null, borrando justo el respaldo. Hoy no truena porque
+    // ninguna liga usa grupos todavía; el día que alguna los use, sí.
+    const scopeFields = conferencesModeEnabled
+      ? { conference_override_id: form.conference_override_id || null }
+      : {
+          conference_id: form.conference_id || null,
+          group_id:      form.group_id || null,
+          group_id_2:    form.group_id_2 || null,
+        };
+
     try {
+      const {
+        conference_id: _c, conference_override_id: _co,
+        group_id: _g, group_id_2: _g2, ...rest
+      } = form;
       await onSubmit({
-        ...form,
+        ...rest,
+        ...scopeFields,
         home_team:   form.home_team.trim(),
         away_team:   form.away_team.trim(),
         venue_id:    form.venue_id || null,
-        group_id:    form.group_id || null,
-        group_id_2:  form.group_id_2 || null,
-        conference_id: form.conference_id || null,
         stream_links: (form.stream_links || []).filter((u) => u && u.trim()),
         ticket_links: (form.ticket_links || []).filter((u) => u && u.trim()),
         week_label:  form.week_label.trim(),
@@ -489,47 +527,68 @@ export default function MatchForm({
 
       {conferencesModeEnabled ? (
         usingConferences && (
-        <>
-          <div className="field">
-            <label>Conferencia (opcional)</label>
-            <select
-              value={primaryConferenceId || ''}
-              onChange={(e) => {
-                const confId = e.target.value ? Number(e.target.value) : null;
-                setPrimaryConferenceId(confId);
-                update('group_id', null);
-                update('conference_id', confId);
-              }}
-            >
-              <option value="">— Sin conferencia —</option>
-              {localConferences.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-            <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: 4 }}>
-              Solo úsalo si esta rama se divide en conferencias (ej. "Conferencia Norte").
-            </div>
-          </div>
+        <div className="field">
+          <label>Conferencia</label>
 
-          {primaryConferenceId && groupsOfSelectedConference.length > 0 && (
-            <div className="field">
-              <label>Grupo (opcional)</label>
-              <select
-                value={form.group_id || ''}
-                onChange={(e) => {
-                  const gId = e.target.value ? Number(e.target.value) : null;
-                  update('group_id', gId);
-                  update('conference_id', gId ? null : primaryConferenceId);
-                }}
-              >
-                <option value="">— Sin grupo (el partido cuelga directo de la conferencia) —</option>
-                {groupsOfSelectedConference.map((g) => (
-                  <option key={g.id} value={g.id}>{g.name}</option>
-                ))}
-              </select>
+          {inherited.estado === 'faltan-equipos' && (
+            <div style={{ fontSize: 13, color: 'var(--ink-dim)' }}>
+              Elige los dos equipos y aquí aparecerá la conferencia que les corresponde.
             </div>
           )}
-        </>
+
+          {inherited.estado === 'heredada' && (
+            <div style={{ fontSize: 14 }}>
+              <strong>{inherited.label}</strong>
+              <span style={{ color: 'var(--ink-dim)', marginLeft: 8, fontSize: 12 }}>
+                heredada de los equipos
+              </span>
+            </div>
+          )}
+
+          {inherited.estado === 'cruce' && (
+            <div style={{ fontSize: 14 }}>
+              <strong>{inherited.label}</strong>
+              <span style={{ color: 'var(--ink-dim)', marginLeft: 8, fontSize: 12 }}>
+                partido interconferencia — aparece en el calendario de las dos
+              </span>
+            </div>
+          )}
+
+          {inherited.estado === 'sin-asignar' && (
+            <div style={{ fontSize: 13, color: 'var(--flag)' }}>
+              {inherited.pendientes.join(' y ')} {inherited.pendientes.length === 1 ? 'no tiene' : 'no tienen'} conferencia
+              asignada en esta rama. Asígnasela una vez desde la rama (botón “+ conf.” junto al equipo)
+              y todos sus partidos la toman solos.
+            </div>
+          )}
+
+          {!showConferenceOverride ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ marginTop: 6, padding: 0 }}
+              onClick={() => setShowConferenceOverride(true)}
+            >
+              Cambiar solo para este partido
+            </button>
+          ) : (
+            <div style={{ marginTop: 8 }}>
+              <select
+                value={form.conference_override_id || ''}
+                onChange={(e) => update('conference_override_id', e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">— Usar la de los equipos —</option>
+                {localConferences.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: 4 }}>
+                Excepción para este partido nada más (una final, un amistoso contra un invitado).
+                No cambia la conferencia de los equipos ni la de sus demás juegos.
+              </div>
+            </div>
+          )}
+        </div>
         )
       ) : (
         <div className="field">
@@ -555,7 +614,11 @@ export default function MatchForm({
         </div>
       )}
 
-      {form.group_id && allGroupsFlat.length > 1 && (
+      {/* Solo en el flujo viejo (categoría sin conferencias). Donde sí hay
+          conferencias, un cruce se detecta solo: si el local y el visitante son
+          de conferencias distintas, el partido queda en las dos sin que nadie
+          lo marque. */}
+      {!conferencesModeEnabled && form.group_id && allGroupsFlat.length > 1 && (
         <div className="field">
           <label>Segundo grupo (opcional — solo para partidos interconferencia)</label>
           <select

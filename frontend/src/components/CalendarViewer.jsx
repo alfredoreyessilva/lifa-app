@@ -6,6 +6,7 @@ import { shareLink } from '../utils/share.js';
 import MatchCard from './MatchCard.jsx';
 import CalendarRanking from './CalendarRanking.jsx';
 import PoolRanking from './PoolRanking.jsx';
+import { matchInConference } from '../utils/matchScope.js';
 
 // Visor de calendario reutilizable: el bloque "Ver por: completo / jornada /
 // equipo / sede / grupo" + las tarjetas de partido. Antes vivía solo dentro
@@ -88,27 +89,29 @@ function getGrupos(matches) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-// Conferencias reales de la rama (ej. "Conferencia Norte"). A diferencia de
-// grupo, hoy solo se conoce indirectamente: partido -> grupo -> conferencia
-// (no hay conference_id directo en partidos). Un partido cuyo grupo no
-// pertenece a ninguna conferencia simplemente no aparece aquí.
+// Conferencias reales de la rama (ej. "Conferencia Norte"). El backend ya las
+// manda resueltas: deduce la conferencia de un partido a partir de la que
+// tienen asignada sus equipos (ver backend utils/matchScope.js). Incluye
+// conference_id_2, que solo viene cuando el local y el visitante son de
+// conferencias distintas — así un partido interconferencia aparece en las dos
+// listas, igual que ya pasaba con group_id/group_id_2.
 //
-// CAUSA RAÍZ DEL CRASH al navegar de MatchPage al calendario: la tabla
-// `matches` todavía tiene un campo `conference_id` de una versión anterior
-// del modelo de datos (antes de que las conferencias se derivaran vía
-// grupo). El backend nunca llena `conference_name` para ese campo viejo
-// (no hay ningún JOIN que lo resuelva), así que llegaba como
-// `undefined`. Antes, con solo comprobar `m.conference_id`, esa entrada
-// vieja SÍ entraba al mapa con nombre `undefined`, y el `.sort()` de abajo
-// truena con "Cannot read properties of undefined (reading
-// 'localeCompare')" — eso es lo que tumbaba TODA la app (no solo esta
-// página) porque el error ocurre durante el render, antes de que React
-// termine de montar el árbol.
+// NO QUITAR el chequeo del nombre además del id. Hubo un crash que tumbaba
+// TODA la app (no solo esta página, porque revienta durante el render) cuando
+// llegaba un conference_id sin su conference_name: la entrada entraba al mapa
+// con nombre `undefined` y el .sort() de abajo truena con "Cannot read
+// properties of undefined (reading 'localeCompare')". Hoy el backend sí
+// resuelve el nombre en las tres consultas públicas, pero un endpoint que se
+// agregue mañana sin la derivación volvería a mandar el id pelón — y este
+// chequeo es lo único que separa eso de una app caída.
 function getConferencias(matches) {
   const seen = new Map();
   for (const m of matches) {
     if (m.conference_id && m.conference_name && !seen.has(m.conference_id)) {
       seen.set(m.conference_id, m.conference_name);
+    }
+    if (m.conference_id_2 && m.conference_name_2 && !seen.has(m.conference_id_2)) {
+      seen.set(m.conference_id_2, m.conference_name_2);
     }
   }
   return Array.from(seen, ([id, name]) => ({ id, name }))
@@ -233,7 +236,7 @@ export default function CalendarViewer({
     filteredMatches = matches.filter((m) => String(m.group_id) === selected || String(m.group_id_2) === selected);
     if (subJornada) filteredMatches = filteredMatches.filter((m) => m.week_label === subJornada);
   }
-  else if (view === 'conferencia' && selected) filteredMatches = matches.filter((m) => String(m.conference_id) === selected);
+  else if (view === 'conferencia' && selected) filteredMatches = matches.filter((m) => matchInConference(m, selected));
 
   const jornadas     = getJornadas(matches);
   const equipos       = getEquipos(matches);
@@ -429,7 +432,7 @@ export default function CalendarViewer({
               {conferencias.length === 0
                 ? <div className="empty-state"><p>Ningún partido tiene una conferencia asignada todavía.</p></div>
                 : conferencias.map((conf) => {
-                    const count = matches.filter((m) => m.conference_id === conf.id).length;
+                    const count = matches.filter((m) => matchInConference(m, conf.id)).length;
                     return (
                       <button key={conf.id} className="filter-card" onClick={() => selectFilter(String(conf.id))}>
                         <div className="filter-card-icon">🏈</div>
