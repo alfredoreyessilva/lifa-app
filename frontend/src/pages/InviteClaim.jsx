@@ -16,6 +16,14 @@ export default function InviteClaim() {
     api.getInvite(inviteToken).then(setInvite).catch((e) => setError(e.message));
   }, [inviteToken]);
 
+  // Al aceptar, la pantalla cambia por completo pero el navegador conserva el
+  // scroll del formulario que acaba de desaparecer — y como el mensaje de éxito
+  // es corto, lo primero que se veía era cancha vacía: parecía que el clic no
+  // había hecho nada. Lo mismo al caer en el estado de error.
+  useEffect(() => {
+    if (claimed || error) window.scrollTo(0, 0);
+  }, [claimed, error]);
+
   // Caso: la persona YA tiene sesión iniciada en este navegador (por ejemplo,
   // es alguien que ya administraba otro equipo y ahora le pasan uno más).
   async function handleClaimWithSession() {
@@ -31,19 +39,25 @@ export default function InviteClaim() {
     }
   }
 
+  // Las tres pantallas de esta ruta (error, éxito y la invitación misma) van
+  // dentro del panel negro, igual que el resto del área con sesión. Antes iban
+  // sueltas sobre el fondo de cancha, y el texto secundario —verde claro sobre
+  // verde— quedaba con muy poco contraste.
   if (error) {
     return (
       <div className="container">
-        <div className="empty-state">
-          <h3>No pudimos abrir esta invitación</h3>
-          <p>{error}</p>
-          <Link to="/" className="btn btn-outline" style={{ marginTop: 16 }}>Volver al inicio</Link>
+        <div className="dashboard-panel">
+          <div className="empty-state">
+            <h3>No pudimos abrir esta invitación</h3>
+            <p>{error}</p>
+            <Link to="/" className="btn btn-outline" style={{ marginTop: 16 }}>Volver al inicio</Link>
+          </div>
         </div>
       </div>
     );
   }
 
-  if (!invite) return <div className="container"><Loading /></div>;
+  if (!invite) return <div className="container"><div className="dashboard-panel"><Loading /></div></div>;
 
   const isOrgAdmin = invite.type === 'org_admin';
   const name = isOrgAdmin ? invite.organization_name : invite.team_name;
@@ -52,15 +66,17 @@ export default function InviteClaim() {
   if (claimed) {
     return (
       <div className="container">
-        <div className="empty-state">
-          <h3>¡Listo! Ya administras {name}</h3>
-          <p>
-            {isOrgAdmin
-              ? 'Tienes el mismo acceso que el resto de los administradores — desde tu panel puedes editar todo igual que ellos.'
-              : 'Desde tu panel puedes editar el logo, contacto, redes y links de transmisión de tu equipo.'}
-          </p>
-          <div style={{ marginTop: 16 }}>
-            <Link to="/panel" className="btn btn-flag">Ir a mi panel</Link>
+        <div className="dashboard-panel">
+          <div className="empty-state">
+            <h3>¡Listo! Ya administras {name}</h3>
+            <p>
+              {isOrgAdmin
+                ? 'Tienes el mismo acceso que el resto de los administradores — desde tu panel puedes editar todo igual que ellos.'
+                : 'Desde tu panel puedes editar el logo, contacto, redes y links de transmisión de tu equipo.'}
+            </p>
+            <div style={{ marginTop: 16 }}>
+              <Link to="/panel" className="btn btn-flag">Ir a mi panel</Link>
+            </div>
           </div>
         </div>
       </div>
@@ -69,6 +85,7 @@ export default function InviteClaim() {
 
   return (
     <div className="container">
+      <div className="dashboard-panel">
       <div className="empty-state" style={{ maxWidth: 440, margin: '40px auto', textAlign: 'center' }}>
         {logoUrl && (
           <div style={{ width: 80, height: 80, borderRadius: '50%', overflow: 'hidden', margin: '0 auto 16px' }}>
@@ -94,6 +111,7 @@ export default function InviteClaim() {
         ) : (
           <InviteAuthForms inviteToken={inviteToken} onClaimed={() => setClaimed(true)} />
         )}
+      </div>
       </div>
     </div>
   );

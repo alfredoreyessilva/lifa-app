@@ -40,7 +40,23 @@ export default function OrgAdminsPanel({ organizationId, organizationName, token
     }
   }
 
+  async function transferOwner(member) {
+    setError('');
+    try {
+      await api.transferOrganizationOwner(organizationId, member.user_id, token);
+      load();
+      setModal(null);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
   const count = members?.length;
+  // Quién es el principal hoy, y si ese soy yo. De esto dependen las dos
+  // acciones nuevas: solo el principal puede ceder el puesto, y nadie puede
+  // quitarlo (ni él mismo) mientras lo tenga.
+  const principal = members?.find((m) => m.role === 'owner');
+  const soyPrincipal = principal?.user_id === user?.id;
 
   return (
     <div className="category-block">
@@ -63,32 +79,75 @@ export default function OrgAdminsPanel({ organizationId, organizationName, token
         <>
           {error && <div className="form-error">{error}</div>}
           <p style={{ color: 'var(--ink-dim)', fontSize: 12, margin: '0 0 8px' }}>
-            Todas las personas listadas aquí tienen el mismo acceso a este panel.
+            Todas las personas listadas aquí tienen el mismo acceso a este panel,
+            incluida la cobranza. Al administrador principal no se le puede quitar
+            el acceso: primero tiene que cederle el puesto a alguien más.
           </p>
           {members === null ? (
             <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>Cargando…</p>
           ) : members.length === 0 ? (
             <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>Sin administradores todavía.</p>
           ) : (
-            members.map((m) => (
-              <div key={m.id} className="admin-match-row">
-                <div>
-                  <div className="who">{m.name}{m.user_id === user?.id ? ' (tú)' : ''}</div>
-                  <div className="info">{m.email}</div>
+            members.map((m) => {
+              const esPrincipal = m.role === 'owner';
+              const soyYo = m.user_id === user?.id;
+              const solo = members.length <= 1;
+              return (
+                <div key={m.id} className="admin-match-row">
+                  <div>
+                    <div className="who">
+                      {m.name}{soyYo ? ' (tú)' : ''}
+                      {esPrincipal && (
+                        <span
+                          style={{
+                            marginLeft: 8, fontSize: 11, fontWeight: 600,
+                            color: 'var(--ink-dim)', textTransform: 'none',
+                          }}
+                          title="Tiene el puesto principal: es quien puede cedérselo a alguien más. El acceso al panel es el mismo para todos."
+                        >
+                          · admin principal
+                        </span>
+                      )}
+                    </div>
+                    <div className="info">{m.email}</div>
+                  </div>
+                  <div className="row-actions">
+                    {/* Ceder el puesto: solo lo ofrece quien lo tiene, y solo
+                        sobre los demás. Es el paso previo obligado para poder
+                        retirarse siendo principal. */}
+                    {soyPrincipal && !esPrincipal && (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setModal({ type: 'transfer', member: m })}
+                      >
+                        Hacer principal
+                      </button>
+                    )}
+                    {/* Al principal no se le ofrece "Quitar" en vez de
+                        ofrecerlo deshabilitado: el botón muerto no explica nada
+                        y antes prometía algo que el backend no cumplía. */}
+                    {!esPrincipal && (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ color: 'var(--flag)' }}
+                        disabled={solo}
+                        title={solo ? 'Invita a alguien más antes de quitar a este administrador' : undefined}
+                        onClick={() => setModal({ type: soyYo ? 'retire' : 'remove', member: m })}
+                      >
+                        {soyYo ? 'Retirarme' : 'Quitar'}
+                      </button>
+                    )}
+                    {esPrincipal && soyYo && (
+                      <span style={{ color: 'var(--ink-dim)', fontSize: 12 }}>
+                        {solo
+                          ? 'Invita a alguien y cédele el puesto para poder retirarte'
+                          : 'Cede el puesto para poder retirarte'}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="row-actions">
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    style={{ color: 'var(--flag)' }}
-                    disabled={members.length <= 1}
-                    title={members.length <= 1 ? 'Invita a alguien más antes de quitar a este administrador' : undefined}
-                    onClick={() => setModal({ type: 'remove', member: m })}
-                  >
-                    Quitar
-                  </button>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </>
       )}
@@ -112,6 +171,41 @@ export default function OrgAdminsPanel({ organizationId, organizationName, token
           <div className="modal-actions">
             <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
             <button className="btn btn-danger" onClick={() => removeMember(modal.member)}>Quitar administrador</button>
+          </div>
+        </Modal>
+      )}
+
+      {modal?.type === 'retire' && (
+        <Modal title="Retirarme como administrador" onClose={() => setModal(null)}>
+          <p>
+            Vas a dejar de administrar <strong>{organizationName}</strong>. Pierdes el acceso a
+            este panel y a su cobranza — incluidos los movimientos de dinero.
+          </p>
+          <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>
+            Quien siga administrando puede volver a invitarte cuando haga falta.
+          </p>
+          <div className="modal-actions">
+            <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
+            <button className="btn btn-danger" onClick={() => removeMember(modal.member)}>Retirarme</button>
+          </div>
+        </Modal>
+      )}
+
+      {modal?.type === 'transfer' && (
+        <Modal title="Hacer administrador principal" onClose={() => setModal(null)}>
+          <p>
+            <strong>{modal.member.name}</strong> va a quedar como administrador principal de{' '}
+            {organizationName}, y tú pasas a ser administrador normal.
+          </p>
+          <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>
+            No pierdes el acceso al panel con esto — lo que cambia es quién puede ceder el
+            puesto. Después de cederlo sí vas a poder retirarte, si eso es lo que buscas.
+          </p>
+          <div className="modal-actions">
+            <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
+            <button className="btn btn-primary" onClick={() => transferOwner(modal.member)}>
+              Hacer principal
+            </button>
           </div>
         </Modal>
       )}

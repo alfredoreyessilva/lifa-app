@@ -495,8 +495,12 @@ export const api = {
     request(`/invites/organizations/${organizationId}/admins`, { method: 'POST', token }),
   getOrganizationMembers: (organizationId, token) =>
     request(`/organizations/${organizationId}/members`, { token }),
+  // Sirve para quitar a alguien más y para retirarse uno mismo: es el mismo
+  // endpoint, la diferencia la hace el userId que se le pase.
   removeOrganizationMember: (organizationId, userId, token) =>
     request(`/organizations/${organizationId}/members/${userId}`, { method: 'DELETE', token }),
+  transferOrganizationOwner: (organizationId, userId, token) =>
+    request(`/organizations/${organizationId}/transfer-owner`, { method: 'POST', body: { userId }, token }),
 
   // Bandeja de notificaciones (pantalla "Notificaciones")
   getLeagueNotifications: (leagueId, token) => request(`/notifications/league/${leagueId}`, { token }),

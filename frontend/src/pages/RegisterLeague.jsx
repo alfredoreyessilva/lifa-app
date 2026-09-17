@@ -96,8 +96,16 @@ export default function RegisterLeague() {
     <div className="container">
       <div className="form-card">
         <h2>Registrar el calendario de mi liga</h2>
+        {/* Decía "Tu liga aparecerá de inmediato en la página de inicio", y era
+            falso: `leagues.is_public` nace en FALSE (db.js), el INSERT de
+            routes/leagues.js no lo toca y la portada filtra is_public = TRUE.
+            La liga nace privada y se publica cuando el admin aprueba la
+            solicitud. El panel de la liga ya lo decía bien ("Tu liga es privada
+            por ahora"); el que prometía de más era este formulario. */}
         <p style={{ color: 'var(--ink-dim)', fontSize: 13, marginTop: -12, marginBottom: 20 }}>
-          Tu liga aparecerá de inmediato en la página de inicio.
+          Tu liga empieza privada: puedes cargar torneos, equipos y calendario sin
+          que nadie más los vea. Cuando esté lista, pides publicarla desde tu panel
+          y aparece en la página de inicio en cuanto se apruebe.
         </p>
         {error && <div className="form-error">{error}</div>}
         <form onSubmit={onSubmit}>

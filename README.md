@@ -90,20 +90,31 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 
 ## En progreso — no terminado todavía
 
-**Lo primero al retomar** (no es código, son dos comandos contra la base real —
-ambos simulan por defecto, ninguno escribe sin `--confirm`):
+~~**Lo primero al retomar**: correr los dos scripts de limpieza contra la base
+real~~ — **hecho (2026-09-17)**. Se corrieron contra producción, con el dueño de
+los datos confirmando que las dos filas eran suyas y de prueba:
 
-```
-cd backend
-node scripts/delete-orphan-roster-players.mjs            # jugador sin rama (ZHAMIS TOLEDO)
-node scripts/delete-orphan-roster-players.mjs --confirm
-node scripts/cleanup-legacy-club-padron.mjs              # tablas viejas del padrón
-node scripts/cleanup-legacy-club-padron.mjs --confirm
-```
+- `delete-orphan-roster-players.mjs`: borró la única membresía sin rama que
+  quedaba (ZHAMIS TOLEDO, equipo BULLDOGS) y su fila en `players`, porque no
+  estaba referenciado en ningún otro lado.
+- `cleanup-legacy-club-padron.mjs`: tiró `team_player_accounts` y
+  `player_ledger_entries`, que tenían una cuenta y un cargo de prueba de $500
+  en GRIZZLIES.
 
-Los dos se probaron de punta a punta contra una rama de Neon: encontraron lo que
-debían, lo borraron, y la reverificación quedó limpia. Falta correrlos donde
-importa. Lo que hay ahí es de prueba y está confirmado como tal.
+Antes de confirmar se revisaron las llaves foráneas hacia `players`: son cuatro
+tablas, y ZHAMIS TOLEDO no aparecía en ninguna salvo su membresía rota, así que
+no se perdió nada en cascada. **El detalle que salió de esa revisión**: al
+momento de correrlos, `club_members` y `club_ledger_entries` (las tablas nuevas)
+estaban **vacías** — ese cargo de $500 nunca se migró, era el único dato de
+cuotas de club en toda la base. Por eso el borrado necesitaba una confirmación
+humana y no se hizo de corrido; el script avisa de esto a propósito.
+
+Reverificación después de correrlos, toda en verde: cero membresías sin rama,
+cero filas de ZHAMIS TOLEDO, las dos tablas viejas ya no existen, y
+`club_members`/`club_ledger_entries` siguen en su lugar. Quedaron dos filas en
+`players` sin ninguna membresía de roster (FERCHO BULLDOG y alfredo reyes): no
+las tocó ningún script porque no son membresías huérfanas sino jugadores sin
+membresía, no se ven en ninguna pantalla y no estorban.
 
 - **Fase B de la separación del padrón** — ver "Fase B" al final de "Cuotas del
   club". Es lo único grande que queda abierto de esta línea de trabajo, y está
@@ -116,8 +127,87 @@ importa. Lo que hay ahí es de prueba y está confirmado como tal.
   **⚙ competencia**. Ver "Lo que queda abierto" al final de "Tabla de
   posiciones y modelo de competencia", donde está también lo único de código
   que quedó suelto de esa línea.
-- **QA visual del panel negro en LeagueStructurePanel/TournamentMatchesPanel**: se envolvió su contenido en `.dashboard-panel` pero no se probó en el navegador.
-- **QA visual de "Invitar administrador"**: el flujo completo (generar link, reclamarlo con una segunda cuenta, ver la liga/equipo aparecer en su "Mi panel", quitar/quedar como último administrador) se verificó por API y directo contra la base de datos, pero no de punta a punta en el navegador.
+- ~~**QA visual del panel negro en LeagueStructurePanel/TournamentMatchesPanel**~~
+  — **hecha en navegador (2026-09-17)** para `LeagueStructurePanel`: el
+  `.dashboard-panel` renderiza bien, el árbol crece dentro del panel sin
+  desbordarlo y los modales (nuevo torneo, quitar administrador) se ven
+  correctos. **`TournamentMatchesPanel` sigue sin verificarse**: llegar a él
+  pide categoría, rama y partidos, y la QA no llegó tan hondo.
+- ~~**QA visual de "Invitar administrador"**~~ — **hecha de punta a punta en
+  navegador (2026-09-17)**, con dos cuentas de prueba y una liga desechable que
+  se borró al terminar. Funciona: generar el link, reclamarlo con una segunda
+  cuenta creada desde el propio link, verla aparecer en su "Mi panel" con acceso
+  real, quitar a un administrador, y el candado del último administrador — que
+  **no es solo visual**: el botón queda deshabilitado con su explicación en el
+  tooltip, y el backend además responde 400 si se le pega directo. El link es de
+  un solo uso y al reabrirlo dice "Esta invitación ya fue utilizada".
+  **Pero salió un hueco de fondo, ver abajo.**
+
+- ~~**Quitar a quien registró la organización NO le quita el acceso**~~ —
+  **arreglado (2026-09-17)**. El problema: `middleware/ownership.js` autoriza con
+  `isMember || owner_user_id === req.user.id`, y ese segundo término es un
+  respaldo deliberado de la migración a `organization_members`. Consecuencia que
+  el comentario no contemplaba: a quien **creó** la liga o el equipo no se le
+  podía revocar el acceso — la pantalla lo quitaba de la lista y el diálogo decía
+  "puedes volver a invitarla más adelante", pero su token seguía dando **200** en
+  `GET /leagues/:id/tree` y en `GET /billing/leagues/:id/overview`, o sea también
+  la cobranza.
+
+  **Cómo se arregló, y por qué así.** Se revisó primero la base real: **cero**
+  ligas y **cero** equipos dependen hoy del respaldo (todos los que tienen
+  `owner_user_id` ya tienen su fila en `organization_members`), así que se podía
+  quitar de los 18 puntos donde aparece. **No se hizo eso.** En vez de tocar 18
+  sitios de autorización, se mantiene `owner_user_id` **sincronizado** con el
+  administrador principal: el respaldo deja de ser puerta trasera porque siempre
+  apunta a alguien que de todas formas tiene acceso, y la red de seguridad de la
+  migración se queda intacta. Retirar el respaldo sigue siendo posible más
+  adelante, pero ya como limpieza aparte y no como parte de un arreglo urgente.
+
+  **Lo que se construyó** (`routes/organizations.js`, `OrgAdminsPanel.jsx`):
+  - **`POST /organizations/:id/transfer-owner`** — cede el puesto de principal a
+    otro administrador ya existente. Mueve el `role` de organization_members y el
+    `owner_user_id` de la liga/equipo **en una sola sentencia con CTEs**: no en
+    varias seguidas, porque `db.prepare` toma una conexión del pool por consulta
+    y del otro lado hay un pooler en modo transacción, así que un BEGIN/COMMIT
+    repartido no tiene garantizada la misma conexión. Solo lo puede hacer quien
+    tiene el puesto — si no, un invitado podría nombrarse principal y después
+    quitar a quien lo invitó.
+  - **Al principal ya no se le ofrece "Quitar"**, en vez de ofrecerlo
+    deshabilitado: un botón muerto no explica nada, y antes prometía algo que el
+    backend no cumplía. El backend además responde `409` si se le pega directo.
+  - **"Retirarme"** — quitarse a uno mismo siempre estuvo permitido por el
+    endpoint; lo que faltaba era que surtiera efecto. Es el caso de quien registra
+    el equipo donde trabaja (un coach) y **no quiere** acceso a las cuentas de
+    dinero: cede el puesto al tesorero y se retira. El diálogo lo dice sin
+    rodeos — se pierde el acceso al panel y a la cobranza.
+
+  **Verificado de punta a punta** contra la base real, con dos cuentas de prueba
+  y una liga desechable que se borró al terminar: roles iniciales correctos, el
+  principal no se puede quitar ni quitarse (409 en ambos), un invitado no puede
+  auto-nombrarse principal (403), el traspaso mueve rol **y** `owner_user_id`
+  juntos, y después de retirarse la cuenta saliente recibe **403** en el panel y
+  en la cobranza — donde antes recibía 200. Las 135 pruebas unitarias siguen en
+  verde.
+- ~~**El registro de liga promete algo que no pasa**~~ — **arreglado
+  (2026-09-17)**. `RegisterLeague.jsx` decía "Tu liga aparecerá de inmediato en
+  la página de inicio", y era falso: `leagues.is_public` nace en `FALSE`
+  (`db.js`), el `INSERT` de `routes/leagues.js` no lo toca y la portada filtra
+  `WHERE is_public = TRUE`. Comprobado creando una liga real: quedó
+  `is_public=false` y no apareció en el listado público. Ahora el formulario dice
+  lo que de verdad ocurre — que la liga empieza privada, que se puede cargar todo
+  sin que nadie la vea, y que se publica cuando se pide desde el panel y el admin
+  aprueba. El panel de la liga ya lo decía bien; el que prometía de más era este
+  formulario.
+- ~~**Al aceptar una invitación no se sube el scroll**~~ — **arreglado
+  (2026-09-17)**, junto con el contraste de esa misma pantalla. La pantalla de
+  éxito se pinta arriba, pero el navegador conservaba el scroll del formulario
+  que acababa de desaparecer: lo primero que se veía era cancha vacía y parecía
+  que el clic no había hecho nada (pasó en la propia QA). Ahora `InviteClaim.jsx`
+  sube el scroll al llegar a éxito o a error. Y las **tres** pantallas de esa
+  ruta (invitación, éxito y "ya fue utilizada") van dentro de `.dashboard-panel`
+  como el resto del área con sesión — antes iban sueltas sobre el fondo de
+  cancha, con el texto secundario en verde claro sobre verde. Verificado en
+  navegador: `scrollY` pasa de 609 a 0 al aceptar.
 - **"Notificaciones" ya muestra contenido real** (cobranza en los dos libros, avisos de partidos, aprobaciones) — lo que falta es que el jugador/tutor tenga bandeja propia. Hoy no puede: `notifications` tiene `CHECK (recipient_type IN ('league','team'))` y los jugadores no tienen cuenta. Por eso los recordatorios de cuotas llegan **agregados a la bandeja del equipo** y el aviso al papá lo dispara el tesorero por WhatsApp.
 - **Permisos de colaboración entre organizaciones** — ver punto 2 de "Roadmap —
   en construcción". Los cuatro tipos de organización **ya se registran** (eso
@@ -1268,7 +1358,10 @@ en el alta manual, botón de foto por jugador. `api/client.js`:
   que la fila del jugador se borra **solo** si no queda referenciada en ningún
   otro lado — otra membresía con rama, estadísticas de partido, o haber
   reclamado su perfil (`players.user_id`). Si tiene aunque sea una, se borra nada
-  más la membresía rota y el jugador se queda. **Falta correrlo.**
+  más la membresía rota y el jugador se queda. **Ya se corrió (2026-09-17)**:
+  encontró una sola membresía huérfana (ZHAMIS TOLEDO, equipo BULLDOGS), sin
+  ninguna otra referencia, así que se fue con todo y su fila en `players`. Ver
+  "En progreso" arriba.
 - ~~No hay endpoint para **quitar** a un jugador del roster~~ — **hecho
   (septiembre 2026)**: `DELETE /api/players/branches/:branchId/teams/:teamId/roster/:playerId`,
   con botón "Quitar" en `BranchRosterModal`. Tiene dos comportamientos porque
@@ -1353,8 +1446,10 @@ siempre había una:
 
 ### Pendiente / fuera de esta versión
 
-- El badge "✓ Verificado" solo se ve hoy en el panel del propio equipo, no en
-  su ficha pública (`TeamCard`/`TeamInfoPanel`).
+- ~~El badge "✓ Verificado" solo se ve hoy en el panel del propio equipo, no en
+  su ficha pública~~ — **ya no aplica**: `TeamCard` muestra la palomita (con
+  `title`/`aria-label` que le dan el significado, porque la tarjeta es chica y
+  va en cuadrícula) y `TeamInfoPanel` la pastilla completa "✓ Verificado".
 - No existe flujo de traspaso de dueño para un equipo independiente (sí existe
   para uno de liga, vía invitación — `routes/invites.js`) — si el que lo
   registró pierde acceso a su cuenta, hoy no hay forma de reclamarlo.
