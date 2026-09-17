@@ -114,11 +114,26 @@ export const TIEBREAKER_CATALOG = {
     label: 'Diferencia de puntos dentro del grupo/conferencia',
   },
 
-  // Rivales en común
+  // Rivales en común. Van DOS variantes, con y sin muestra mínima, porque el
+  // umbral no es una propiedad del criterio sino del empate que se resuelve:
+  // entre equipos del mismo grupo, que comparten casi todo el calendario,
+  // siempre hay muestra y el reglamento de la NFL lo aplica sin mínimo; entre
+  // equipos de grupos distintos puede haber dos rivales en común, y ahí el
+  // mismo reglamento exige cuatro para no decidir sobre ruido.
+  //
+  // Se ofrecen como dos criterios y no como un parámetro para que la lista de
+  // desempates siga siendo un arreglo de nombres —simple de guardar, de mandar
+  // y de reordenar en pantalla— y para que la elección quede escrita y
+  // auditable en vez de deducida por el código a espaldas de quien configura.
   common_win_pct: {
-    metric: 'win_pct', universe: 'common', min_games: 4,
+    metric: 'win_pct', universe: 'common',
     label: '% de ganados ante rivales en común',
-    help: 'No aplica si los empatados no comparten al menos 4 rivales.',
+    help: 'Sin muestra mínima. Para empates dentro de un mismo grupo, donde los equipos comparten casi todo el calendario.',
+  },
+  common_win_pct_min4: {
+    metric: 'win_pct', universe: 'common', min_games: 4,
+    label: '% de ganados ante rivales en común (mínimo 4)',
+    help: 'Se salta si los empatados no comparten al menos 4 rivales. Para comparar equipos de grupos distintos, donde la muestra puede ser mínima.',
   },
 
   // Generales

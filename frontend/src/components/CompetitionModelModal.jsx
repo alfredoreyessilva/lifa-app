@@ -342,7 +342,13 @@ function QualificationRow({ phase, token, onChanged, setError, hasConferences, h
 function FormatTab({ branch, token, catalog, config, hasConferences, hasGroups, onChanged, setError }) {
   const [levels, setLevels] = useState(config?.standings_levels || ['branch']);
   const [keys, setKeys] = useState(config?.tiebreakers || []);
-  const [mode, setMode] = useState(config?.multi_team_mode || 'sequential');
+  const [mode, setMode] = useState(config?.multi_team_mode || 'restart');
+
+  // Reglamento propio por nivel de tabla. Vacío = todos heredan el de la
+  // rama, que es como vive el 95% de las ligas. `editando` es qué se está
+  // viendo: 'default' (el de la rama) o un nivel concreto.
+  const [byLevel, setByLevel] = useState(config?.by_level || {});
+  const [editando, setEditando] = useState('default');
   const [usePoints, setUsePoints] = useState(Boolean(config?.uses_points));
   const [pts, setPts] = useState({
     win: config?.points_win ?? 3, draw: config?.points_draw ?? 1, loss: config?.points_loss ?? 0,
@@ -351,10 +357,53 @@ function FormatTab({ branch, token, catalog, config, hasConferences, hasGroups, 
   const [saved, setSaved] = useState(false);
 
   const byKey = Object.fromEntries(catalog.tiebreakers.map((t) => [t.key, t]));
-  const available = catalog.tiebreakers.filter((t) => !keys.includes(t.key));
+
+  // Qué lista está editando la pantalla: la de la rama, o la propia de un
+  // nivel. Si el nivel no tiene una propia todavía, se muestra la heredada
+  // (de solo lectura hasta que la persona decida separarla).
+  const propio = editando !== 'default' ? byLevel[editando] : null;
+  const heredando = editando !== 'default' && !propio;
+  const keysActuales = propio ? propio.tiebreakers : keys;
+  const modeActual = propio ? (propio.multi_team_mode || 'restart') : mode;
+  const available = catalog.tiebreakers.filter((t) => !keysActuales.includes(t.key));
+
+  // Escribe la lista/modo en el lugar correcto según lo que se esté editando.
+  //
+  // Todas usan la forma funcional de setByLevel — `prev` en vez de la variable
+  // `byLevel` del render — y no es estilo: aplicar un preconfigurado llama a
+  // setCriterios Y a setModo en el mismo evento, y con la variable del render
+  // las dos partirían del MISMO objeto viejo, así que la segunda pisaba a la
+  // primera y el cambio de criterios se perdía en silencio.
+  function setCriterios(lista) {
+    if (editando === 'default') setKeys(lista);
+    else setByLevel((prev) => ({ ...prev, [editando]: { ...prev[editando], tiebreakers: lista } }));
+    setSaved(false);
+  }
+  function setModo(m) {
+    if (editando === 'default') setMode(m);
+    else setByLevel((prev) => ({ ...prev, [editando]: { ...prev[editando], multi_team_mode: m } }));
+    setSaved(false);
+  }
+  // Separar un nivel del reglamento de la rama: arranca con una COPIA del
+  // heredado, no vacío, para que se edite desde donde ya estaba.
+  function separarNivel() {
+    setByLevel((prev) => ({ ...prev, [editando]: { tiebreakers: [...keys], multi_team_mode: mode } }));
+    setSaved(false);
+  }
+  function volverAHeredar() {
+    setByLevel((prev) => {
+      const copia = { ...prev };
+      delete copia[editando];
+      return copia;
+    });
+    setSaved(false);
+  }
 
   function applyPreset(p) {
-    setKeys(p.tiebreakers); setMode(p.multi_team_mode);
+    setCriterios(p.tiebreakers);
+    setModo(p.multi_team_mode);
+    // El sistema de puntos es de la rama entera, no de un nivel: no tendría
+    // sentido que la misma temporada valiera 3 puntos en una tabla y 2 en otra.
     const hasPts = p.points_win !== null && p.points_win !== undefined;
     setUsePoints(hasPts);
     if (hasPts) setPts({ win: p.points_win, draw: p.points_draw, loss: p.points_loss });
@@ -362,11 +411,11 @@ function FormatTab({ branch, token, catalog, config, hasConferences, hasGroups, 
   }
 
   function move(i, delta) {
-    const next = [...keys];
+    const next = [...keysActuales];
     const j = i + delta;
     if (j < 0 || j >= next.length) return;
     [next[i], next[j]] = [next[j], next[i]];
-    setKeys(next); setSaved(false);
+    setCriterios(next);
   }
 
   function toggleLevel(l) {
@@ -381,6 +430,7 @@ function FormatTab({ branch, token, catalog, config, hasConferences, hasGroups, 
         standings_levels: levels.length ? levels : ['branch'],
         tiebreakers: keys,
         tiebreaker_mode: mode,
+        tiebreakers_by_level: byLevel,
         points_win:  usePoints ? Number(pts.win)  : null,
         points_draw: usePoints ? Number(pts.draw) : null,
         points_loss: usePoints ? Number(pts.loss) : null,
@@ -419,6 +469,47 @@ function FormatTab({ branch, token, catalog, config, hasConferences, hasGroups, 
 
       <div className="field">
         <label>Reglamento de desempate</label>
+
+        {/* Solo aparece si la rama publica más de una tabla. Con una sola,
+            elegir "a cuál aplica" sería una pregunta sin sentido. */}
+        {levels.length > 1 && (
+          <>
+            <div className="competition-level-tabs">
+              <button
+                type="button"
+                className={`competition-chip ${editando === 'default' ? 'is-on' : ''}`}
+                onClick={() => setEditando('default')}
+              >
+                Todas las tablas
+              </button>
+              {levels.map((l) => (
+                <button
+                  type="button"
+                  key={l}
+                  className={`competition-chip ${editando === l ? 'is-on' : ''}`}
+                  onClick={() => setEditando(l)}
+                >
+                  {LEVEL_LABEL[l]}{byLevel[l] ? ' ·' : ''}
+                </button>
+              ))}
+            </div>
+            <p className="competition-help" style={{ margin: '6px 0 10px' }}>
+              {editando === 'default'
+                ? 'Este es el reglamento base: lo usa toda tabla que no tenga uno propio.'
+                : heredando
+                  ? 'Esta tabla usa el reglamento base. Sepárala solo si su empate se resuelve distinto — pasa cuando una tabla compara equipos que no comparten calendario.'
+                  : 'Esta tabla tiene reglamento propio; el base no la afecta.'}
+            </p>
+            {editando !== 'default' && (
+              <div className="competition-presets" style={{ marginBottom: 10 }}>
+                {heredando
+                  ? <button type="button" className="btn btn-outline btn-sm" onClick={separarNivel}>Darle reglamento propio</button>
+                  : <button type="button" className="btn btn-ghost btn-sm" onClick={volverAHeredar}>Volver a usar el base</button>}
+              </div>
+            )}
+          </>
+        )}
+
         <div className="competition-presets">
           {catalog.presets.map((p) => (
             <button key={p.key} type="button" className="btn btn-outline btn-sm" onClick={() => applyPreset(p)} title={p.description}>
@@ -428,8 +519,8 @@ function FormatTab({ branch, token, catalog, config, hasConferences, hasGroups, 
         </div>
       </div>
 
-      <ol className="competition-criteria">
-        {keys.map((k, i) => (
+      <ol className={`competition-criteria ${heredando ? 'is-inherited' : ''}`}>
+        {keysActuales.map((k, i) => (
           <li key={k}>
             <span className="competition-criteria-num">{i + 1}</span>
             <span>
@@ -437,17 +528,17 @@ function FormatTab({ branch, token, catalog, config, hasConferences, hasGroups, 
               {byKey[k]?.help && <span className="competition-item-meta"> {byKey[k].help}</span>}
             </span>
             <span className="tree-spacer" />
-            <button type="button" className="tree-chip-btn" onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
-            <button type="button" className="tree-chip-btn" onClick={() => move(i, 1)} disabled={i === keys.length - 1}>↓</button>
-            <button type="button" className="tree-chip-btn" onClick={() => { setKeys(keys.filter((x) => x !== k)); setSaved(false); }}>✕</button>
+            <button type="button" className="tree-chip-btn" onClick={() => move(i, -1)} disabled={heredando || i === 0}>↑</button>
+            <button type="button" className="tree-chip-btn" onClick={() => move(i, 1)} disabled={heredando || i === keysActuales.length - 1}>↓</button>
+            <button type="button" className="tree-chip-btn" disabled={heredando} onClick={() => setCriterios(keysActuales.filter((x) => x !== k))}>✕</button>
           </li>
         ))}
       </ol>
 
-      {available.length > 0 && (
+      {available.length > 0 && !heredando && (
         <select
           value="" className="competition-add-select"
-          onChange={(e) => { if (e.target.value) { setKeys([...keys, e.target.value]); setSaved(false); } }}
+          onChange={(e) => { if (e.target.value) setCriterios([...keysActuales, e.target.value]); }}
         >
           <option value="">+ Agregar criterio…</option>
           {available.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
@@ -456,7 +547,7 @@ function FormatTab({ branch, token, catalog, config, hasConferences, hasGroups, 
 
       <div className="field" style={{ marginTop: 16 }}>
         <label>Si empatan tres o más</label>
-        <select value={mode} onChange={(e) => { setMode(e.target.value); setSaved(false); }}>
+        <select value={modeActual} disabled={heredando} onChange={(e) => setModo(e.target.value)}>
           <option value="restart">Reiniciar el reglamento con los que queden</option>
           <option value="sequential">Seguir con el criterio siguiente</option>
         </select>

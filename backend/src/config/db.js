@@ -333,31 +333,63 @@ CREATE INDEX IF NOT EXISTS idx_pool_members_user ON pool_members(user_id);
 
 export async function initSchema() {
   // Candado a nivel de base de datos (no necesita Redis ni nada externo):
-  // si el día de mañana corren dos instancias del servidor a la vez (Render
-  // escalando por tráfico, o un redeploy donde la vieja y la nueva coinciden
-  // un instante), la segunda instancia se ESPERA aquí hasta que la primera
-  // termine todas las migraciones, en vez de correrlas ambas al mismo tiempo.
-  // Es "advisory" porque no bloquea ninguna tabla real, solo actúa como una
-  // bandera compartida que todas las instancias respetan.
+  // si corren dos instancias del servidor a la vez (Render escalando por
+  // tráfico, o un redeploy donde la vieja y la nueva coinciden un instante),
+  // la segunda se ESPERA aquí hasta que la primera termine, en vez de correr
+  // las migraciones ambas al mismo tiempo. Es "advisory" porque no bloquea
+  // ninguna tabla real, solo es una bandera que todas las instancias respetan.
   //
-  // OJO: el candado vive en la SESIÓN de una sola conexión — por eso se pide
-  // un cliente dedicado del pool (`client`) en vez de usar `exec()`/`db`, que
-  // toman una conexión distinta del pool en cada llamada. Todas las
-  // instrucciones de esta función corren sobre ese mismo `client`.
+  // ── Por qué de TRANSACCIÓN y no de sesión ──
+  //
+  // La primera versión usaba pg_advisory_lock(), que vive en la SESIÓN. Eso es
+  // incompatible con el endpoint que usamos de Neon: la cadena de conexión
+  // apunta al **pooler** (PgBouncer en modo transacción), donde "sesión" no
+  // significa una conexión propia — el pooler reparte conexiones de servidor
+  // entre clientes al terminar cada transacción. Resultado real, visto en la
+  // base: el lock quedó tomado en una conexión que después volvió al pool y
+  // siguió atendiendo consultas normales de la app, ociosa y con el candado
+  // puesto. La siguiente migración se habría quedado esperando **para
+  // siempre**, y con ella el arranque del servidor.
+  //
+  // pg_advisory_xact_lock() se suelta solo al terminar la transacción, pase lo
+  // que pase — commit, rollback, o que se caiga el proceso. No hay forma de
+  // filtrarlo, y el pooler mantiene la misma conexión de servidor durante toda
+  // la transacción, que es justo lo que este candado necesita.
   const MIGRATION_LOCK_KEY = 727272; // número arbitrario, solo debe ser el mismo en todas las instancias
 
   const client = await getPool().connect();
+
+  // Cada migración va dentro de su propio SAVEPOINT. Sin esto, meter todo en
+  // una transacción cambiaría el comportamiento: en Postgres, UNA instrucción
+  // fallida aborta la transacción entera y todas las siguientes revientan con
+  // "current transaction is aborted". Con savepoint, una migración que falla
+  // (porque ya se había aplicado, típicamente) se deshace sola y el resto
+  // sigue igual que antes.
   async function run(sql) {
     try {
-      await client.query(sql);
+      // Las tres instrucciones viajan en UN solo mensaje, no en tres. No es
+      // microoptimización: son ~150 migraciones y cada viaje de ida y vuelta a
+      // Neon cuesta ~100ms, así que separarlas le sumaba medio minuto a cada
+      // arranque en frío. Se puede porque ninguna migración lleva parámetros
+      // (todas son SQL literal), que es lo que habilita el protocolo simple.
+      await client.query(`SAVEPOINT paso; ${sql}; RELEASE SAVEPOINT paso;`);
     } catch {
       // mismo comportamiento de antes: si una migración puntual falla
-      // (ej. ya existía), no se detiene el resto del arranque.
+      // (ej. ya existía), no se detiene el resto del arranque. El SAVEPOINT ya
+      // se creó aunque la instrucción de en medio reventara, así que deshacer
+      // hasta él deja la transacción sana para la migración siguiente.
+      await client.query('ROLLBACK TO SAVEPOINT paso').catch(() => {});
     }
   }
 
   try {
-    await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_KEY]);
+    await client.query('BEGIN');
+
+    // Si otra instancia está migrando, aquí se espera. El tope evita que un
+    // candado atorado cuelgue el arranque en silencio: prefiere fallar con un
+    // error que se vea en los logs a quedarse esperando sin decir nada.
+    await client.query("SET LOCAL lock_timeout = '60s'");
+    await client.query('SELECT pg_advisory_xact_lock($1)', [MIGRATION_LOCK_KEY]);
 
     await run(schemaSql);
 
@@ -1482,6 +1514,19 @@ export async function initSchema() {
       DEFAULT '["wins","h2h_wins","point_diff","points_for"]'::jsonb
     `);
     await run(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS tiebreaker_mode TEXT NOT NULL DEFAULT 'restart'`);
+    // Reglamento propio por NIVEL de tabla, cuando el de la rama no alcanza.
+    //
+    // Hace falta porque una competencia con estructura no usa un solo
+    // reglamento para todas sus tablas. En la NFL, por ejemplo, el empate
+    // dentro de una división y el empate por un wild card NO se resuelven
+    // igual: el segundo criterio de uno es el récord de división y el del
+    // otro el de conferencia. Con una sola lista por rama, una de las dos
+    // tablas sale mal por construcción.
+    //
+    // Es un mapa { nivel: { tiebreakers[], multi_team_mode } } y es OPCIONAL:
+    // el nivel que no aparezca usa el reglamento de la rama. Así las ligas de
+    // una sola tabla —la enorme mayoría— no se enteran de que esto existe.
+    await run(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS tiebreakers_by_level JSONB`);
     await run(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS points_win INTEGER`);
     await run(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS points_draw INTEGER`);
     await run(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS points_loss INTEGER`);
@@ -1612,9 +1657,15 @@ export async function initSchema() {
       WHERE tiebreakers = '["win_pct","h2h_win_pct","scope_win_pct","common_win_pct","point_diff","points_for"]'::jsonb
         AND tiebreaker_mode = 'sequential'
     `);
+    await client.query('COMMIT');
+  } catch (err) {
+    // El ROLLBACK suelta el candado por sí solo (es de transacción). Se
+    // registra el error en vez de tragárselo: una migración que no se aplicó
+    // tiene que verse en los logs del arranque.
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[db] Falló la migración del esquema:', err.message);
+    throw err;
   } finally {
-    // Se suelta el candado y se libera la conexión pase lo que pase
-    await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY]).catch(() => {});
     client.release();
   }
 }

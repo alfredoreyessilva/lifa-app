@@ -2066,7 +2066,10 @@ router.delete('/phases/:phaseId/qualification', authRequired, phaseOwnerRequired
 // --- Configuración de la tabla ---
 
 router.put('/branches/:branchId/standings-config', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
-  const { standings_levels, tiebreakers, tiebreaker_mode, points_win, points_draw, points_loss } = req.body;
+  const {
+    standings_levels, tiebreakers, tiebreaker_mode, tiebreakers_by_level,
+    points_win, points_draw, points_loss,
+  } = req.body;
 
   const LEVELS = ['branch', 'conference', 'group'];
   if (standings_levels !== undefined) {
@@ -2074,15 +2077,42 @@ router.put('/branches/:branchId/standings-config', authRequired, branchOwnerRequ
       return res.status(400).json({ error: 'Los niveles de la tabla deben ser rama, conferencia o grupo' });
     }
   }
+
+  // Misma validación para la lista de la rama y para la de cada nivel, en un
+  // solo lugar: si un criterio desconocido se colara, la tabla se ordenaría
+  // ignorándolo en silencio, que es la peor forma de fallar.
+  const listaInvalida = (lista) => {
+    if (!Array.isArray(lista) || !lista.length) return 'Hace falta al menos un criterio de desempate';
+    const unknown = lista.find((k) => !TIEBREAKER_CATALOG[k]);
+    return unknown ? `Criterio de desempate desconocido: ${unknown}` : null;
+  };
+
   if (tiebreakers !== undefined) {
-    if (!Array.isArray(tiebreakers) || !tiebreakers.length) {
-      return res.status(400).json({ error: 'Hace falta al menos un criterio de desempate' });
-    }
-    const unknown = tiebreakers.find((k) => !TIEBREAKER_CATALOG[k]);
-    if (unknown) return res.status(400).json({ error: `Criterio de desempate desconocido: ${unknown}` });
+    const error = listaInvalida(tiebreakers);
+    if (error) return res.status(400).json({ error });
   }
   if (tiebreaker_mode !== undefined && !['restart', 'sequential'].includes(tiebreaker_mode)) {
     return res.status(400).json({ error: 'El modo de empate múltiple debe ser restart o sequential' });
+  }
+
+  // Reglamento propio por nivel. Se manda el mapa COMPLETO: lo que no venga
+  // se borra, y {} devuelve todos los niveles a heredar el de la rama. Es a
+  // propósito — un merge parcial haría imposible quitar un nivel sin inventar
+  // un valor centinela.
+  if (tiebreakers_by_level !== undefined) {
+    if (tiebreakers_by_level === null || typeof tiebreakers_by_level !== 'object' || Array.isArray(tiebreakers_by_level)) {
+      return res.status(400).json({ error: 'El reglamento por nivel debe venir como un objeto por nivel' });
+    }
+    for (const [nivel, cfg] of Object.entries(tiebreakers_by_level)) {
+      if (!LEVELS.includes(nivel)) {
+        return res.status(400).json({ error: `Nivel desconocido: ${nivel}` });
+      }
+      const error = listaInvalida(cfg?.tiebreakers);
+      if (error) return res.status(400).json({ error: `${error} (en el nivel ${nivel})` });
+      if (cfg.multi_team_mode !== undefined && !['restart', 'sequential'].includes(cfg.multi_team_mode)) {
+        return res.status(400).json({ error: `El modo de empate múltiple del nivel ${nivel} debe ser restart o sequential` });
+      }
+    }
   }
 
   // Los tres puntos van juntos o no van: dejar points_win puesto y
@@ -2097,6 +2127,7 @@ router.put('/branches/:branchId/standings-config', authRequired, branchOwnerRequ
       standings_levels = COALESCE(?::jsonb, standings_levels),
       tiebreakers      = COALESCE(?::jsonb, tiebreakers),
       tiebreaker_mode  = COALESCE(?, tiebreaker_mode),
+      tiebreakers_by_level = CASE WHEN ?::boolean THEN ?::jsonb ELSE tiebreakers_by_level END,
       points_win       = ?,
       points_draw      = ?,
       points_loss      = ?
@@ -2105,6 +2136,14 @@ router.put('/branches/:branchId/standings-config', authRequired, branchOwnerRequ
     standings_levels === undefined ? null : JSON.stringify(standings_levels),
     tiebreakers === undefined ? null : JSON.stringify(tiebreakers),
     toNull(tiebreaker_mode),
+    // Dos parámetros para una columna: el primero dice si esta petición toca
+    // el mapa por nivel y el segundo trae el valor. Hace falta porque aquí
+    // null SIGNIFICA algo ("quítalo todo"), así que el COALESCE que usan las
+    // demás columnas para decir "no tocar" no sirve.
+    tiebreakers_by_level !== undefined,
+    tiebreakers_by_level === undefined || !Object.keys(tiebreakers_by_level).length
+      ? null
+      : JSON.stringify(tiebreakers_by_level),
     points_win ?? null,
     points_draw ?? null,
     points_loss ?? null,

@@ -18,6 +18,8 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 
 ## Cambios recientes importantes (septiembre 2026)
 
+- **El candado de migración se filtraba con el pooler de Neon (2026-09-16)**: `initSchema()` usaba `pg_advisory_lock()`, que vive en la **sesión**, y la app se conecta al endpoint **pooler** (PgBouncer en modo transacción), donde una "sesión" no es una conexión propia. Se encontró en la base una conexión **ociosa y atendiendo consultas normales con el candado puesto**: la siguiente migración se habría quedado esperando para siempre, colgando el arranque del servidor sin ningún error que lo explicara. Ahora es `pg_advisory_xact_lock()`, que se suelta solo al cerrar la transacción pase lo que pase, con un `SAVEPOINT` por migración para no perder la tolerancia a fallos de antes. Verificado contra la base: dos corridas seguidas, cero candados colgados, y el arranque sigue tardando lo mismo (9s). Ver "El candado de migración" en la sección de posiciones.
+
 - **Tabla de posiciones y modelo de competencia (2026-09-16)**: la app ya sabía qué partidos se juegan, pero no **cómo se compite** — no había forma de decir que una liga corona campeón por conferencia y otra tiene un solo campeón general. Se agregaron tres piezas: **`phases`** (qué se está jugando, que es lo que permite que la tabla cuente la temporada regular y deje fuera playoffs y amistosos), **`titles`** (a qué nivel se corona campeón) y la configuración de la tabla por rama (niveles publicados + reglamento de desempates). Con `scope` + `decided_by` caben sin casos especiales la NFL (campeón de división, de conferencia y Super Bowl), ONEFA (dos campeones de conferencia y **ningún** campeón general — esa ausencia es justo cómo se representa que no hay juegos interconferencia) y LFA (un solo campeón). La jerarquía quedó alineada con el modelo estándar de la industria (Sportradar/SportMonks/IPTC SportsML), que ya era casi la que había. Ver la sección **"Tabla de posiciones y modelo de competencia"**.
   La fase y el campeón se resuelven **al leer**, no se migra nada: un partido sin `phase_id` deduce su fase de `week_label` como siempre, y el campeón sale de la tabla o del partido decisivo (`title_overrides` guarda solo la excepción). Los desempates son **configurables por rama** porque no existe un orden universal — **ni siquiera dentro de un mismo deporte**: ONEFA ordena por juegos ganados y la NFL por porcentaje, ambas de americano. Cada criterio es un par (métrica, universo), y lo que separa a un reglamento de otro es en qué posición va el "entre sí" y qué se hace cuando empatan tres o más. Por lo mismo, ni los sistemas de competencia ni los preconfigurados de desempate se nombran por un deporte: un sistema de competencia (todos contra todos, eliminación directa, sistema suizo) no le pertenece a ninguno.
   **Verificado contra la base real** con LFA 2025 y leyendo ONEFA 2026 (ver "Verificado contra la base real" en esa sección). De ahí salieron dos bugs que las pruebas unitarias no podían encontrar: el estado de un partido terminado es `'finished'`, no `'final'` —la tabla habría salido toda en ceros— y crear una fase no servía de nada si había que reasignarle los partidos a mano. También se unificó `utils/scoring.js`: los puntos de la quiniela ahora salen de la fase resuelta y no de la etiqueta de jornada, con el ranking del concurso en curso comprobado renglón por renglón (36 participantes, 433 puntos, cero diferencias).
@@ -919,7 +921,7 @@ de ganados, puntos, diferencia, anotados, recibidos) medida sobre un
 | `all` | todos los del equipo en la rama |
 | `head_to_head` | solo los jugados **entre los equipos empatados** |
 | `scope` | solo dentro de su grupo/conferencia |
-| `common` | rivales que **todos** los empatados enfrentaron (mínimo 4) |
+| `common` | rivales que **todos** los empatados enfrentaron |
 
 Con esos dos ejes se arma cualquier reglamento sin escribir código nuevo, y la
 diferencia de fondo entre ligas — la que en México se dice "diferencia
@@ -959,6 +961,45 @@ dos modos: `restart` y `sequential`. No es cosmético: dan órdenes distintos
 sobre los mismos partidos, y hay una prueba que lo demuestra con el mismo
 juego de datos.
 
+### Dos criterios de "rivales en común", y por qué no es un parámetro
+
+El umbral de muestra mínima **no es una propiedad del criterio, sino del
+empate que resuelve**. En el reglamento del que se tomó (NFL) el mismo
+criterio va de las dos formas: entre equipos de la misma división, que
+comparten casi todo el calendario, **sin mínimo**; entre equipos de divisiones
+distintas, que pueden compartir dos rivales, **mínimo cuatro**, para no decidir
+un campeonato sobre ruido.
+
+Por eso van como **dos criterios** en el catálogo y no como un número
+configurable: la lista de desempates sigue siendo un arreglo de nombres —
+simple de guardar, de mandar y de reordenar en pantalla — y la elección queda
+escrita y auditable en vez de deducida por el código a espaldas de quien
+configura. Hay dos pruebas con los **mismos partidos** donde cada variante da
+un ganador distinto; ese par es la demostración de que el umbral tenía que ser
+una decisión y no un número nuestro.
+
+### Un reglamento por nivel de tabla
+
+Una competencia con estructura no usa el mismo reglamento para todas sus
+tablas. El caso que lo obliga: en la NFL el empate **dentro de una división** y
+el empate por un **wild card** no se resuelven igual — no cambia solo el
+umbral, cambia el orden completo:
+
+| | División | Wild card |
+|---|---|---|
+| 1 | entre sí | entre sí (si aplica) |
+| 2 | récord de división | **récord de conferencia** |
+| 3 | rivales en común | rivales en común (mínimo 4) |
+
+Con una sola lista por rama, una de las dos tablas sale mal por construcción.
+`branches.tiebreakers_by_level` es un mapa opcional `{ nivel: { tiebreakers[],
+multi_team_mode } }`; el nivel que no aparezca hereda el reglamento de la rama.
+
+Es **opcional a propósito**: las ligas de una sola tabla —la enorme mayoría—
+no se enteran de que existe, porque el selector de nivel solo aparece cuando la
+rama publica más de una. Y al separar un nivel, arranca con una **copia** del
+heredado en vez de una lista vacía, para que se edite desde donde ya estaba.
+
 ### Clasificación: quién avanza (otra cosa que el desempate)
 
 `phase_qualifications` responde "grupos de 4, pasa el primero de cada uno", el
@@ -975,6 +1016,31 @@ sí" y aplica criterios generales — que es exactamente por qué FIFA cambia de
 reglamento al rankear terceros lugares. En el panel se configura por fase
 (`top_n` + alcance); `computeQualification()` implementa además la parte de
 `plus_best_n`, con pruebas, pero esa mitad todavía no tiene control en la UI.
+
+### El candado de migración: de sesión a transacción
+
+Hallazgo que salió probando esto, y que no tiene que ver con posiciones:
+`initSchema()` protegía las migraciones con `pg_advisory_lock()`, que vive en
+la **sesión**. Eso es incompatible con el endpoint que usa la app: la cadena de
+conexión apunta al **pooler** de Neon (PgBouncer en modo transacción), donde
+"sesión" no significa una conexión propia — el pooler reparte conexiones de
+servidor entre clientes al terminar cada transacción.
+
+No es teórico: se encontró una conexión **ociosa, atendiendo consultas normales
+de la app, con el candado de migración puesto**. La siguiente migración se
+habría quedado esperando para siempre, y con ella el arranque del servidor —
+un despliegue que nunca termina de levantar, sin error que lo explique.
+
+Ahora usa `pg_advisory_xact_lock()`, que se suelta solo al terminar la
+transacción pase lo que pase (commit, rollback, o que se caiga el proceso), y
+el pooler mantiene la misma conexión de servidor mientras dura. Para no perder
+la tolerancia a fallos de antes —una migración que ya se había aplicado no
+detiene el arranque— cada instrucción va en su propio `SAVEPOINT`; sin eso,
+dentro de una transacción la primera que fallara abortaría todas las
+siguientes. Las tres instrucciones del savepoint viajan en **un solo mensaje**:
+son ~150 migraciones y separarlas le sumaba medio minuto a cada arranque en
+frío. Medido contra la base real: 9s, igual que antes del cambio, y corriéndolo
+dos veces seguidas no queda ningún candado colgado.
 
 ### Dónde vive
 
@@ -1006,7 +1072,7 @@ frontend/src/components/
 | GET | `/api/leagues/branches/:branchId/standings` | Público. Tabla de una rama (solo si la liga está publicada) |
 | GET | `/api/manage/branches/:branchId/standings` | La misma, con la configuración, para el panel |
 | GET | `/api/manage/standings-catalog` | Criterios, reglamentos preconfigurados y tipos de fase |
-| PUT | `/api/manage/branches/:branchId/standings-config` | Niveles, desempates, modo, sistema de puntos |
+| PUT | `/api/manage/branches/:branchId/standings-config` | Niveles, desempates, modo, sistema de puntos y el reglamento por nivel |
 | GET POST | `/api/manage/branches/:branchId/phases` | Fases de la rama. El GET devuelve `{ phases, week_labels }`: las jornadas con partidos sin fase, para poder adoptarlas |
 | PUT DELETE | `/api/manage/phases/:phaseId` | Editar/borrar fase |
 | PUT DELETE | `/api/manage/phases/:phaseId/qualification` | Quién clasifica desde esa fase |

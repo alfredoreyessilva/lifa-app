@@ -3784,3 +3784,17 @@ a.match-card-new {
   font-size: 12px;
   color: var(--positive);
 }
+
+/* Selector de a qué tabla aplica el reglamento de desempate. Solo aparece
+   cuando la rama publica más de una. */
+.competition-level-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+/* La lista heredada se ve, pero apagada: comunica "esto es lo que se aplica
+   aquí, y no lo estás editando" mejor que esconderla o que dejarla igual que
+   una editable. */
+.competition-criteria.is-inherited { opacity: 0.55; }

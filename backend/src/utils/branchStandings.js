@@ -38,17 +38,44 @@ function parseJsonArray(value, fallback) {
   return fallback;
 }
 
+function parseJsonObject(value, fallback) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
 // La configuración de la rama, ya normalizada. `points_win` en NULL significa
-// "sin sistema de puntos": la tabla se ordena por % de ganados, como americano.
+// "sin sistema de puntos": la tabla se ordena por el primer criterio de la
+// lista (juegos ganados o porcentaje) en vez de por puntos.
 export function standingsConfigOf(branch) {
   return {
     standings_levels: parseJsonArray(branch.standings_levels, ['branch']).filter((l) => LEVELS.includes(l)),
     tiebreakers: parseJsonArray(branch.tiebreakers, []),
     multi_team_mode: branch.tiebreaker_mode === 'restart' ? 'restart' : 'sequential',
+    by_level: parseJsonObject(branch.tiebreakers_by_level, {}),
     points_win:  branch.points_win  ?? undefined,
     points_draw: branch.points_draw ?? undefined,
     points_loss: branch.points_loss ?? undefined,
     uses_points: branch.points_win !== null && branch.points_win !== undefined,
+  };
+}
+
+// El reglamento que le toca a UNA tabla. Si su nivel no tiene uno propio,
+// hereda el de la rama — que es el caso de casi todas las ligas.
+export function configForLevel(config, level) {
+  const propio = config.by_level?.[level];
+  if (!propio || !Array.isArray(propio.tiebreakers) || !propio.tiebreakers.length) return config;
+  return {
+    ...config,
+    tiebreakers: propio.tiebreakers,
+    multi_team_mode: propio.multi_team_mode === 'sequential' ? 'sequential' : 'restart',
   };
 }
 
@@ -180,12 +207,19 @@ export async function buildBranchStandings(branchId, { publicOnly = false } = {}
       // tener que contar renglones.
       const rule = quals.find((q) => q.from_scope === level);
 
+      // El reglamento de ESTE nivel (el propio si lo tiene, si no el de la
+      // rama). `uses_own_rules` lo lleva la tabla para que el panel pueda
+      // decirlo en pantalla sin volver a calcularlo.
+      const levelConfig = configForLevel(config, level);
+
       tables.push({
         level,
         scope_id: scope.id,
         scope_name: scope.name,
         qualifying_count: rule ? rule.top_n : 0,
-        rows: computeStandings({ teams: scopeTeams, matches, config, inScope }),
+        uses_own_rules: levelConfig !== config,
+        tiebreakers: levelConfig.tiebreakers,
+        rows: computeStandings({ teams: scopeTeams, matches, config: levelConfig, inScope }),
       });
     }
   }

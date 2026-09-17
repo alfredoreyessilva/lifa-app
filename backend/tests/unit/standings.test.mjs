@@ -16,6 +16,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { configForLevel } from '../../src/utils/branchStandings.js';
 import {
   computeStandings,
   computeQualification,
@@ -379,6 +380,89 @@ test('la racha se lee del partido más reciente hacia atrás', () => {
 
   assert.equal(rows.find((r) => r.team_id === 1).streak, 'G2');
   assert.equal(rows.find((r) => r.team_id === 2).streak, 'P2');
+});
+
+// ── Rivales en común: las dos variantes ──────────────────────────────────
+
+// A y B quedan 2-1 los dos. Comparten exactamente dos rivales (C y D):
+//   A: le gana a C, pierde con D  -> 1-1 contra los comunes, diferencia 0
+//   B: le gana a C, le gana a D   -> 2-0 contra los comunes, diferencia -36
+// Es el escenario donde las dos variantes dan ganadores OPUESTOS: por rivales
+// en común manda B, y si el criterio se salta por falta de muestra, manda A
+// por diferencia de puntos. Los mismos partidos, dos resultados legítimos —
+// por eso el umbral tiene que ser una decisión escrita y no un número mío.
+const RIVALES_COMUNES = [
+  game(1, 3, 20, 0),   // A le gana a C
+  game(4, 1, 30, 0),   // D le gana a A   -> A 2-1, diferencia 0
+  game(1, 5, 10, 0),   // A le gana a E
+  game(2, 3, 7, 0),    // B le gana a C
+  game(2, 4, 7, 0),    // B le gana a D
+  game(6, 2, 50, 0),   // F le gana a B   -> B 2-1, diferencia -36
+];
+const SEIS = [team(1), team(2), team(3), team(4), team(5), team(6)];
+
+test('rivales en común SIN mínimo desempata aunque la muestra sea chica', () => {
+  const rows = computeStandings({
+    teams: SEIS,
+    matches: RIVALES_COMUNES,
+    config: { tiebreakers: ['wins', 'common_win_pct', 'point_diff'], multi_team_mode: 'restart' },
+  });
+
+  assert.deepEqual(order(rows).slice(0, 2), [2, 1]);   // B por encima de A
+  assert.equal(rows[0].resolved_by, 'common_win_pct');
+});
+
+test('rivales en común CON mínimo 4 se salta, y decide la diferencia', () => {
+  // Mismos partidos, criterio con muestra mínima: dos rivales en común no
+  // alcanzan, así que el criterio NO desempata (tampoco elimina a nadie) y
+  // el orden lo termina decidiendo la diferencia de puntos — al revés.
+  const rows = computeStandings({
+    teams: SEIS,
+    matches: RIVALES_COMUNES,
+    config: { tiebreakers: ['wins', 'common_win_pct_min4', 'point_diff'], multi_team_mode: 'restart' },
+  });
+
+  assert.deepEqual(order(rows).slice(0, 2), [1, 2]);   // A por encima de B
+  assert.equal(rows[0].resolved_by, 'point_diff');
+});
+
+// ── Reglamento propio por nivel de tabla ─────────────────────────────────
+
+test('configForLevel: un nivel sin reglamento propio hereda el de la rama', () => {
+  const base = { tiebreakers: ['wins', 'point_diff'], multi_team_mode: 'restart', by_level: {} };
+  assert.equal(configForLevel(base, 'conference'), base);
+  assert.equal(configForLevel(base, 'group'), base);
+});
+
+test('configForLevel: cada nivel puede tener su propio reglamento', () => {
+  // Es el caso que motivó esto: en la NFL el empate DENTRO de una división y
+  // el empate por un wild card no se resuelven igual — cambia el orden, no
+  // solo un umbral. Con una sola lista por rama, una de las dos tablas sale
+  // mal por construcción.
+  const base = {
+    tiebreakers: ['wins', 'h2h_wins'], multi_team_mode: 'restart',
+    by_level: {
+      group:      { tiebreakers: ['win_pct', 'h2h_win_pct', 'scope_win_pct', 'common_win_pct'], multi_team_mode: 'sequential' },
+      conference: { tiebreakers: ['win_pct', 'h2h_win_pct', 'common_win_pct_min4'], multi_team_mode: 'sequential' },
+    },
+  };
+
+  assert.deepEqual(configForLevel(base, 'group').tiebreakers,
+    ['win_pct', 'h2h_win_pct', 'scope_win_pct', 'common_win_pct']);
+  assert.deepEqual(configForLevel(base, 'conference').tiebreakers,
+    ['win_pct', 'h2h_win_pct', 'common_win_pct_min4']);
+  // El que no está en el mapa sigue heredando.
+  assert.deepEqual(configForLevel(base, 'branch').tiebreakers, ['wins', 'h2h_wins']);
+  assert.equal(configForLevel(base, 'group').multi_team_mode, 'sequential');
+});
+
+test('configForLevel: un reglamento por nivel vacío o mal formado se ignora', () => {
+  const base = { tiebreakers: ['wins'], multi_team_mode: 'restart', by_level: {
+    conference: { tiebreakers: [] },
+    group: { tiebreakers: null },
+  } };
+  assert.equal(configForLevel(base, 'conference'), base);
+  assert.equal(configForLevel(base, 'group'), base);
 });
 
 // ── Clasificación a la siguiente fase ────────────────────────────────────
