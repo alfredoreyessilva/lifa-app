@@ -1433,8 +1433,11 @@ export async function initSchema() {
         id SERIAL PRIMARY KEY,
         branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
         name TEXT NOT NULL,
-        type TEXT NOT NULL DEFAULT 'regular'
-          CHECK (type IN ('regular', 'knockout', 'placement', 'exhibition')),
+        type TEXT NOT NULL DEFAULT 'round_robin'
+          CHECK (type IN (
+            'round_robin', 'double_round_robin', 'groups', 'swiss',
+            'single_elimination', 'double_elimination', 'series', 'exhibition'
+          )),
         counts_for_standings BOOLEAN NOT NULL DEFAULT TRUE,
         sort_order INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -1457,17 +1460,18 @@ export async function initSchema() {
     //   sorprende a nadie. Una liga con conferencias agrega "conference", una
     //   con grupos agrega "group".
     //
-    // `tiebreakers` — la lista ORDENADA de criterios de desempate. Nace con
-    //   el reglamento de americano porque es el deporte de esta app, pero es
-    //   por rama justamente porque no existe un orden universal: la diferencia
-    //   real entre reglamentos (NFL, FIFA, FIBA) es en qué posición va el
-    //   "entre sí". Ver el catálogo completo en utils/standings.js.
+    // `tiebreakers` — la lista ORDENADA de criterios de desempate. Nace por
+    //   juegos ganados (ganados → entre sí → diferencia de puntos), que es el
+    //   orden más común en las ligas de esta app. Es configurable por rama
+    //   porque no existe un orden universal: ONEFA y la NFL juegan el mismo
+    //   deporte y ordenan distinto (una por ganados, la otra por porcentaje).
+    //   Ver el catálogo completo en utils/standings.js.
     //
     // `tiebreaker_mode` — qué hacer cuando empatan TRES o más. 'restart'
-    //   (FIBA/FIFA) reinicia el reglamento desde el primer criterio en cuanto
-    //   uno se separa, porque el universo "entre sí" cambió. 'sequential'
-    //   (NFL) sigue con el criterio siguiente. No es un detalle: dan órdenes
-    //   distintos sobre los mismos partidos.
+    //   reinicia el reglamento desde el primer criterio en cuanto uno se
+    //   separa, porque al irse ese equipo el universo "entre sí" ya son otros
+    //   partidos. 'sequential' sigue con el criterio siguiente. No es un
+    //   detalle: dan órdenes distintos sobre los mismos partidos.
     //
     // `points_win/draw/loss` — nullable. En NULL (el default) la tabla se
     //   ordena por % de ganados, como en americano. Con valores, se ordena por
@@ -1475,9 +1479,9 @@ export async function initSchema() {
     await run(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS standings_levels JSONB NOT NULL DEFAULT '["branch"]'::jsonb`);
     await run(`
       ALTER TABLE branches ADD COLUMN IF NOT EXISTS tiebreakers JSONB NOT NULL
-      DEFAULT '["win_pct","h2h_win_pct","scope_win_pct","common_win_pct","point_diff","points_for"]'::jsonb
+      DEFAULT '["wins","h2h_wins","point_diff","points_for"]'::jsonb
     `);
-    await run(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS tiebreaker_mode TEXT NOT NULL DEFAULT 'sequential'`);
+    await run(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS tiebreaker_mode TEXT NOT NULL DEFAULT 'restart'`);
     await run(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS points_win INTEGER`);
     await run(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS points_draw INTEGER`);
     await run(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS points_loss INTEGER`);
@@ -1565,6 +1569,49 @@ export async function initSchema() {
       )
     `);
     await run(`CREATE INDEX IF NOT EXISTS idx_phase_qual_phase ON phase_qualifications(phase_id)`);
+
+    // ── Los nombres reales de los sistemas de competencia ────────────────
+    //
+    // La primera versión de `phases.type` usaba 'regular' / 'knockout' /
+    // 'placement', que describen el PAPEL de la fase dentro del torneo, no
+    // cómo se juega — y encima mezclaban ese papel con si la fase cuenta para
+    // la tabla, que ya es una columna aparte. Ahora el tipo dice el SISTEMA DE
+    // COMPETENCIA por su nombre (todos contra todos, eliminación directa,
+    // sistema suizo…), que es un concepto que no le pertenece a ningún
+    // deporte. Ver utils/matchPhase.js.
+    //
+    // El CHECK se rehace (DROP + ADD es idempotente; ADD solo, no) y los
+    // valores viejos se traducen antes, para que ninguna fila quede fuera del
+    // constraint nuevo.
+    await run(`
+      UPDATE phases SET type = CASE type
+        WHEN 'regular'   THEN 'round_robin'
+        WHEN 'knockout'  THEN 'single_elimination'
+        WHEN 'placement' THEN 'single_elimination'
+        ELSE type
+      END
+      WHERE type IN ('regular', 'knockout', 'placement')
+    `);
+    await run(`ALTER TABLE phases DROP CONSTRAINT IF EXISTS phases_type_check`);
+    await run(`
+      ALTER TABLE phases ADD CONSTRAINT phases_type_check CHECK (type IN (
+        'round_robin', 'double_round_robin', 'groups', 'swiss',
+        'single_elimination', 'double_elimination', 'series', 'exhibition'
+      ))
+    `);
+    await run(`ALTER TABLE phases ALTER COLUMN type SET DEFAULT 'round_robin'`);
+
+    // Las ramas que todavía traen el default VIEJO de desempates pasan al
+    // nuevo (ganados en vez de porcentaje). La guarda por igualdad exacta es
+    // lo que hace esto seguro de repetir y respetuoso: si una liga ya
+    // reordenó sus criterios, su lista no coincide con la vieja y no se toca.
+    await run(`
+      UPDATE branches
+      SET tiebreakers     = '["wins","h2h_wins","point_diff","points_for"]'::jsonb,
+          tiebreaker_mode = 'restart'
+      WHERE tiebreakers = '["win_pct","h2h_win_pct","scope_win_pct","common_win_pct","point_diff","points_for"]'::jsonb
+        AND tiebreaker_mode = 'sequential'
+    `);
   } finally {
     // Se suelta el candado y se libera la conexión pase lo que pase
     await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY]).catch(() => {});

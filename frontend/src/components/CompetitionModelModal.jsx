@@ -126,7 +126,7 @@ export default function CompetitionModelModal({ branch, token, onClose }) {
 
 function PhasesTab({ branch, token, phases, phaseTypes, onChanged, setError, hasConferences, hasGroups, weekLabels }) {
   const [name, setName] = useState('');
-  const [type, setType] = useState('regular');
+  const [type, setType] = useState('round_robin');
   const [adopt, setAdopt] = useState([]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
@@ -146,7 +146,7 @@ function PhasesTab({ branch, token, phases, phaseTypes, onChanged, setError, has
       if (creada.adopted > 0) {
         setNote(`Se asignaron ${creada.adopted} partido${creada.adopted === 1 ? '' : 's'} a “${creada.name}”.`);
       }
-      setName(''); setType('regular'); setAdopt([]);
+      setName(''); setType('round_robin'); setAdopt([]);
       await onChanged();
     } catch (e2) { setError(e2.message); }
     setBusy(false);
@@ -169,10 +169,12 @@ function PhasesTab({ branch, token, phases, phaseTypes, onChanged, setError, has
   return (
     <div>
       <p className="competition-help">
-        La fase dice <strong>qué se está jugando</strong>. Es lo que permite que la tabla de
-        posiciones cuente la temporada regular y deje fuera playoffs y amistosos.
-        Si no creas ninguna, la fase se deduce de la jornada del partido
-        (FINAL, SEMIFINAL, PLAYOFF y SCRIMMAGE no cuentan) — así que tu tabla
+        Cada fase declara su <strong>sistema de competencia</strong>: todos contra todos,
+        fase de grupos, eliminación directa, sistema suizo. Eso describe cómo se juega, y
+        aparte se dice si cuenta o no para la tabla — son dos cosas distintas (hay ligas
+        donde el repechaje sí suma).
+        Si no creas ninguna fase, se deduce de la jornada del partido
+        (FINAL, SEMIFINAL, PLAYOFF y SCRIMMAGE no cuentan), así que tu tabla
         sale bien desde hoy sin capturar nada.
       </p>
 
@@ -455,13 +457,13 @@ function FormatTab({ branch, token, catalog, config, hasConferences, hasGroups, 
       <div className="field" style={{ marginTop: 16 }}>
         <label>Si empatan tres o más</label>
         <select value={mode} onChange={(e) => { setMode(e.target.value); setSaved(false); }}>
-          <option value="sequential">Seguir con el criterio siguiente (estilo NFL)</option>
-          <option value="restart">Reiniciar el reglamento al separarse uno (estilo FIBA/FIFA)</option>
+          <option value="restart">Reiniciar el reglamento con los que queden</option>
+          <option value="sequential">Seguir con el criterio siguiente</option>
         </select>
         <p className="competition-help">
-          No es lo mismo: al salir un equipo del empate, el criterio "entre sí" se calcula
-          sobre otros partidos. Reiniciar vuelve a preguntarlo; seguir de largo usa números
-          de un grupo que ya cambió.
+          No es lo mismo: al salir un equipo del empate, el criterio "entre sí" pasa a
+          calcularse sobre otros partidos. Reiniciar vuelve a preguntarlo con los que
+          quedan; seguir de largo usa números de un grupo que ya cambió.
         </p>
       </div>
 
@@ -486,7 +488,10 @@ function FormatTab({ branch, token, catalog, config, hasConferences, hasGroups, 
             ))}
           </div>
         ) : (
-          <p className="competition-help">Sin puntos, la tabla se ordena por porcentaje de ganados, como en americano.</p>
+          <p className="competition-help">
+            Sin sistema de puntos, la tabla se ordena por el primer criterio de tu lista
+            de arriba — juegos ganados o porcentaje de ganados, según cuál hayas puesto.
+          </p>
         )}
       </div>
 
@@ -506,8 +511,13 @@ function TitlesTab({ branch, token, titles, phases, standings, hasConferences, h
   const [form, setForm] = useState({ name: '', scope: 'branch', decided_by: 'match', phase_id: '' });
   const [busy, setBusy] = useState(false);
 
-  const knockoutPhases = phases.filter((p) => p.type !== 'regular');
-  const usablePhases = knockoutPhases.length ? knockoutPhases : phases;
+  // Un título que se gana en un partido casi siempre se juega en una fase de
+  // eliminación. Se ofrecen esas primero; si la rama no tiene ninguna, se
+  // ofrecen todas, porque hay torneos donde la final es el último juego del
+  // todos-contra-todos y no una fase aparte.
+  const ELIMINACION = ['single_elimination', 'double_elimination', 'series'];
+  const deEliminacion = phases.filter((p) => ELIMINACION.includes(p.type));
+  const usablePhases = deEliminacion.length ? deEliminacion : phases;
 
   async function add(e) {
     e.preventDefault();
@@ -538,10 +548,12 @@ function TitlesTab({ branch, token, titles, phases, standings, hasConferences, h
   return (
     <div>
       <p className="competition-help">
-        Un título por cada nivel donde tu liga corona campeón. La NFL tendría tres
-        (división, conferencia y Super Bowl); una liga de todos contra todos con final,
-        uno solo. <strong>Si no hay campeón general, no crees ese título</strong> — así es
-        como se representa una liga sin juegos entre conferencias.
+        Un título por cada nivel donde tu liga corona campeón. Una liga de todos contra
+        todos con final tiene uno solo; una con dos conferencias que no se cruzan tiene
+        uno por conferencia y ninguno general; una con divisiones dentro de conferencias
+        puede tener los tres niveles. <strong>Si no hay campeón general, no crees ese
+        título</strong> — esa ausencia es justo como se representa que las conferencias
+        no se enfrentan entre sí.
       </p>
 
       {titles.length === 0 ? (

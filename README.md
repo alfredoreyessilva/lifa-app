@@ -19,7 +19,7 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 ## Cambios recientes importantes (septiembre 2026)
 
 - **Tabla de posiciones y modelo de competencia (2026-09-16)**: la app ya sabía qué partidos se juegan, pero no **cómo se compite** — no había forma de decir que una liga corona campeón por conferencia y otra tiene un solo campeón general. Se agregaron tres piezas: **`phases`** (qué se está jugando, que es lo que permite que la tabla cuente la temporada regular y deje fuera playoffs y amistosos), **`titles`** (a qué nivel se corona campeón) y la configuración de la tabla por rama (niveles publicados + reglamento de desempates). Con `scope` + `decided_by` caben sin casos especiales la NFL (campeón de división, de conferencia y Super Bowl), ONEFA (dos campeones de conferencia y **ningún** campeón general — esa ausencia es justo cómo se representa que no hay juegos interconferencia) y LFA (un solo campeón). La jerarquía quedó alineada con el modelo estándar de la industria (Sportradar/SportMonks/IPTC SportsML), que ya era casi la que había. Ver la sección **"Tabla de posiciones y modelo de competencia"**.
-  La fase y el campeón se resuelven **al leer**, no se migra nada: un partido sin `phase_id` deduce su fase de `week_label` como siempre, y el campeón sale de la tabla o del partido decisivo (`title_overrides` guarda solo la excepción). Los desempates son **configurables por rama** porque no existe un orden universal: cada criterio es un par (métrica, universo), y lo que separa a NFL de FIFA de FIBA es en qué posición va el "entre sí" y qué se hace cuando empatan tres o más.
+  La fase y el campeón se resuelven **al leer**, no se migra nada: un partido sin `phase_id` deduce su fase de `week_label` como siempre, y el campeón sale de la tabla o del partido decisivo (`title_overrides` guarda solo la excepción). Los desempates son **configurables por rama** porque no existe un orden universal — **ni siquiera dentro de un mismo deporte**: ONEFA ordena por juegos ganados y la NFL por porcentaje, ambas de americano. Cada criterio es un par (métrica, universo), y lo que separa a un reglamento de otro es en qué posición va el "entre sí" y qué se hace cuando empatan tres o más. Por lo mismo, ni los sistemas de competencia ni los preconfigurados de desempate se nombran por un deporte: un sistema de competencia (todos contra todos, eliminación directa, sistema suizo) no le pertenece a ninguno.
   **Verificado contra la base real** con LFA 2025 y leyendo ONEFA 2026 (ver "Verificado contra la base real" en esa sección). De ahí salieron dos bugs que las pruebas unitarias no podían encontrar: el estado de un partido terminado es `'finished'`, no `'final'` —la tabla habría salido toda en ceros— y crear una fase no servía de nada si había que reasignarle los partidos a mano. También se unificó `utils/scoring.js`: los puntos de la quiniela ahora salen de la fase resuelta y no de la etiqueta de jornada, con el ranking del concurso en curso comprobado renglón por renglón (36 participantes, 433 puntos, cero diferencias).
 
 - **La conferencia se dice una vez por equipo, no una vez por partido (2026-09-16)**: hasta ahora, al capturar cada juego había que elegirle rama, conferencia y grupo en el formulario. Eso era dato **derivado capturado como dato primario**: el hecho estable es "este equipo juega en esta conferencia", y a qué conferencia pertenece un partido es consecuencia de qué equipos lo juegan. En ONEFA eran ~130 selecciones de dropdown que no tenían por qué existir. Ahora la conferencia/grupo se registra en **`branch_teams`** (la tabla que ya decía qué equipos están inscritos en cada rama) y el partido la hereda. Queda separado por temporada **sin trabajo extra**: una rama cuelga de categoría → torneo, y el torneo tiene año, así que mover un equipo de conferencia el año que entra no reescribe a qué conferencia perteneció el pasado.
@@ -849,10 +849,30 @@ contra el concurso en curso (mismo resultado exacto), y ahora una liga que
 llame "Liguilla" a su fase final también reparte los 2 puntos, cosa que antes
 no pasaba porque su etiqueta no estaba en la lista.
 
-**1. `phases` — qué se está jugando.** Cuelga de la rama. Tipo (`regular`,
-`knockout`, `placement`, `exhibition`) y `counts_for_standings`. Sin esto no
-hay tabla posible: sumaría playoffs y scrimmages junto con la temporada
-regular.
+**1. `phases` — qué se está jugando, y con qué sistema.** Cuelga de la rama.
+Sin esto no hay tabla posible: sumaría playoffs y amistosos junto con la
+temporada regular.
+
+Cada fase declara su **sistema de competencia** por su nombre real, que es un
+concepto que **no le pertenece a ningún deporte** — el mismo todos-contra-todos
+lo usa la LFA, la Champions y un torneo de ajedrez:
+
+| `type` | Qué es |
+|---|---|
+| `round_robin` | Todos contra todos — cada uno enfrenta a los demás una vez |
+| `double_round_robin` | Todos contra todos, ida y vuelta |
+| `groups` | Fase de grupos — todos contra todos dentro de cada grupo |
+| `swiss` | Sistema suizo — nadie queda eliminado, cada ronda empareja registros parecidos |
+| `single_elimination` | Eliminación directa — el que pierde queda fuera |
+| `double_elimination` | Eliminación doble — hacen falta dos derrotas |
+| `series` | Serie — el cruce se decide al mejor de varios juegos |
+| `exhibition` | Amistoso o pretemporada |
+
+Que una fase **cuente para la tabla** es una pregunta aparte
+(`counts_for_standings`), y a propósito: no se deduce del sistema. Hay ligas
+donde el repechaje suma a la tabla general y otras donde no. La primera
+versión de esto los tenía mezclados en un solo campo (`regular` describía las
+dos cosas a la vez), lo que obligaba al formato a mentir para decir si contaba.
 
 Ese dato **ya existía**, pero como texto libre dentro de `week_label`
 (`'PLAYOFF'`, `'SEMIFINAL'`, `'FINAL'`, `'SCRIMMAGE'`), con la lista repetida
@@ -899,20 +919,41 @@ de ganados, puntos, diferencia, anotados, recibidos) medida sobre un
 | `all` | todos los del equipo en la rama |
 | `head_to_head` | solo los jugados **entre los equipos empatados** |
 | `scope` | solo dentro de su grupo/conferencia |
-| `common` | rivales que **todos** los empatados enfrentaron (NFL, mínimo 4 juegos) |
+| `common` | rivales que **todos** los empatados enfrentaron (mínimo 4) |
 
 Con esos dos ejes se arma cualquier reglamento sin escribir código nuevo, y la
 diferencia de fondo entre ligas — la que en México se dice "diferencia
 particular vs general" — es solo **en qué posición de la lista va el
-head-to-head**. Por eso la lista es configurable por rama: no existe un orden
-universal. Vienen cuatro preconfigurados (americano, FIBA, FIFA, simple) como
-punto de partida, no como jaula.
+head-to-head**.
+
+**Por eso la lista es configurable por rama, y por eso los preconfigurados se
+nombran por lo que hacen y no por un deporte.** ONEFA y la NFL juegan el mismo
+deporte y ordenan distinto: ONEFA por **juegos ganados**, la NFL por
+**porcentaje**. Llamarle "el de americano" a cualquiera de los dos sería falso
+además de inútil para quien lo configura. Los cuatro puntos de partida son:
+
+| Preconfigurado | Orden |
+|---|---|
+| **Por juegos ganados** (default) | ganados → entre sí → diferencia de puntos → anotados |
+| **Por porcentaje de ganados** | % ganados → entre sí → dentro del grupo → rivales en común → diferencia |
+| **Por puntos de tabla** | puntos (3-1-0) → entre sí (pts, dif, anotados) → diferencia general |
+| **Entre sí, hasta agotarlo** | ganados → entre sí (ganados, dif, anotados) → diferencia general |
+
+El default es **por juegos ganados** porque es el orden de las ligas de esta
+app —es literalmente el reglamento de ONEFA: ganados, luego el juego entre
+ellos, y si no se enfrentaron, diferencia de puntos— y porque "ganó más
+juegos" se entiende sin explicación. Una liga cuyos equipos no jueguen el
+mismo número de partidos cambia a porcentaje en un clic: con 3-1 contra 2-0,
+por ganados va arriba el de 3-1 y por porcentaje el de 2-0. Hay una prueba
+que fija esa diferencia, y dos más que fijan el reglamento de ONEFA en sus
+dos casos (los empatados **se enfrentaron** / **no se enfrentaron**).
 
 **El empate de tres o más es donde casi toda implementación casera falla.**
-Ordenar tres empatados de corrido no da lo que dice el reglamento. FIBA y FIFA
-lo especifican: se arma una sub-clasificación solo entre los empatados y, en
-cuanto uno se separa, se **reinicia desde el primer criterio** con los que
-quedan — porque al salir un equipo, el universo "entre sí" ya son otros
+Ordenar tres empatados de corrido no da lo que dice el reglamento. Los
+reglamentos que se molestan en especificarlo (FIBA y FIFA lo escriben con
+todas sus letras) coinciden: se arma una sub-clasificación solo entre los
+empatados y, en cuanto uno se separa, se **reinicia desde el primer criterio**
+con los que quedan — porque al salir un equipo, el universo "entre sí" ya son otros
 partidos. NFL lo hace al revés (elimina primero y sigue de largo), así que hay
 dos modos: `restart` y `sequential`. No es cosmético: dan órdenes distintos
 sobre los mismos partidos, y hay una prueba que lo demuestra con el mismo

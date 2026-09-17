@@ -150,7 +150,7 @@ test('empate de dos se rompe con el resultado entre sí, aunque el otro tenga me
       game(2, 4, 10, 0),   // B gana
       game(4, 3, 10, 0),   // D le gana a C
     ],
-    config: TIEBREAKER_PRESETS.americano,
+    config: TIEBREAKER_PRESETS.porcentaje,
   });
 
   assert.deepEqual(order(rows).slice(0, 2), [2, 1]);
@@ -173,7 +173,7 @@ test('empate circular de tres: entre sí no separa a nadie y se pasa al criterio
       game(2, 4, 30, 0),
       game(3, 4, 10, 0),
     ],
-    config: TIEBREAKER_PRESETS.fiba,
+    config: TIEBREAKER_PRESETS.entre_si,
   });
 
   assert.deepEqual(order(rows), [1, 2, 3, 4]);
@@ -201,11 +201,11 @@ test('modo restart: al separarse uno, los que quedan vuelven al primer criterio'
   const rows = computeStandings({
     teams: [team(1), team(2), team(3), team(4)],
     matches: TRIANGULO,
-    config: { ...TIEBREAKER_PRESETS.fiba, multi_team_mode: 'restart' },
+    config: { ...TIEBREAKER_PRESETS.entre_si, multi_team_mode: 'restart' },
   });
 
   assert.deepEqual(order(rows), [3, 1, 2, 4]);
-  assert.equal(rows[0].resolved_by, 'h2h_win_pct');
+  assert.equal(rows[0].resolved_by, 'h2h_wins');
 });
 
 test('modo secuencial: los mismos partidos se resuelven con otro criterio', () => {
@@ -217,7 +217,7 @@ test('modo secuencial: los mismos partidos se resuelven con otro criterio', () =
   const rows = computeStandings({
     teams: [team(1), team(2), team(3), team(4)],
     matches: TRIANGULO,
-    config: { ...TIEBREAKER_PRESETS.fiba, multi_team_mode: 'sequential' },
+    config: { ...TIEBREAKER_PRESETS.entre_si, multi_team_mode: 'sequential' },
   });
 
   assert.deepEqual(order(rows), [3, 1, 2, 4]);
@@ -256,7 +256,64 @@ test('si el reglamento se agota, los equipos quedan marcados y no se inventa un 
   assert.equal(rows[1].unresolved_tie, true);
 });
 
-// ── Sistema de puntos (fútbol) ───────────────────────────────────────────
+// ── Reglamentos reales ───────────────────────────────────────────────────
+
+test('ganados por encima de porcentaje: 3-1 va arriba de 2-0', () => {
+  // Es la diferencia entre los dos reglamentos más comunes, y no es teórica:
+  // a media temporada, con equipos que llevan distinto número de juegos, el
+  // orden cambia según cuál se use. ONEFA ordena por juegos GANADOS, así que
+  // el de 3-1 va arriba del invicto de 2-0.
+  const partidos = [
+    game(1, 3, 20, 0), game(1, 4, 20, 0), game(1, 5, 20, 0), game(5, 1, 20, 0), // A: 3-1
+    game(2, 3, 20, 0), game(2, 4, 20, 0),                                        // B: 2-0
+  ];
+  const equipos = [team(1), team(2), team(3), team(4), team(5)];
+
+  const porGanados = computeStandings({ teams: equipos, matches: partidos, config: TIEBREAKER_PRESETS.ganados });
+  assert.deepEqual(order(porGanados).slice(0, 2), [1, 2]);
+
+  const porPorcentaje = computeStandings({ teams: equipos, matches: partidos, config: TIEBREAKER_PRESETS.porcentaje });
+  assert.deepEqual(order(porPorcentaje).slice(0, 2), [2, 1]);
+});
+
+test('ONEFA: empatados en ganados que SÍ se enfrentaron — manda ese juego', () => {
+  // Primera mitad del reglamento de ONEFA: ganados, y el empate lo rompe el
+  // juego entre ellos. A y B quedan 2-1; A le ganó a B, así que A va arriba.
+  const rows = computeStandings({
+    teams: [team(1), team(2), team(3), team(4)],
+    matches: [
+      game(1, 2, 21, 14),  // A le gana a B
+      game(1, 3, 21, 0),   // A gana
+      game(4, 1, 21, 0),   // A pierde  -> A 2-1
+      game(2, 3, 21, 0),   // B gana
+      game(2, 4, 21, 0),   // B gana    -> B 2-1
+    ],
+    config: TIEBREAKER_PRESETS.ganados,
+  });
+
+  assert.deepEqual(order(rows).slice(0, 2), [1, 2]);
+  assert.equal(rows[0].resolved_by, 'h2h_wins');
+});
+
+test('ONEFA: empatados en ganados que NO se enfrentaron — manda la diferencia', () => {
+  // Segunda mitad, y la que se olvida al implementar: si los empatados nunca
+  // jugaron entre sí, el criterio "entre sí" no puede decidir nada. Tiene que
+  // SALTARSE en silencio y dejar que resuelva la diferencia de puntos — no
+  // dejarlos igualados ni inventar un ganador.
+  const rows = computeStandings({
+    teams: [team(1), team(2), team(3), team(4)],
+    matches: [
+      game(1, 3, 40, 0),   // A gana por 40
+      game(2, 4, 10, 0),   // B gana por 10  (A y B nunca se enfrentan)
+    ],
+    config: TIEBREAKER_PRESETS.ganados,
+  });
+
+  assert.deepEqual(order(rows), [1, 2, 4, 3]);
+  assert.equal(rows[0].resolved_by, 'point_diff');
+});
+
+// ── Sistema de puntos ────────────────────────────────────────────────────
 
 test('con sistema de puntos la tabla se ordena por puntos, no por % de ganados', () => {
   // A: 1 ganado y 2 empatados = 5 pts en 3 juegos (33% de ganados).
@@ -272,7 +329,7 @@ test('con sistema de puntos la tabla se ordena por puntos, no por % de ganados',
       game(2, 4, 3, 0),
       game(3, 2, 2, 0),
     ],
-    config: TIEBREAKER_PRESETS.fifa,
+    config: TIEBREAKER_PRESETS.puntos,
   });
 
   const a = rows.find((r) => r.team_id === 1);

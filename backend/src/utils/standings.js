@@ -2,9 +2,9 @@
 //
 // Todo aquí es función PURA — recibe equipos, partidos y configuración, y
 // devuelve la tabla ya ordenada. No toca la base de datos a propósito: el
-// algoritmo de desempate real (el que exigen FIBA, FIFA y NFL) no se puede
-// expresar en SQL sin volverse ilegible, y así se puede probar de verdad,
-// caso por caso, con `node --test` y sin Postgres de por medio.
+// algoritmo de desempate real no se puede expresar en SQL sin volverse
+// ilegible, y así se puede probar de verdad, caso por caso, con `node --test`
+// y sin Postgres de por medio.
 //
 // ── Por qué un catálogo y no una lista fija de criterios ──
 //
@@ -19,48 +19,57 @@
 //                  head_to_head → SOLO los jugados entre los equipos empatados
 //                  scope        → solo dentro del grupo/conferencia de la tabla
 //                  common       → rivales que TODOS los empatados enfrentaron
-//                                 (exclusivo de NFL, exige mínimo 4 juegos)
 //
-// Con esos dos ejes se arma cualquier reglamento sin escribir código nuevo:
+// Con esos dos ejes se arma cualquier reglamento sin escribir código nuevo.
+// Reglamentos reales que se revisaron al diseñar esto, y que el modelo
+// expresa sin casos especiales (van como comprobación, NO como categorías
+// que la app ofrezca — un reglamento no le pertenece a un deporte):
 //
+//   ONEFA           ganados → entre sí → diferencia de puntos
 //   NFL (división)  entre sí → % división → % conferencia → rivales en común
 //   FIBA            puntos → entre sí → diferencia → anotados
 //   FIFA/UEFA       puntos → entre sí (pts, dif, goles) → diferencia general
 //
-// La diferencia de fondo entre reglamentos — la que en México se dice
-// "diferencia particular vs general" — es solo EN QUÉ POSICIÓN de la lista
-// va el head-to-head. Por eso la lista es configurable por rama y no una
-// constante: no existe un orden universal que sirva para todas las ligas.
+// Nótese que ONEFA y NFL son el MISMO deporte y ordenan distinto: una por
+// juegos ganados, la otra por porcentaje. Eso es exactamente por qué la lista
+// es configurable por rama y no una constante — no existe un orden universal,
+// ni siquiera dentro de un deporte.
 //
 // ── El empate de tres o más, que es donde casi todos se equivocan ──
 //
 // Ordenar tres equipos empatados de corrido NO da el mismo resultado que
-// dice el reglamento. FIBA y FIFA lo especifican explícitamente: se arma una
+// dice el reglamento. Los reglamentos que se molestan en especificarlo (FIBA
+// y FIFA lo escriben con todas sus letras) dicen lo mismo: se arma una
 // sub-clasificación SOLO entre los empatados y, en cuanto uno se separa, se
 // REINICIA desde el primer criterio con los que quedan. La razón es que al
 // salir un equipo del grupo, el universo "entre sí" cambia — ya no son los
 // mismos partidos — así que seguir con el criterio siguiente usaría números
 // calculados sobre un conjunto que ya no existe.
 //
-// NFL lo resuelve al revés (elimina primero a todos menos el mejor de cada
-// división y luego recomienza), así que los dos modos están disponibles:
-// `multi_team_mode: 'restart'` (FIBA/FIFA, el default) y `'sequential'`.
+// Otros reglamentos lo resuelven al revés y siguen de largo con el criterio
+// siguiente (la NFL, por ejemplo, elimina primero a todos menos al mejor de
+// cada división y luego recomienza). Por eso hay dos modos:
+//
+//   restart    → al separarse uno, se vuelve al primer criterio. Es el default
+//                porque es el que no usa números de un grupo que ya cambió.
+//   sequential → se sigue con el criterio siguiente.
 
 // ── Catálogo de criterios ────────────────────────────────────────────────
 //
 // `lower_is_better` es solo para puntos en contra: menos es mejor. Todo lo
 // demás se ordena de mayor a menor.
 //
-// `min_games` existe por los rivales en común de NFL: el reglamento dice que
-// el criterio no aplica si hay menos de cuatro juegos comparables. Cuando no
-// se cumple, el criterio se SALTA (no desempata, no elimina a nadie) y se
-// pasa al siguiente — que es distinto a que todos queden iguales.
+// `min_games` es para los criterios que exigen una muestra mínima: el de
+// rivales en común no aplica si los empatados no comparten al menos cuatro
+// (umbral tomado del reglamento de la NFL, que es donde está especificado).
+// Cuando no se cumple, el criterio se SALTA — no desempata ni elimina a
+// nadie — y se pasa al siguiente, que es distinto a que todos queden iguales.
 export const TIEBREAKER_CATALOG = {
   // Primarios — normalmente el primero de la lista
   win_pct: {
     metric: 'win_pct', universe: 'all',
     label: '% de ganados (general)',
-    help: 'Empates cuentan medio juego, como en americano.',
+    help: 'El empate cuenta como medio juego ganado.',
   },
   wins: {
     metric: 'wins', universe: 'all',
@@ -73,6 +82,11 @@ export const TIEBREAKER_CATALOG = {
   },
 
   // Entre sí — el head-to-head
+  h2h_wins: {
+    metric: 'wins', universe: 'head_to_head',
+    label: 'Entre sí — juegos ganados',
+    help: 'Si los empatados no se enfrentaron, no separa a nadie y pasa al criterio siguiente.',
+  },
   h2h_win_pct: {
     metric: 'win_pct', universe: 'head_to_head',
     label: 'Entre sí — % de ganados',
@@ -100,11 +114,11 @@ export const TIEBREAKER_CATALOG = {
     label: 'Diferencia de puntos dentro del grupo/conferencia',
   },
 
-  // Rivales en común (NFL)
+  // Rivales en común
   common_win_pct: {
     metric: 'win_pct', universe: 'common', min_games: 4,
     label: '% de ganados ante rivales en común',
-    help: 'No aplica si hay menos de 4 juegos comparables (regla NFL).',
+    help: 'No aplica si los empatados no comparten al menos 4 rivales.',
   },
 
   // Generales
@@ -124,42 +138,49 @@ export const TIEBREAKER_CATALOG = {
 
 // ── Reglamentos preconfigurados ──────────────────────────────────────────
 //
-// No son "los reglamentos oficiales" completos: son el punto de partida más
-// cercano para que una liga no empiece desde una lista vacía. Los últimos
-// criterios de NFL (fuerza de victoria, fuerza de calendario, ranking
-// combinado de anotación) no están en el catálogo porque en ligas de esta
-// escala no se han necesitado nunca; si alguna vez hacen falta, se agregan
-// al catálogo y aparecen solas en el selector.
+// Se nombran por LO QUE HACEN, no por dónde se vieron por primera vez. Un
+// reglamento de desempate no le pertenece a un deporte ni a una liga: ONEFA y
+// la NFL juegan el mismo deporte y ordenan distinto (ONEFA por juegos
+// ganados, la NFL por porcentaje), así que llamarle "el de americano" a
+// cualquiera de los dos sería falso además de inútil para quien lo configura.
+//
+// Son un punto de partida para no empezar desde una lista vacía. Lo normal es
+// tomar el más cercano y reordenarlo: el reglamento de cada competencia lo
+// escribe la competencia, no esta app.
 export const TIEBREAKER_PRESETS = {
-  americano: {
-    label: 'Americano (estilo NFL)',
-    description: 'Entre sí, luego récord dentro del grupo, luego conferencia y rivales en común.',
+  ganados: {
+    label: 'Por juegos ganados',
+    description: 'Ordena por cuántos ganó. Si dos empatan manda el juego entre ellos, y si no se enfrentaron, la diferencia de puntos.',
+    tiebreakers: ['wins', 'h2h_wins', 'point_diff', 'points_for'],
+    multi_team_mode: 'restart',
+  },
+  porcentaje: {
+    label: 'Por porcentaje de ganados',
+    description: 'Para cuando no todos juegan el mismo número de partidos (descansos, calendarios disparejos): 3-1 vale más que 2-0 por ganados, pero menos por porcentaje.',
     tiebreakers: ['win_pct', 'h2h_win_pct', 'scope_win_pct', 'common_win_pct', 'point_diff', 'points_for'],
     multi_team_mode: 'sequential',
   },
-  fiba: {
-    label: 'Baloncesto (estilo FIBA)',
-    description: 'Entre sí completo (ganados, diferencia, anotados) antes que cualquier número general.',
-    tiebreakers: ['win_pct', 'h2h_win_pct', 'h2h_point_diff', 'h2h_points_for', 'point_diff', 'points_for'],
-    multi_team_mode: 'restart',
-  },
-  fifa: {
-    label: 'Fútbol (estilo FIFA/UEFA)',
-    description: 'Puntos de tabla, entre sí, y después diferencia general.',
+  puntos: {
+    label: 'Por puntos de tabla',
+    description: 'Cada resultado vale puntos (3 por ganar, 1 por empatar). Útil donde el empate es un resultado común.',
     tiebreakers: ['points', 'h2h_points', 'h2h_point_diff', 'h2h_points_for', 'point_diff', 'points_for'],
     multi_team_mode: 'restart',
     points_win: 3, points_draw: 1, points_loss: 0,
   },
-  simple: {
-    label: 'Simple',
-    description: 'Ganados, entre sí, diferencia de puntos. Para torneos cortos.',
-    tiebreakers: ['win_pct', 'h2h_win_pct', 'point_diff', 'points_for'],
+  entre_si: {
+    label: 'Entre sí, hasta agotarlo',
+    description: 'Los juegos entre los empatados deciden casi todo: primero quién ganó, luego por cuánto, luego cuánto anotó. Solo si eso no alcanza se miran los números generales.',
+    tiebreakers: ['wins', 'h2h_wins', 'h2h_point_diff', 'h2h_points_for', 'point_diff', 'points_for'],
     multi_team_mode: 'restart',
   },
 };
 
-export const DEFAULT_TIEBREAKERS = TIEBREAKER_PRESETS.americano.tiebreakers;
-
+// El default de una rama nueva. Juegos ganados es lo más común en las ligas
+// de esta app (es el reglamento de ONEFA, por ejemplo) y es el que menos
+// sorprende: "ganó más juegos" se entiende sin explicación. Una liga que
+// necesite porcentaje —porque sus equipos no juegan el mismo número de
+// partidos— lo cambia en un clic.
+export const DEFAULT_TIEBREAKERS = TIEBREAKER_PRESETS.ganados.tiebreakers;
 // Un partido cuenta para la tabla solo si terminó y tiene los dos marcadores.
 // Un partido "finalizado" sin marcador capturado no se inventa como 0-0: se
 // ignora, igual que hace el ranking de predicciones con los no calificables.

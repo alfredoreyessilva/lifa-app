@@ -1,4 +1,4 @@
-import { MATCH_PHASE_TYPE_SQL } from './matchPhase.js';
+import { MATCH_PHASE_TYPE_SQL, ELIMINATION_TYPES } from './matchPhase.js';
 
 // Lógica de calificación de predicciones, compartida por todos los rankings
 // (calendario, quiniela, tarjeta de jugador) para que todos usen exactamente
@@ -46,15 +46,16 @@ export const PREDICTION_CORRECT_SQL = `(
 // Puntos que vale este renglón de predicción: 0 si no acertó (o el partido
 // aún no termina), 2 por acierto en fase final y 1 en cualquier otro caso.
 //
-// "Fase final" ya NO se lee de la etiqueta de jornada: se pregunta a la fase
-// del partido (utils/matchPhase.js), que cuando no hay fase capturada deriva
-// de esa misma etiqueta. O sea: para todo lo que existe hoy da EXACTAMENTE el
+// "Fase final" ya NO se lee de la etiqueta de jornada: se pregunta al SISTEMA
+// DE COMPETENCIA de la fase (utils/matchPhase.js) y vale doble en los de
+// eliminación, donde perder te deja fuera. Cuando el partido no tiene fase
+// capturada, ese sistema se deriva de esa misma etiqueta. O sea: para todo lo que existe hoy da EXACTAMENTE el
 // mismo resultado —se verificó contra el concurso en curso, renglón por
 // renglón— y a partir de ahora una liga que llame "Liguilla" a su fase final
 // también reparte los 2 puntos, cosa que antes no pasaba.
 export const PREDICTION_POINTS_SQL = `
   CASE WHEN ${PREDICTION_CORRECT_SQL}
-    THEN (CASE WHEN ${MATCH_PHASE_TYPE_SQL} = 'knockout' THEN 2 ELSE 1 END)
+    THEN (CASE WHEN ${MATCH_PHASE_TYPE_SQL} IN (${ELIMINATION_TYPES.map((t) => `'${t}'`).join(', ')}) THEN 2 ELSE 1 END)
     ELSE 0 END
 `;
 

@@ -5,10 +5,10 @@ import StandingsTable from './StandingsTable.jsx';
 // abajo las tablas del nivel que se esté viendo.
 //
 // Una rama puede tener VARIOS niveles de tabla a la vez (por grupo, por
-// conferencia, y general) porque así son las competencias reales — NFL tiene
-// los tres. Se muestran como pestañas y no todas apiladas: apiladas, la
-// pantalla de una liga con 8 grupos sería un muro de tablas donde no se
-// encuentra nada.
+// conferencia, y general) porque así son las competencias reales: hay ligas
+// que publican los tres. Se muestran como pestañas y no todas apiladas —
+// apiladas, la pantalla de una liga con 8 grupos sería un muro de tablas
+// donde no se encuentra nada.
 //
 // Si la liga configuró un solo nivel (el caso más común), no hay pestañas:
 // se ve la tabla y ya.
