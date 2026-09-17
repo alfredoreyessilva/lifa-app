@@ -937,9 +937,13 @@ además de inútil para quien lo configura. Los cuatro puntos de partida son:
 | Preconfigurado | Orden |
 |---|---|
 | **Por juegos ganados** (default) | ganados → entre sí → diferencia de puntos → anotados |
-| **Por porcentaje de ganados** | % ganados → entre sí → dentro del grupo → rivales en común → diferencia |
-| **Por puntos de tabla** | puntos (3-1-0) → entre sí (pts, dif, anotados) → diferencia general |
-| **Entre sí, hasta agotarlo** | ganados → entre sí (ganados, dif, anotados) → diferencia general |
+| **Por porcentaje de ganados** | % ganados → entre sí → dentro del grupo → rivales en común → diferencia → anotados |
+| **Por puntos de tabla** | puntos (3-1-0) → entre sí (pts, dif, anotados) → diferencia → anotados |
+| **Entre sí, hasta agotarlo** | ganados → entre sí (ganados, dif, anotados) → diferencia → anotados |
+
+El criterio que hace posible ese orden es `h2h_wins` ("entre sí — juegos
+ganados"): si los empatados no se enfrentaron, no separa a nadie y deja pasar
+al siguiente, que es exactamente lo que pide el reglamento.
 
 El default es **por juegos ganados** porque es el orden de las ligas de esta
 app —es literalmente el reglamento de ONEFA: ganados, luego el juego entre
@@ -970,8 +974,8 @@ comparten casi todo el calendario, **sin mínimo**; entre equipos de divisiones
 distintas, que pueden compartir dos rivales, **mínimo cuatro**, para no decidir
 un campeonato sobre ruido.
 
-Por eso van como **dos criterios** en el catálogo y no como un número
-configurable: la lista de desempates sigue siendo un arreglo de nombres —
+Por eso van como **dos criterios** en el catálogo (`common_win_pct` y
+`common_win_pct_min4`) y no como un número configurable: la lista de desempates sigue siendo un arreglo de nombres —
 simple de guardar, de mandar y de reordenar en pantalla — y la elección queda
 escrita y auditable en vez de deducida por el código a espaldas de quien
 configura. Hay dos pruebas con los **mismos partidos** donde cada variante da
@@ -1132,10 +1136,19 @@ pruebas se deshizo; la base quedó igual.
   con sus cuatro secciones, alta de fase con adopción, alta de título, y el
   campeón apareciendo en la página pública. En teléfono la tabla **cabe sin
   deslizar** (se ocultan escudo, PF y PC; DIF ya resume a esas dos).
+- Tras corregir el reglamento de ONEFA: sus tablas ordenan por **juegos
+  ganados**, y como los empatados en 2-0 no se enfrentaron, el criterio "entre
+  sí" se salta solo y decide la diferencia de puntos — la regla tal cual.
+- Migraciones corridas **dos veces seguidas** sin dejar candados colgados, y el
+  arranque sigue en 9s (ver "El candado de migración").
+- Reglamento por nivel, con la NFL configurada de verdad: tabla de división y
+  de conferencia con procedimientos propios y la general heredando el base.
 
-Dos bugs que solo aparecieron contra datos reales, y que ninguna prueba
-unitaria podía encontrar porque el dato de prueba lo inventaba el mismo código
-que se estaba probando:
+Lo que encontró salir del código y probar de verdad — ninguno lo podía
+atrapar una prueba unitaria, porque en todos el dato de prueba lo inventaba el
+mismo código que se estaba probando:
+
+**Contra la base real:**
 
 1. **El estado era `'finished'`, no `'final'`.** La primera versión comparaba
    contra un valor inventado, así que la tabla habría salido **toda en ceros**.
@@ -1148,6 +1161,20 @@ que se estaba probando:
    133 partidos en ONEFA eso no era aceptable. Al crear una fase se pueden
    adoptar las jornadas que ya existen (`adopt_week_labels`), y eso solo toca
    los partidos que no tienen fase propia.
+3. **El candado de migración estaba filtrado en una conexión ociosa.** Salió al
+   colgarse un script de prueba; es lo más grave de la lista porque habría
+   colgado el siguiente arranque del servidor. Tiene sección propia más abajo.
+
+**En el navegador:**
+
+4. **El formulario de fase seguía mandando `'regular'`** después de renombrar
+   los sistemas de competencia — un valor que ya no existe. Crear una fase sin
+   tocar el selector habría fallado. Lo destapó crear una de verdad, no leer el
+   código.
+5. **Aplicar un preconfigurado dentro de un nivel no surtía efecto.**
+   `setCriterios` y `setModo` se llaman en el mismo evento y ambos partían del
+   mismo objeto de estado viejo, así que el segundo pisaba al primero y el
+   cambio se perdía en silencio. Pasan a la forma funcional de `setState`.
 
 ### Lo que queda abierto
 
