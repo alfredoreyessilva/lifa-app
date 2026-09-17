@@ -31,6 +31,17 @@ append-only, se resuelve al leer y no se migra) están en
 Solo lo que **falta**. Lo que ya se cerró está en `docs/CHANGELOG.md` con su
 verificación.
 
+- **El proyecto se llama de tres formas distintas, y ninguna está declarada como
+  la oficial.** Este README dice "Calendarios de Fútbol Americano México (LIFA
+  App)", `frontend/src/config/legal.js` habla de **CFBAMX**, y en el código y el
+  roadmap se le dice **LIFA**. No es cosmético: el nombre con el que se emiten
+  los Términos, se factura y se registra un dominio tiene que ser uno solo. Se
+  resuelve al llenar los datos legales, porque ahí se elige la razón social —
+  pero conviene decidirlo a propósito y no que quede el que se escribió primero.
+- **No hay archivo `LICENSE`.** El repositorio no declara nada sobre qué se
+  puede hacer con este código. Es decisión de negocio, no técnica: o el repo es
+  privado, o lleva una licencia propietaria explícita. Hoy no es ninguna de las
+  dos cosas por omisión, no por elección.
 - **Los roles de organización no se distinguen, y ya hay dinero de por medio.**
   `organization_members.role` acepta `owner` / `admin` / `editor`, pero
   `utils/orgMembers.js` los da por equivalentes: `isOrgMember()` acepta los tres
@@ -1619,6 +1630,22 @@ Estas dos siguen apareciendo en `npm audit` del frontend. No es que se nos olvid
   Neon corta del otro lado al dormirse) se emitía sin escucha y eso tiraba el
   proceso entero de Node.
 - JWT guardado en `localStorage` (no en cookie `httpOnly`): trade-off aceptado por simplicidad de configuración entre dominios distintos (Vercel + Render).
+- **Cinco archivos concentran demasiado.** Hoy funcionan y no hay razón para
+  tocarlos, pero es donde va a doler cuando toque:
+
+  | Archivo | Líneas | Qué concentra |
+  |---|---|---|
+  | `frontend/src/styles.css` | 3,800 | **Todos** los estilos de la app, en un solo archivo |
+  | `backend/src/routes/manage.js` | 2,294 | El CRUD entero de liga, torneo, categoría, rama, equipo, sede y partido |
+  | `backend/src/config/db.js` | 1,706 | Las 38 tablas más ~150 migraciones |
+  | `frontend/src/pages/LeagueStructurePanel.jsx` | 1,119 | El árbol completo del panel de liga |
+  | `frontend/src/pages/AdminPanel.jsx` | 977 | Las cuatro pestañas de `/admin` |
+
+  El de `db.js` es el que tiene techo real: el arranque ya tarda 9s corriendo
+  todas las migraciones, y crece con cada una. El día que eso estorbe, la salida
+  es congelar las migraciones viejas en un esquema base y dejar en `db.js` solo
+  las nuevas — pero todavía no estorba, y partirlo antes de tiempo costaría la
+  tolerancia a fallos que hoy da el `SAVEPOINT` por instrucción.
 - **Las invitaciones no caducan.** El esquema de `invites` no tiene `expires_at`
   y el único freno es `used_at`. Un link que nunca se usó sigue sirviendo
   indefinidamente, hasta que alguien genere otro para esa misma organización
