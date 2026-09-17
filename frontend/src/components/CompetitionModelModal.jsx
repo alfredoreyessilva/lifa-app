@@ -564,7 +564,7 @@ function FormatTab({ branch, token, catalog, config, hasConferences, hasGroups, 
             type="checkbox" checked={usePoints}
             onChange={(e) => { setUsePoints(e.target.checked); setSaved(false); }}
           />
-          {' '}Usar sistema de puntos (fútbol)
+          {' '}Usar sistema de puntos
         </label>
         {usePoints ? (
           <div className="competition-points">
