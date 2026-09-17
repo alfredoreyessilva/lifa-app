@@ -2,7 +2,7 @@
 //
 // Contexto: `POST /leagues` tenía 19 placeholders para 18 columnas, así que
 // Postgres rechazaba el INSERT completo y la persona solo veía "Error interno
-// del servidor" (ver README, "Cambios recientes"). Ya está corregido.
+// del servidor" (ver `docs/CHANGELOG.md`). Ya está corregido.
 //
 // La liga fallida NO dejó rastro en la tabla `leagues` — el INSERT nunca entró.
 //
