@@ -3453,3 +3453,334 @@ a.match-card-new {
   .data-table thead th,
   .data-table tbody td { padding: var(--space-2); }
 }
+
+/* ---------- Tabla de posiciones ----------
+   Reusa .data-table (misma rejilla, mismo encabezado pegajoso) y le agrega lo
+   propio de una tabla deportiva: posición, escudo, y las tres cifras que se
+   comparan de un vistazo.
+
+   Los colores se declaran como variables locales para que la MISMA tabla
+   funcione en los dos fondos de la app: sobre la cancha verde (página pública
+   del torneo) y sobre el panel negro de trabajo (.dashboard-panel), donde la
+   segunda regla las repinta con los tokens --ws-*. Sin esto habría que
+   mantener dos componentes iguales con distinto color. */
+.standings-view {
+  --st-line: var(--line);
+  --st-ink-dim: var(--ink-dim);
+  --st-key: var(--flag);
+}
+.dashboard-panel .standings-view {
+  --st-line: var(--ws-line);
+  --st-ink-dim: var(--ws-ink-dim);
+  --st-key: var(--ws-ink);
+}
+
+.standings-block + .standings-block { margin-top: var(--space-5, 20px); }
+
+.standings-scope-name {
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--st-ink-dim);
+  margin: 0 0 8px;
+}
+
+.standings-table .standings-pos {
+  width: 34px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--st-ink-dim);
+}
+/* Todas las cifras con ancho de dígito fijo: sin esto las columnas "bailan"
+   de una fila a otra y la tabla deja de poder leerse en vertical, que es
+   justo para lo que sirve. */
+.standings-table .col-num { font-variant-numeric: tabular-nums; }
+.standings-table .standings-key { font-weight: 700; color: var(--st-key); }
+.standings-pos-diff { color: var(--positive); }
+.standings-neg-diff { color: var(--danger); }
+
+.standings-team { display: flex; align-items: center; gap: 8px; }
+.standings-logo {
+  width: 22px; height: 22px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* El empate que el reglamento no resolvió. Se marca en la fila porque es una
+   acción pendiente de la liga, no un dato más. */
+.standings-flag {
+  font-family: var(--font-eyebrow);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--flag);
+  border: 1px solid var(--flag);
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+/* Los equipos que clasifican a la siguiente fase, cuando la rama lo tiene
+   configurado. Barra a la izquierda en vez de fondo de color: no compite con
+   la cebra de la tabla ni con el hover. */
+.standings-table tbody tr.standings-qualifies td:first-child {
+  box-shadow: inset 3px 0 0 var(--flag);
+}
+
+/* Clasifica por lugar extra (wild card). Se distingue del corte normal
+   porque su razón no está en la posición: es el 3º de un grupo que sí pasa
+   mientras el 3º de otro grupo no. Sin decirlo, la tabla se ve arbitraria. */
+.standings-wildcard {
+  font-family: var(--font-eyebrow);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--st-ink-dim);
+  border: 1px solid var(--st-line);
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+/* ---------- Campeones ---------- */
+.standings-champions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4, 16px);
+  margin-bottom: var(--space-5, 20px);
+}
+.standings-champion-group {
+  flex: 1 1 260px;
+  border: 1px solid var(--st-line);
+  border-radius: var(--radius-md, 8px);
+  padding: 12px 14px;
+}
+.standings-champion-title {
+  font-family: var(--font-eyebrow);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--flag);
+  margin-bottom: 10px;
+}
+.standings-champion-list { display: flex; flex-direction: column; gap: 10px; }
+.standings-champion { display: flex; align-items: center; gap: 10px; }
+.standings-champion-logo { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
+.standings-champion-team { font-weight: 700; line-height: 1.2; }
+.standings-champion-meta { font-size: 11px; color: var(--st-ink-dim); line-height: 1.3; }
+
+.standings-legend {
+  font-size: 11px;
+  color: var(--st-ink-dim);
+  line-height: 1.5;
+  margin-top: 12px;
+}
+
+@media (max-width: 640px) {
+  /* En teléfono sobra el escudo (roba el ancho que necesita el nombre) y
+     sobran PF/PC: son las dos columnas que nadie compara en un celular, y
+     DIF —que sí se mira— ya resume a las dos. Quitándolas la tabla CABE, en
+     vez de obligar a deslizarla de lado para ver el final del renglón.
+     Se marcan con una clase en el <th> y en el <td>, no por posición: las
+     columnas no son fijas (la de empates solo se dibuja si hay empates, y la
+     de récord de conferencia solo en tablas de conferencia), así que un
+     :nth-child ocultaría la columna equivocada según la rama. */
+  .standings-logo { display: none; }
+  .standings-table { font-size: 12px; }
+  .standings-table th.standings-hide-sm,
+  .standings-table td.standings-hide-sm { display: none; }
+  /* Con el relleno normal (.data-table usa var(--space-3) a cada lado) las
+     ocho columnas que quedan siguen sin caber por unos 30px, y el renglón se
+     corta justo en la racha. Apretando solo el relleno lateral la tabla entra
+     completa, sin tocar el alto de la fila ni el tamaño de letra. */
+  .standings-table thead th,
+  .standings-table tbody td { padding-left: 6px; padding-right: 6px; }
+}
+
+/* ---------- Modelo de competencia (fases, títulos, formato de tabla) ----------
+   Vive en un modal ancho: son cuatro secciones con listas editables y una
+   vista previa de la tabla real, que en 480px (el ancho normal de .modal) no
+   se podría leer. */
+.modal:has(.competition-modal) { max-width: 720px; }
+
+.competition-modal .tab-bar { margin-top: 0; }
+
+.competition-help {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-dim);
+  margin: 8px 0 14px;
+}
+.competition-empty {
+  font-size: 13px;
+  color: var(--ink-dim);
+  padding: 14px;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+
+.competition-list { list-style: none; margin: 0 0 14px; padding: 0; }
+.competition-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.competition-list li:last-child { border-bottom: none; }
+.competition-item-name { font-weight: 600; font-size: 14px; }
+.competition-item-meta { font-size: 11px; color: var(--ink-dim); line-height: 1.4; }
+
+/* Lista ORDENADA de criterios: el número no es decorativo, es el orden en que
+   se aplica el reglamento, así que se muestra siempre. */
+.competition-criteria { list-style: none; margin: 0; padding: 0; }
+.competition-criteria li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.competition-criteria-num {
+  flex-shrink: 0;
+  width: 20px; height: 20px;
+  display: grid; place-items: center;
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dim);
+}
+
+.competition-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.competition-checks { display: flex; flex-direction: column; gap: 8px; }
+.competition-checks label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.competition-checks label.is-disabled { opacity: 0.45; }
+
+.competition-points { display: flex; gap: 10px; margin-top: 8px; }
+.competition-points label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 11px; color: var(--ink-dim);
+}
+.competition-points input { width: 70px; }
+
+.competition-add { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.competition-add--stack { flex-direction: column; align-items: stretch; }
+.competition-add input,
+.competition-add select,
+.competition-add-select {
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.competition-add input { flex: 1 1 180px; }
+.competition-add-select { width: 100%; margin-top: 8px; }
+
+.competition-saved { color: var(--positive); font-size: 12px; align-self: center; margin-right: auto; }
+
+/* Interruptor con dos estados visibles.
+
+   No reusa .tree-chip-btn: ese nace con `border: none` porque es una acción
+   sutil dentro de un renglón del árbol (✎, 🗑), no algo que se prenda y se
+   apague. Sin borde no hay nada que colorear al encenderlo, y el usuario no
+   tiene cómo saber que es clicable ni cuál eligió. */
+.competition-chip {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-dim);
+  cursor: pointer;
+  font-size: 11px;
+  font-family: var(--font-eyebrow);
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.competition-chip:hover { color: var(--ink); border-color: var(--line-strong); }
+.competition-chip.is-on {
+  border-color: var(--flag);
+  color: var(--flag);
+  background: rgba(255, 210, 63, 0.12);
+}
+
+/* La vista previa muestra la tabla real dentro del modal, así que necesita
+   los tokens oscuros — el modal va sobre --card, no sobre la cancha. */
+.standings-preview .standings-view {
+  --st-line: var(--line);
+  --st-ink-dim: var(--ink-dim);
+}
+
+/* La fase deja de ser un renglón simple cuando tiene regla de clasificación:
+   pasa a ser un bloque de dos líneas (la fase arriba, el corte abajo). */
+.competition-list li.competition-phase { display: block; }
+.competition-phase-head { display: flex; align-items: center; gap: 6px; }
+
+.competition-qual {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding-left: 12px;
+  border-left: 2px solid var(--flag);
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+.competition-qual input {
+  width: 56px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.competition-qual select {
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+}
+.competition-qual-add {
+  margin-top: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--ink-dim);
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Adopción de partidos por jornada al crear una fase: los chips son las
+   jornadas que ya existen en el calendario y todavía no tienen fase. */
+.competition-adopt {
+  flex-basis: 100%;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+}
+.competition-adopt-title {
+  font-size: 12px;
+  color: var(--ink-dim);
+  margin-bottom: 8px;
+}
+.competition-adopt-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.competition-note {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--positive);
+}

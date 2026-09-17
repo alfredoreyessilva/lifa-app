@@ -172,6 +172,50 @@ export const api = {
   removeTeamFromBranch: (branchId, teamId, token) =>
     request(`/manage/branches/${branchId}/teams/${teamId}`, { method: 'DELETE', token }),
 
+  // Tabla de posiciones y modelo de competencia.
+  //
+  // La tabla pública NO viene dentro del payload del torneo: se pide aparte,
+  // cuando alguien abre esa pestaña. Calcularla en cada carga del calendario
+  // le costaría a todos los visitantes un trabajo que casi ninguno pidió.
+  getBranchStandings: (branchId) => request(`/leagues/branches/${branchId}/standings`),
+  getBranchStandingsAdmin: (branchId, token) =>
+    request(`/manage/branches/${branchId}/standings`, { token }),
+
+  // Catálogo de criterios de desempate, reglamentos preconfigurados y tipos
+  // de fase. Sale del código del backend para que el panel no tenga que
+  // repetir la lista: un criterio nuevo aparece solo, sin tocar el frontend.
+  getStandingsCatalog: (token) => request('/manage/standings-catalog', { token }),
+  updateStandingsConfig: (branchId, payload, token) =>
+    request(`/manage/branches/${branchId}/standings-config`, { method: 'PUT', body: payload, token }),
+
+  // Fases del calendario (temporada regular, playoffs, amistosos…)
+  getPhases: (branchId, token) => request(`/manage/branches/${branchId}/phases`, { token }),
+  createPhase: (branchId, payload, token) =>
+    request(`/manage/branches/${branchId}/phases`, { method: 'POST', body: payload, token }),
+  updatePhase: (phaseId, payload, token) =>
+    request(`/manage/phases/${phaseId}`, { method: 'PUT', body: payload, token }),
+  deletePhase: (phaseId, token) =>
+    request(`/manage/phases/${phaseId}`, { method: 'DELETE', token }),
+  // Clasificación: de esta fase pasan los primeros N de cada grupo/conferencia.
+  setPhaseQualification: (phaseId, payload, token) =>
+    request(`/manage/phases/${phaseId}/qualification`, { method: 'PUT', body: payload, token }),
+  clearPhaseQualification: (phaseId, token) =>
+    request(`/manage/phases/${phaseId}/qualification`, { method: 'DELETE', token }),
+
+  // Títulos: a qué nivel se corona campeón esta rama
+  getTitles: (branchId, token) => request(`/manage/branches/${branchId}/titles`, { token }),
+  createTitle: (branchId, payload, token) =>
+    request(`/manage/branches/${branchId}/titles`, { method: 'POST', body: payload, token }),
+  updateTitle: (titleId, payload, token) =>
+    request(`/manage/titles/${titleId}`, { method: 'PUT', body: payload, token }),
+  deleteTitle: (titleId, token) =>
+    request(`/manage/titles/${titleId}`, { method: 'DELETE', token }),
+  // Campeón puesto a mano — la excepción, no la regla: normalmente se deriva.
+  setTitleWinner: (titleId, payload, token) =>
+    request(`/manage/titles/${titleId}/winner`, { method: 'PUT', body: payload, token }),
+  clearTitleWinner: (titleId, scopeId, token) =>
+    request(`/manage/titles/${titleId}/winner${scopeId ? `?scope_id=${scopeId}` : ''}`, { method: 'DELETE', token }),
+
   // Roster de un equipo DENTRO DE UNA RAMA (reemplaza el roster genérico
   // de equipo, corrección roster-por-rama)
   getBranchTeamRoster: (branchId, teamId, token) =>

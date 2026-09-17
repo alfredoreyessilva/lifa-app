@@ -15,6 +15,7 @@ import InviteTeamModal from '../components/InviteTeamModal.jsx';
 import OrgAdminsPanel from '../components/OrgAdminsPanel.jsx';
 import BranchRosterModal from '../components/BranchRosterModal.jsx';
 import MatchStatsModal from '../components/MatchStatsModal.jsx';
+import CompetitionModelModal from '../components/CompetitionModelModal.jsx';
 import { getTimezoneLabel } from '../utils/timezones.js';
 import { scopeName, matchScopeLabel } from '../utils/matchScope.js';
 
@@ -402,6 +403,7 @@ function BranchBlock({ t, c, b, q, open, onToggle, isOpen, onToggleKey, openKey,
           <button className="btn btn-outline btn-sm" onClick={() => { setModal({ type: 'import-matches', c, b }); openKey(bkey); }}>📥 Excel</button>
           <button className="btn btn-ghost btn-sm" onClick={() => { setModal({ type: 'add-conference', b }); openKey(bkey); }}>+ conf.</button>
           <button className="btn btn-ghost btn-sm" onClick={() => { setModal({ type: 'add-branch-group', b }); openKey(bkey); }}>+ grupo</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'competition-model', b })} title="Fases, tabla de posiciones y campeones">⚙ competencia</button>
           {!b.is_placeholder && (
             <>
               <IconBtn title="Renombrar rama" onClick={() => setModal({ type: 'rename-branch', b })}>✎</IconBtn>
@@ -784,6 +786,10 @@ function TreeModal({ modal, token, leagueId, league, leagueTimezone, teams, venu
     );
   }
 
+  if (type === 'competition-model') {
+    return <CompetitionModelModal branch={modal.b} token={token} onClose={onClose} />;
+  }
+
   // Conferencias
   if (type === 'add-conference') {
     return <PromptModal title={`Nueva conferencia — ${modal.b.name}`} label="Nombre de la conferencia"
@@ -883,6 +889,9 @@ function TreeModal({ modal, token, leagueId, league, leagueTimezone, teams, venu
           // Es de donde el formulario deduce la conferencia del partido en vez
           // de pedir que se elija a mano.
           branchTeams={modal.b.teams || []}
+          // Las fases de esta rama, para poder decir en cuál va el partido.
+          // Si la rama no tiene fases creadas, el campo ni aparece.
+          phases={modal.b.phases || []}
           leagueTimezone={leagueTimezone}
           token={token}
           leagueId={leagueId}

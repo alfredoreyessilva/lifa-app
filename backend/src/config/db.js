@@ -1403,6 +1403,168 @@ export async function initSchema() {
     // derivar — ver resolveScopeSql() en utils/matchScope.js.
     await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS conference_override_id INTEGER REFERENCES conferences(id) ON DELETE SET NULL`);
     await run(`CREATE INDEX IF NOT EXISTS idx_matches_conference_override ON matches(conference_override_id)`);
+
+    // ── Tabla de posiciones y modelo de competencia ──────────────────────
+    //
+    // Tres piezas que se agregan juntas porque una sin las otras no sirve:
+    //
+    //   1. `phases`  — qué se está jugando (regular, playoffs, amistoso). Sin
+    //                  esto no se puede calcular una tabla: no se sabe qué
+    //                  juegos cuentan.
+    //   2. `titles`  — A QUÉ NIVEL se corona campeón esta rama. Es lo que
+    //                  permite que NFL (campeón de división + de conferencia
+    //                  + Super Bowl), ONEFA (dos campeones de conferencia y
+    //                  NINGÚN campeón general) y LFA (un solo campeón) usen
+    //                  el mismo modelo sin casos especiales.
+    //   3. Configuración de la tabla en `branches` — en qué niveles se dibuja
+    //                  y con qué reglamento de desempates.
+    //
+    // La jerarquía completa queda alineada con el modelo estándar de la
+    // industria (Sportradar, SportMonks, IPTC SportsML):
+    //   Liga → Torneo(año) → Categoría → Rama → [Conferencia] → [Grupo]
+    //   con FASE como eje transversal y posiciones colgando de cualquier
+    //   nivel — que es justo lo que SportsML resolvió en su versión 2.1.
+
+    // Una fase del calendario de una rama. Cuelga de la rama (no de la
+    // categoría) porque la rama es donde vive el calendario: los partidos ya
+    // tienen branch_id.
+    await run(`
+      CREATE TABLE IF NOT EXISTS phases (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'regular'
+          CHECK (type IN ('regular', 'knockout', 'placement', 'exhibition')),
+        counts_for_standings BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_phases_branch ON phases(branch_id)`);
+
+    // El partido apunta a su fase. Nullable A PROPÓSITO y para siempre: si
+    // está en NULL, la fase se deriva de `week_label` ('PLAYOFF', 'FINAL',
+    // 'SCRIMMAGE'…), que es donde vivía este dato hasta ahora. Así ninguna
+    // liga tiene que migrar nada para que su tabla salga bien desde el primer
+    // día — ver utils/matchPhase.js, mismo patrón que utils/matchScope.js.
+    await run(`ALTER TABLE matches ADD COLUMN IF NOT EXISTS phase_id INTEGER REFERENCES phases(id) ON DELETE SET NULL`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_matches_phase ON matches(phase_id)`);
+
+    // Configuración de la tabla de posiciones, por rama.
+    //
+    // `standings_levels` — en qué niveles se dibuja tabla. Nace en ["branch"]
+    //   (una sola tabla general) porque es el caso más común y el que no
+    //   sorprende a nadie. Una liga con conferencias agrega "conference", una
+    //   con grupos agrega "group".
+    //
+    // `tiebreakers` — la lista ORDENADA de criterios de desempate. Nace con
+    //   el reglamento de americano porque es el deporte de esta app, pero es
+    //   por rama justamente porque no existe un orden universal: la diferencia
+    //   real entre reglamentos (NFL, FIFA, FIBA) es en qué posición va el
+    //   "entre sí". Ver el catálogo completo en utils/standings.js.
+    //
+    // `tiebreaker_mode` — qué hacer cuando empatan TRES o más. 'restart'
+    //   (FIBA/FIFA) reinicia el reglamento desde el primer criterio en cuanto
+    //   uno se separa, porque el universo "entre sí" cambió. 'sequential'
+    //   (NFL) sigue con el criterio siguiente. No es un detalle: dan órdenes
+    //   distintos sobre los mismos partidos.
+    //
+    // `points_win/draw/loss` — nullable. En NULL (el default) la tabla se
+    //   ordena por % de ganados, como en americano. Con valores, se ordena por
+    //   puntos, como en fútbol.
+    await run(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS standings_levels JSONB NOT NULL DEFAULT '["branch"]'::jsonb`);
+    await run(`
+      ALTER TABLE branches ADD COLUMN IF NOT EXISTS tiebreakers JSONB NOT NULL
+      DEFAULT '["win_pct","h2h_win_pct","scope_win_pct","common_win_pct","point_diff","points_for"]'::jsonb
+    `);
+    await run(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS tiebreaker_mode TEXT NOT NULL DEFAULT 'sequential'`);
+    await run(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS points_win INTEGER`);
+    await run(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS points_draw INTEGER`);
+    await run(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS points_loss INTEGER`);
+
+    // El título: "en esta rama se corona campeón a este nivel".
+    //
+    //   scope      — dónde: toda la rama, cada conferencia, o cada grupo.
+    //   decided_by — cómo: 'standings' (el primer lugar de la tabla, como el
+    //                campeón de división de NFL) o 'match' (el ganador del
+    //                partido decisivo de una fase, como una final).
+    //
+    // Los tres casos que pediste, con las mismas dos columnas:
+    //   NFL   → 3 filas: (group, standings) + (conference, match) + (branch, match)
+    //   ONEFA → 2 filas (conference, match), y NINGUNA con scope='branch'.
+    //           Esa ausencia ES la representación de "no hay interconferencia":
+    //           no hay campeón general porque nadie declaró ese título.
+    //   LFA   → 1 fila: (branch, match).
+    await run(`
+      CREATE TABLE IF NOT EXISTS titles (
+        id SERIAL PRIMARY KEY,
+        branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        scope TEXT NOT NULL CHECK (scope IN ('branch', 'conference', 'group')),
+        decided_by TEXT NOT NULL DEFAULT 'match' CHECK (decided_by IN ('standings', 'match')),
+        phase_id INTEGER REFERENCES phases(id) ON DELETE SET NULL,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_titles_branch ON titles(branch_id)`);
+
+    // El campeón NO se guarda cuando sale solo: se deriva al leer (primer
+    // lugar de la tabla, o ganador del partido de la fase final), igual que
+    // la conferencia de un partido. Esta tabla guarda ÚNICAMENTE la
+    // excepción: "el campeón es este otro, aunque los números digan lo
+    // contrario" — un desempate por sorteo, una sanción, un título compartido.
+    // Mismo papel que matches.conference_override_id.
+    await run(`
+      CREATE TABLE IF NOT EXISTS title_overrides (
+        id SERIAL PRIMARY KEY,
+        title_id INTEGER NOT NULL REFERENCES titles(id) ON DELETE CASCADE,
+        scope_id INTEGER,
+        team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        note TEXT,
+        created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    // Un solo override por (título, alcance concreto). Van como DOS índices
+    // parciales y no como un UNIQUE normal porque en Postgres dos NULL se
+    // consideran distintos entre sí: un UNIQUE(title_id, scope_id) dejaría
+    // meter varios campeones de rama (donde scope_id siempre es NULL).
+    await run(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_title_overrides_scoped
+      ON title_overrides(title_id, scope_id) WHERE scope_id IS NOT NULL
+    `);
+    await run(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_title_overrides_whole
+      ON title_overrides(title_id) WHERE scope_id IS NULL
+    `);
+
+    // Clasificación: quién avanza de una fase a la siguiente. Es OTRA cosa
+    // que el desempate — responde "grupos de 4, pasa el primero de cada uno",
+    // el wild card de NFL, o los 8 mejores terceros del Mundial.
+    //
+    //   top_n       — cuántos avanzan de CADA tabla del alcance.
+    //   plus_best_n — cuántos más, comparando entre sí a los que quedaron en
+    //                 el MISMO lugar de tablas distintas.
+    //   of_rank     — qué lugar se compara (3 = los mejores terceros).
+    //
+    // Esa segunda parte compara equipos que quizá nunca jugaron entre sí, así
+    // que no puede usar "entre sí" y aplica criterios generales — que es
+    // exactamente por qué FIFA cambia de reglamento al rankear terceros.
+    await run(`
+      CREATE TABLE IF NOT EXISTS phase_qualifications (
+        id SERIAL PRIMARY KEY,
+        phase_id INTEGER NOT NULL REFERENCES phases(id) ON DELETE CASCADE,
+        from_scope TEXT NOT NULL DEFAULT 'branch'
+          CHECK (from_scope IN ('branch', 'conference', 'group')),
+        top_n INTEGER NOT NULL DEFAULT 1,
+        plus_best_n INTEGER NOT NULL DEFAULT 0,
+        of_rank INTEGER,
+        target_phase_id INTEGER REFERENCES phases(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_phase_qual_phase ON phase_qualifications(phase_id)`);
   } finally {
     // Se suelta el candado y se libera la conexión pase lo que pase
     await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY]).catch(() => {});

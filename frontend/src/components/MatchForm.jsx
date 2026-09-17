@@ -84,6 +84,10 @@ export default function MatchForm({
   // asignó UNA vez al inscribirlo. De aquí sale la conferencia del partido:
   // ya no se elige juego por juego (ver backend utils/matchScope.js).
   branchTeams,
+  // Fases del calendario de la rama (temporada regular, playoffs…). Si no se
+  // mandan, el campo no aparece y la fase se sigue deduciendo de la jornada,
+  // como siempre — ver backend utils/matchPhase.js.
+  phases,
   leagueTimezone, token, leagueId, categoryId, onVenueCreated, onTeamCreated, onGroupCreated,
   // Nuevo: cuando el formulario NO recibe una Categoría/Rama ya decidida
   // (como pasa en la pantalla "Partidos del Torneo"), se le puede pasar
@@ -131,6 +135,7 @@ export default function MatchForm({
     stream_links: initial?.stream_links || [],
     ticket_links: initial?.ticket_links || [],
     week_label:  parseWeekNumber(initial?.week_label),
+    phase_id:    initial?.phase_id || '',
     home_score:  initial?.home_score  ?? '',
     away_score:  initial?.away_score  ?? '',
     timezone:    defaultTimezone,
@@ -656,6 +661,22 @@ export default function MatchForm({
           </select>
         </div>
       </div>
+
+      {/* La fase solo se pregunta si la rama tiene fases creadas. Sin ellas se
+          deduce de la jornada de arriba, que es como funcionó siempre. */}
+      {(phases || []).length > 0 && (
+        <div className="field">
+          <label>Fase (opcional)</label>
+          <select value={form.phase_id} onChange={(e) => update('phase_id', e.target.value)}>
+            <option value="">Deducir de la jornada</option>
+            {phases.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}{p.counts_for_standings ? '' : ' (no cuenta para la tabla)'}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <LinkListField
         label="Links de transmisión (opcional)"

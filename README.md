@@ -18,6 +18,10 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 
 ## Cambios recientes importantes (septiembre 2026)
 
+- **Tabla de posiciones y modelo de competencia (2026-09-16)**: la app ya sabía qué partidos se juegan, pero no **cómo se compite** — no había forma de decir que una liga corona campeón por conferencia y otra tiene un solo campeón general. Se agregaron tres piezas: **`phases`** (qué se está jugando, que es lo que permite que la tabla cuente la temporada regular y deje fuera playoffs y amistosos), **`titles`** (a qué nivel se corona campeón) y la configuración de la tabla por rama (niveles publicados + reglamento de desempates). Con `scope` + `decided_by` caben sin casos especiales la NFL (campeón de división, de conferencia y Super Bowl), ONEFA (dos campeones de conferencia y **ningún** campeón general — esa ausencia es justo cómo se representa que no hay juegos interconferencia) y LFA (un solo campeón). La jerarquía quedó alineada con el modelo estándar de la industria (Sportradar/SportMonks/IPTC SportsML), que ya era casi la que había. Ver la sección **"Tabla de posiciones y modelo de competencia"**.
+  La fase y el campeón se resuelven **al leer**, no se migra nada: un partido sin `phase_id` deduce su fase de `week_label` como siempre, y el campeón sale de la tabla o del partido decisivo (`title_overrides` guarda solo la excepción). Los desempates son **configurables por rama** porque no existe un orden universal: cada criterio es un par (métrica, universo), y lo que separa a NFL de FIFA de FIBA es en qué posición va el "entre sí" y qué se hace cuando empatan tres o más.
+  **Verificado contra la base real** con LFA 2025 y leyendo ONEFA 2026 (ver "Verificado contra la base real" en esa sección). De ahí salieron dos bugs que las pruebas unitarias no podían encontrar: el estado de un partido terminado es `'finished'`, no `'final'` —la tabla habría salido toda en ceros— y crear una fase no servía de nada si había que reasignarle los partidos a mano. También se unificó `utils/scoring.js`: los puntos de la quiniela ahora salen de la fase resuelta y no de la etiqueta de jornada, con el ranking del concurso en curso comprobado renglón por renglón (36 participantes, 433 puntos, cero diferencias).
+
 - **La conferencia se dice una vez por equipo, no una vez por partido (2026-09-16)**: hasta ahora, al capturar cada juego había que elegirle rama, conferencia y grupo en el formulario. Eso era dato **derivado capturado como dato primario**: el hecho estable es "este equipo juega en esta conferencia", y a qué conferencia pertenece un partido es consecuencia de qué equipos lo juegan. En ONEFA eran ~130 selecciones de dropdown que no tenían por qué existir. Ahora la conferencia/grupo se registra en **`branch_teams`** (la tabla que ya decía qué equipos están inscritos en cada rama) y el partido la hereda. Queda separado por temporada **sin trabajo extra**: una rama cuelga de categoría → torneo, y el torneo tiene año, así que mover un equipo de conferencia el año que entra no reescribe a qué conferencia perteneció el pasado.
   La resolución vive en **un solo lugar**, `backend/src/utils/matchScope.js`, que exporta el fragmento de SQL que usan las tres consultas públicas más el árbol del panel. El orden es: override explícito del partido → la conferencia de los equipos → la del grupo asignado a mano → `matches.conference_id`. Ese último es lo que se capturó a mano antes de este cambio: **se conserva íntegro en la base** y pasa a ser el respaldo para el partido que no tenga de dónde derivar. Como la derivación resuelve **al leer** y no reescribe filas, un partido mal capturado se corrige solo.
   Tres decisiones que no son obvias y que conviene no revertir sin pensarlas. (1) **Se deriva solo cuando los DOS equipos tienen conferencia.** Con uno bastaría para que un amistoso contra un invitado de fuera (que no está en ninguna conferencia) se colara al calendario de la conferencia del rival como si fuera juego oficial — es exactamente el caso del scrimmage contra Whittier College, y por eso ese partido aparece sin conferencia, a propósito. (2) **Un partido entre conferencias distintas pertenece a las dos** (`conference_id` + `conference_id_2`) y sale al filtrar por cualquiera, mismo patrón que ya tenían los grupos con `group_id_2`; nadie lo marca a mano, se detecta solo. (3) El override por partido es **columna nueva** (`matches.conference_override_id`), no la vieja reutilizada, justo para no pisar el respaldo.
@@ -104,6 +108,12 @@ importa. Lo que hay ahí es de prueba y está confirmado como tal.
   especificado con detalle para poder arrancarlo en frío.
 - **Reactivar comisión de Hotel sin Drive**: desde que se quitó Travelpayouts Drive (ver "Cambios recientes" y "Monetización"), el botón 🏨 Hotel no genera comisión. Ya no depende de la aprobación de Booking.com dentro de Travelpayouts (ese flujo se fue junto con Drive) — la alternativa ya integrada en el código es configurar `VITE_HOTEL_AFFILIATE_ID` con un ID de afiliado directo de Booking.com. Falta conseguir/confirmar ese ID y configurarlo en Vercel.
 - **Rellenar los datos legales** — **son cuatro datos y un solo archivo**: `frontend/src/config/legal.js` (razón social o nombre de quien opera, domicilio fiscal, correo de contacto y ciudad/estado de jurisdicción). En cuanto los cuatro tengan contenido, los Términos de Servicio vuelven a publicarse solos y el Aviso de Privacidad queda completo; no hay nada más que tocar. **Hoy `/terminos` no existe** (ver "Cambios recientes"). Es lo único que bloquea cerrar la Fase 1 del roadmap de negocio. Nota de prioridad entre los dos: el **Aviso de Privacidad** es el más urgente, porque sigue público, es el que exige la LFPDPPP y es el link que usa la pantalla de consentimiento de Google — sin razón social ni contacto ARCO está incompleto como aviso legal.
+- **Configurar la competencia de ONEFA** — es captura, no código: su temporada
+  está en curso y todavía no tiene fases ni títulos declarados, así que su
+  página pública no muestra tabla. Se hace desde Estructura → rama →
+  **⚙ competencia**. Ver "Lo que queda abierto" al final de "Tabla de
+  posiciones y modelo de competencia", donde está también lo único de código
+  que quedó suelto de esa línea.
 - **QA visual del panel negro en LeagueStructurePanel/TournamentMatchesPanel**: se envolvió su contenido en `.dashboard-panel` pero no se probó en el navegador.
 - **QA visual de "Invitar administrador"**: el flujo completo (generar link, reclamarlo con una segunda cuenta, ver la liga/equipo aparecer en su "Mi panel", quitar/quedar como último administrador) se verificó por API y directo contra la base de datos, pero no de punta a punta en el navegador.
 - **"Notificaciones" ya muestra contenido real** (cobranza en los dos libros, avisos de partidos, aprobaciones) — lo que falta es que el jugador/tutor tenga bandeja propia. Hoy no puede: `notifications` tiene `CHECK (recipient_type IN ('league','team'))` y los jugadores no tienen cuenta. Por eso los recordatorios de cuotas llegan **agregados a la bandeja del equipo** y el aviso al papá lo dispara el tesorero por WhatsApp.
@@ -157,7 +167,13 @@ lifa-app/
                               matchScope.js (de dónde sale la conferencia/grupo de
                               un partido: se deriva de sus equipos, no se captura.
                               Exporta el SQL que comparten las tres consultas
-                              públicas y el árbol del panel)
+                              públicas y el árbol del panel),
+                              matchPhase.js (de dónde sale la FASE de un partido:
+                              phase_id, o derivada de week_label),
+                              standings.js (catálogo de desempates + motor de
+                              ordenamiento; función pura, se prueba sin Postgres),
+                              branchStandings.js (arma las tablas de una rama y
+                              resuelve sus campeones)
       seed.js                Datos de ejemplo para desarrollo local
     scripts/                 Scripts de diagnóstico y limpieza de un solo uso.
                               Los de SOLO LECTURA usan `pg` directo y sin
@@ -173,7 +189,15 @@ lifa-app/
                               la conferencia que ya tenía repetida en sus partidos;
                               simula por defecto y escribe con --apply, solo en
                               branch_teams (nunca en matches ni predictions).
-    tests/                   Recorridos de punta a punta de cobranza (NO corren en
+                              verify-standings.mjs revisa la tabla de posiciones
+                              (estructura + la tabla ya calculada de una rama);
+                              es de SOLO LECTURA, no escribe ni una fila.
+    tests/
+      unit/                  Pruebas puras, corren en el CI sin base de datos:
+                              validation, timezones y standings — esta última es
+                              sobre todo el reglamento de desempates, que es
+                              donde se falla sin que nadie lo note.
+      (resto)                Recorridos de punta a punta de cobranza (NO corren en
                               el CI: necesitan un backend vivo apuntado a una rama
                               de Neon). Ver backend/tests/README.md
       server.js              Arranque de Express: CORS, rate limiting, rutas, manejo de errores
@@ -192,6 +216,13 @@ lifa-app/
       components/
         FlightSearchWidget.jsx   Botón "✈️ Vuelo" en MatchPage — despliega el
                                  widget de búsqueda de Aviasales (ver "Monetización")
+        StandingsTable.jsx       Una tabla de posiciones. Solo pinta: el orden y
+                                 los desempates ya vienen resueltos del backend
+        StandingsView.jsx        Campeones + pestañas por nivel + las tablas.
+                                 La usan la página pública y la vista previa del panel
+        CompetitionModelModal.jsx  El panel de "⚙ competencia" de una rama:
+                                 Fases · Formato · Títulos · Vista previa
+                                 (ver "Tabla de posiciones y modelo de competencia")
         (resto de components/), context/, api/
       utils/
         matchServices.js      Hotel (buildHotelSearchUrl) y Vuelos (iataForCity,
@@ -768,6 +799,260 @@ mensaje ya armado), inscripciones en línea, convocatorias, y el bloque de
 "oportunidades para el club" (proveedores) — ese último no se construye hasta
 que haya oferta real registrada, porque con espacios vacíos se lee como
 publicidad y abarata justo la pantalla que se quería ver seria.
+## Tabla de posiciones y modelo de competencia
+
+Lo que resuelve: hasta ahora la app sabía **qué partidos se juegan**, pero no
+**cómo se compite**. No había forma de decir que una liga corona campeón por
+conferencia y otra tiene un solo campeón general, ni de calcular una tabla,
+porque faltaba lo más básico: saber qué juegos cuentan.
+
+### Hay un estándar de estructura, y la jerarquía ya cabía en él
+
+Antes de inventar nada se revisó cómo lo modelan los proveedores de datos
+deportivos (Sportradar, SportMonks) y el estándar abierto de la IPTC
+(SportsML-G2, el que usan las agencias de noticias). Los tres convergen en:
+
+```
+Competition → Season → Stage/Phase → Group → Round → Match
+```
+
+Y SportsML resolvió explícitamente, en su versión 2.1, el mismo problema que
+esta sección: **las posiciones cuelgan de cualquier nivel del árbol**
+(torneo, división, fase, ronda), no de uno solo, porque los formatos reales
+no caben en un nivel.
+
+La jerarquía de la app ya coincidía casi exacto — incluso `branches`
+(Varonil/Femenil) es lo que SportsML llama el *gender divider*, el nivel donde
+cuelgan las posiciones generales:
+
+| Estándar | Esta app |
+|---|---|
+| Competition | `leagues` |
+| Season | `tournaments` (tiene `year`) |
+| *(sin equivalente)* | `categories` (Juvenil/Mayor) |
+| Division | `branches` ← **la unidad de competencia**: los partidos cuelgan de aquí |
+| Group | `conferences` → `groups` |
+| Stage/Phase | `phases` ← **esto es lo que faltaba** |
+| Round | `matches.week_label` |
+
+Lo que **no** está estandarizado es "¿dónde se corona campeón?", y no por
+descuido: esas APIs son feeds de lectura, describen lo que pasó. Para una app
+de gestión eso es **configuración**, y se modela declarando un título por cada
+nivel donde exista uno.
+
+### Las tres piezas nuevas
+
+La fase resuelta es también, desde este cambio, lo que decide los **puntos de
+la quiniela** (2 por acierto en fase final): antes eso se leía de `week_label`
+con la lista de etiquetas escrita a mano. Se verificó renglón por renglón
+contra el concurso en curso (mismo resultado exacto), y ahora una liga que
+llame "Liguilla" a su fase final también reparte los 2 puntos, cosa que antes
+no pasaba porque su etiqueta no estaba en la lista.
+
+**1. `phases` — qué se está jugando.** Cuelga de la rama. Tipo (`regular`,
+`knockout`, `placement`, `exhibition`) y `counts_for_standings`. Sin esto no
+hay tabla posible: sumaría playoffs y scrimmages junto con la temporada
+regular.
+
+Ese dato **ya existía**, pero como texto libre dentro de `week_label`
+(`'PLAYOFF'`, `'SEMIFINAL'`, `'FINAL'`, `'SCRIMMAGE'`), con la lista repetida
+a mano en `utils/scoring.js` y en `MatchForm.jsx`. Servía para pintar una
+etiqueta; no alcanza para calcular. `matches.phase_id` es **nullable para
+siempre**: si está en NULL, la fase se deriva de `week_label`. Mismo patrón
+que `matchScope.js` — se resuelve **al leer**, nadie migra nada, y las ligas
+que ya tienen temporada capturada tienen su tabla bien desde el primer día.
+Vive en `backend/src/utils/matchPhase.js`.
+
+**2. `titles` — a qué nivel se corona campeón.** Dos columnas bastan:
+
+```
+titles(branch_id, name, scope, decided_by, phase_id)
+  scope       ∈ branch | conference | group
+  decided_by  ∈ standings | match
+```
+
+Los tres formatos que había que representar, sin un solo caso especial:
+
+- **NFL** → 3 filas: `(group, standings)` campeón de división · `(conference, match)` final de conferencia · `(branch, match)` Super Bowl.
+- **ONEFA Liga Mayor** → 2 filas `(conference, match)`, una por conferencia, y **ninguna con `scope='branch'`**. Esa ausencia *es* la representación de "no hay juegos interconferencia": no hay campeón general porque nadie declaró ese título, y la tabla general tampoco se dibuja.
+- **LFA** → 1 fila: `(branch, match)`.
+
+El campeón **no se guarda**: se deriva al leer (primer lugar de la tabla, o
+ganador del último partido terminado de esa fase dentro de ese alcance).
+`title_overrides` guarda solo la excepción — "el campeón es este otro aunque
+los números digan otra cosa" (sorteo, sanción, título compartido) — igual que
+`matches.conference_override_id`.
+
+**3. Configuración de la tabla, por rama.** `standings_levels` (en qué niveles
+se publica tabla), `tiebreakers` (la lista ordenada de criterios),
+`tiebreaker_mode` y el sistema de puntos opcional.
+
+### Los desempates: cada criterio es un par (métrica, universo)
+
+Revisando los reglamentos reales (NFL, FIFA, UEFA, FIBA) resulta que todos se
+escriben con las mismas piezas. Cada criterio es una **métrica** (ganados, %
+de ganados, puntos, diferencia, anotados, recibidos) medida sobre un
+**universo**:
+
+| Universo | Qué partidos |
+|---|---|
+| `all` | todos los del equipo en la rama |
+| `head_to_head` | solo los jugados **entre los equipos empatados** |
+| `scope` | solo dentro de su grupo/conferencia |
+| `common` | rivales que **todos** los empatados enfrentaron (NFL, mínimo 4 juegos) |
+
+Con esos dos ejes se arma cualquier reglamento sin escribir código nuevo, y la
+diferencia de fondo entre ligas — la que en México se dice "diferencia
+particular vs general" — es solo **en qué posición de la lista va el
+head-to-head**. Por eso la lista es configurable por rama: no existe un orden
+universal. Vienen cuatro preconfigurados (americano, FIBA, FIFA, simple) como
+punto de partida, no como jaula.
+
+**El empate de tres o más es donde casi toda implementación casera falla.**
+Ordenar tres empatados de corrido no da lo que dice el reglamento. FIBA y FIFA
+lo especifican: se arma una sub-clasificación solo entre los empatados y, en
+cuanto uno se separa, se **reinicia desde el primer criterio** con los que
+quedan — porque al salir un equipo, el universo "entre sí" ya son otros
+partidos. NFL lo hace al revés (elimina primero y sigue de largo), así que hay
+dos modos: `restart` y `sequential`. No es cosmético: dan órdenes distintos
+sobre los mismos partidos, y hay una prueba que lo demuestra con el mismo
+juego de datos.
+
+### Clasificación: quién avanza (otra cosa que el desempate)
+
+`phase_qualifications` responde "grupos de 4, pasa el primero de cada uno", el
+wild card de NFL, o los mejores terceros del Mundial:
+
+```
+phase_qualifications(phase_id, from_scope, top_n, plus_best_n, of_rank, target_phase_id)
+```
+
+`top_n` sale de **cada** tabla del alcance; `plus_best_n` compara entre sí a
+los que quedaron en el **mismo lugar** de tablas distintas. Esa segunda parte
+compara equipos que quizá nunca jugaron entre sí, así que no puede usar "entre
+sí" y aplica criterios generales — que es exactamente por qué FIFA cambia de
+reglamento al rankear terceros lugares. En el panel se configura por fase
+(`top_n` + alcance); `computeQualification()` implementa además la parte de
+`plus_best_n`, con pruebas, pero esa mitad todavía no tiene control en la UI.
+
+### Dónde vive
+
+```
+backend/src/utils/standings.js        El catálogo de criterios, los reglamentos
+                                      preconfigurados y el motor de ordenamiento.
+                                      Función PURA, sin base de datos: por eso se
+                                      puede probar caso por caso con node --test.
+backend/src/utils/matchPhase.js       De dónde sale la fase de un partido
+                                      (phase_id, o derivada de week_label).
+backend/src/utils/branchStandings.js  Junta la base con el motor: arma todas las
+                                      tablas de una rama y resuelve los campeones.
+backend/tests/unit/standings.test.mjs 16 pruebas, casi todas del reglamento de
+                                      desempates (que es donde está el riesgo).
+backend/scripts/verify-standings.mjs  Verificación de SOLO LECTURA contra la base
+                                      real: revisa estructura e imprime la tabla ya
+                                      calculada, para comparar con lo que la liga
+                                      tiene a mano. No escribe nada.
+frontend/src/components/
+  StandingsTable.jsx                  Una tabla.
+  StandingsView.jsx                   Campeones + pestañas por nivel + tablas.
+  CompetitionModelModal.jsx           El panel: Fases · Formato · Títulos · Vista previa.
+```
+
+### Endpoints
+
+| Método | Ruta | Para qué |
+|---|---|---|
+| GET | `/api/leagues/branches/:branchId/standings` | Público. Tabla de una rama (solo si la liga está publicada) |
+| GET | `/api/manage/branches/:branchId/standings` | La misma, con la configuración, para el panel |
+| GET | `/api/manage/standings-catalog` | Criterios, reglamentos preconfigurados y tipos de fase |
+| PUT | `/api/manage/branches/:branchId/standings-config` | Niveles, desempates, modo, sistema de puntos |
+| GET POST | `/api/manage/branches/:branchId/phases` | Fases de la rama. El GET devuelve `{ phases, week_labels }`: las jornadas con partidos sin fase, para poder adoptarlas |
+| PUT DELETE | `/api/manage/phases/:phaseId` | Editar/borrar fase |
+| PUT DELETE | `/api/manage/phases/:phaseId/qualification` | Quién clasifica desde esa fase |
+| GET POST | `/api/manage/branches/:branchId/titles` | Títulos de la rama |
+| PUT DELETE | `/api/manage/titles/:titleId` | Editar/borrar título |
+| PUT DELETE | `/api/manage/titles/:titleId/winner` | Campeón a mano (la excepción) |
+
+La tabla pública va como endpoint **aparte** y no dentro del payload del
+torneo a propósito: solo hace falta cuando alguien abre esa pestaña, y
+calcularla en cada carga del calendario le costaría a todos los visitantes un
+trabajo que casi ninguno pidió.
+
+### Decisiones que parecen detalles y no lo son
+
+- **Un partido "finalizado" sin marcador no cuenta.** El atajo obvio
+  (`Number.isFinite(Number(x))`) no sirve: `Number(null)` es `0`, así que un
+  partido sin capturar entraría a la tabla como un 0-0 inventado, regalándole
+  un empate a los dos equipos. Lo encontró una prueba.
+- **Un juego contra alguien que no está en la tabla se ignora.** Un amistoso
+  contra un invitado de fuera no puede alterar el récord dentro de la
+  competencia. Mismo criterio que ya usaba `matchScope.js`.
+- **Un equipo sin partidos queda arriba del que ya perdió.** Los dos van a 0%,
+  y en diferencia de puntos el que no jugó está en 0 contra el −10 del que
+  perdió. Es la aplicación literal del reglamento, no un caso especial: quien
+  no ha jugado tampoco ha perdido.
+- **Un empate que el reglamento no resolvió se marca en la tabla** en vez de
+  quedarse con el orden que salió. Y un título cuyo primer lugar sigue
+  empatado **no corona a nadie**: sería inventar un campeón a partir del orden
+  de un array.
+- **Borrar una fase no borra sus partidos**: quedan con `phase_id` en NULL y
+  su fase vuelve a derivarse de `week_label`.
+- **Los tres valores del sistema de puntos van juntos o no van.** Dejar
+  `points_win` puesto y `points_draw` en NULL daría una tabla sumada con un
+  reglamento a medias.
+
+### Verificado contra la base real (2026-09-16)
+
+Se probó con los datos de **LFA 2025** (temporada cerrada, sin quiniela activa)
+y se leyó **ONEFA 2026** sin escribirle nada. Todo lo que escribieron las
+pruebas se deshizo; la base quedó igual.
+
+- Migraciones aplicadas y `scripts/verify-standings.mjs` en verde.
+- Tabla de LFA correcta: 8 equipos, 8 juegos cada uno. Los 3 partidos de
+  postemporada quedaron fuera **sin que nadie capturara una fase** — salieron
+  de `week_label`, que era justo la promesa del diseño.
+- Desempates verificados a mano: OSOS 2º sobre CAUDILLOS (les ganó 35-21 en la
+  J7) y DINOS 5º sobre RAPTORS (44-43 en la J4). Detalle fino que salió bien:
+  **la semifinal OSOS-CAUDILLOS no se usó para desempatar**, porque un partido
+  que no cuenta para la tabla tampoco cuenta para el "entre sí".
+- Campeón derivado del partido de la final (MEXICAS), override manual, y la
+  adopción de jornadas: 3 partidos asignados de un golpe.
+- ONEFA: sus dos conferencias producen dos tablas (14 Grandes con 14 equipos,
+  Nacional con 18) y la columna "en conferencia" se separa del récord general.
+- **El ranking de predicciones en curso no se movió**: 36 participantes, 433
+  puntos, cero diferencias entre el SQL viejo y el nuevo.
+- Navegador (Playwright): pestaña pública de Posiciones, modal ⚙ competencia
+  con sus cuatro secciones, alta de fase con adopción, alta de título, y el
+  campeón apareciendo en la página pública. En teléfono la tabla **cabe sin
+  deslizar** (se ocultan escudo, PF y PC; DIF ya resume a esas dos).
+
+Dos bugs que solo aparecieron contra datos reales, y que ninguna prueba
+unitaria podía encontrar porque el dato de prueba lo inventaba el mismo código
+que se estaba probando:
+
+1. **El estado era `'finished'`, no `'final'`.** La primera versión comparaba
+   contra un valor inventado, así que la tabla habría salido **toda en ceros**.
+   Peor: la regla real de "ya terminó" ni siquiera es esa comparación — un
+   partido en `'scheduled'` también terminó si su categoría tiene auto-status y
+   ya pasó la ventana. Ahora la tabla usa `MATCH_IS_FINAL_SQL` de
+   `utils/scoring.js`, la misma que los rankings de predicciones, y el motor
+   recibe `is_final` ya resuelto en vez de mirar `status`.
+2. **Crear una fase no servía de nada sin reasignar los partidos a mano.** Con
+   133 partidos en ONEFA eso no era aceptable. Al crear una fase se pueden
+   adoptar las jornadas que ya existen (`adopt_week_labels`), y eso solo toca
+   los partidos que no tienen fase propia.
+
+### Lo que queda abierto
+
+- **Configurar ONEFA**: su temporada está en curso y su estructura (2
+  conferencias, la Nacional con grupos) todavía no tiene fases ni títulos
+  declarados. Se verificó que sus tablas salen bien; declarar sus títulos es
+  decisión de la liga, no de esta entrega.
+- `computeQualification` reparte los lugares extra comparando entre tablas del
+  mismo nivel, pero el orden de esa comparación usa criterios generales fijos
+  (% de ganados → diferencia → anotados) y todavía no es configurable como sí
+  lo es el desempate normal.
+
 ## Roster de jugadores (plantilla de Excel)
 
 Reemplaza el flujo real de la liga ("le mando el Excel al equipo por WhatsApp y
@@ -1046,7 +1331,7 @@ adelantó al resto: es lo que hace que el admin de la liga vuelva cada semana.
 ### Gratuitas — para enganchar
 
 **Para ligas**
-- Tabla de posiciones automática (PG-PP-PE, desempates configurables) — hoy se arma a mano.
+- ~~Tabla de posiciones automática (PG-PP-PE, desempates configurables)~~ — **hecho y verificado contra datos reales (septiembre 2026)**, ver "Tabla de posiciones y modelo de competencia".
 - Generador de rol de juegos (round-robin por conferencias, respeta sedes compartidas y byes).
 - Credencial digital de jugador con QR — el registro de roster (alta manual, traspasos, plantilla de Excel con logos/CURP/foto) **ya existe**, ver sección "Roster de jugadores" más arriba; falta la parte de credencial/QR para resolver disputas de elegibilidad en la cancha.
 - Asignación de cuerpo arbitral (quién pita qué partido, disponibilidad, tarifa) — no existe.

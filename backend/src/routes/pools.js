@@ -4,7 +4,7 @@ import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isNonEmptyString } from '../utils/validation.js';
-import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL, PREDICTION_POINTS_SQL } from '../utils/scoring.js';
+import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL, PREDICTION_POINTS_SQL, MATCH_IS_EXHIBITION_SQL } from '../utils/scoring.js';
 
 const router = express.Router();
 
@@ -101,7 +101,7 @@ router.get('/:code/ranking', authRequired, asyncHandler(async (req, res) => {
     // (playoff / semifinal / final), los partidos de scrimmage no cuentan, y un
     // partido no reparte puntos hasta que YA TERMINÓ (no basta el marcador
     // parcial mientras sigue en vivo).
-    const notScrimmage = "m.week_label IS DISTINCT FROM 'SCRIMMAGE'";
+    const notScrimmage = `NOT ${MATCH_IS_EXHIBITION_SQL}`;
     rows = await db.prepare(`
       SELECT
         u.id AS user_id,

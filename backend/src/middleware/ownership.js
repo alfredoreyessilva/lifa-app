@@ -264,3 +264,43 @@ export const branchTeamOwnerRequired = asyncHandler(async (req, res, next) => {
   }
   return res.status(403).json({ error: 'No tienes permiso sobre el roster de este equipo en esta rama' });
 });
+
+// Fase de una rama. Mismo encadenamiento que conferenceOwnerRequired: la
+// fase cuelga de la rama, la rama de la categoría y la categoría de la liga,
+// que es donde vive el permiso.
+export const phaseOwnerRequired = asyncHandler(async (req, res, next) => {
+  const phaseId = Number(req.params.phaseId);
+  const phase = await db.prepare('SELECT * FROM phases WHERE id = ?').get(phaseId);
+  if (!phase) return res.status(404).json({ error: 'Fase no encontrada' });
+  const branch = await db.prepare('SELECT * FROM branches WHERE id = ?').get(phase.branch_id);
+  const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(branch.category_id);
+  const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(category.league_id);
+  const isMember = await isOrgMember(req.user.id, league.organization_id);
+  if (req.user.role === 'admin' || isMember || league.owner_user_id === req.user.id) {
+    req.league = league;
+    req.category = category;
+    req.branch = branch;
+    req.phase = phase;
+    return next();
+  }
+  return res.status(403).json({ error: 'No tienes permiso sobre esta fase' });
+});
+
+// Título (campeonato) de una rama — mismo encadenamiento que la fase.
+export const titleOwnerRequired = asyncHandler(async (req, res, next) => {
+  const titleId = Number(req.params.titleId);
+  const title = await db.prepare('SELECT * FROM titles WHERE id = ?').get(titleId);
+  if (!title) return res.status(404).json({ error: 'Título no encontrado' });
+  const branch = await db.prepare('SELECT * FROM branches WHERE id = ?').get(title.branch_id);
+  const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(branch.category_id);
+  const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(category.league_id);
+  const isMember = await isOrgMember(req.user.id, league.organization_id);
+  if (req.user.role === 'admin' || isMember || league.owner_user_id === req.user.id) {
+    req.league = league;
+    req.category = category;
+    req.branch = branch;
+    req.title = title;
+    return next();
+  }
+  return res.status(403).json({ error: 'No tienes permiso sobre este título' });
+});

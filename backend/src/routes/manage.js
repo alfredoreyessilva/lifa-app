@@ -3,7 +3,7 @@ import multer from 'multer';
 import * as XLSX from 'xlsx';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
-import { categoryOwnerRequired, matchOwnerRequired, leagueOwnerRequired, teamOwnerRequired, venueOwnerRequired, groupOwnerRequired, branchOwnerRequired, conferenceOwnerRequired, tournamentOwnerRequired } from '../middleware/ownership.js';
+import { categoryOwnerRequired, matchOwnerRequired, leagueOwnerRequired, teamOwnerRequired, venueOwnerRequired, groupOwnerRequired, branchOwnerRequired, conferenceOwnerRequired, tournamentOwnerRequired, phaseOwnerRequired, titleOwnerRequired } from '../middleware/ownership.js';
 import { isValidEmail, isValidUrl, isValidGoogleMapsUrl, isNonEmptyString } from '../utils/validation.js';
 import {
   isValidTimezone,
@@ -14,6 +14,9 @@ import {
 } from '../utils/timezones.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { notifyMatchFollowers } from '../utils/pushNotifier.js';
+import { PHASE_TYPES, PHASE_TYPE_KEYS } from '../utils/matchPhase.js';
+import { TIEBREAKER_CATALOG, TIEBREAKER_PRESETS } from '../utils/standings.js';
+import { buildBranchStandings } from '../utils/branchStandings.js';
 
 const router = express.Router();
 
@@ -683,7 +686,7 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
   // navegador. La única conversión a UTC autoritativa ocurre aquí, en el
   // backend, usando la zona horaria explícita del partido (nunca la zona
   // ambiente del servidor ni la del navegador de quien lo captura).
-  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, conference_id, conference_override_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, branch_id } = req.body;
+  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, conference_id, conference_override_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, branch_id, phase_id } = req.body;
   if (!isNonEmptyString(home_team) || !isNonEmptyString(away_team) || !match_date_local) {
     return res.status(400).json({ error: 'Se requieren equipo local, visitante y fecha' });
   }
@@ -702,8 +705,8 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
   const awayTeamId = await resolveTeamId(req.category, away_team);
 
   const result = await db.prepare(`
-    INSERT INTO matches (category_id, branch_id, home_team, away_team, home_team_id, away_team_id, match_date, venue_id, group_id, group_id_2, conference_id, conference_override_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO matches (category_id, branch_id, home_team, away_team, home_team_id, away_team_id, match_date, venue_id, group_id, group_id_2, conference_id, conference_override_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, phase_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.category.id,
     branch_id || null,
@@ -734,8 +737,11 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
     away_score === '' || away_score === undefined ? null : away_score,
     // Se guarda SIEMPRE la zona ya resuelta (nunca null), para que el
     // partido nunca quede con una zona horaria ambigua en la base de datos.
-    effectiveTimezone
-
+    effectiveTimezone,
+    // Fase del calendario (temporada regular, playoffs…). En null se deriva
+    // de week_label al leer — ver utils/matchPhase.js — así que ninguna liga
+    // tiene que capturarla para que su tabla de posiciones salga bien.
+    phase_id || null,
   );
 
   res.status(201).json(await db.prepare('SELECT * FROM matches WHERE id = ?').get(result.lastInsertRowid));
@@ -1289,7 +1295,7 @@ router.post(
 router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
   // match_date_local: igual que en creación, el string crudo del input
   // <datetime-local> (o ausente, si esta edición no toca la fecha/hora).
-  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, conference_id, conference_override_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, branch_id, category_id, is_draft } = req.body;
+  const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, conference_id, conference_override_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, branch_id, category_id, is_draft, phase_id } = req.body;
   const m = req.match;
 
   const effectiveCategoryId = category_id || m.category_id;
@@ -1388,7 +1394,8 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
       status       = COALESCE(?, status),
       home_score   = COALESCE(?, home_score),
       away_score   = COALESCE(?, away_score),
-      timezone     = COALESCE(?, timezone)
+      timezone     = COALESCE(?, timezone),
+      phase_id     = ?
     WHERE id = ?
   `).run(
     toNull(home_team), toNull(away_team),
@@ -1403,7 +1410,11 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
     toNull(category_id),
     toNull(is_draft),
     toLinksJson(stream_links), toLinksJson(ticket_links), toNull(week_label), toNull(status),
-    toNull(home_score), toNull(away_score), toNull(resolvedTimezone), m.id
+    toNull(home_score), toNull(away_score), toNull(resolvedTimezone),
+    // Se escribe directo (sin COALESCE) para poder BORRAR la fase mandando
+    // null; con COALESCE, quitarla una vez puesta seria imposible.
+    phase_id !== undefined ? (phase_id || null) : m.phase_id,
+    m.id
   );
 
   const updatedMatch = await db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id);
@@ -1869,5 +1880,376 @@ router.get('/leagues/:leagueId/manage', authRequired, leagueOwnerRequired, async
   const venues = await db.prepare('SELECT * FROM venues WHERE league_id = ? ORDER BY sort_order ASC, name ASC').all(league.id);
   res.json({ league, categories: categoriesWithMatches, teams, venues });
 }));
+
+
+// ── Fases, títulos y tabla de posiciones ─────────────────────────────────
+//
+// Las tres cosas viven juntas porque son el mismo modelo: la FASE dice qué
+// juegos cuentan, la TABLA los cuenta, y el TÍTULO dice a qué nivel de esa
+// tabla (o de qué partido) sale un campeón. Ver utils/standings.js para el
+// reglamento de desempates y utils/branchStandings.js para el armado.
+
+// Catálogo para poblar los selectores del panel. Es estático — sale del
+// código, no de la base — así que el frontend no tiene que repetir la lista
+// de criterios ni las etiquetas: si mañana se agrega un criterio nuevo al
+// catálogo, aparece solo en el panel sin tocar el frontend.
+router.get('/standings-catalog', authRequired, asyncHandler(async (req, res) => {
+  res.json({
+    tiebreakers: Object.entries(TIEBREAKER_CATALOG).map(([key, def]) => ({
+      key, label: def.label, help: def.help || null, universe: def.universe,
+    })),
+    presets: Object.entries(TIEBREAKER_PRESETS).map(([key, p]) => ({
+      key, label: p.label, description: p.description,
+      tiebreakers: p.tiebreakers, multi_team_mode: p.multi_team_mode,
+      points_win: p.points_win ?? null,
+      points_draw: p.points_draw ?? null,
+      points_loss: p.points_loss ?? null,
+    })),
+    phase_types: Object.entries(PHASE_TYPES).map(([key, p]) => ({
+      key, label: p.label, counts_for_standings: p.counts_for_standings,
+    })),
+  });
+}));
+
+// --- Fases ---
+
+router.get('/branches/:branchId/phases', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  const phases = await db.prepare(`
+    SELECT p.*,
+           (SELECT COUNT(*)::int FROM matches m WHERE m.phase_id = p.id) AS match_count,
+           q.from_scope, q.top_n, q.plus_best_n, q.of_rank, q.target_phase_id
+    FROM phases p
+    LEFT JOIN phase_qualifications q ON q.phase_id = p.id
+    WHERE p.branch_id = ?
+    ORDER BY p.sort_order ASC, p.id ASC
+  `).all(req.branch.id);
+
+  // Las jornadas que ya existen en el calendario de esta rama, y cuántos de
+  // sus partidos siguen SIN fase propia. Es lo que permite crear una fase y
+  // adoptar de un golpe los partidos que ya la tenían escrita como texto —
+  // sin esto, una liga con 133 partidos tendría que editarlos uno por uno.
+  const weekLabels = await db.prepare(`
+    SELECT UPPER(COALESCE(m.week_label, '')) AS label,
+           COUNT(*)::int AS total,
+           COUNT(*) FILTER (WHERE m.phase_id IS NULL)::int AS unassigned
+    FROM matches m
+    WHERE m.branch_id = ? AND m.is_draft = FALSE AND m.week_label IS NOT NULL AND m.week_label <> ''
+    GROUP BY 1
+    ORDER BY 1
+  `).all(req.branch.id);
+
+  res.json({ phases, week_labels: weekLabels });
+}));
+
+router.post('/branches/:branchId/phases', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  const { name, type, counts_for_standings, sort_order, adopt_week_labels } = req.body;
+  if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre de la fase es obligatorio' });
+  if (type !== undefined && !PHASE_TYPE_KEYS.includes(type)) {
+    return res.status(400).json({ error: 'Tipo de fase no válido' });
+  }
+
+  const phaseType = type || 'regular';
+  // Si no se dice explícitamente, el default lo pone el TIPO de fase: una
+  // eliminatoria nace sin contar para la tabla, una regular contando. Que se
+  // pueda cambiar es a propósito: hay ligas donde el repechaje sí suma.
+  const counts = counts_for_standings === undefined
+    ? PHASE_TYPES[phaseType].counts_for_standings
+    : Boolean(counts_for_standings);
+
+  const result = await db.prepare(`
+    INSERT INTO phases (branch_id, name, type, counts_for_standings, sort_order)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(req.branch.id, name.trim(), phaseType, counts, sort_order || 0);
+
+  // Adopción opcional: los partidos de estas jornadas pasan a esta fase. Solo
+  // toca los que NO tienen fase todavía — una fase ya asignada a mano manda
+  // sobre esto y no se pisa nunca.
+  let adopted = 0;
+  const labels = Array.isArray(adopt_week_labels)
+    ? adopt_week_labels.filter((l) => typeof l === 'string' && l.trim()).map((l) => l.trim().toUpperCase())
+    : [];
+  if (labels.length) {
+    const upd = await db.prepare(`
+      UPDATE matches SET phase_id = ?
+      WHERE branch_id = ? AND phase_id IS NULL
+        AND UPPER(COALESCE(week_label, '')) = ANY(?)
+    `).run(result.lastInsertRowid, req.branch.id, labels);
+    adopted = upd.changes;
+  }
+
+  const phase = await db.prepare('SELECT * FROM phases WHERE id = ?').get(result.lastInsertRowid);
+  res.status(201).json({ ...phase, adopted });
+}));
+
+router.put('/phases/:phaseId', authRequired, phaseOwnerRequired, asyncHandler(async (req, res) => {
+  const { name, type, counts_for_standings, sort_order } = req.body;
+  if (name !== undefined && !isNonEmptyString(name)) {
+    return res.status(400).json({ error: 'El nombre de la fase no puede estar vacío' });
+  }
+  if (type !== undefined && !PHASE_TYPE_KEYS.includes(type)) {
+    return res.status(400).json({ error: 'Tipo de fase no válido' });
+  }
+
+  await db.prepare(`
+    UPDATE phases SET
+      name                 = COALESCE(?, name),
+      type                 = COALESCE(?, type),
+      counts_for_standings = COALESCE(?, counts_for_standings),
+      sort_order           = COALESCE(?, sort_order)
+    WHERE id = ?
+  `).run(
+    toNull(name ? name.trim() : name),
+    toNull(type),
+    counts_for_standings === undefined ? null : Boolean(counts_for_standings),
+    toNull(sort_order),
+    req.phase.id,
+  );
+
+  res.json(await db.prepare('SELECT * FROM phases WHERE id = ?').get(req.phase.id));
+}));
+
+// Borrar una fase NO borra sus partidos: quedan con phase_id en NULL y su
+// fase vuelve a derivarse de week_label, que es el respaldo de siempre.
+// Es lo mismo que hace el borrado de una conferencia con sus partidos.
+router.delete('/phases/:phaseId', authRequired, phaseOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare('DELETE FROM phases WHERE id = ?').run(req.phase.id);
+  res.json({ ok: true });
+}));
+
+// Regla de clasificación de una fase: "de esta fase pasan los primeros N de
+// cada grupo / conferencia / de la tabla general". Es UNA por fase (si ya
+// había, se reemplaza) — dos reglas distintas para la misma fase no
+// describirían nada, se contradirían.
+router.put('/phases/:phaseId/qualification', authRequired, phaseOwnerRequired, asyncHandler(async (req, res) => {
+  const { from_scope, top_n, plus_best_n, of_rank, target_phase_id } = req.body;
+
+  if (!['branch', 'conference', 'group'].includes(from_scope)) {
+    return res.status(400).json({ error: 'El alcance debe ser rama, conferencia o grupo' });
+  }
+  const topN = Number(top_n);
+  if (!Number.isInteger(topN) || topN < 1) {
+    return res.status(400).json({ error: 'Cuántos clasifican debe ser un número de 1 o más' });
+  }
+  const plusN = plus_best_n === undefined || plus_best_n === null || plus_best_n === '' ? 0 : Number(plus_best_n);
+  if (!Number.isInteger(plusN) || plusN < 0) {
+    return res.status(400).json({ error: 'Los lugares extra deben ser 0 o más' });
+  }
+
+  if (target_phase_id) {
+    const target = await db.prepare('SELECT id FROM phases WHERE id = ? AND branch_id = ?')
+      .get(Number(target_phase_id), req.branch.id);
+    if (!target) return res.status(400).json({ error: 'La fase de destino no existe en esta rama' });
+  }
+
+  await db.prepare('DELETE FROM phase_qualifications WHERE phase_id = ?').run(req.phase.id);
+  await db.prepare(`
+    INSERT INTO phase_qualifications (phase_id, from_scope, top_n, plus_best_n, of_rank, target_phase_id)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    req.phase.id, from_scope, topN, plusN,
+    // `of_rank` solo significa algo si hay lugares extra: es "qué lugar se
+    // compara entre tablas" (3 = los mejores terceros). Sin lugares extra no
+    // hay nada que comparar, así que se guarda en null.
+    plusN > 0 ? (Number(of_rank) || topN + 1) : null,
+    target_phase_id ? Number(target_phase_id) : null,
+  );
+
+  res.json(await db.prepare('SELECT * FROM phase_qualifications WHERE phase_id = ?').get(req.phase.id));
+}));
+
+router.delete('/phases/:phaseId/qualification', authRequired, phaseOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare('DELETE FROM phase_qualifications WHERE phase_id = ?').run(req.phase.id);
+  res.json({ ok: true });
+}));
+
+
+// --- Configuración de la tabla ---
+
+router.put('/branches/:branchId/standings-config', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  const { standings_levels, tiebreakers, tiebreaker_mode, points_win, points_draw, points_loss } = req.body;
+
+  const LEVELS = ['branch', 'conference', 'group'];
+  if (standings_levels !== undefined) {
+    if (!Array.isArray(standings_levels) || standings_levels.some((l) => !LEVELS.includes(l))) {
+      return res.status(400).json({ error: 'Los niveles de la tabla deben ser rama, conferencia o grupo' });
+    }
+  }
+  if (tiebreakers !== undefined) {
+    if (!Array.isArray(tiebreakers) || !tiebreakers.length) {
+      return res.status(400).json({ error: 'Hace falta al menos un criterio de desempate' });
+    }
+    const unknown = tiebreakers.find((k) => !TIEBREAKER_CATALOG[k]);
+    if (unknown) return res.status(400).json({ error: `Criterio de desempate desconocido: ${unknown}` });
+  }
+  if (tiebreaker_mode !== undefined && !['restart', 'sequential'].includes(tiebreaker_mode)) {
+    return res.status(400).json({ error: 'El modo de empate múltiple debe ser restart o sequential' });
+  }
+
+  // Los tres puntos van juntos o no van: dejar points_win puesto y
+  // points_draw en NULL daría una tabla que suma con un reglamento a medias.
+  const pointsGiven = [points_win, points_draw, points_loss].filter((v) => v !== undefined && v !== null);
+  if (pointsGiven.length && pointsGiven.length < 3) {
+    return res.status(400).json({ error: 'Para usar sistema de puntos hay que definir los tres valores (ganar, empatar, perder)' });
+  }
+
+  await db.prepare(`
+    UPDATE branches SET
+      standings_levels = COALESCE(?::jsonb, standings_levels),
+      tiebreakers      = COALESCE(?::jsonb, tiebreakers),
+      tiebreaker_mode  = COALESCE(?, tiebreaker_mode),
+      points_win       = ?,
+      points_draw      = ?,
+      points_loss      = ?
+    WHERE id = ?
+  `).run(
+    standings_levels === undefined ? null : JSON.stringify(standings_levels),
+    tiebreakers === undefined ? null : JSON.stringify(tiebreakers),
+    toNull(tiebreaker_mode),
+    points_win ?? null,
+    points_draw ?? null,
+    points_loss ?? null,
+    req.branch.id,
+  );
+
+  res.json(await db.prepare('SELECT * FROM branches WHERE id = ?').get(req.branch.id));
+}));
+
+// --- Títulos ---
+
+router.get('/branches/:branchId/titles', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  res.json(await db.prepare(`
+    SELECT ti.*, ph.name AS phase_name
+    FROM titles ti
+    LEFT JOIN phases ph ON ph.id = ti.phase_id
+    WHERE ti.branch_id = ?
+    ORDER BY ti.sort_order ASC, ti.id ASC
+  `).all(req.branch.id));
+}));
+
+router.post('/branches/:branchId/titles', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  const { name, scope, decided_by, phase_id, sort_order } = req.body;
+  const error = await validateTitle({ name, scope, decided_by, phase_id, branchId: req.branch.id });
+  if (error) return res.status(400).json({ error });
+
+  const by = decided_by || 'match';
+  const result = await db.prepare(`
+    INSERT INTO titles (branch_id, name, scope, decided_by, phase_id, sort_order)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    req.branch.id, name.trim(), scope, by,
+    by === 'match' ? Number(phase_id) : null,
+    sort_order || 0,
+  );
+
+  res.status(201).json(await db.prepare('SELECT * FROM titles WHERE id = ?').get(result.lastInsertRowid));
+}));
+
+router.put('/titles/:titleId', authRequired, titleOwnerRequired, asyncHandler(async (req, res) => {
+  const { name, scope, decided_by, phase_id, sort_order } = req.body;
+  const merged = {
+    name: name ?? req.title.name,
+    scope: scope ?? req.title.scope,
+    decided_by: decided_by ?? req.title.decided_by,
+    phase_id: phase_id === undefined ? req.title.phase_id : phase_id,
+    branchId: req.branch.id,
+  };
+  const error = await validateTitle(merged);
+  if (error) return res.status(400).json({ error });
+
+  await db.prepare(`
+    UPDATE titles SET
+      name       = ?,
+      scope      = ?,
+      decided_by = ?,
+      phase_id   = ?,
+      sort_order = COALESCE(?, sort_order)
+    WHERE id = ?
+  `).run(
+    merged.name.trim(), merged.scope, merged.decided_by,
+    merged.decided_by === 'match' ? Number(merged.phase_id) : null,
+    toNull(sort_order),
+    req.title.id,
+  );
+
+  res.json(await db.prepare('SELECT * FROM titles WHERE id = ?').get(req.title.id));
+}));
+
+router.delete('/titles/:titleId', authRequired, titleOwnerRequired, asyncHandler(async (req, res) => {
+  await db.prepare('DELETE FROM titles WHERE id = ?').run(req.title.id);
+  res.json({ ok: true });
+}));
+
+// El campeón normalmente NO se guarda: se deriva al leer. Esto guarda la
+// EXCEPCIÓN — "el campeón es este otro aunque los números digan lo
+// contrario" (desempate por sorteo, sanción, título compartido). Mismo papel
+// que matches.conference_override_id.
+router.put('/titles/:titleId/winner', authRequired, titleOwnerRequired, asyncHandler(async (req, res) => {
+  const { scope_id, team_id, note } = req.body;
+  if (!Number.isInteger(Number(team_id))) return res.status(400).json({ error: 'Falta el equipo campeón' });
+
+  // El título de rama no tiene alcance concreto; los de conferencia/grupo sí,
+  // y sin él no se sabría de cuál de las conferencias se está hablando.
+  const scopeId = req.title.scope === 'branch' ? null : Number(scope_id);
+  if (req.title.scope !== 'branch' && !Number.isInteger(scopeId)) {
+    return res.status(400).json({ error: 'Falta decir de qué conferencia o grupo es este campeón' });
+  }
+
+  const enrolled = await db.prepare(
+    'SELECT 1 FROM branch_teams WHERE branch_id = ? AND team_id = ?'
+  ).get(req.branch.id, Number(team_id));
+  if (!enrolled) return res.status(400).json({ error: 'Ese equipo no está inscrito en esta rama' });
+
+  // Un solo campeón por (título, alcance): se borra el anterior y se escribe
+  // el nuevo. Los dos índices únicos parciales de db.js lo respaldan del lado
+  // de la base, incluido el caso scope_id = NULL.
+  if (scopeId === null) {
+    await db.prepare('DELETE FROM title_overrides WHERE title_id = ? AND scope_id IS NULL').run(req.title.id);
+  } else {
+    await db.prepare('DELETE FROM title_overrides WHERE title_id = ? AND scope_id = ?').run(req.title.id, scopeId);
+  }
+
+  await db.prepare(`
+    INSERT INTO title_overrides (title_id, scope_id, team_id, note, created_by_user_id)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(req.title.id, scopeId, Number(team_id), isNonEmptyString(note) ? note.trim() : null, req.user.id);
+
+  res.json({ ok: true });
+}));
+
+// Quita el campeón puesto a mano: el título vuelve a derivarse solo.
+router.delete('/titles/:titleId/winner', authRequired, titleOwnerRequired, asyncHandler(async (req, res) => {
+  const scopeId = req.query.scope_id ? Number(req.query.scope_id) : null;
+  if (scopeId === null) {
+    await db.prepare('DELETE FROM title_overrides WHERE title_id = ? AND scope_id IS NULL').run(req.title.id);
+  } else {
+    await db.prepare('DELETE FROM title_overrides WHERE title_id = ? AND scope_id = ?').run(req.title.id, scopeId);
+  }
+  res.json({ ok: true });
+}));
+
+async function validateTitle({ name, scope, decided_by, phase_id, branchId }) {
+  if (!isNonEmptyString(name)) return 'El nombre del título es obligatorio';
+  if (!['branch', 'conference', 'group'].includes(scope)) {
+    return 'El nivel del título debe ser rama, conferencia o grupo';
+  }
+  const by = decided_by || 'match';
+  if (!['standings', 'match'].includes(by)) return 'El título se define por tabla o por partido';
+
+  if (by === 'match') {
+    if (!Number.isInteger(Number(phase_id))) {
+      return 'Un título que se define por partido necesita decir en qué fase se juega';
+    }
+    const phase = await db.prepare('SELECT * FROM phases WHERE id = ? AND branch_id = ?').get(Number(phase_id), branchId);
+    if (!phase) return 'Esa fase no existe en esta rama';
+  }
+  return null;
+}
+
+// La tabla completa para el panel: incluye la configuración y las fases con
+// todos sus campos, que la vista pública no necesita.
+router.get('/branches/:branchId/standings', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  res.json(await buildBranchStandings(req.branch.id));
+}));
+
 
 export default router;

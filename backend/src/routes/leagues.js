@@ -7,6 +7,7 @@ import { isValidTimezone } from '../utils/timezones.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { MEXICO_STATES } from '../utils/mexicoStates.js';
 import { MATCH_SCOPE_JOINS, MATCH_SCOPE_COLUMNS } from '../utils/matchScope.js';
+import { buildBranchStandings } from '../utils/branchStandings.js';
 
 const router = express.Router();
 
@@ -605,7 +606,7 @@ router.get('/:leagueId/tree', authRequired, leagueOwnerRequired, asyncHandler(as
 
   const [
     tournaments, categories, branches, conferences, groups,
-    matches, branchTeams, teams, venues, legacy,
+    matches, branchTeams, teams, venues, legacy, phases, titles,
   ] = await Promise.all([
     db.prepare(`
       SELECT * FROM tournaments
@@ -671,6 +672,25 @@ router.get('/:leagueId/tree', authRequired, leagueOwnerRequired, asyncHandler(as
         (SELECT COUNT(*)::int FROM matches m JOIN categories c ON c.id = m.category_id
            WHERE c.league_id = ? AND c.tournament_id IS NULL) AS matches
     `).get(leagueId, leagueId),
+    // Fases y títulos de cada rama. Van en el árbol (y no en una petición
+    // aparte) porque el formulario de partido necesita las fases para poder
+    // elegir una, y el árbol ya es la fuente única de todo lo demás.
+    db.prepare(`
+      SELECT ph.* FROM phases ph
+      JOIN branches b ON b.id = ph.branch_id
+      JOIN categories c ON c.id = b.category_id
+      JOIN tournaments t ON t.id = c.tournament_id
+      WHERE t.league_id = ?
+      ORDER BY ph.sort_order ASC, ph.id ASC
+    `).all(leagueId),
+    db.prepare(`
+      SELECT ti.* FROM titles ti
+      JOIN branches b ON b.id = ti.branch_id
+      JOIN categories c ON c.id = b.category_id
+      JOIN tournaments t ON t.id = c.tournament_id
+      WHERE t.league_id = ?
+      ORDER BY ti.sort_order ASC, ti.id ASC
+    `).all(leagueId),
   ]);
 
   const by = (rows, key) => {
@@ -681,6 +701,8 @@ router.get('/:leagueId/tree', authRequired, leagueOwnerRequired, asyncHandler(as
 
   const matchesByBranch     = by(matches, 'branch_id');
   const branchTeamsByBranch  = by(branchTeams, 'branch_id');
+  const phasesByBranch       = by(phases, 'branch_id');
+  const titlesByBranch       = by(titles, 'branch_id');
   const groupsByConference   = {};
   const directGroupsByBranch = {};
   for (const g of groups) {
@@ -704,6 +726,8 @@ router.get('/:leagueId/tree', authRequired, leagueOwnerRequired, asyncHandler(as
       directGroups: directGroupsByBranch[b.id] || [],
       teams:        branchTeamsByBranch[b.id] || [],
       matches:      matchesByBranch[b.id] || [],
+      phases:       phasesByBranch[b.id] || [],
+      titles:       titlesByBranch[b.id] || [],
     });
   }
 
@@ -1004,7 +1028,50 @@ router.get('/tournaments/:tournamentId/public', asyncHandler(async (req, res) =>
     ORDER BY t.name ASC
   `).all(tournament.id, tournament.id);
 
-  res.json({ tournament, matches, teams });
+  // Las ramas del torneo, para que la página pública sepa de cuáles puede
+  // ofrecer tabla de posiciones sin tener que deducirlas de los partidos.
+  // Se filtran las que no tienen ningún equipo inscrito: una rama vacía no
+  // tiene tabla que mostrar.
+  const branches = await db.prepare(`
+    SELECT b.id, b.name, b.standings_levels, c.id AS category_id, c.name AS category_name,
+           (SELECT COUNT(*)::int FROM branch_teams bt WHERE bt.branch_id = b.id) AS team_count
+    FROM branches b
+    JOIN categories c ON c.id = b.category_id
+    WHERE c.tournament_id = ?
+      AND EXISTS (SELECT 1 FROM branch_teams bt WHERE bt.branch_id = b.id)
+    ORDER BY c.sort_order ASC, c.name ASC, b.sort_order ASC, b.name ASC
+  `).all(tournament.id);
+
+  res.json({ tournament, matches, teams, branches });
 }));
+
+
+// Tabla de posiciones pública de una rama.
+//
+// Va como endpoint aparte y no dentro del payload del torneo a propósito: la
+// tabla solo hace falta cuando alguien abre esa pestaña, y calcularla en cada
+// carga del calendario le costaría a todos los visitantes un trabajo que casi
+// ninguno pidió.
+//
+// El filtro de visibilidad es el mismo de siempre (l.is_public): una liga que
+// no está publicada no expone su tabla aunque alguien adivine el id de la rama.
+router.get('/branches/:branchId/standings', asyncHandler(async (req, res) => {
+  const branch = await db.prepare(`
+    SELECT b.id, b.name, c.name AS category_name, t.id AS tournament_id,
+           t.name AS tournament_name, t.year
+    FROM branches b
+    JOIN categories c   ON c.id = b.category_id
+    JOIN tournaments t  ON t.id = c.tournament_id
+    JOIN leagues l      ON l.id = t.league_id
+    WHERE b.id = ? AND l.is_public = TRUE
+  `).get(req.params.branchId);
+  if (!branch) return res.status(404).json({ error: 'Rama no encontrada' });
+
+  const standings = await buildBranchStandings(branch.id, { publicOnly: true });
+  if (!standings) return res.status(404).json({ error: 'Rama no encontrada' });
+
+  res.json({ ...standings, branch: { ...standings.branch, ...branch } });
+}));
+
 
 export default router;

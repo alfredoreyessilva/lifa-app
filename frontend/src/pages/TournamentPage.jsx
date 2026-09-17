@@ -5,6 +5,7 @@ import TeamCard from '../components/TeamCard.jsx';
 import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
 import Loading from '../components/Loading.jsx';
 import CalendarViewer from '../components/CalendarViewer.jsx';
+import StandingsView from '../components/StandingsView.jsx';
 
 // Pantalla pública de un Torneo específico. Misma idea visual que
 // LeaguePage.jsx (portada, header, sección de contenido), pero solo con
@@ -24,9 +25,17 @@ export default function TournamentPage() {
   const [selectedTeam,       setSelectedTeam]       = useState(null);
   const [copied, setCopied] = useState(false);
 
+  // Pestaña Calendario/Posiciones y la tabla ya pedida. La tabla se trae solo
+  // cuando alguien abre esa pestaña (y se guarda por rama, para no volver a
+  // pedirla al ir y venir entre las dos).
+  const [view, setView] = useState('calendar');
+  const [standings, setStandings] = useState({});
+  const [standingsError, setStandingsError] = useState('');
+
   useEffect(() => {
     setData(null); setError('');
     setSelectedCategoryId(null); setSelectedBranchId(null); setSelectedTeam(null);
+    setView('calendar'); setStandings({}); setStandingsError('');
     api.getTournamentPublic(tournamentId).then(setData).catch((e) => setError(e.message));
   }, [tournamentId]);
 
@@ -84,10 +93,14 @@ export default function TournamentPage() {
   let options = [];
   let matchesToShow = matches;
   let infoLabel = '';
+  // La rama que se está viendo. Es la que necesita la tabla de posiciones,
+  // que siempre pertenece a UNA rama (ver utils/branchStandings.js).
+  let activeBranchId = null;
 
   if (branchesAll.length <= 1) {
     // Un solo calendario en TODO el torneo: directo, sin pasos.
     const only = branchesAll[0];
+    activeBranchId = only?.id || null;
     infoLabel = only ? `${categories.find((c) => c.id === only.category_id)?.name} · ${only.name}` : (categories[0]?.name || '');
   } else if (categories.length === 1) {
     // Una sola categoría: la categoría es info, se elige rama directo.
@@ -97,6 +110,7 @@ export default function TournamentPage() {
       options = branchesAll;
     } else {
       matchesToShow = matches.filter((m) => m.branch_id === selectedBranchId);
+      activeBranchId = selectedBranchId;
       const b = branchesAll.find((x) => x.id === selectedBranchId);
       infoLabel = `${categories[0].name} · ${b?.name || ''}`;
     }
@@ -108,6 +122,7 @@ export default function TournamentPage() {
     const cat = categories.find((c) => c.id === selectedCategoryId);
     if (branchesHere.length <= 1) {
       matchesToShow = matches.filter((m) => m.category_id === selectedCategoryId);
+      activeBranchId = branchesHere[0]?.id || null;
       infoLabel = branchesHere[0] ? `${cat.name} · ${branchesHere[0].name}` : cat.name;
     } else if (!selectedBranchId) {
       mode = 'pick-branch';
@@ -115,12 +130,23 @@ export default function TournamentPage() {
       infoLabel = cat.name;
     } else {
       matchesToShow = matches.filter((m) => m.branch_id === selectedBranchId);
+      activeBranchId = selectedBranchId;
       const b = branchesHere.find((x) => x.id === selectedBranchId);
       infoLabel = `${cat.name} · ${b?.name || ''}`;
     }
   }
 
+  function openStandings(branchId) {
+    setView('standings');
+    if (!branchId || standings[branchId]) return;
+    setStandingsError('');
+    api.getBranchStandings(branchId)
+      .then((d) => setStandings((prev) => ({ ...prev, [branchId]: d })))
+      .catch((e) => setStandingsError(e.message));
+  }
+
   function goBack() {
+    setView('calendar');
     if (categories.length === 1) {
       setSelectedBranchId(null);
     } else if (selectedBranchId && branchesAll.filter((b) => b.category_id === selectedCategoryId).length > 1) {
@@ -163,7 +189,7 @@ export default function TournamentPage() {
           {mode === 'pick-category' && (
             <div className="category-grid">
               {options.map((c) => (
-                <button key={c.id} className="category-card" onClick={() => setSelectedCategoryId(c.id)}>
+                <button key={c.id} className="category-card" onClick={() => { setSelectedCategoryId(c.id); setView('calendar'); }}>
                   <div className="category-card-name">{c.name}</div>
                   <div className="category-card-arrow">→</div>
                 </button>
@@ -174,14 +200,14 @@ export default function TournamentPage() {
           {mode === 'pick-branch' && (
             <>
               {categories.length > 1 && (
-                <button className="filter-back" onClick={() => { setSelectedCategoryId(null); setSelectedBranchId(null); }}>
+                <button className="filter-back" onClick={() => { setSelectedCategoryId(null); setSelectedBranchId(null); setView('calendar'); }}>
                   ← Todas las categorías
                 </button>
               )}
               {infoLabel && <div className="filter-selected-title">{infoLabel}</div>}
               <div className="category-grid">
                 {options.map((b) => (
-                  <button key={b.id} className="category-card" onClick={() => setSelectedBranchId(b.id)}>
+                  <button key={b.id} className="category-card" onClick={() => { setSelectedBranchId(b.id); setView('calendar'); }}>
                     <div className="category-card-name">{b.name}</div>
                     <div className="category-card-arrow">→</div>
                   </button>
@@ -195,6 +221,42 @@ export default function TournamentPage() {
               {branchesAll.length > 1 && (
                 <button className="filter-back" onClick={goBack}>← Volver</button>
               )}
+
+              {/* La pestaña de posiciones solo existe si la rama tiene equipos
+                  inscritos: sin inscripción no hay a quién ordenar. Las ramas
+                  vienen ya filtradas así desde el backend. */}
+              {activeBranchId && (data.branches || []).some((b) => b.id === activeBranchId) && (
+                <div className="tab-bar">
+                  <button
+                    className={`tab-btn ${view === 'calendar' ? 'active' : ''}`}
+                    onClick={() => setView('calendar')}
+                  >
+                    Calendario
+                  </button>
+                  <button
+                    className={`tab-btn ${view === 'standings' ? 'active' : ''}`}
+                    onClick={() => openStandings(activeBranchId)}
+                  >
+                    Posiciones
+                  </button>
+                </div>
+              )}
+
+              {view === 'standings' ? (
+                standingsError ? (
+                  <div className="empty-state">
+                    <h3>No pudimos cargar la tabla</h3>
+                    <p>{standingsError}</p>
+                  </div>
+                ) : standings[activeBranchId] ? (
+                  <StandingsView
+                    data={standings[activeBranchId]}
+                    emptyText="Esta rama todavía no tiene tabla de posiciones publicada."
+                  />
+                ) : (
+                  <Loading />
+                )
+              ) : (
               <CalendarViewer
                 matches={matchesToShow}
                 title={infoLabel || tournament.name}
@@ -207,6 +269,7 @@ export default function TournamentPage() {
                 emptyTitle="Calendario sin publicar"
                 emptyText="Este torneo aún no tiene partidos programados."
               />
+              )}
             </>
           )}
         </div>
