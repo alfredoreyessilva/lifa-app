@@ -801,9 +801,14 @@ cambiarlo cuesta más que el renombre y no estaba en el alcance:
   `ptm.player_id`, `BranchRosterModal`, `MatchStatsModal`, `PlayerShareButton`,
   `PlayerCardPage`). Es el otro padrón y no se toca.
 
-> ### ⚠️ Esta fase tiene ventana de incompatibilidad al desplegar
+> ### Nota de despliegue: esta fase tuvo ventana de incompatibilidad
 >
-> **Hay que leerlo antes de subirla a producción.** El frontend es un bundle
+> **Se desplegó el 2026-09-17 aceptando la ventana** (salida 1 de las de abajo),
+> porque no había usuarios a los que rompiera. Queda escrito porque el próximo
+> renombre de superficie —empezando por el prefijo `/api/player-billing`— va a
+> tener exactamente la misma, y esa vez puede no dar lo mismo.
+>
+> El frontend es un bundle
 > estático en Vercel y el backend un proceso en Render: dos despliegues
 > independientes que el mismo push a `main` dispara, pero que **no terminan al
 > mismo tiempo** (Render, en plan gratuito, tarda más y además arranca en frío).
@@ -825,7 +830,7 @@ cambiarlo cuesta más que el renombre y no estaba en el alcance:
 >
 > 1. **Desplegar y avisar.** Subirlo en horario de poco uso y pedir a los
 >    tesoreros que recarguen. Es lo más barato y lo que corresponde al tamaño
->    de uso de hoy.
+>    de uso de hoy. **Es la que se usó.**
 > 2. **Compatibilidad por un ciclo**, que es la técnica que usó la fase A:
 >    registrar las rutas viejas como alias de las nuevas, devolver `member_id`
 >    **y** `player_id`, aceptar `items` con cualquiera de los dos. Se despliega
