@@ -1657,6 +1657,39 @@ export async function initSchema() {
       WHERE tiebreakers = '["win_pct","h2h_win_pct","scope_win_pct","common_win_pct","point_diff","points_for"]'::jsonb
         AND tiebreaker_mode = 'sequential'
     `);
+
+    // Historial de conversación del bot de WhatsApp (routes/bot.js). La tabla
+    // faltaba: bot.js se escribió asumiéndola y nunca se creó aquí, así que en
+    // cuanto llegara el primer mensaje real el SELECT habría tronado con
+    // "relation bot_messages does not exist" — y como el webhook no alcanza a
+    // responder 200, Meta reintenta el mismo mensaje una y otra vez. No se
+    // había notado porque el bot todavía no está conectado (falta el número de
+    // WhatsApp y la llave de Anthropic), así que este código nunca se ejecutó.
+    //
+    // `role` solo acepta los dos valores que la API de Claude entiende. Si
+    // algún día se renombran, hay que cambiarlos aquí Y en bot.js: un CHECK
+    // "mejorado" por su cuenta es exactamente lo que tiró los pagos del papá
+    // en la fase A de la separación del padrón.
+    //
+    // Nota de privacidad: aquí quedan el teléfono y la conversación completa
+    // de CLIENTES de la tienda — gente sin cuenta en la plataforma. No hay
+    // borrado por antigüedad todavía, así que la tabla crece sin límite.
+    await run(`
+      CREATE TABLE IF NOT EXISTS bot_messages (
+        id              SERIAL PRIMARY KEY,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        wa_from         TEXT NOT NULL,
+        role            TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+        content         TEXT NOT NULL,
+        created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    // El índice es exactamente la consulta de los últimos 10 turnos de bot.js.
+    await run(`
+      CREATE INDEX IF NOT EXISTS idx_bot_messages_conversacion
+        ON bot_messages(organization_id, wa_from, created_at DESC)
+    `);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se
