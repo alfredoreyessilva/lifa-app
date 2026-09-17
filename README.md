@@ -31,6 +31,30 @@ append-only, se resuelve al leer y no se migra) están en
 Solo lo que **falta**. Lo que ya se cerró está en `docs/CHANGELOG.md` con su
 verificación.
 
+- **Los roles de organización no se distinguen, y ya hay dinero de por medio.**
+  `organization_members.role` acepta `owner` / `admin` / `editor`, pero
+  `utils/orgMembers.js` los da por equivalentes: `isOrgMember()` acepta los tres
+  por defecto y **ninguna ruta le pasa una lista más corta**. Consecuencia real:
+  a quien invitas como "editor" para que te ayude a capturar partidos le queda
+  abierta también la cobranza — puede registrar cargos, confirmar pagos y
+  cancelar movimientos contables, en los dos libros.
+  El mecanismo para cerrarlo **ya existe y está escrito para esto**: el
+  parámetro `allowedRoles` de `isOrgMember()`, que hoy nadie usa. Faltaría
+  pasárselo en `routes/billing.js`, `routes/playerBilling.js` y en las acciones
+  destructivas (borrar la organización, quitar administradores), y decidir qué
+  puede hacer un `editor`. No es refactor: es elegir la lista en cada punto.
+  > Esto estaba anotado en el README dentro del bullet de "Invitar
+  > administrador", y al partir el histórico se fue a `docs/CHANGELOG.md`, donde
+  > se lee como nota de algo pasado y no como limitación vigente. Por eso está
+  > aquí ahora.
+- **La advertencia de no apuntar a producción es solo texto, no un mecanismo.**
+  La `DATABASE_URL` local apunta hoy a la base real, así que cualquier prueba
+  desde `localhost:5173` escribe filas de verdad — está advertido en "Cómo
+  correrlo en local" y es la regla 1 de `CLAUDE.md`, pero nada lo impide.
+  Conviene que sea código: que el servidor **se niegue a arrancar** en modo
+  desarrollo contra el host de producción salvo que se le pase una variable
+  explícita. Son unas diez líneas en `config/db.js` y eliminan la categoría
+  entera de accidente, incluido el de levantar un segundo backend por error.
 - **Fase B de la separación del padrón** — ver "Fase B" al final de "Cuotas del
   club". Es lo único grande que queda abierto de esta línea de trabajo, y está
   especificado con detalle para poder arrancarlo en frío.
