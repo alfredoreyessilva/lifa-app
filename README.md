@@ -141,6 +141,25 @@ membresía, no se ven en ninguna pantalla y no estorban.
   **no es solo visual**: el botón queda deshabilitado con su explicación en el
   tooltip, y el backend además responde 400 si se le pega directo. El link es de
   un solo uso y al reabrirlo dice "Esta invitación ya fue utilizada".
+
+  **Dos cosas del mecanismo de invitaciones que salieron de paso** (ninguna es
+  un bug abierto, pero conviene tenerlas escritas):
+  - **El link se genera al ABRIR el modal, no al enviarlo** (`InviteAdminModal.jsx`
+    lo pide en un `useEffect`). Abrir y cerrar sin mandar nada deja una
+    invitación válida en la base. No se acumulan, porque `routes/invites.js`
+    borra las no usadas de esa organización antes de crear la siguiente — la
+    consecuencia real es que **generar un link nuevo invalida el anterior**, que
+    es lo correcto pero no es obvio desde la pantalla. En desarrollo se ven DOS
+    filas por cada apertura: `React.StrictMode` corre el efecto dos veces y las
+    dos peticiones se pisan (ambas borran antes de que la otra inserte). Es
+    ruido de desarrollo — en el build de producción StrictMode no duplica
+    efectos — pero explica por qué en la QA apareció una invitación huérfana.
+  - **Las invitaciones no caducan**: el esquema de `invites` no tiene
+    `expires_at` y el único freno es `used_at`. Un link que nunca se usó sigue
+    sirviendo indefinidamente, hasta que alguien genere otro para esa misma
+    organización. Trade-off aceptable hoy (el link se manda por WhatsApp y se
+    usa en el momento), pero si algún día se reenvía un chat viejo, ese link
+    todavía funciona.
   **Pero salió un hueco de fondo, ver abajo.**
 
 - ~~**Quitar a quien registró la organización NO le quita el acceso**~~ —
@@ -348,6 +367,22 @@ El `.env.example` trae comentarios explicando cada variable, incluyendo cómo ge
 npm run seed     # opcional: crea datos de ejemplo (ligas, categorías, partidos)
 npm run dev      # http://localhost:4000
 ```
+
+> **Cuidado si tu `DATABASE_URL` apunta a la base de producción** (hoy es el
+> caso). Dos avisos que costaron un susto:
+>
+> 1. **Levantar un segundo backend interrumpe el servicio.** Si ya hay uno
+>    corriendo en el 4000 y arrancas otro, el segundo falla por `EADDRINUSE`
+>    — pero antes de morir alcanza a correr `initSchema()` contra la base, y
+>    eso tumba las consultas del que sí está sirviendo. Se ve como una tanda
+>    de **500 en todos los endpoints** durante unos segundos, sin ninguna
+>    causa aparente. Se cura solo al recargar; el error no es de la app.
+> 2. **Todo lo que pruebes en local escribe en producción.** Registrar una
+>    liga, invitar administradores o dar de alta jugadores desde
+>    `localhost:5173` crea filas reales. Para cualquier prueba que escriba,
+>    usa una rama de Neon (Branches → New branch, copia instantánea) y apunta
+>    `DATABASE_URL` ahí — es lo mismo que exige `backend/tests/README.md` para
+>    las suites de punta a punta.
 
 ### 2. Frontend
 
@@ -1511,8 +1546,8 @@ Objetivo: que la plataforma genere flujo de cobro real sin que cada venta depend
 No iniciado. Hoy `PUT /organizations/:id/plan` (`admin.js`) requiere que el admin active el plan "pro" a mano después de un pago fuera de la plataforma (transferencia/PayPal). Reemplazar por checkout self-serve + webhook (Conekta o Stripe — Conekta tiene ventaja en México por soportar OXXO/SPEI) que actualice `plan`/`plan_expires_at` solo, con downgrade automático si el pago falla. Después, evaluar extender el mismo mecanismo a `billing.js`: cobro en línea liga→equipo, y eventualmente equipo→jugador (para que los equipos cobren a sus propios jugadores).
 
 **Fase 3 — Red de seguridad técnica**
-En marcha. **Hecho (2026-09-16)**: 111 pruebas unitarias que corren solas en cada
-push (30 en `backend/tests/unit/` y 81 en `frontend/tests/unit/`, con
+En marcha. **Hecho (2026-09-16)**: 135 pruebas unitarias que corren solas en cada
+push (54 en `backend/tests/unit/` y 81 en `frontend/tests/unit/`, con
 `node --test`) — ver "Cambios recientes". Las 18 más nuevas son de
 `matchScope.js`, la herencia de conferencia. Siguen existiendo los dos recorridos de punta a punta de
 cobranza (`backend/tests/billing-*.e2e.mjs`), que se corren a mano contra una
