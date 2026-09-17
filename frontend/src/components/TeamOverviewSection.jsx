@@ -32,7 +32,7 @@ export default function TeamOverviewSection({ team, token }) {
   if (error) return <div className="form-error">{error}</div>;
   if (!data) return <Loading />;
 
-  const { kpis, players } = data;
+  const { kpis, members } = data;
   const leagueBalance = statement ? Number(statement.balance || 0) : null;
   const upToDatePct = kpis.active_count > 0
     ? Math.round((kpis.up_to_date_count / kpis.active_count) * 100)
@@ -91,7 +91,7 @@ export default function TeamOverviewSection({ team, token }) {
         <Link to={`${base}/jugadores`} className="btn btn-ws">Administrar plantel</Link>
       </div>
 
-      {players.length === 0 ? (
+      {members.length === 0 ? (
         <div className="empty-teach">
           <div className="empty-teach-icon">🏈</div>
           <h3>Empieza por tu padrón</h3>
@@ -138,7 +138,7 @@ function RecentActivity({ entries }) {
           <div key={e.id} className={`ledger-row${voided ? ' is-void' : ''}`}>
             <div className="ledger-row-main">
               <div className="ledger-row-concept">
-                <strong>{e.first_name} {e.last_name}</strong>
+                <strong>{e.display_name}</strong>
                 {isCharge && ' — nuevo cargo'}
                 {isPayment && (fromPlayer ? ' — reportó un pago' : ' — pago registrado')}
                 {e.kind === 'adjustment' && ' — ajuste'}

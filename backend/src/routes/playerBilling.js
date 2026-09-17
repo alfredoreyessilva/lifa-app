@@ -67,68 +67,31 @@ const BALANCE_SUM_SQL = `
   ), 0)
 `;
 
-// Compatibilidad de nombre. `club_members` guarda UN solo `display_name` —ese
-// es el punto de la separación: el club puede registrar a alguien como "El
-// Güero" sin inventarle un apellido, cosa que `players.last_name NOT NULL` no
-// permitía. Pero el frontend todavía lee first_name/last_name, así que la API
-// los sigue devolviendo, partidos por el primer espacio:
-//
-//   "Juan Perez"  -> first "Juan",  last "Perez"
-//   "El Güero"    -> first "El",    last "Güero"
-//   "Güero"       -> first "Güero", last ""      <- antes no se podía guardar
-//
-// `display_name` también va en la respuesta: cuando el frontend se mueva a él
-// (fase B), estos dos derivados se borran y esta función con ellos.
-const nameCompatSql = (alias) => `
-    ${alias}.display_name,
-    split_part(${alias}.display_name, ' ', 1) AS first_name,
-    CASE WHEN position(' ' IN ${alias}.display_name) > 0
-         THEN substring(${alias}.display_name FROM position(' ' IN ${alias}.display_name) + 1)
-         ELSE '' END AS last_name`;
+// El nombre de un miembro del club es UN solo campo, `display_name`. Hasta la
+// fase B la API partía ese campo por el primer espacio y devolvía además
+// first_name/last_name, para que el frontend de entonces no tuviera que
+// cambiar. Eso ya no existe: partir el nombre es justo lo que impedía
+// registrar a alguien como "El Güero" sin inventarle un apellido.
 
-// Espejo en JS de nameCompatSql, para las respuestas que no salen de una
-// consulta. Parte por el PRIMER espacio, igual que el SQL.
-function splitDisplayName(displayName) {
-  const s = String(displayName || '').trim();
-  const i = s.indexOf(' ');
-  return i === -1
-    ? { first_name: s, last_name: '' }
-    : { first_name: s.slice(0, i), last_name: s.slice(i + 1) };
-}
-
-// Una fila de club_members con la forma que el frontend espera de un "player".
-function memberAsPlayer(m) {
-  return {
-    id: m.id,
-    display_name: m.display_name,
-    ...splitDisplayName(m.display_name),
-    birth_date: m.birth_date,
-    position: m.position,
-    jersey_number: m.jersey_number,
-    photo_url: m.photo_url,
-    curp: m.curp,
-  };
-}
-
-async function computeBalance(teamId, playerId) {
+async function computeBalance(teamId, memberId) {
   const row = await db.prepare(`
     SELECT ${BALANCE_SUM_SQL} AS balance
     FROM club_ledger_entries
     WHERE team_id = ? AND member_id = ?
-  `).get(teamId, playerId);
+  `).get(teamId, memberId);
   return Number(row?.balance || 0);
 }
 
 // Misma heurística que la liga: si el jugador ya no debe nada, sus cargos
 // abiertos pasan a 'settled' y dejan de disparar recordatorios.
-async function settleIfPaid(teamId, playerId) {
-  const balance = await computeBalance(teamId, playerId);
+async function settleIfPaid(teamId, memberId) {
+  const balance = await computeBalance(teamId, memberId);
   if (balance >= 0) {
     await db.prepare(`
       UPDATE club_ledger_entries
       SET status = 'settled', updated_at = NOW()
       WHERE team_id = ? AND member_id = ? AND kind = 'charge' AND status = 'open'
-    `).run(teamId, playerId);
+    `).run(teamId, memberId);
   }
   return balance;
 }
@@ -156,15 +119,15 @@ async function notifyTeam(teamId, type, title, body, extra = {}) {
 // equipo: un equipo independiente no podía cobrarle a nadie, jamás. Ahora el
 // club da de alta a su gente directamente (POST /teams/:id/members) y esto
 // solo responde quién está en el padrón.
-async function membersOfTeam(teamId, playerIds) {
-  if (!Array.isArray(playerIds) || playerIds.length === 0) return new Set();
+async function membersOfTeam(teamId, memberIds) {
+  if (!Array.isArray(memberIds) || memberIds.length === 0) return new Set();
   const rows = await db.prepare(`
-    SELECT id AS player_id
+    SELECT id AS member_id
     FROM club_members
     WHERE team_id = ?
-      AND id IN (${playerIds.map(() => '?').join(',')})
-  `).all(teamId, ...playerIds);
-  return new Set(rows.map((r) => r.player_id));
+      AND id IN (${memberIds.map(() => '?').join(',')})
+  `).all(teamId, ...memberIds);
+  return new Set(rows.map((r) => r.member_id));
 }
 
 // Acceso a un movimiento por su id. No hay id de equipo en la URL, así que se
@@ -210,8 +173,8 @@ function validateChargeMeta(body) {
   return null;
 }
 
-// Normaliza el cuerpo de "crear cargos" a [{player_id, amount}]. Copia de
-// normalizeChargeItems en routes/billing.js con player_id en vez de team_id.
+// Normaliza el cuerpo de "crear cargos" a [{member_id, amount}]. Copia de
+// normalizeChargeItems en routes/billing.js con member_id en vez de team_id.
 // Se permite amount = 0 (a diferencia del libro de liga) para poder generar la
 // mensualidad de TODA la categoría de un jalón incluyendo a los becados, sin
 // tener que acordarse de destildarlos uno por uno. Las filas en 0 no se
@@ -222,16 +185,16 @@ function normalizeChargeItems(body) {
   }
   const items = [];
   for (const it of body.items) {
-    const playerId = Number(it.player_id);
+    const memberId = Number(it.member_id);
     const amount = Number(it.amount);
-    if (!playerId || Number.isNaN(amount) || amount < 0) {
+    if (!memberId || Number.isNaN(amount) || amount < 0) {
       return { error: 'Cada jugador necesita un monto válido' };
     }
-    items.push({ player_id: playerId, amount });
+    items.push({ member_id: memberId, amount });
   }
   // si un jugador viene repetido, el último gana
-  const byPlayer = new Map(items.map((i) => [i.player_id, i.amount]));
-  return { items: [...byPlayer].map(([player_id, amount]) => ({ player_id, amount })) };
+  const byMember = new Map(items.map((i) => [i.member_id, i.amount]));
+  return { items: [...byMember].map(([member_id, amount]) => ({ member_id, amount })) };
 }
 
 // ─── Panorama del equipo ────────────────────────────────────────────────────
@@ -242,8 +205,8 @@ router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(
   // Sale del padrón del club (club_members), NO del roster de torneo.
   // Un equipo independiente, o uno al que su liga todavía no inscribe en
   // ninguna rama, tiene aquí a toda su gente igual.
-  const players = await db.prepare(`
-    SELECT a.id AS player_id,${nameCompatSql('a')},
+  const members = await db.prepare(`
+    SELECT a.id AS member_id, a.display_name,
            a.photo_url, a.jersey_number, a.position, a.birth_date, a.curp,
            a.monthly_amount, a.status, a.group_label, a.joined_date, a.note,
            a.tutor_name, a.tutor_phone, a.tutor_email,
@@ -254,7 +217,7 @@ router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(
   `).all(teamId);
 
   const agg = await db.prepare(`
-    SELECT member_id AS player_id,
+    SELECT member_id AS member_id,
            ${BALANCE_SUM_SQL} AS balance,
            COALESCE(SUM(CASE WHEN kind = 'charge' AND status = 'open' AND due_date < CURRENT_DATE THEN amount ELSE 0 END), 0) AS overdue_charges,
            MIN(CASE WHEN kind = 'charge' AND status = 'open' THEN due_date END) AS next_due_date
@@ -262,10 +225,10 @@ router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(
     WHERE team_id = ?
     GROUP BY member_id
   `).all(teamId);
-  const byPlayer = new Map(agg.map((r) => [r.player_id, r]));
+  const byMember = new Map(agg.map((r) => [r.member_id, r]));
 
-  const rows = players.map((p) => {
-    const a = byPlayer.get(p.player_id);
+  const rows = members.map((p) => {
+    const a = byMember.get(p.member_id);
     const balance = Number(a?.balance || 0);
     const overdueCharges = Number(a?.overdue_charges || 0);
     return {
@@ -300,8 +263,8 @@ router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(
   `).all(teamId);
 
   const pendingPayments = await db.prepare(`
-    SELECT e.id, e.member_id AS player_id, e.amount, e.currency, e.payment_method, e.reference,
-           e.proof_url, e.note, e.created_at,${nameCompatSql('m')}
+    SELECT e.id, e.member_id AS member_id, e.amount, e.currency, e.payment_method, e.reference,
+           e.proof_url, e.note, e.created_at, m.display_name
     FROM club_ledger_entries e
     JOIN club_members m ON m.id = e.member_id
     WHERE e.team_id = ? AND e.kind = 'payment' AND e.status = 'pending'
@@ -310,7 +273,7 @@ router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(
 
   const recentActivity = await db.prepare(`
     SELECT e.id, e.kind, e.category, e.concept, e.amount, e.status, e.direction,
-           e.created_by_side, e.created_at,${nameCompatSql('m')}
+           e.created_by_side, e.created_at, m.display_name
     FROM club_ledger_entries e
     JOIN club_members m ON m.id = e.member_id
     WHERE e.team_id = ?
@@ -327,7 +290,7 @@ router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(
            MAX(amount)       AS max_amount,
            SUM(amount)       AS total_amount,
            MAX(period_label) AS period_label,
-           COUNT(*)          AS player_count
+           COUNT(*)          AS member_count
     FROM club_ledger_entries
     WHERE team_id = ? AND kind = 'charge' AND batch_id IS NOT NULL
     GROUP BY batch_id
@@ -353,7 +316,7 @@ router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(
       active_count: active.length,
       pending_payments_count: pendingPayments.length,
     },
-    players: rows,
+    members: rows,
     monthly_flow: monthlyFlow.map((m) => ({ month: m.month, total: Number(m.total) })),
     pending_payments: pendingPayments,
     recent_activity: recentActivity,
@@ -365,24 +328,26 @@ router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(
 }));
 
 // Libro de un jugador, visto por el club.
-router.get('/teams/:id/players/:playerId/entries', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.get('/teams/:id/members/:memberId/entries', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
   const teamId = req.team.id;
-  const playerId = Number(req.params.playerId);
+  const memberId = Number(req.params.memberId);
 
-  const inTeam = await membersOfTeam(teamId, [playerId]);
-  if (!inTeam.has(playerId)) return res.status(404).json({ error: 'Ese jugador no está en el plantel de este equipo' });
+  const inTeam = await membersOfTeam(teamId, [memberId]);
+  if (!inTeam.has(memberId)) return res.status(404).json({ error: 'Ese jugador no está en el plantel de este equipo' });
 
-  const player = await db.prepare('SELECT id, first_name, last_name FROM players WHERE id = ?').get(playerId);
+  const member = await db.prepare(
+    'SELECT id, display_name FROM club_members WHERE team_id = ? AND id = ?'
+  ).get(teamId, memberId);
 
   const entries = await db.prepare(`
     SELECT * FROM club_ledger_entries
     WHERE team_id = ? AND member_id = ?
     ORDER BY created_at ASC, id ASC
-  `).all(teamId, playerId);
+  `).all(teamId, memberId);
 
   res.json({
-    player,
-    balance: await computeBalance(teamId, playerId),
+    member,
+    balance: await computeBalance(teamId, memberId),
     entries,
   });
 }));
@@ -400,8 +365,8 @@ router.post('/teams/:id/charges', authRequired, teamOwnerRequired, asyncHandler(
 
   const { category, concept, due_date, period_label, note } = req.body;
 
-  const valid = await membersOfTeam(teamId, items.map((i) => i.player_id));
-  if (items.some((i) => !valid.has(i.player_id))) {
+  const valid = await membersOfTeam(teamId, items.map((i) => i.member_id));
+  if (items.some((i) => !valid.has(i.member_id))) {
     return res.status(400).json({ error: 'Uno o más jugadores no están en el plantel de este equipo' });
   }
 
@@ -414,12 +379,12 @@ router.post('/teams/:id/charges', authRequired, teamOwnerRequired, asyncHandler(
   // Un cargo en cero (becado) no es movimiento contable — se omite en silencio.
   const billable = items.filter((i) => i.amount > 0);
 
-  for (const { player_id, amount } of billable) {
+  for (const { member_id, amount } of billable) {
     await db.prepare(`
       INSERT INTO club_ledger_entries
         (team_id, member_id, kind, category, concept, amount, due_date, period_label, note, batch_id, created_by_user_id, created_by_side)
       VALUES (?, ?, 'charge', ?, ?, ?, ?, ?, ?, ?, ?, 'team')
-    `).run(teamId, player_id, category, cleanConcept, amount, due_date, cleanPeriod, cleanNote, batchId, req.user.id);
+    `).run(teamId, member_id, category, cleanConcept, amount, due_date, cleanPeriod, cleanNote, batchId, req.user.id);
   }
 
   res.status(201).json({ created: billable.length, skipped: items.length - billable.length, batch_id: batchId });
@@ -441,42 +406,42 @@ router.post('/teams/:id/charges/repeat', authRequired, teamOwnerRequired, asyncH
   if (source.length === 0) return res.status(404).json({ error: 'No se encontró el lote de origen' });
 
   const template = source[0];
-  const amountByPlayer = new Map(source.map((r) => [r.player_id, Number(r.amount)]));
-  const requested = Array.isArray(req.body.player_ids) && req.body.player_ids.length > 0
-    ? [...new Set(req.body.player_ids.map(Number))]
+  const amountByPlayer = new Map(source.map((r) => [r.member_id, Number(r.amount)]));
+  const requested = Array.isArray(req.body.member_ids) && req.body.member_ids.length > 0
+    ? [...new Set(req.body.member_ids.map(Number))]
     : [...amountByPlayer.keys()];
 
   // Solo jugadores que sigan en el plantel y que estuvieran en el lote original
   // — si alguien se dio de baja entre un mes y otro, no se le vuelve a cobrar.
   const stillInTeam = await membersOfTeam(teamId, requested);
-  const playerIds = requested.filter((id) => stillInTeam.has(id) && amountByPlayer.has(id));
-  if (playerIds.length === 0) return res.status(400).json({ error: 'Ningún jugador válido para repetir el cargo' });
+  const memberIds = requested.filter((id) => stillInTeam.has(id) && amountByPlayer.has(id));
+  if (memberIds.length === 0) return res.status(400).json({ error: 'Ningún jugador válido para repetir el cargo' });
 
   const batchId = crypto.randomUUID();
   const cleanPeriod = isNonEmptyString(period_label) ? period_label.trim().toUpperCase() : template.period_label;
 
-  for (const playerId of playerIds) {
+  for (const memberId of memberIds) {
     await db.prepare(`
       INSERT INTO club_ledger_entries
         (team_id, member_id, kind, category, concept, amount, due_date, period_label, note, batch_id, created_by_user_id, created_by_side)
       VALUES (?, ?, 'charge', ?, ?, ?, ?, ?, ?, ?, ?, 'team')
     `).run(
-      teamId, playerId, template.category, template.concept, amountByPlayer.get(playerId),
+      teamId, memberId, template.category, template.concept, amountByPlayer.get(memberId),
       due_date, cleanPeriod, template.note, batchId, req.user.id
     );
   }
 
-  res.status(201).json({ created: playerIds.length, batch_id: batchId });
+  res.status(201).json({ created: memberIds.length, batch_id: batchId });
 }));
 
 // ─── Registrar un pago recibido (lo captura el club) ────────────────────────
 
-router.post('/teams/:id/players/:playerId/payments', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.post('/teams/:id/members/:memberId/payments', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
   const teamId = req.team.id;
-  const playerId = Number(req.params.playerId);
+  const memberId = Number(req.params.memberId);
 
-  const inTeam = await membersOfTeam(teamId, [playerId]);
-  if (!inTeam.has(playerId)) return res.status(404).json({ error: 'Ese jugador no está en el plantel de este equipo' });
+  const inTeam = await membersOfTeam(teamId, [memberId]);
+  if (!inTeam.has(memberId)) return res.status(404).json({ error: 'Ese jugador no está en el plantel de este equipo' });
 
   const { amount, payment_method, reference, proof_url, note } = req.body;
   if (amount === undefined || amount === null || amount === '' || Number.isNaN(Number(amount)) || Number(amount) <= 0) {
@@ -493,7 +458,7 @@ router.post('/teams/:id/players/:playerId/payments', authRequired, teamOwnerRequ
     VALUES (?, ?, 'payment', ?, ?, ?, ?, ?, ?, 'confirmed', ?, 'team')
     RETURNING *
   `).get(
-    teamId, playerId, concept, Number(amount),
+    teamId, memberId, concept, Number(amount),
     payment_method,
     isNonEmptyString(reference) ? reference.trim() : null,
     proof_url || null,
@@ -501,7 +466,7 @@ router.post('/teams/:id/players/:playerId/payments', authRequired, teamOwnerRequ
     req.user.id
   );
 
-  const balance = await settleIfPaid(teamId, playerId);
+  const balance = await settleIfPaid(teamId, memberId);
   res.status(201).json({ payment, balance });
 }));
 
@@ -602,18 +567,14 @@ function parseJersey(value) {
 router.post('/teams/:id/members', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
   const teamId = req.team.id;
   const {
-    display_name, first_name, last_name, birth_date, position, jersey_number, photo_url, curp,
+    display_name, birth_date, position, jersey_number, photo_url, curp,
     monthly_amount, group_label, tutor_name, tutor_phone, tutor_email, note,
   } = req.body;
 
-  // Se acepta `display_name` (un solo campo, lo nuevo) o el par
-  // first_name/last_name que manda el formulario de hoy. Basta con cualquiera
-  // de los dos, y el apellido ya NO es obligatorio: un club puede tener a
-  // alguien registrado solo como "El Güero" y eso es información válida, no un
-  // dato incompleto. Lo que se guarda siempre es un display_name.
-  const displayName = isNonEmptyString(display_name)
-    ? display_name.trim()
-    : [first_name, last_name].filter(isNonEmptyString).map((s) => s.trim()).join(' ');
+  // Un solo campo de nombre. No hay apellido obligatorio: un club puede tener
+  // a alguien registrado solo como "El Güero" y eso es información válida, no
+  // un dato incompleto.
+  const displayName = isNonEmptyString(display_name) ? display_name.trim() : '';
 
   if (!displayName) {
     return res.status(400).json({ error: 'El nombre es obligatorio' });
@@ -671,9 +632,10 @@ router.post('/teams/:id/members', authRequired, teamOwnerRequired, asyncHandler(
     cleanText(note, 200)
   );
 
-  // Se sigue respondiendo { player, account } con la misma forma de antes para
-  // no mover el frontend en esta fase; las dos mitades salen de la misma fila.
-  res.status(201).json({ player: memberAsPlayer(member), account: member });
+  // Una fila, una respuesta. Antes esto devolvía { player, account }: dos
+  // mitades de la misma fila, con la forma que tenía cuando la persona vivía
+  // en `players` y su ficha de cobranza aquí.
+  res.status(201).json({ member });
 }));
 
 // Edición de un miembro del padrón: datos de la persona Y su ficha de cobranza
@@ -681,16 +643,16 @@ router.post('/teams/:id/members', authRequired, teamOwnerRequired, asyncHandler(
 // campos que vinieron en el cuerpo — así el botón de WhatsApp puede mandar
 // únicamente { mark_reminded: true } sin borrar el resto con NULLs.
 
-router.patch('/teams/:id/accounts/:playerId', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.patch('/teams/:id/members/:memberId', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
   const teamId = req.team.id;
-  const playerId = Number(req.params.playerId);
+  const memberId = Number(req.params.memberId);
 
-  const inTeam = await membersOfTeam(teamId, [playerId]);
-  if (!inTeam.has(playerId)) return res.status(404).json({ error: 'Ese jugador no está en el plantel de este equipo' });
+  const inTeam = await membersOfTeam(teamId, [memberId]);
+  if (!inTeam.has(memberId)) return res.status(404).json({ error: 'Ese jugador no está en el plantel de este equipo' });
 
 
   const {
-    display_name, first_name, last_name, birth_date, position, jersey_number, photo_url, curp,
+    display_name, birth_date, position, jersey_number, photo_url, curp,
     monthly_amount, status, group_label, tutor_name, tutor_phone, tutor_email, note, mark_reminded,
   } = req.body;
 
@@ -706,7 +668,7 @@ router.patch('/teams/:id/accounts/:playerId', authRequired, teamOwnerRequired, a
     return res.status(400).json({ error: 'El correo del tutor no es válido' });
   }
 
-  if (first_name !== undefined && !isNonEmptyString(first_name)) {
+  if (display_name !== undefined && !isNonEmptyString(display_name)) {
     return res.status(400).json({ error: 'El nombre no puede quedar vacío' });
   }
   const jersey = parseJersey(jersey_number);
@@ -721,23 +683,8 @@ router.patch('/teams/:id/accounts/:playerId', authRequired, teamOwnerRequired, a
   const sets = [];
   const args = [];
 
-  // El nombre puede llegar como `display_name` (lo nuevo) o como el par
-  // first_name/last_name del formulario de hoy. En el segundo caso puede venir
-  // solo una mitad, así que se parte el nombre actual y se reemplaza la mitad
-  // que cambió, en vez de perder la otra.
-  if (display_name !== undefined || first_name !== undefined || last_name !== undefined) {
-    let nuevoNombre;
-    if (isNonEmptyString(display_name)) {
-      nuevoNombre = display_name.trim();
-    } else {
-      const actual = await db.prepare('SELECT display_name FROM club_members WHERE id = ?').get(playerId);
-      const partes = splitDisplayName(actual?.display_name);
-      const nom = first_name !== undefined ? first_name.trim() : partes.first_name;
-      const ape = last_name  !== undefined ? String(last_name || '').trim() : partes.last_name;
-      nuevoNombre = [nom, ape].filter(Boolean).join(' ');
-    }
-    if (!nuevoNombre) return res.status(400).json({ error: 'El nombre no puede quedar vacío' });
-    sets.push('display_name = ?'); args.push(nuevoNombre);
+  if (display_name !== undefined) {
+    sets.push('display_name = ?'); args.push(display_name.trim());
   }
 
   // Datos de la persona, ahora en la misma tabla que su cuenta.
@@ -764,7 +711,7 @@ router.patch('/teams/:id/accounts/:playerId', authRequired, teamOwnerRequired, a
   }
 
   sets.push('updated_at = NOW()');
-  args.push(teamId, playerId);
+  args.push(teamId, memberId);
 
   const account = await db.prepare(`
     UPDATE club_members
@@ -773,7 +720,7 @@ router.patch('/teams/:id/accounts/:playerId', authRequired, teamOwnerRequired, a
     RETURNING *
   `).get(...args);
 
-  res.json({ account });
+  res.json({ member: account });
 }));
 
 // Quitar a alguien del padrón del club.
@@ -792,26 +739,26 @@ router.patch('/teams/:id/accounts/:playerId', authRequired, teamOwnerRequired, a
 // usuario) antes de atreverse a borrar su fila de `players`. Ya no: el miembro
 // del club es una fila que solo le pertenece a este club. Borrarlo aquí no
 // puede tocar el roster de ningún torneo, porque no comparten nada.
-router.delete('/teams/:id/members/:playerId', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.delete('/teams/:id/members/:memberId', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
   const teamId = req.team.id;
-  const playerId = Number(req.params.playerId);
+  const memberId = Number(req.params.memberId);
 
-  const inTeam = await membersOfTeam(teamId, [playerId]);
-  if (!inTeam.has(playerId)) return res.status(404).json({ error: 'Esa persona no está en tu padrón' });
+  const inTeam = await membersOfTeam(teamId, [memberId]);
+  if (!inTeam.has(memberId)) return res.status(404).json({ error: 'Esa persona no está en tu padrón' });
 
   const movements = await db.prepare(
     'SELECT 1 FROM club_ledger_entries WHERE team_id = ? AND member_id = ? LIMIT 1'
-  ).get(teamId, playerId);
+  ).get(teamId, memberId);
 
   if (movements) {
     await db.prepare(`
       UPDATE club_members SET status = 'baja', updated_at = NOW()
       WHERE team_id = ? AND id = ?
-    `).run(teamId, playerId);
+    `).run(teamId, memberId);
     return res.json({ ok: true, action: 'baja' });
   }
 
-  await db.prepare('DELETE FROM club_members WHERE team_id = ? AND id = ?').run(teamId, playerId);
+  await db.prepare('DELETE FROM club_members WHERE team_id = ? AND id = ?').run(teamId, memberId);
 
   res.json({ ok: true, action: 'eliminado' });
 }));
@@ -891,19 +838,19 @@ router.post('/teams/:id/members/import-roster', authRequired, teamOwnerRequired,
 
 // Regenerar el link del papá (si se filtró en un grupo equivocado). El token
 // viejo deja de funcionar en cuanto se reemplaza.
-router.post('/teams/:id/accounts/:playerId/rotate-token', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.post('/teams/:id/members/:memberId/rotate-token', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
   const teamId = req.team.id;
-  const playerId = Number(req.params.playerId);
+  const memberId = Number(req.params.memberId);
 
-  const inTeam = await membersOfTeam(teamId, [playerId]);
-  if (!inTeam.has(playerId)) return res.status(404).json({ error: 'Ese jugador no está en el plantel de este equipo' });
+  const inTeam = await membersOfTeam(teamId, [memberId]);
+  if (!inTeam.has(memberId)) return res.status(404).json({ error: 'Ese jugador no está en el plantel de este equipo' });
 
   const account = await db.prepare(`
     UPDATE club_members
     SET share_token = ?, updated_at = NOW()
     WHERE team_id = ? AND id = ?
     RETURNING share_token
-  `).get(crypto.randomUUID(), teamId, playerId);
+  `).get(crypto.randomUUID(), teamId, memberId);
 
   res.json({ share_token: account.share_token });
 }));
@@ -926,7 +873,7 @@ router.patch('/teams/:id/settings', authRequired, teamOwnerRequired, asyncHandle
 async function loadAccountByToken(shareToken) {
   if (!isNonEmptyString(shareToken)) return null;
   return db.prepare(`
-    SELECT a.team_id, a.id AS player_id, a.monthly_amount, a.status,${nameCompatSql('a')},
+    SELECT a.team_id, a.id AS member_id, a.monthly_amount, a.status, a.display_name,
            a.photo_url, a.jersey_number,
            t.name AS team_name, t.logo_url AS team_logo_url, t.brand_color,
            t.contact_phone AS team_phone, t.contact_email AS team_email
@@ -947,7 +894,7 @@ router.get('/statement/:shareToken', publicStatementLimiter, asyncHandler(async 
     FROM club_ledger_entries
     WHERE team_id = ? AND member_id = ?
     ORDER BY created_at ASC, id ASC
-  `).all(account.team_id, account.player_id);
+  `).all(account.team_id, account.member_id);
 
   const agg = await db.prepare(`
     SELECT ${BALANCE_SUM_SQL} AS balance,
@@ -955,15 +902,14 @@ router.get('/statement/:shareToken', publicStatementLimiter, asyncHandler(async 
            COALESCE(SUM(CASE WHEN kind = 'charge' AND status = 'open' AND due_date < CURRENT_DATE THEN amount ELSE 0 END), 0) AS overdue_charges
     FROM club_ledger_entries
     WHERE team_id = ? AND member_id = ?
-  `).get(account.team_id, account.player_id);
+  `).get(account.team_id, account.member_id);
 
   const balance = Number(agg?.balance || 0);
   const hasPending = entries.some((e) => e.kind === 'payment' && e.status === 'pending');
 
   res.json({
-    player: {
-      first_name: account.first_name,
-      last_name: account.last_name,
+    member: {
+      display_name: account.display_name,
       photo_url: account.photo_url,
       jersey_number: account.jersey_number,
     },
@@ -1005,19 +951,19 @@ router.post('/statement/:shareToken/report-payment', reportPaymentLimiter, async
   const alreadyPending = await db.prepare(`
     SELECT id FROM club_ledger_entries
     WHERE team_id = ? AND member_id = ? AND kind = 'payment' AND status = 'pending'
-  `).get(account.team_id, account.player_id);
+  `).get(account.team_id, account.member_id);
   if (alreadyPending) {
     return res.status(409).json({ error: 'Ya tienes un pago esperando confirmación del club. Espera a que lo revisen.' });
   }
 
-  const playerName = `${account.first_name} ${account.last_name}`.trim();
+  const memberName = account.display_name;
 
   await db.prepare(`
     INSERT INTO club_ledger_entries
       (team_id, member_id, kind, concept, amount, payment_method, reference, proof_url, note, status, created_by_side)
     VALUES (?, ?, 'payment', ?, ?, ?, ?, ?, ?, 'pending', 'player')
   `).run(
-    account.team_id, account.player_id,
+    account.team_id, account.member_id,
     'Pago reportado por el jugador',
     Number(amount),
     payment_method,
@@ -1030,9 +976,9 @@ router.post('/statement/:shareToken/report-payment', reportPaymentLimiter, async
     account.team_id,
     'player_payment_reported',
     'Un pago espera tu confirmación 🧾',
-    `${playerName} reportó un pago de ${formatMoney(amount)} (${payment_method}). `
+    `${memberName} reportó un pago de ${formatMoney(amount)} (${payment_method}). `
       + `Revísalo en Finanzas para que se aplique a su estado de cuenta.`,
-    { player_id: account.player_id }
+    { member_id: account.member_id }
   );
 
   res.status(201).json({ ok: true });
@@ -1049,7 +995,7 @@ router.post('/statement/:shareToken/withdraw-payment', reportPaymentLimiter, asy
     SELECT id FROM club_ledger_entries
     WHERE team_id = ? AND member_id = ? AND kind = 'payment'
       AND status = 'pending' AND created_by_side = 'player'
-  `).get(account.team_id, account.player_id);
+  `).get(account.team_id, account.member_id);
 
   if (!pending) return res.status(404).json({ error: 'No tienes ningún pago esperando confirmación' });
 

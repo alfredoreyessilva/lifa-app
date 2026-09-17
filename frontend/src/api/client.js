@@ -552,14 +552,14 @@ export const api = {
   // papá abre su estado de cuenta sin cuenta, el share_token es la credencial.
   getPlayerBillingOverview: (teamId, token) =>
     request(`/player-billing/teams/${teamId}/overview`, { token }),
-  getPlayerLedger: (teamId, playerId, token) =>
-    request(`/player-billing/teams/${teamId}/players/${playerId}/entries`, { token }),
+  getMemberLedger: (teamId, memberId, token) =>
+    request(`/player-billing/teams/${teamId}/members/${memberId}/entries`, { token }),
   createPlayerCharges: (teamId, payload, token) =>
     request(`/player-billing/teams/${teamId}/charges`, { method: 'POST', body: payload, token }),
   repeatPlayerCharges: (teamId, payload, token) =>
     request(`/player-billing/teams/${teamId}/charges/repeat`, { method: 'POST', body: payload, token }),
-  recordPlayerPayment: (teamId, playerId, payload, token) =>
-    request(`/player-billing/teams/${teamId}/players/${playerId}/payments`, { method: 'POST', body: payload, token }),
+  recordMemberPayment: (teamId, memberId, payload, token) =>
+    request(`/player-billing/teams/${teamId}/members/${memberId}/payments`, { method: 'POST', body: payload, token }),
   confirmPlayerPayment: (entryId, token) =>
     request(`/player-billing/entries/${entryId}/confirm`, { method: 'POST', token }),
   voidPlayerLedgerEntry: (entryId, reason, token) =>
@@ -568,15 +568,16 @@ export const api = {
   // liga da de alta aquí a su gente y ya puede cobrarle.
   addTeamMember: (teamId, payload, token) =>
     request(`/player-billing/teams/${teamId}/members`, { method: 'POST', body: payload, token }),
-  removeTeamMember: (teamId, playerId, token) =>
-    request(`/player-billing/teams/${teamId}/members/${playerId}`, { method: 'DELETE', token }),
+  removeTeamMember: (teamId, memberId, token) =>
+    request(`/player-billing/teams/${teamId}/members/${memberId}`, { method: 'DELETE', token }),
   importRosterToMembers: (teamId, payload, token) =>
     request(`/player-billing/teams/${teamId}/members/import-roster`, { method: 'POST', body: payload, token }),
-  // Edita persona y ficha de cobranza en una sola llamada.
-  updatePlayerAccount: (teamId, playerId, payload, token) =>
-    request(`/player-billing/teams/${teamId}/accounts/${playerId}`, { method: 'PATCH', body: payload, token }),
-  rotatePlayerShareToken: (teamId, playerId, token) =>
-    request(`/player-billing/teams/${teamId}/accounts/${playerId}/rotate-token`, { method: 'POST', token }),
+  // Edita persona y ficha de cobranza en una sola llamada. Mismo recurso que
+  // el DELETE de arriba: lo que los separa es el método.
+  updateTeamMember: (teamId, memberId, payload, token) =>
+    request(`/player-billing/teams/${teamId}/members/${memberId}`, { method: 'PATCH', body: payload, token }),
+  rotateMemberShareToken: (teamId, memberId, token) =>
+    request(`/player-billing/teams/${teamId}/members/${memberId}/rotate-token`, { method: 'POST', token }),
   updatePlayerBillingSettings: (teamId, payload, token) =>
     request(`/player-billing/teams/${teamId}/settings`, { method: 'PATCH', body: payload, token }),
   getPublicPlayerStatement: (shareToken) =>

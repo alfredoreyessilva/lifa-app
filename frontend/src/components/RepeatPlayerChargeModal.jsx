@@ -67,7 +67,7 @@ export default function RepeatPlayerChargeModal({ batches, onSubmit, onCancel })
         <select value={batchId} onChange={(e) => setBatchId(e.target.value)}>
           {batches.map((b) => (
             <option key={b.batch_id} value={b.batch_id}>
-              {(CATEGORY_LABELS[b.category] || b.category)} · {b.concept} · {amountLabel(b)} · {b.player_count} jugador{Number(b.player_count) === 1 ? '' : 'es'}
+              {(CATEGORY_LABELS[b.category] || b.category)} · {b.concept} · {amountLabel(b)} · {b.member_count} jugador{Number(b.member_count) === 1 ? '' : 'es'}
             </option>
           ))}
         </select>
@@ -76,7 +76,7 @@ export default function RepeatPlayerChargeModal({ batches, onSubmit, onCancel })
       {selected && (
         <p style={{ fontSize: 12, color: 'var(--ws-ink-faint)', marginTop: -4 }}>
           Se vuelve a crear ese cargo ({amountLabel(selected)}, total {money(selected.total_amount)}) para
-          los {selected.player_count} jugadores que sigan en el plantel, respetando el monto de cada uno.
+          los {selected.member_count} jugadores que sigan en el plantel, respetando el monto de cada uno.
         </p>
       )}
 

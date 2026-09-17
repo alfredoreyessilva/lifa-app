@@ -28,24 +28,24 @@ function statementUrl(shareToken) {
 // Se abre WhatsApp con el texto ya escrito (wa.me), no se manda solo: no hay
 // API de por medio, no cuesta nada, y el tesorero puede editarlo antes de
 // enviarlo — que es lo correcto, porque conoce el tono de cada familia.
-function whatsappReminderUrl(player, teamName) {
-  const link = statementUrl(player.share_token);
-  const saludo = player.tutor_name ? `Hola ${player.tutor_name}` : 'Hola';
-  const owed = Number(player.balance) < 0;
+function whatsappReminderUrl(member, teamName) {
+  const link = statementUrl(member.share_token);
+  const saludo = member.tutor_name ? `Hola ${member.tutor_name}` : 'Hola';
+  const owed = Number(member.balance) < 0;
 
   const cuerpo = owed
-    ? `${saludo}, te escribo de ${teamName}. ${player.first_name} tiene un saldo pendiente de `
-      + `${money(player.balance)}${player.next_due_date ? ` (vence el ${fmtDate(player.next_due_date)})` : ''}. `
+    ? `${saludo}, te escribo de ${teamName}. ${member.display_name} tiene un saldo pendiente de `
+      + `${money(member.balance)}${member.next_due_date ? ` (vence el ${fmtDate(member.next_due_date)})` : ''}. `
       + `Aquí puedes ver el detalle y reportar tu pago: ${link}`
-    : `${saludo}, te escribo de ${teamName}. ${player.first_name} está al corriente con sus cuotas. `
+    : `${saludo}, te escribo de ${teamName}. ${member.display_name} está al corriente con sus cuotas. `
       + `Puedes consultar su estado de cuenta cuando quieras aquí: ${link}`;
 
-  const phone = String(player.tutor_phone || '').replace(/[^\d]/g, '');
+  const phone = String(member.tutor_phone || '').replace(/[^\d]/g, '');
   return `https://wa.me/${phone}?text=${encodeURIComponent(cuerpo)}`;
 }
 
 // Cuotas del club hacia sus jugadores. Es el libro equipo → jugador
-// (player_ledger_entries), el gemelo del que la liga usa para cobrarle al
+// (member_ledger_entries), el gemelo del que la liga usa para cobrarle al
 // equipo — pero aquí el papá también escribe: reporta su pago desde el link
 // público y el club lo confirma.
 export default function TeamFinancesSection({ team, token }) {
@@ -54,7 +54,7 @@ export default function TeamFinancesSection({ team, token }) {
   const [notice, setNotice] = useState('');
   const [modal, setModal] = useState(null);
   const [confirm, setConfirm] = useState(null);
-  const [openPlayerId, setOpenPlayerId] = useState(null);
+  const [openMemberId, setOpenMemberId] = useState(null);
   const [ledger, setLedger] = useState(null);
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -67,38 +67,38 @@ export default function TeamFinancesSection({ team, token }) {
       .catch((e) => setError(e.message));
   }
 
-  async function openLedger(playerId) {
-    if (openPlayerId === playerId) { setOpenPlayerId(null); setLedger(null); return; }
-    setOpenPlayerId(playerId);
+  async function openLedger(memberId) {
+    if (openMemberId === memberId) { setOpenMemberId(null); setLedger(null); return; }
+    setOpenMemberId(memberId);
     setLedger(null);
     try {
-      setLedger(await api.getPlayerLedger(team.id, playerId, token));
+      setLedger(await api.getMemberLedger(team.id, memberId, token));
     } catch (e) {
       setError(e.message);
     }
   }
 
-  async function reloadLedger(playerId) {
-    if (!playerId) return;
+  async function reloadLedger(memberId) {
+    if (!memberId) return;
     try {
-      setLedger(await api.getPlayerLedger(team.id, playerId, token));
+      setLedger(await api.getMemberLedger(team.id, memberId, token));
     } catch { /* el panorama ya se refrescó; el detalle puede esperar */ }
   }
 
-  async function afterWrite(playerId) {
+  async function afterWrite(memberId) {
     setModal(null);
     setConfirm(null);
     await refresh();
-    await reloadLedger(playerId ?? openPlayerId);
+    await reloadLedger(memberId ?? openMemberId);
   }
 
   async function toggleReminders() {
     if (!data) return;
     setSavingSettings(true);
     try {
-      const next = !data.team.player_billing_reminders_enabled;
-      await api.updatePlayerBillingSettings(team.id, { player_billing_reminders_enabled: next }, token);
-      setData((d) => ({ ...d, team: { ...d.team, player_billing_reminders_enabled: next } }));
+      const next = !data.team.member_billing_reminders_enabled;
+      await api.updatePlayerBillingSettings(team.id, { member_billing_reminders_enabled: next }, token);
+      setData((d) => ({ ...d, team: { ...d.team, member_billing_reminders_enabled: next } }));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -106,20 +106,20 @@ export default function TeamFinancesSection({ team, token }) {
     }
   }
 
-  async function remind(player) {
+  async function remind(member) {
     // Marcar el recordatorio ANTES de abrir WhatsApp: si se hace después, el
     // navegador ya cambió de pestaña y la petición se puede quedar a medias.
     try {
-      await api.updatePlayerAccount(team.id, player.player_id, { mark_reminded: true }, token);
+      await api.updateTeamMember(team.id, member.member_id, { mark_reminded: true }, token);
       await refresh();
     } catch { /* que no se pierda el recordatorio por un fallo de red */ }
-    window.open(whatsappReminderUrl(player, team.name), '_blank', 'noopener');
+    window.open(whatsappReminderUrl(member, team.name), '_blank', 'noopener');
   }
 
-  async function copyLink(player) {
+  async function copyLink(member) {
     try {
-      await navigator.clipboard.writeText(statementUrl(player.share_token));
-      setNotice(`Link de ${player.first_name} copiado. Pégalo en tu grupo de WhatsApp.`);
+      await navigator.clipboard.writeText(statementUrl(member.share_token));
+      setNotice(`Link de ${member.display_name} copiado. Pégalo en tu grupo de WhatsApp.`);
       setTimeout(() => setNotice(''), 4000);
     } catch {
       setError('Tu navegador no dejó copiar el link. Ábrelo desde "Ver movimientos".');
@@ -129,11 +129,11 @@ export default function TeamFinancesSection({ team, token }) {
   if (error && !data) return <div className="form-error">{error}</div>;
   if (!data) return <Loading />;
 
-  const { kpis, players, pending_payments: pending } = data;
-  const hasPlayers = players.length > 0;
+  const { kpis, members, pending_payments: pending } = data;
+  const hasMembers = members.length > 0;
   const hasMovements = data.recent_activity.length > 0;
 
-  if (!hasPlayers) {
+  if (!hasMembers) {
     return (
       <div className="empty-teach">
         <div className="empty-teach-icon">💰</div>
@@ -186,7 +186,7 @@ export default function TeamFinancesSection({ team, token }) {
           {pending.map((p) => (
             <div key={p.id} className="pending-row">
               <div className="pending-row-main">
-                <div><strong>{p.first_name} {p.last_name}</strong> reportó un pago</div>
+                <div><strong>{p.display_name}</strong> reportó un pago</div>
                 <div className="pending-row-sub">
                   {p.payment_method}{p.reference ? ` · ${p.reference}` : ''} · {fmtDate(p.created_at)}
                   {p.note ? ` · ${p.note}` : ''}
@@ -203,7 +203,7 @@ export default function TeamFinancesSection({ team, token }) {
                 onClick={async () => {
                   try {
                     await api.confirmPlayerPayment(p.id, token);
-                    await afterWrite(p.player_id);
+                    await afterWrite(p.member_id);
                   } catch (e) { setError(e.message); }
                 }}
               >
@@ -215,7 +215,7 @@ export default function TeamFinancesSection({ team, token }) {
                 onClick={() => setConfirm({
                   kind: 'reject',
                   entry: p,
-                  playerName: `${p.first_name} ${p.last_name}`,
+                  memberName: p.display_name,
                 })}
               >
                 Rechazar
@@ -235,7 +235,7 @@ export default function TeamFinancesSection({ team, token }) {
         <label className="spacer" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--ws-ink-dim)' }}>
           <input
             type="checkbox"
-            checked={!!data.team.player_billing_reminders_enabled}
+            checked={!!data.team.member_billing_reminders_enabled}
             onChange={toggleReminders}
             disabled={savingSettings}
           />
@@ -272,18 +272,18 @@ export default function TeamFinancesSection({ team, token }) {
             </tr>
           </thead>
           <tbody>
-            {players.map((p) => {
+            {members.map((p) => {
               const balance = Number(p.balance);
               const isBaja = p.status === 'baja';
               const reminded = timeAgo(p.last_reminded_at);
               return (
-                <tr key={p.player_id} className={isBaja ? 'row-muted' : ''}>
+                <tr key={p.member_id} className={isBaja ? 'row-muted' : ''}>
                   <td>
                     <div className="cell-player">
                       {p.photo_url && <img src={p.photo_url} alt="" />}
                       <div style={{ minWidth: 0 }}>
                         <div className="cell-player-name">
-                          {p.first_name} {p.last_name}
+                          {p.display_name}
                           {p.jersey_number != null && (
                             <span style={{ color: 'var(--ws-ink-faint)' }}> #{p.jersey_number}</span>
                           )}
@@ -323,14 +323,14 @@ export default function TeamFinancesSection({ team, token }) {
                         Copiar link
                       </button>
                     )}
-                    <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'account', player: p })}>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'account', member: p })}>
                       Ficha
                     </button>
-                    <button className="btn btn-ws btn-sm" onClick={() => setModal({ type: 'payment', player: p })}>
+                    <button className="btn btn-ws btn-sm" onClick={() => setModal({ type: 'payment', member: p })}>
                       + Pago
                     </button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => openLedger(p.player_id)}>
-                      {openPlayerId === p.player_id ? 'Ocultar' : 'Movimientos'}
+                    <button className="btn btn-ghost btn-sm" onClick={() => openLedger(p.member_id)}>
+                      {openMemberId === p.member_id ? 'Ocultar' : 'Movimientos'}
                     </button>
                   </td>
                 </tr>
@@ -340,16 +340,16 @@ export default function TeamFinancesSection({ team, token }) {
         </table>
       </div>
 
-      {openPlayerId && (
+      {openMemberId && (
         <div style={{
           marginTop: 20, background: 'var(--ws-surface)', border: '1px solid var(--ws-line)',
           borderRadius: 'var(--radius-md)', padding: 16,
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h3 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 18 }}>
-              Movimientos — {ledger ? `${ledger.player.first_name} ${ledger.player.last_name}` : ''}
+              Movimientos — {ledger ? ledger.member.display_name : ''}
             </h3>
-            <button className="btn btn-ghost btn-sm" onClick={() => { setOpenPlayerId(null); setLedger(null); }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setOpenMemberId(null); setLedger(null); }}>
               Cerrar
             </button>
           </div>
@@ -361,13 +361,13 @@ export default function TeamFinancesSection({ team, token }) {
               onConfirm={async (entry) => {
                 try {
                   await api.confirmPlayerPayment(entry.id, token);
-                  await afterWrite(openPlayerId);
+                  await afterWrite(openMemberId);
                 } catch (e) { setError(e.message); }
               }}
               onVoid={(entry) => setConfirm({
                 kind: entry.kind === 'payment' && entry.status === 'pending' ? 'reject' : 'void',
                 entry,
-                playerName: `${ledger.player.first_name} ${ledger.player.last_name}`,
+                memberName: ledger.member.display_name,
               })}
             />
           )}
@@ -384,7 +384,7 @@ export default function TeamFinancesSection({ team, token }) {
       {modal?.type === 'charge' && (
         <Modal title="Generar cuotas" onClose={() => setModal(null)}>
           <PlayerChargeForm
-            players={players}
+            members={members}
             categories={data.categories}
             onCancel={() => setModal(null)}
             onSubmit={async (payload) => {
@@ -409,29 +409,29 @@ export default function TeamFinancesSection({ team, token }) {
       )}
 
       {modal?.type === 'payment' && (
-        <Modal title={`Registrar pago — ${modal.player.first_name} ${modal.player.last_name}`} onClose={() => setModal(null)}>
+        <Modal title={`Registrar pago — ${modal.member.display_name}`} onClose={() => setModal(null)}>
           <PlayerPaymentForm
-            playerName={`${modal.player.first_name} ${modal.player.last_name}`}
+            memberName={modal.member.display_name}
             methods={data.payment_methods}
-            suggestedAmount={Number(modal.player.balance) < 0 ? Math.abs(Number(modal.player.balance)) : null}
+            suggestedAmount={Number(modal.member.balance) < 0 ? Math.abs(Number(modal.member.balance)) : null}
             onCancel={() => setModal(null)}
             onSubmit={async (payload) => {
-              await api.recordPlayerPayment(team.id, modal.player.player_id, payload, token);
-              await afterWrite(modal.player.player_id);
+              await api.recordMemberPayment(team.id, modal.member.member_id, payload, token);
+              await afterWrite(modal.member.member_id);
             }}
           />
         </Modal>
       )}
 
       {modal?.type === 'account' && (
-        <Modal title={`Ficha — ${modal.player.first_name} ${modal.player.last_name}`} onClose={() => setModal(null)}>
+        <Modal title={`Ficha — ${modal.member.display_name}`} onClose={() => setModal(null)}>
           <ClubMemberForm
-            member={modal.player}
+            member={modal.member}
             statuses={data.account_statuses}
             onCancel={() => setModal(null)}
             onSubmit={async (payload) => {
-              await api.updatePlayerAccount(team.id, modal.player.player_id, payload, token);
-              await afterWrite(modal.player.player_id);
+              await api.updateTeamMember(team.id, modal.member.member_id, payload, token);
+              await afterWrite(modal.member.member_id);
             }}
           />
         </Modal>
@@ -440,7 +440,7 @@ export default function TeamFinancesSection({ team, token }) {
       {confirm?.kind === 'reject' && (
         <ConfirmDialog
           title="Rechazar este pago"
-          message={`El pago que reportó ${confirm.playerName} se marca como rechazado y no se aplica a su saldo.`}
+          message={`El pago que reportó ${confirm.memberName} se marca como rechazado y no se aplica a su saldo.`}
           detail={<>
             <strong>{money(confirm.entry.amount)}</strong> · {confirm.entry.payment_method}
             {confirm.entry.reference ? ` · ${confirm.entry.reference}` : ''}
@@ -453,7 +453,7 @@ export default function TeamFinancesSection({ team, token }) {
           onClose={() => setConfirm(null)}
           onConfirm={async (reason) => {
             await api.voidPlayerLedgerEntry(confirm.entry.id, reason, token);
-            await afterWrite(confirm.entry.player_id);
+            await afterWrite(confirm.entry.member_id);
           }}
         />
       )}
@@ -461,7 +461,7 @@ export default function TeamFinancesSection({ team, token }) {
       {confirm?.kind === 'void' && (
         <ConfirmDialog
           title={confirm.entry.kind === 'charge' ? 'Cancelar este cargo' : 'Cancelar este pago'}
-          message={`Se cancela el movimiento de ${confirm.playerName} y su saldo se recalcula.`}
+          message={`Se cancela el movimiento de ${confirm.memberName} y su saldo se recalcula.`}
           detail={<>
             <strong>{money(confirm.entry.amount)}</strong> · {confirm.entry.concept}
             {confirm.entry.due_date ? ` · vence ${fmtDate(confirm.entry.due_date)}` : ''}
@@ -474,7 +474,7 @@ export default function TeamFinancesSection({ team, token }) {
           onClose={() => setConfirm(null)}
           onConfirm={async (reason) => {
             await api.voidPlayerLedgerEntry(confirm.entry.id, reason, token);
-            await afterWrite(confirm.entry.player_id);
+            await afterWrite(confirm.entry.member_id);
           }}
         />
       )}

@@ -15,7 +15,7 @@ const METHOD_LABELS = {
 // práctica, transferencia que ya vio en su cuenta). Nace confirmado y baja el
 // saldo de inmediato — a diferencia del que reporta el papá desde su link
 // público, que nace pendiente y espera revisión.
-export default function PlayerPaymentForm({ playerName, methods, suggestedAmount, onSubmit, onCancel }) {
+export default function PlayerPaymentForm({ memberName, methods, suggestedAmount, onSubmit, onCancel }) {
   const [form, setForm] = useState({
     amount: suggestedAmount != null && suggestedAmount > 0 ? String(suggestedAmount) : '',
     payment_method: 'transferencia',
@@ -61,7 +61,7 @@ export default function PlayerPaymentForm({ playerName, methods, suggestedAmount
       {error && <div className="form-error">{error}</div>}
 
       <p style={{ fontSize: 13, color: 'var(--ws-ink-dim)', marginTop: 0 }}>
-        Registra un pago recibido de <strong>{playerName}</strong>. Se aplica de inmediato a su estado de cuenta.
+        Registra un pago recibido de <strong>{memberName}</strong>. Se aplica de inmediato a su estado de cuenta.
         {suggestedAmount > 0 && <> Debe {money(suggestedAmount)}.</>}
       </p>
 

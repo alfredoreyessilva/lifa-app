@@ -22,8 +22,8 @@ const CATEGORY_LABELS = {
 // Los jugadores dados de baja no aparecen. Los becados sí, en cero: se quedan
 // visibles para que el tesorero vea el plantel completo, y el backend omite
 // las filas en cero al insertar.
-export default function PlayerChargeForm({ players, categories, onSubmit, onCancel }) {
-  const eligible = useMemo(() => players.filter((p) => p.status !== 'baja'), [players]);
+export default function PlayerChargeForm({ members, categories, onSubmit, onCancel }) {
+  const eligible = useMemo(() => members.filter((p) => p.status !== 'baja'), [members]);
 
   // Categorías internas del club presentes en el padrón, para el filtro. Es la
   // agrupación PROPIA del equipo (group_label), no la rama de la liga: un club
@@ -43,11 +43,11 @@ export default function PlayerChargeForm({ players, categories, onSubmit, onCanc
     note: '',
   });
 
-  // amounts: { [player_id]: string }. Vacío o "0" = no se le cobra.
+  // amounts: { [member_id]: string }. Vacío o "0" = no se le cobra.
   const [amounts, setAmounts] = useState(() => {
     const initial = {};
     eligible.forEach((p) => {
-      initial[p.player_id] = p.status === 'beca' ? '0' : (p.monthly_amount != null ? String(p.monthly_amount) : '');
+      initial[p.member_id] = p.status === 'beca' ? '0' : (p.monthly_amount != null ? String(p.monthly_amount) : '');
     });
     return initial;
   });
@@ -60,7 +60,7 @@ export default function PlayerChargeForm({ players, categories, onSubmit, onCanc
     : eligible;
 
   const items = Object.entries(amounts)
-    .map(([id, value]) => ({ player_id: Number(id), amount: Number(value || 0) }))
+    .map(([id, value]) => ({ member_id: Number(id), amount: Number(value || 0) }))
     .filter((i) => i.amount > 0);
 
   const total = items.reduce((sum, i) => sum + i.amount, 0);
@@ -73,7 +73,7 @@ export default function PlayerChargeForm({ players, categories, onSubmit, onCanc
     setAmounts((prev) => {
       const next = { ...prev };
       visible.forEach((p) => {
-        next[p.player_id] = p.status === 'beca' ? '0' : (p.monthly_amount != null ? String(p.monthly_amount) : '');
+        next[p.member_id] = p.status === 'beca' ? '0' : (p.monthly_amount != null ? String(p.monthly_amount) : '');
       });
       return next;
     });
@@ -82,7 +82,7 @@ export default function PlayerChargeForm({ players, categories, onSubmit, onCanc
   function clearVisible() {
     setAmounts((prev) => {
       const next = { ...prev };
-      visible.forEach((p) => { next[p.player_id] = ''; });
+      visible.forEach((p) => { next[p.member_id] = ''; });
       return next;
     });
   }
@@ -183,17 +183,17 @@ export default function PlayerChargeForm({ players, categories, onSubmit, onCanc
           </thead>
           <tbody>
             {visible.map((p) => (
-              <tr key={p.player_id} className={p.status === 'beca' ? 'row-muted' : ''}>
+              <tr key={p.member_id} className={p.status === 'beca' ? 'row-muted' : ''}>
                 <td>
-                  <div className="cell-player-name">{p.first_name} {p.last_name}</div>
+                  <div className="cell-player-name">{p.display_name}</div>
                   {p.status === 'beca' && <span className="pill is-muted">Becado</span>}
                 </td>
                 <td style={{ color: 'var(--ws-ink-faint)', fontSize: 12 }}>{p.group_label || '—'}</td>
                 <td className="col-num">
                   <input
                     type="number" min="0" step="0.01"
-                    value={amounts[p.player_id] ?? ''}
-                    onChange={(e) => setAmounts((prev) => ({ ...prev, [p.player_id]: e.target.value }))}
+                    value={amounts[p.member_id] ?? ''}
+                    onChange={(e) => setAmounts((prev) => ({ ...prev, [p.member_id]: e.target.value }))}
                     placeholder="0"
                     style={{ width: 100, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
                   />

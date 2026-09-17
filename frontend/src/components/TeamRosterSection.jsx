@@ -56,7 +56,7 @@ export default function TeamRosterSection({ team, token }) {
   if (error && !data) return <div className="form-error">{error}</div>;
   if (!data) return <Loading />;
 
-  const members = data.players;
+  const members = data.members;
   const active = members.filter((m) => m.status !== 'baja');
   const withoutFee = active.filter((m) => m.monthly_amount == null).length;
 
@@ -118,13 +118,13 @@ export default function TeamRosterSection({ team, token }) {
             </thead>
             <tbody>
               {members.map((m) => (
-                <tr key={m.player_id} className={m.status === 'baja' ? 'row-muted' : ''}>
+                <tr key={m.member_id} className={m.status === 'baja' ? 'row-muted' : ''}>
                   <td>
                     <div className="cell-player">
                       {m.photo_url && <img src={m.photo_url} alt="" />}
                       <div style={{ minWidth: 0 }}>
                         <div className="cell-player-name">
-                          {m.first_name} {m.last_name}
+                          {m.display_name}
                           {m.jersey_number != null && (
                             <span style={{ color: 'var(--ws-ink-faint)' }}> #{m.jersey_number}</span>
                           )}
@@ -170,7 +170,7 @@ export default function TeamRosterSection({ team, token }) {
 
       {modal?.type === 'member' && (
         <Modal
-          title={modal.member ? `Editar — ${modal.member.first_name} ${modal.member.last_name}` : 'Agregar jugador al padrón'}
+          title={modal.member ? `Editar — ${modal.member.display_name}` : 'Agregar jugador al padrón'}
           onClose={() => setModal(null)}
         >
           <ClubMemberForm
@@ -179,7 +179,7 @@ export default function TeamRosterSection({ team, token }) {
             onCancel={() => setModal(null)}
             onSubmit={async (payload) => {
               if (modal.member) {
-                await api.updatePlayerAccount(team.id, modal.member.player_id, payload, token);
+                await api.updateTeamMember(team.id, modal.member.member_id, payload, token);
               } else {
                 await api.addTeamMember(team.id, payload, token);
               }
@@ -206,7 +206,7 @@ export default function TeamRosterSection({ team, token }) {
       {confirm && (
         <ConfirmDialog
           title="Quitar del padrón"
-          message={`${confirm.first_name} ${confirm.last_name} deja de aparecer en el cobro del mes.`}
+          message={`${confirm.display_name} deja de aparecer en el cobro del mes.`}
           warning={
             'Si ya tiene cargos o pagos registrados no se borra: se le da de baja y su historial '
             + 'se conserva completo. Solo se elimina de verdad si nunca tuvo un movimiento.'
@@ -216,7 +216,7 @@ export default function TeamRosterSection({ team, token }) {
           danger
           onClose={() => setConfirm(null)}
           onConfirm={async () => {
-            await api.removeTeamMember(team.id, confirm.player_id, token);
+            await api.removeTeamMember(team.id, confirm.member_id, token);
             await afterChange();
           }}
         />

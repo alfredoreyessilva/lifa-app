@@ -72,9 +72,9 @@ export default function PlayerStatementPage() {
         )}
         <div className="statement-label">{data.team.name}</div>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, margin: '8px 0 16px' }}>
-          {data.player.first_name} {data.player.last_name}
-          {data.player.jersey_number != null && (
-            <span style={{ color: 'var(--ws-ink-faint)' }}> #{data.player.jersey_number}</span>
+          {data.member.display_name}
+          {data.member.jersey_number != null && (
+            <span style={{ color: 'var(--ws-ink-faint)' }}> #{data.member.jersey_number}</span>
           )}
         </h1>
 

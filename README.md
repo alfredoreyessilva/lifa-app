@@ -66,9 +66,18 @@ verificación.
   desarrollo contra el host de producción salvo que se le pase una variable
   explícita. Son unas diez líneas en `config/db.js` y eliminan la categoría
   entera de accidente, incluido el de levantar un segundo backend por error.
-- **Fase B de la separación del padrón** — ver "Fase B" al final de "Cuotas del
-  club". Es lo único grande que queda abierto de esta línea de trabajo, y está
-  especificado con detalle para poder arrancarlo en frío.
+- **Renombrar `/api/player-billing`** — es lo único que quedó de la fase B (ya
+  hecha; ver "Cuotas del club"). El prefijo y el archivo `routes/playerBilling.js`
+  siguen diciendo "player" donde quieren decir "miembro del club". Se dejó fuera
+  porque mueve los 18 endpoints del router de un golpe —incluidos los tres
+  públicos del papá— en vez de los 5 que movió la fase, y **toda esta clase de
+  cambio tiene ventana de incompatibilidad al desplegar**: eso está explicado,
+  con sus salidas, en la nota de "Fase B". Junto con el prefijo van
+  `created_by_side = 'player'` y los tipos de notificación `player_*`, que son
+  valores guardados y piden migración.
+- **Scroll horizontal en el modal de la ficha del padrón** — las rejillas de
+  "Categoría / Número / Posición" y "Cuota / Situación" desbordan el ancho del
+  modal. Es preexistente y está medido en "Fase B".
 - **Reactivar comisión de Hotel sin Drive**: desde que se quitó Travelpayouts Drive (ver "Monetización"), el botón 🏨 Hotel no genera comisión. Ya no depende de la aprobación de Booking.com dentro de Travelpayouts (ese flujo se fue junto con Drive) — la alternativa ya integrada en el código es configurar `VITE_HOTEL_AFFILIATE_ID` con un ID de afiliado directo de Booking.com. Falta conseguir/confirmar ese ID y configurarlo en Vercel.
 - **Rellenar los datos legales** — **son cuatro datos y un solo archivo**: `frontend/src/config/legal.js` (razón social o nombre de quien opera, domicilio fiscal, correo de contacto y ciudad/estado de jurisdicción). En cuanto los cuatro tengan contenido, los Términos de Servicio vuelven a publicarse solos y el Aviso de Privacidad queda completo; no hay nada más que tocar. **Hoy `/terminos` no existe** (ver `docs/CHANGELOG.md`). Es lo único que bloquea cerrar la Fase 1 del roadmap de negocio. Nota de prioridad entre los dos: el **Aviso de Privacidad** es el más urgente, porque sigue público, es el que exige la LFPDPPP y es el link que usa la pantalla de consentimiento de Google — sin razón social ni contacto ARCO está incompleto como aviso legal.
 - **Configurar la competencia de ONEFA** — es captura, no código: su temporada
@@ -608,16 +617,16 @@ tanto a la organización del equipo como a la de su liga.
 |---|---|---|
 | GET | `/teams/:id/overview` | KPIs, padrón con saldo, pagos por confirmar, flujo mensual, lotes repetibles |
 | POST | `/teams/:id/members` | Alta en el padrón del club (una fila en `club_members`: persona y ficha juntas) |
-| PATCH | `/teams/:id/accounts/:playerId` | Edita persona **y** ficha de cobranza en una llamada |
-| DELETE | `/teams/:id/members/:playerId` | Baja si ya tiene movimientos; borrado real solo si nunca tuvo |
+| PATCH | `/teams/:id/members/:memberId` | Edita persona **y** ficha de cobranza en una llamada |
+| DELETE | `/teams/:id/members/:memberId` | Baja si ya tiene movimientos; borrado real solo si nunca tuvo (misma URL que el PATCH: lo distingue el método) |
 | POST | `/teams/:id/members/import-roster` | Copia (una vez) de un roster de torneo |
-| GET | `/teams/:id/players/:playerId/entries` | Libro de un jugador |
+| GET | `/teams/:id/members/:memberId/entries` | Libro de un miembro del padrón |
 | POST | `/teams/:id/charges` | Cargos en bloque, monto por jugador |
 | POST | `/teams/:id/charges/repeat` | Repetir un lote anterior |
-| POST | `/teams/:id/players/:playerId/payments` | Pago capturado por el club (nace confirmado) |
+| POST | `/teams/:id/members/:memberId/payments` | Pago capturado por el club (nace confirmado) |
 | POST | `/entries/:entryId/confirm` | Confirmar un pago reportado por el papá |
 | POST | `/entries/:entryId/void` | Cancelar / rechazar |
-| POST | `/teams/:id/accounts/:playerId/rotate-token` | Regenerar el link (si se filtró) |
+| POST | `/teams/:id/members/:memberId/rotate-token` | Regenerar el link (si se filtró) |
 | PATCH | `/teams/:id/settings` | Interruptor de recordatorios |
 | **GET** | **`/statement/:shareToken`** | **Público, sin sesión** |
 | **POST** | **`/statement/:shareToken/report-payment`** | **Público** — un pendiente a la vez por jugador |
@@ -629,10 +638,10 @@ salir el teléfono del tutor, el id interno del jugador, ni rastro de ningún ot
 jugador. Van con su propio limitador (`publicStatementLimiter` /
 `reportPaymentLimiter` en `middleware/rateLimit.js`).
 
-> **Nombres en la API.** Las rutas y campos todavía dicen `player` /
-> `player_id`, y las respuestas siguen trayendo `first_name` / `last_name`
-> derivados del `display_name`. Es compatibilidad deliberada de la fase A, no un
-> descuido: ver "Fase B" más abajo.
+> **Nombres en la API.** El padrón son `members` y su id es `member_id`; el
+> nombre es un solo `display_name`. `first_name` / `last_name` ya no existen
+> en este router — ver "Fase B" más abajo. Lo que sigue diciendo "player" es el
+> prefijo `/api/player-billing`, y ahí está dicho por qué.
 
 El comprobante no puede pasar por `POST /api/upload` porque ese exige sesión; la
 configuración de Cloudinary se sacó a **`utils/cloudinary.js`** en cuanto hubo un
@@ -720,73 +729,140 @@ libros), **`MonthlyFlowChart.jsx`** (SVG a mano, sin librería, mismo criterio q
 `UserGrowthChart` en `AdminPanel.jsx`) y **`utils/money.js`** (el formateo de
 pesos que estaba duplicado en cuatro archivos).
 
-### Fase B — renombrar la superficie (PENDIENTE)
+### Fase B — renombrar la superficie (HECHA)
 
-> Escrito para poder arrancarlo en frío, sin contexto de la sesión en que se
-> hizo la fase A.
+**Qué era.** La fase A separó los datos —el padrón pasó a `club_members` y su
+libro a `club_ledger_entries`, sin ninguna columna que apunte a `players`— pero
+dejó intacto el contrato de la API a propósito: seguía respondiendo `player_id`,
+`first_name` y `last_name`, estos dos partiendo el `display_name` por el primer
+espacio. Así las dos suites e2e, que asumían ese contrato, pudieron hacer de
+juez del refactor sin que hubiera que editarlas: **46 aserciones y 0 fallas
+antes, 46 y 0 después**. La fase B era quitar esa compatibilidad, y sí exigía
+editar las pruebas — por eso fue después y aparte.
 
-**Dónde quedó la fase A.** Los datos ya están separados: el padrón vive en
-`club_members` y su libro en `club_ledger_entries`, sin ninguna columna que
-apunte a `players`. Lo que **no** se movió fue el contrato de la API: sigue
-respondiendo `player_id`, `first_name` y `last_name`, estos dos derivados del
-`display_name` partiéndolo por el primer espacio. Por eso el frontend no se tocó
-ni una línea.
+**Qué quedó.** El nombre de un miembro del club es **un solo campo**,
+`display_name`, de punta a punta: un club puede registrar a alguien como "El
+Güero", o como "Chispa" a secas, que es lo que `players.last_name NOT NULL`
+hacía imposible. El padrón dejó de llamarse "players" en la API.
 
-**Por qué se dejó a medias a propósito.** Las dos suites de punta a punta
-(`backend/tests/`) asumen ese contrato. Al no moverlo, sirvieron de juez del
-refactor: **46 aserciones y 0 fallas antes, 46 y 0 después**, con el único cambio
-en las pruebas siendo una consulta que lee la tabla directo. Si se hubieran
-renombrado las URLs al mismo tiempo, habría habido que editar las pruebas — y una
-prueba editada ya no demuestra que nada se rompió. La fase B sí necesita editar
-las pruebas, y por eso va después y aparte.
+| Antes | Ahora |
+|---|---|
+| `GET /teams/:id/players/:playerId/entries` | `GET /teams/:id/members/:memberId/entries` |
+| `POST /teams/:id/players/:playerId/payments` | `POST /teams/:id/members/:memberId/payments` |
+| `PATCH /teams/:id/accounts/:playerId` | `PATCH /teams/:id/members/:memberId` |
+| `POST /teams/:id/accounts/:playerId/rotate-token` | `POST /teams/:id/members/:memberId/rotate-token` |
+| `DELETE /teams/:id/members/:playerId` | `DELETE /teams/:id/members/:memberId` |
+| `player_id` en las respuestas | `member_id` |
+| `items: [{ player_id, amount }]` | `items: [{ member_id, amount }]` |
+| `player_ids` al repetir un lote | `member_ids` |
+| `{ players: [...] }` en el overview | `{ members: [...] }` |
+| `{ player, account }` al dar de alta | `{ member }` |
+| `{ account }` al editar | `{ member }` |
+| `{ player: {...} }` en el estado de cuenta público | `{ member: {...} }` |
+| `player_count` en `recent_batches` | `member_count` |
 
-**Qué falta hacer:**
+Editar y dar de baja quedaron en **la misma URL**, separadas por el método
+(PATCH y DELETE), que es lo que siempre debieron ser: un solo recurso. Del
+backend se fueron `nameCompatSql`, `splitDisplayName` y `memberAsPlayer`, y con
+ellas el `split_part` que partía el nombre.
 
-1. **Un solo campo de nombre en el formulario.** `ClubMemberForm.jsx` pide
-   nombre y apellido y exige los dos (`if (!form.first_name.trim() ||
-   !form.last_name.trim())`). Debe pedir **un** campo, "Nombre", que se mande
-   como `display_name`. El backend ya lo acepta desde la fase A: si viene
-   `display_name` lo usa tal cual, y si no, arma uno juntando first/last. Este
-   punto es el que le da sentido a todo lo demás — es lo que permite registrar a
-   alguien como "El Güero" sin inventarle un apellido.
-2. **Que el frontend lea `display_name`** en vez de `first_name`/`last_name`.
-   Los consumidores son `TeamRosterSection.jsx`, `TeamFinancesSection.jsx`,
-   `TeamOverviewSection.jsx` y `PlayerStatementPage.jsx` (el estado de cuenta
-   público del papá). La API ya devuelve `display_name` junto a los derivados, así
-   que este paso se puede hacer y verificar antes de quitar nada.
-3. **Quitar la compatibilidad del backend** una vez que (2) esté hecho:
-   `nameCompatSql`, `splitDisplayName` y `memberAsPlayer` en
-   `routes/playerBilling.js`, más los `AS first_name` / `AS last_name` de las
-   consultas. Están marcados en el código con el comentario que dice que se
-   borran en esta fase.
-4. **Renombrar URLs y campos** para que dejen de decir "player" donde quieren
-   decir "miembro del club": `/teams/:id/players/:playerId/entries`,
-   `/teams/:id/accounts/:playerId`, `/teams/:id/members/:playerId`, el campo
-   `player_id` de las respuestas y el `items: [{ player_id, amount }]` de crear
-   cargos. Es puro renombre, pero toca las dos puntas a la vez.
-5. **Actualizar las suites** al contrato nuevo. Aquí sí hay que editarlas; el
-   valor que conservan es que las aserciones de saldo (cancelar, rechazar,
-   retirar, confirmar) sigan cuadrando.
+**Dos bugs de la fase A que salieron al hacerlo.** Ninguno lo cubrían las
+suites, y los dos estaban en producción:
 
-**Cómo verificarlo.** Igual que la fase A, y es la parte que no se debe saltar:
-crear una rama en Neon (Branches → New branch, es copia instantánea y no toca
-producción), levantar el backend contra ella en el puerto 4100 y correr las dos
-suites — antes de empezar, para tener el verde de partida, y después. Ver
-`backend/tests/README.md`. **Nunca contra producción**: las suites crean
-usuarios, equipos y movimientos de cobranza reales.
+1. **El libro de un miembro leía la tabla equivocada.**
+   `GET /teams/:id/players/:playerId/entries` hacía
+   `SELECT ... FROM players WHERE id = ?` con un id de `club_members`. Son
+   padrones distintos y sus ids no tienen nada que ver, así que el modal de
+   movimientos salía con el nombre de **otra persona** —un jugador de roster de
+   torneo cuyo id coincidiera— o vacío. Ahora lee `club_members`.
+2. **Repetir un lote de cargos estaba roto al 100%.** La consulta hace
+   `SELECT * FROM club_ledger_entries`, cuya columna es `member_id`, pero el
+   código leía `r.player_id`. El `Map` quedaba con una sola clave `undefined` y
+   el endpoint respondía **400 "Ningún jugador válido para repetir el cargo"
+   siempre**, con lote válido y jugadores en plantel. El renombre lo arregló
+   solo.
 
-**Advertencia de la fase A, para no repetirla.** Al escribir el esquema nuevo se
-"mejoró" un valor de `created_by_side` de `'player'` a `'member'` sin cambiar el
-código que lo escribe, y eso tiraba **todo pago reportado desde el link del
-papá** contra el CHECK. Lo cazaron las suites. En esta fase hay mucho renombre de
-ese tipo: cada valor que viaje en la API (`created_by_side`, `status`, `kind`)
-hay que cambiarlo en el esquema **y** en el código **y** en el frontend, o no
-cambiarlo en ninguno.
+**Lo que NO se cambió, a propósito.** Todo esto sigue diciendo "player" porque
+cambiarlo cuesta más que el renombre y no estaba en el alcance:
 
-**Lo que NO hay que tocar en esta fase:** nada del cálculo de saldo
-(`BALANCE_SUM_SQL`), ni los estados de un pago (`pending` / `rejected` /
-`withdrawn` / `void`), ni `reverses_entry_id`. Esa lógica ya está probada y el
-refactor de la fase A no la movió. La fase B es renombre de superficie.
+- **El prefijo `/api/player-billing`** y el archivo `routes/playerBilling.js`.
+  Cambiar el prefijo movería los 18 endpoints del router de un golpe, incluidos
+  los tres públicos del papá, en vez de los 5 que movió esta fase. Es la misma
+  clase de cambio, más grande — ver la nota de despliegue de abajo.
+- **`created_by_side = 'player'`** — es un valor del `CHECK` de
+  `club_ledger_entries`. Vale la regla 6 de `CLAUDE.md`: se cambia en esquema,
+  backend y frontend a la vez, o en ninguno. Se eligió ninguno.
+- **`player_billing_reminders_enabled`** (columna de `teams`) y los tipos de
+  notificación `player_payment_reported` / `player_billing_due_soon` /
+  `player_billing_overdue`: son columnas y valores guardados, no superficie.
+- **El alias `player_count` dentro de `utils/billingReminders.js`**, que no
+  viaja por la API del padrón: solo arma el texto de un aviso.
+- Todo lo del **roster de torneo** (`players`, `player_team_memberships`,
+  `ptm.player_id`, `BranchRosterModal`, `MatchStatsModal`, `PlayerShareButton`,
+  `PlayerCardPage`). Es el otro padrón y no se toca.
+
+> ### ⚠️ Esta fase tiene ventana de incompatibilidad al desplegar
+>
+> **Hay que leerlo antes de subirla a producción.** El frontend es un bundle
+> estático en Vercel y el backend un proceso en Render: dos despliegues
+> independientes que el mismo push a `main` dispara, pero que **no terminan al
+> mismo tiempo** (Render, en plan gratuito, tarda más y además arranca en frío).
+>
+> Un renombre de ruta no se negocia: el backend nuevo sirve
+> `/members/:memberId/entries` y **deja de servir** `/players/:playerId/entries`.
+> No hay solapamiento. Durante la ventana entre un deploy y el otro, uno de los
+> dos lados pide una ruta que el otro ya no conoce, y la respuesta es 404:
+>
+> - Si Vercel termina primero, el bundle nuevo pide `/members/…` al backend viejo.
+> - Si Render termina primero, el bundle viejo pide `/players/…` al backend nuevo.
+>
+> Y lo que más alarga la ventana no es el deploy: **quien tenga la pestaña
+> abierta sigue con el bundle viejo hasta que recargue.**
+>
+> Solo revienta la cobranza del club (el resto de la app no toca este router),
+> son 404 y no escrituras malas —no se corrompe nada— y se arregla recargando.
+> Pero es real y conviene que sea una decisión, no una sorpresa. Tres salidas:
+>
+> 1. **Desplegar y avisar.** Subirlo en horario de poco uso y pedir a los
+>    tesoreros que recarguen. Es lo más barato y lo que corresponde al tamaño
+>    de uso de hoy.
+> 2. **Compatibilidad por un ciclo**, que es la técnica que usó la fase A:
+>    registrar las rutas viejas como alias de las nuevas, devolver `member_id`
+>    **y** `player_id`, aceptar `items` con cualquiera de los dos. Se despliega
+>    eso, se deja correr unos días, y en un segundo despliegue se quitan los
+>    alias. Ventana cero, al precio de volver a meter —y luego volver a sacar—
+>    la compatibilidad que esta fase quitó.
+> 3. **Desplegar backend y frontend juntos a mano**, sin esperar a que el push
+>    los dispare por su cuenta. Reduce la ventana a minutos, pero no la cierra
+>    para las pestañas ya abiertas.
+>
+> Esto **no** es privativo del prefijo `/api/player-billing`: aplica a todo
+> renombre de superficie, incluidos los cinco endpoints que esta fase ya movió.
+
+**Cómo se verificó.** Rama nueva en Neon (`fase-b-test`), backend en el 4100
+contra ella, nunca contra producción:
+
+- Las dos suites e2e, **antes y después**: 46 y 0 de partida; **47 y 0** al
+  final. La de más es una aserción nueva de que un nombre de una sola palabra se
+  guarda tal cual. La suite de liga no toca el padrón y quedó igual (21).
+- Las unitarias: 81 frontend, 54 backend.
+- Un smoke test de contrato (18 comprobaciones) que verifica que **cada clave
+  que lee el frontend existe en la respuesta**. Hizo falta porque el build de
+  Vite no puede ver esto: un `data.players` que ya no existe compila igual y
+  revienta en el navegador. Cazó tres roturas de este refactor —
+  `TeamOverviewSection` destructurando `data.players`, `RepeatPlayerChargeModal`
+  leyendo `player_count`, y un `setModal({ player: p })` que se leía como
+  `modal.member`.
+- **En el navegador**, contra la rama: Resumen, Finanzas, Jugadores, el modal de
+  movimientos, la ficha, el estado de cuenta público del papá, el alta de
+  "Chispa" (una sola palabra) y repetir un lote — que es como se confirmó que el
+  bug 2 estaba muerto y ahora revive los cargos del mes.
+
+> **QA visual pendiente, preexistente.** El modal de la ficha tiene scroll
+> horizontal: las rejillas de "Categoría / Número / Posición" y de "Cuota /
+> Situación" desbordan (554px y 562px contra 407px disponibles). No es de esta
+> fase —esas dos rejillas no se tocaron, y la fase quitó una tercera— pero ahí
+> está.
 
 ### Fuera de esta versión
 

@@ -19,8 +19,7 @@ const STATUS_LABELS = {
 export default function ClubMemberForm({ member, statuses, onSubmit, onCancel }) {
   const isEdit = !!member;
   const [form, setForm] = useState({
-    first_name: member?.first_name || '',
-    last_name: member?.last_name || '',
+    display_name: member?.display_name || '',
     birth_date: member?.birth_date ? String(member.birth_date).slice(0, 10) : '',
     position: member?.position || '',
     jersey_number: member?.jersey_number != null ? String(member.jersey_number) : '',
@@ -45,8 +44,8 @@ export default function ClubMemberForm({ member, statuses, onSubmit, onCancel })
     e.preventDefault();
     setError('');
 
-    if (!form.first_name.trim() || !form.last_name.trim()) {
-      setError('Nombre y apellido son obligatorios.');
+    if (!form.display_name.trim()) {
+      setError('El nombre es obligatorio.');
       return;
     }
     const validationError = runValidations([
@@ -65,8 +64,7 @@ export default function ClubMemberForm({ member, statuses, onSubmit, onCancel })
     setLoading(true);
     try {
       await onSubmit({
-        first_name: form.first_name.trim(),
-        last_name: form.last_name.trim(),
+        display_name: form.display_name.trim(),
         birth_date: form.birth_date || null,
         position: form.position.trim() || null,
         jersey_number: form.jersey_number === '' ? null : Number(form.jersey_number),
@@ -92,15 +90,14 @@ export default function ClubMemberForm({ member, statuses, onSubmit, onCancel })
 
       <div className="ws-section-title" style={{ marginTop: 0 }}>Quién es</div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div className="field">
-          <label>Nombre</label>
-          <input value={form.first_name} onChange={(e) => update('first_name', e.target.value)} placeholder="Juan" />
-        </div>
-        <div className="field">
-          <label>Apellido</label>
-          <input value={form.last_name} onChange={(e) => update('last_name', e.target.value)} placeholder="Pérez" />
-        </div>
+      <div className="field">
+        <label>Nombre</label>
+        <input value={form.display_name} onChange={(e) => update('display_name', e.target.value)}
+          placeholder="Juan Pérez" />
+        <small style={{ color: 'var(--ws-ink-faint)' }}>
+          Como le dicen en el equipo. Si a alguien se le conoce por su apodo, va el apodo:
+          es el nombre que verás en la lista de cobro y el que lee su papá en el estado de cuenta.
+        </small>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>

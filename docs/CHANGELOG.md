@@ -15,6 +15,58 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Fase B de la separación del padrón: un solo campo de nombre, y el padrón
+  deja de llamarse "players" (2026-09-17)**: cierra lo que la fase A dejó a
+  medias a propósito. El nombre de un miembro del club es ahora **un solo
+  campo** (`display_name`) de punta a punta — el formulario pide "Nombre" y ya
+  no exige apellido, así que un club puede registrar a "El Güero", o a "Chispa"
+  a secas, que es lo que `players.last_name NOT NULL` hacía imposible. Se fue
+  del backend la capa de compatibilidad (`nameCompatSql`, `splitDisplayName`,
+  `memberAsPlayer`, y el `split_part` que partía el nombre por el primer
+  espacio), y la superficie de la API pasó de `player`/`player_id` a
+  `member`/`member_id`: `/teams/:id/players/:playerId/entries` →
+  `/members/:memberId/entries`, `/accounts/:playerId` → `/members/:memberId`
+  (editar y dar de baja quedaron en la misma URL, separadas por el método), y
+  las claves `players`, `player_count`, `{ player, account }` y
+  `{ player: {...} }` del estado de cuenta público. El detalle completo, con la
+  tabla antes/ahora, está en "Cuotas del club → Fase B" del
+  [README](../README.md).
+
+  **Salieron dos bugs de la fase A que las suites no cubrían, los dos vivos en
+  producción.** (1) El libro de un miembro hacía `SELECT ... FROM players` con
+  un id de `club_members`: son padrones distintos y sus ids no se corresponden,
+  así que el modal de movimientos salía con el nombre de **otra persona** o
+  vacío. (2) **Repetir un lote de cargos estaba roto al 100%**: el código leía
+  `r.player_id` de `club_ledger_entries`, cuya columna es `member_id`, así que
+  el endpoint respondía *400 "Ningún jugador válido para repetir el cargo"*
+  siempre, con lote válido y jugadores en plantel. El renombre arregló el
+  segundo solo; el primero se corrigió apuntando la consulta a `club_members`.
+
+  **Verificación**, en una rama de Neon (`fase-b-test`), nunca contra
+  producción: las dos suites e2e antes y después — **46 y 0 de partida, 47 y 0
+  al final** (la de más comprueba que un nombre de una sola palabra se guarda
+  tal cual); 81 unitarias de frontend y 54 de backend; un **smoke test de
+  contrato** de 18 comprobaciones que verifica que cada clave que lee el
+  frontend existe en la respuesta — hizo falta porque el build de Vite compila
+  igual un `data.players` que ya no existe, y cazó tres roturas del propio
+  refactor; y **QA visual en el navegador** contra la rama: Resumen, Finanzas,
+  Jugadores, el modal de movimientos, la ficha, el estado de cuenta público del
+  papá, el alta de "Chispa" y repetir un lote. La rama se borró al terminar.
+
+  **Ojo al desplegar**: es un cambio de contrato sin solapamiento, y el frontend
+  (Vercel) y el backend (Render) no terminan de desplegarse al mismo tiempo, así
+  que hay una ventana en la que un lado pide una ruta que el otro ya no sirve —
+  y las pestañas ya abiertas siguen con el bundle viejo hasta recargar. Solo
+  afecta a la cobranza del club, son 404 y no escrituras malas, y se arregla
+  recargando. Las salidas están en "Fase B" del README.
+
+  **Quedó fuera a propósito**: el prefijo `/api/player-billing` y el archivo
+  `routes/playerBilling.js` (mueve los 18 endpoints del router de golpe en vez
+  de los 5 de esta fase — misma clase de cambio, más grande),
+  y `created_by_side = 'player'` más los tipos de notificación `player_*`, que
+  son valores guardados y piden migración — vale la regla 6 de `CLAUDE.md`: los
+  tres lados o ninguno, y se eligió ninguno. Está anotado en "Pendientes
+  abiertos".
 - **`CLAUDE.md`, el changelog aparte, y las funciones que nadie había
   documentado (2026-09-17)**: el README pasó de 1,629 líneas a un índice por
   dominio. Lo cronológico se movió a este archivo y las reglas de trabajo a
