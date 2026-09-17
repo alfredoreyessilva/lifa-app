@@ -16,3 +16,7 @@ npm-debug.log*
 .vscode/
 .idea/
 diff.txt
+# Artefactos de Playwright MCP (capturas, snapshots y logs de consola que se
+# generan al manejar el navegador). Son de usar y tirar: sirven para mirar una
+# pantalla en el momento y no documentan nada — lo que se decide va al README.
+.playwright-mcp/
