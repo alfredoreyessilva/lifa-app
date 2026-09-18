@@ -17,7 +17,10 @@ import { useAccentColor } from '../utils/color.js';
 const SECTIONS = [
   { to: '',                   label: 'Resumen',         end: true },
   { to: '/finanzas',          label: 'Finanzas' },
-  { to: '/jugadores',         label: 'Jugadores' },
+  // La ruta sigue siendo /jugadores a propósito: cambiarla rompería links
+  // guardados y abriría una ventana de incompatibilidad al desplegar, que es
+  // caro por una etiqueta. Lo que cambia es cómo se llama, no dónde vive.
+  { to: '/jugadores',         label: 'Padrón' },
   { to: '/estado-de-cuenta',  label: 'Con la liga', hideWhenIndependent: true },
   { to: '/perfil',            label: 'Perfil' },
   { to: '/administradores',   label: 'Administradores' },

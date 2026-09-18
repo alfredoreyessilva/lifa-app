@@ -31,6 +31,62 @@ append-only, se resuelve al leer y no se migra) están en
 Solo lo que **falta**. Lo que ya se cerró está en `docs/CHANGELOG.md` con su
 verificación.
 
+- **⚠️ El cobro automático de la mensualidad no se ha verificado contra una
+  base real (2026-09-18).** Es lo primero que hay que hacer antes de que un
+  club lo use. Lo que sí pasó: las 135 pruebas unitarias, el chequeo de
+  sintaxis del backend y el build de Vite. Lo que **no**:
+
+  - **Las dos suites e2e no se corrieron.** La de jugador trae 12 aserciones
+    nuevas (que `status='beca'` se guarde al dar de alta, que a un `baja` y a un
+    `beca` no se les genere mensualidad, que un club recién activado reciba UN
+    mes, que correr la generación dos veces no duplique, y que la nota interna
+    no salga en el link público). Línea base documentada: 47 y 0; deberían
+    quedar en **59 y 0**. Instrucciones en `backend/tests/README.md`.
+  - **Nada se abrió en el navegador**: ni el bloque de "Cobro automático" en
+    Finanzas, ni la pestaña renombrada, ni el estado de cuenta del papá.
+  - **El índice `idx_club_ledger_auto_cycle` no se ha visto existir.** Importa
+    porque `run()` de `initSchema()` se traga el error de una migración que
+    falle: hay que confirmarlo con
+    `node scripts/report-mensualidades-duplicadas.mjs`, que además reporta si
+    algún club ya tenía doble cobro histórico. El generador se niega a insertar
+    si el índice no está, así que el modo de falla es visible y no silencioso.
+  - **La frecuencia del cron externo sigue sin confirmarse** (ver más abajo).
+
+- **Nadie sabe cada cuánto corre el cron, y ahora de él depende el dinero.**
+  `POST /api/notifications/trigger` lo llama un servicio **externo al
+  repositorio**: no está en `.github/workflows/`, no hay `render.yaml`, no hay
+  `node-cron`, y su frecuencia no está escrita en ningún archivo del proyecto —
+  vive en el panel de un proveedor de fuera. Hasta ahora eso solo atrasaba
+  avisos; desde el cobro automático, también la generación de cargos. La vía
+  perezosa del panel lo cubre (por eso se construyó así), pero **hay que entrar
+  a ese panel, confirmar que sigue corriendo, y anotar aquí cada cuánto.**
+
+- **Falta decidir el prorrateo de quien entra a media quincena.** Hoy el ciclo
+  le cobra el mes completo a quien esté `activo` al generar, y solo se salta los
+  periodos cuya fecha de pago es anterior a su `joined_date`. Si un club espera
+  cobrar medio mes a quien entró el día 20, eso no está resuelto. Se puede
+  agregar después sin tocar la idempotencia, porque `auto_cycle_key` no depende
+  del monto.
+
+- **Dos decisiones de producto sobre qué le concede un club a su liga.** Las dos
+  salen de que `teamOwnerRequired` deja pasar también a los administradores de
+  la organización de la LIGA, y ninguna es técnica:
+
+  1. **Borrar un equipo arrasa con su contabilidad.**
+     `DELETE /api/manage/teams/:id` es un `DELETE FROM teams` pelón, y el
+     esquema encadena `teams → club_members → club_ledger_entries`. El panel de
+     la liga ya tiene ese botón (`LeagueStructurePanel.jsx`, 🗑 "Eliminar
+     equipo"), así que una liga "limpiando equipos viejos" borra la cobranza
+     privada de ese club con sus familias — y el diálogo no menciona nada de
+     eso. Lo mínimo sería responder 409 si hay movimientos; lo correcto,
+     dar de baja en vez de borrar.
+  2. **El padrón con CURP y fechas de nacimiento de menores lo ve la liga.**
+     Un administrador de liga puede pedir el `overview` de cualquiera de sus
+     equipos y recibir CURP, fecha de nacimiento, foto y contacto del tutor de
+     todo el padrón, más el libro completo. Es justo lo que se separó de
+     `players` para proteger (regla 7 de CLAUDE.md), y el README dice que el
+     padrón lo arma el club, siempre.
+
 - **El nombre del proyecto ya está decidido: CFBAMX.** El texto visible al
   usuario, los comentarios y los nombres de paquete ya dicen CFBAMX. Lo que
   sigue diciendo `lifa` es infraestructura heredada que no se renombró a
@@ -42,6 +98,29 @@ verificación.
   convenga; ninguna es urgente. Lo que sí sigue pendiente es elegir la razón
   social al llenar los datos legales, que es de lo que dependen los Términos y
   la facturación.
+- **La zona horaria solo se corrigió en el libro del CLUB.** `CURRENT_DATE` se
+  evalúa en UTC (Neon), seis horas adelante de México: un cargo que vence hoy
+  se marcaba vencido desde las 18:00 del mismo día. Se cambió por
+  `utils/sqlDates.js` (`HOY_MX`) en `routes/playerBilling.js` y en
+  `runPlayerBillingReminders`, pero **`runBillingReminders` (liga → equipo)
+  sigue usando `CURRENT_DATE`** en `utils/billingReminders.js:71,100`. Es el
+  mismo bug y la misma sustitución de una línea; se dejó fuera para no meter el
+  libro de la liga en un cambio del panel del club, y porque toca correr las
+  dos suites e2e antes y después.
+- **Falta UI para rotar el link del estado de cuenta.** El endpoint
+  (`POST /teams/:id/members/:memberId/rotate-token`) y el método del cliente
+  (`api.rotateMemberShareToken`) existen, pero **ningún componente los llama**:
+  hoy no hay forma de revocar un `share_token` filtrado sin entrar a la base.
+  Junto con eso, "Copiar link" solo aparece cuando el miembro NO tiene
+  teléfono, así que un club que sí capturó los teléfonos nunca puede copiarlo.
+- **No hay auditoría del padrón.** Se sabe cuál es la cuota de alguien, no
+  quién se la cambió ni cuándo. El patrón a imitar ya existe: el trío
+  `created_by_user_id` / `voided_by_user_id` / `reverses_entry_id` del libro.
+- **El botón "Recordar" puede quedar bloqueado por el navegador.** Hay dos
+  `await` antes del `window.open` (`TeamFinancesSection.jsx`), y Safari —y casi
+  siempre Firefox— bloquean una ventana que no cuelga síncronamente del clic.
+  El tesorero ve "recordado hoy" y no se abrió nada: peor que no marcar, porque
+  la plataforma registra un recordatorio que nunca se mandó.
 - **No hay archivo `LICENSE`.** El repositorio no declara nada sobre qué se
   puede hacer con este código. Es decisión de negocio, no técnica: o el repo es
   privado, o lleva una licencia propietaria explícita. Hoy no es ninguna de las
@@ -625,13 +704,12 @@ tanto a la organización del equipo como a la de su liga.
 | DELETE | `/teams/:id/members/:memberId` | Baja si ya tiene movimientos; borrado real solo si nunca tuvo (misma URL que el PATCH: lo distingue el método) |
 | POST | `/teams/:id/members/import-roster` | Copia (una vez) de un roster de torneo |
 | GET | `/teams/:id/members/:memberId/entries` | Libro de un miembro del padrón |
-| POST | `/teams/:id/charges` | Cargos en bloque, monto por jugador |
-| POST | `/teams/:id/charges/repeat` | Repetir un lote anterior |
+| POST | `/teams/:id/charges` | Cargos en bloque, monto por jugador — lo esporádico (uniforme, viaje, arbitraje) |
 | POST | `/teams/:id/members/:memberId/payments` | Pago capturado por el club (nace confirmado) |
 | POST | `/entries/:entryId/confirm` | Confirmar un pago reportado por el papá |
 | POST | `/entries/:entryId/void` | Cancelar / rechazar |
 | POST | `/teams/:id/members/:memberId/rotate-token` | Regenerar el link (si se filtró) |
-| PATCH | `/teams/:id/settings` | Interruptor de recordatorios |
+| PATCH | `/teams/:id/settings` | Recordatorios y cobro automático (parcial: solo toca las claves que le llegan) |
 | **GET** | **`/statement/:shareToken`** | **Público, sin sesión** |
 | **POST** | **`/statement/:shareToken/report-payment`** | **Público** — un pendiente a la vez por jugador |
 | **POST** | **`/statement/:shareToken/upload-proof`** | **Público** — subida del comprobante |
@@ -653,6 +731,104 @@ segundo llamador, y el comprobante va a `lifa-app/comprobantes` sin el recorte
 cuadrado de los logos (una captura de SPEI es alta y angosta, y a 800x800 el
 monto queda ilegible). **Nota de privacidad**: la URL de Cloudinary es pública
 para quien la tenga — mismo trato que `proof_url` en la cobranza liga→equipo.
+
+### La mensualidad se genera sola (y por qué no se "repite")
+
+La V1 tenía un botón **"Repetir el mes pasado"**: se elegía el lote de
+septiembre y se volvía a crear con la fecha de octubre. Se retiró, y no por
+sus dos bugs —que los tenía— sino porque el modelo estaba mal de origen: **si
+una cuota ya está configurada como mensual, que alguien tenga que acordarse de
+apretar un botón el día correcto de cada mes no es una función, es una tarea
+pendiente que la plataforma le deja al tesorero.**
+
+Ahora el club configura **una sola fecha** —el día en que se paga, típicamente
+el 1 o el 15— y el cargo nace solo, cinco días antes, para cada miembro
+`activo` con `monthly_amount > 0`, por el monto de su propia ficha.
+
+**No existe el concepto de "vencimiento" aparte de la fecha de pago.** Es
+deliberado y viene de cómo se cobra de verdad en un club: hay una fecha de
+pago, del día siguiente en adelante *se debe*, y lo que no se pagó se acumula
+con el mes que entra. Dos fechas para lo mismo ("se genera el 1 pero vence el
+10") era precisión que nadie usaba.
+
+Lo esporádico —uniforme, viaje, arbitraje, multa— se sigue cobrando a mano con
+**Generar cargo**, que es justamente lo que no tiene fecha fija. Por eso el
+formulario manual ya no ofrece la categoría `mensualidad`: el backend la sigue
+aceptando porque el ciclo la escribe, pero ofrecerla en los dos lados era
+invitar al doble cobro.
+
+#### La idempotencia es de la base, no del código
+
+Esto se llama desde **dos** lugares:
+
+1. El cron, al final de `POST /api/notifications/trigger`.
+2. **La carga del panel** (`GET /teams/:id/overview`), de forma perezosa.
+
+Lo segundo no es redundancia por gusto: **el cron es externo al repositorio**.
+No está en `.github/workflows/`, no hay `render.yaml`, no hay `node-cron`, y su
+frecuencia no está documentada en ningún archivo del proyecto — vive en el
+panel de un proveedor de fuera. Colgar de ahí la generación de dinero significa
+que si ese cron se cae, el club **deja de facturar en silencio**. La vía
+perezosa es lo que garantiza que el cargo exista aunque el cron lleve semanas
+muerto.
+
+Que se pueda llamar dos veces obliga a que llamarla dos veces sea inofensivo, y
+eso **no se confía al código**: lo garantiza un índice único parcial.
+
+- `club_ledger_entries.auto_cycle_key` — `'mensualidad:OCT-2026'` en lo que
+  generó el ciclo, **NULL en todo lo que capturó un humano**.
+- `idx_club_ledger_auto_cycle` — `UNIQUE (team_id, member_id, auto_cycle_key)
+  WHERE auto_cycle_key IS NOT NULL`, más `ON CONFLICT DO NOTHING`.
+
+Dos decisiones de la forma de ese índice que parecen detalle y no lo son:
+
+1. **El predicado es inmutable.** Se filtra por `auto_cycle_key IS NOT NULL`, no
+   por `status`. Así una fila nunca sale del índice, y **cancelar una
+   mensualidad automática impide que se regenere**. Si se filtrara por status,
+   el cargo cancelado saldría del índice y la siguiente corrida lo reviviría:
+   el tesorero cancela octubre, abre el panel al día siguiente y reaparece. Para
+   dinero, el humano le gana al robot.
+2. **La columna nace NULL en toda la tabla**, así que el índice se crea sobre
+   cero filas y **no puede fallar por duplicados históricos**. Importa porque
+   `run()` de `initSchema()` se traga el error de cualquier migración que falle
+   (ver el `SAVEPOINT` en `config/db.js`): un índice que fallara ahí no
+   aparecería en ningún log. Por si acaso, el generador **se niega a insertar**
+   si el índice no existe, y `scripts/report-mensualidades-duplicadas.mjs` lo
+   reporta.
+
+Además hay una **guarda blanda** en el `WHERE`: el ciclo no cobra un mes que un
+humano ya cobró a mano. Esa sí es heurística —compara por el mes de la fecha de
+pago— y no puede ser un índice, porque un cargo manual no tiene identidad de
+periodo confiable (`period_label` es texto libre y opcional).
+
+#### Cuánto hacia atrás genera
+
+Una corrida evalúa **mes−1, mes y mes+1**, y ese rango está codificado en la
+forma de la consulta (`generate_series(-1, 1)`), no en una condición que se
+pueda relajar por accidente: es **estructuralmente imposible** que una corrida
+produzca una avalancha de meses.
+
+- Recupera hasta un mes de cron caído. Si el cron murió en noviembre y alguien
+  abre el panel en diciembre, se generan **noviembre y diciembre**. Si solo se
+  generara diciembre, el club perdería un mes de ingreso sin enterarse, que es
+  justo lo que esto vino a evitar.
+- Si el cron estuvo muerto **más de dos meses** y nadie abrió el panel, ese mes
+  se pierde y hay que capturarlo a mano. Es una pérdida acotada y preferible a
+  la alternativa.
+- `teams.monthly_charge_started_on` se sella al encender el interruptor y nunca
+  se genera un periodo cuya fecha de pago sea anterior. Sin eso, un club que
+  lleva un año en la app y lo enciende hoy recibiría doce meses de cargos
+  inventados. Se vuelve a sellar en cada transición apagado → encendido.
+- El día de cobro se limita a **1–28** (`CHECK`), lo que elimina de raíz el caso
+  borde de febrero. "El último día del mes" no existe en esta versión.
+
+#### Cambiar la cuota NO reescribe lo ya cobrado
+
+Regla explícita, porque es la tentación obvia: `club_members.monthly_amount` es
+**la configuración**; cada cargo guarda **su propio `amount`**. Si Juan pagaba
+$1,000 en septiembre y en octubre sube a $1,200, septiembre se queda en $1,000
+para siempre. El libro es append-only y un cargo pasado no se edita ni se
+recalcula.
 
 ### Recordatorios
 

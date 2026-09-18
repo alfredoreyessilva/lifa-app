@@ -15,6 +15,96 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **La mensualidad del club se cobra sola (2026-09-18)**: se retiró el botón
+  "Repetir el mes pasado" (`POST /teams/:id/charges/repeat`,
+  `RepeatPlayerChargeModal.jsx`) y en su lugar el club configura **una sola
+  fecha** —el día en que se paga— y el cargo nace solo, cinco días antes, para
+  cada miembro `activo` con cuota definida.
+
+  No se quitó por sus bugs, aunque los tenía: **le volvía a cobrar a quien ya
+  estaba dado de baja** (solo comprobaba que la fila siguiera existiendo en
+  `club_members`, y una baja es justamente una fila que sigue existiendo) y
+  repetía también los cargos que se habían cancelado en el lote original. Se
+  quitó porque el modelo estaba mal de origen: si una cuota ya está configurada
+  como mensual, que alguien tenga que acordarse de apretar un botón el día
+  correcto de cada mes no es una función, es una tarea pendiente que la
+  plataforma le deja al tesorero. El cargo esporádico —uniforme, viaje,
+  arbitraje— se queda en **"Generar cargo"**, que ya no ofrece la categoría
+  `mensualidad`.
+
+  **La idempotencia es de la base, no del código**, porque la generación se
+  dispara desde dos lados: el cron y la carga del panel. Lo segundo no es
+  redundancia — el cron es **externo al repositorio** (no está en
+  `.github/workflows/`, no hay `render.yaml`, no hay `node-cron`) y su
+  frecuencia no está documentada en ningún archivo, así que si se cae el club
+  dejaría de facturar en silencio. La garantía la da
+  `idx_club_ledger_auto_cycle` sobre la columna nueva
+  `club_ledger_entries.auto_cycle_key`, con `ON CONFLICT DO NOTHING`. Dos
+  detalles del índice que no son detalle: su predicado es **inmutable** (no
+  filtra por `status`), así que cancelar una mensualidad automática impide que
+  se regenere; y la columna nace NULL en toda la tabla, así que el índice se
+  crea sobre cero filas y **no puede fallar** por duplicados históricos — que
+  importa porque `run()` de `initSchema()` se traga el error de una migración
+  que falle. Por si acaso, el generador **se niega a insertar** si el índice no
+  está, y `scripts/report-mensualidades-duplicadas.mjs` lo reporta.
+
+  Detalle en el README, "Cuotas del club" → "La mensualidad se genera sola".
+
+- **Cuatro correcciones del panel del club (2026-09-18)**, las tres primeras en
+  producción:
+
+  1. **El interruptor de recordatorios estaba muerto.** El frontend leía y
+     escribía `member_billing_reminders_enabled` y el backend
+     `player_billing_reminders_enabled`, así que la casilla siempre salía
+     desmarcada y **cualquier clic la guardaba en `false`**
+     (`Boolean(undefined)`): un club que los tuviera prendidos los perdía y no
+     podía volver a prenderlos. Lo introdujo el renombre de la fase B (`dcf6ac7`)
+     sobre una clave que el propio README marcaba como intocable — es la regla 6
+     de CLAUDE.md rota: se cambió en un lado y en los otros dos no.
+  2. **La situación se ignoraba al dar de alta.** `POST /teams/:id/members` no
+     desestructuraba ni insertaba `status`, así que quien registrabas como
+     **Becado** nacía **Activo** y al mes siguiente entraba en el cobro. Con la
+     generación automática habría dejado de necesitar que alguien apretara un
+     botón para cobrarle de más. La suite e2e creaba un becado y **nunca lo
+     verificaba**; ahora sí.
+  3. **La nota interna viajaba en el estado de cuenta público.**
+     `GET /statement/:shareToken` devolvía `note` por movimiento. No se pintaba,
+     pero estaba en el JSON y se leía con la pestaña de red — y el campo que la
+     captura promete "solo la ves tú, no aparece en el estado de cuenta del papá".
+  4. **`PATCH /teams/:id/settings` pisaba lo que no le mandabas.** Hacía
+     `Boolean(req.body?.player_billing_reminders_enabled)` sin preguntar si la
+     clave venía, así que en cuanto el panel mandó el interruptor del ciclo
+     habría apagado los recordatorios en silencio. Ahora es parcial, como el
+     `PATCH` de un miembro.
+
+- **La fecha de hoy se calcula en México, no en UTC (2026-09-18)**: `CURRENT_DATE`
+  se evalúa en la zona del servidor de Postgres y Neon corre en UTC, seis horas
+  adelante. Consecuencia real: **un cargo que vencía hoy se marcaba vencido desde
+  las 18:00 hora de México del mismo día**, y el papá que pagaba a las 7 pm veía
+  "vencido" en su estado de cuenta. Se sacó a `utils/sqlDates.js` (`HOY_MX`), que
+  pone la zona **en la expresión** y no en la sesión: con un pooler en modo
+  transacción un `SET TIME ZONE` no es confiable, por el mismo motivo por el que
+  `pg_advisory_lock()` se tuvo que cambiar por su versión de transacción. Se
+  aplicó en `routes/playerBilling.js` y en `runPlayerBillingReminders`; el libro
+  de la liga sigue con `CURRENT_DATE` (ver "Pendientes abiertos").
+
+- **Un lote de cargos es atómico (2026-09-18)**: `POST /teams/:id/charges`
+  insertaba fila por fila en un `for...await`. Si tronaba en el jugador 20 de 40
+  quedaba **medio lote creado**, ya visible en los saldos de veinte familias, y no
+  hay acción de "cancelar el lote": había que cancelar cargo por cargo, cada uno
+  con su ajuste. Ahora es un solo `INSERT` multi-fila, que es una sola sentencia y
+  por lo tanto atómica pase lo que pase con el pooler.
+
+- **La pestaña "Jugadores" se llama "Padrón" (2026-09-18)**: el padrón del club no
+  son solo jugadores — hay becados, gente que entrena sin estar en ninguna liga y,
+  más adelante, staff. Es además la palabra que ya usaban el README, los
+  comentarios del código y la propia pantalla. **La ruta sigue siendo
+  `/panel/equipo/:id/jugadores`**: cambiarla rompería links guardados y abriría
+  una ventana de incompatibilidad al desplegar, que es caro por una etiqueta.
+
+  De paso, `recent_batches` dejó de contar los cargos **cancelados** (sumaba
+  montos que ya no existían) y ahora distingue el lote del ciclo del capturado a
+  mano (`is_auto`).
 - **Las tarjetas que se abren sobre la cancha van en negro (2026-09-17)**: la
   tarjeta del partido en MatchPage y las fichas de equipo y de sede
   (`.team-profile-modal`, en modal o embebidas) pasaron del verde `--card` a un

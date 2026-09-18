@@ -25,6 +25,15 @@ const CATEGORY_LABELS = {
 export default function PlayerChargeForm({ members, categories, onSubmit, onCancel }) {
   const eligible = useMemo(() => members.filter((p) => p.status !== 'baja'), [members]);
 
+  // 'mensualidad' no se ofrece aquí: la genera sola el cobro automático. Este
+  // formulario es para lo esporádico —uniforme, viaje, arbitraje, multa—, que
+  // es justo lo que no tiene una fecha fija cada mes. El backend sigue
+  // aceptando la categoría porque el ciclo la escribe.
+  const categoriasManuales = useMemo(
+    () => (categories || Object.keys(CATEGORY_LABELS)).filter((c) => c !== 'mensualidad'),
+    [categories],
+  );
+
   // Categorías internas del club presentes en el padrón, para el filtro. Es la
   // agrupación PROPIA del equipo (group_label), no la rama de la liga: un club
   // sin liga igual necesita cobrarle distinto a su U17 y a su infantil.
@@ -36,8 +45,8 @@ export default function PlayerChargeForm({ members, categories, onSubmit, onCanc
 
   const [groupFilter, setGroupFilter] = useState('');
   const [meta, setMeta] = useState({
-    category: 'mensualidad',
-    concept: `Mensualidad ${periodLabelFor()}`,
+    category: 'uniforme',
+    concept: '',
     due_date: '',
     period_label: periodLabelFor(),
     note: '',
@@ -115,8 +124,8 @@ export default function PlayerChargeForm({ members, categories, onSubmit, onCanc
     return (
       <div>
         <p style={{ color: 'var(--ws-ink-dim)', fontSize: 14 }}>
-          Este equipo todavía no tiene jugadores en su plantel. Regístralos en la sección
-          Jugadores y después vuelve aquí a cobrarles.
+          Este equipo todavía no tiene a nadie en su padrón. Regístralos en la sección
+          Padrón y después vuelve aquí a cobrarles.
         </p>
         <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onCancel}>Cerrar</button>
@@ -133,7 +142,7 @@ export default function PlayerChargeForm({ members, categories, onSubmit, onCanc
         <div className="field">
           <label>Tipo de cargo</label>
           <select value={meta.category} onChange={(e) => updateMeta('category', e.target.value)}>
-            {(categories || Object.keys(CATEGORY_LABELS)).map((c) => (
+            {categoriasManuales.map((c) => (
               <option key={c} value={c}>{CATEGORY_LABELS[c] || c}</option>
             ))}
           </select>
@@ -148,7 +157,7 @@ export default function PlayerChargeForm({ members, categories, onSubmit, onCanc
       <div className="field">
         <label>Concepto</label>
         <input value={meta.concept} onChange={(e) => updateMeta('concept', e.target.value)}
-          placeholder="Mensualidad de septiembre" />
+          placeholder="Uniforme de local" />
       </div>
 
       <div className="field">

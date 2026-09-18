@@ -1405,6 +1405,62 @@ export async function initSchema() {
       CHECK (created_by_side IN ('team', 'player'))
     `);
 
+    // ── Ciclo de mensualidad automática ──────────────────────────────────
+    //
+    // Reemplaza al botón "Repetir el mes pasado", que le volvía a cobrar a
+    // quien ya estaba de baja y no impedía generar el mismo mes dos veces.
+    // El club define UNA fecha (el día en que se paga) y el cargo nace solo,
+    // cinco días antes, para todo miembro activo con cuota definida.
+    await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS monthly_charge_enabled BOOLEAN NOT NULL DEFAULT FALSE`);
+    await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS monthly_charge_day INTEGER`);
+
+    // Fecha en que el club encendió el ciclo. Es el candado contra generar
+    // meses retroactivos: nunca se genera un periodo cuya fecha de pago sea
+    // anterior a esta. Sin él, un club que lleva un año en la app y prende el
+    // interruptor hoy recibiría doce meses de cargos inventados.
+    await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS monthly_charge_started_on DATE`);
+
+    // 1–28 y no 1–31: elimina de raíz el caso borde de febrero y de los meses
+    // de 30 días. "El último día del mes" no existe en esta versión.
+    // DROP + ADD porque ADD por sí solo no es idempotente (mismo idiom que arriba).
+    await run(`ALTER TABLE teams DROP CONSTRAINT IF EXISTS teams_monthly_charge_day_check`);
+    await run(`
+      ALTER TABLE teams
+      ADD CONSTRAINT teams_monthly_charge_day_check
+      CHECK (monthly_charge_day IS NULL OR (monthly_charge_day BETWEEN 1 AND 28))
+    `);
+
+    // Identidad del cargo que generó el ciclo: 'mensualidad:OCT-2026'.
+    // NULL en todo lo que capturó un humano.
+    //
+    // El índice parcial de abajo es la ÚNICA garantía de que no se cobre dos
+    // veces el mismo mes. No se confía al código porque el cron y el panel
+    // pueden generar a la vez: con el índice, la segunda sentencia salta las
+    // filas en conflicto; con una comprobación en JS habría ventana de carrera.
+    //
+    // Dos decisiones de la forma del índice:
+    //
+    //  1. El predicado es INMUTABLE (auto_cycle_key nunca cambia), así que una
+    //     fila jamás sale del índice. Cancelar un cargo automático impide que
+    //     se regenere — que es lo correcto para dinero: cancelar la mensualidad
+    //     de octubre significa "esta persona no debe octubre", y el robot no le
+    //     gana al humano. Si se filtrara por status, el cargo cancelado saldría
+    //     del índice y la siguiente corrida lo reviviría.
+    //  2. La columna nace NULL en el 100% de las filas existentes, así que el
+    //     índice se crea sobre CERO filas y no puede fallar por duplicados
+    //     históricos. Importa porque run() se traga los errores de cada
+    //     migración (ver el SAVEPOINT de initSchema): un índice que fallara
+    //     aquí no aparecería en ningún log y nadie se enteraría.
+    //
+    // Sin CONCURRENTLY a propósito: no puede correr dentro de un bloque de
+    // transacción, y initSchema() envuelve todo en BEGIN.
+    await run(`ALTER TABLE club_ledger_entries ADD COLUMN IF NOT EXISTS auto_cycle_key TEXT`);
+    await run(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_club_ledger_auto_cycle
+      ON club_ledger_entries (team_id, member_id, auto_cycle_key)
+      WHERE auto_cycle_key IS NOT NULL
+    `);
+
     // ── La conferencia/grupo deja de capturarse partido por partido ──
     //
     // Hasta aquí, cada partido guardaba a mano su conference_id/group_id: el

@@ -86,9 +86,9 @@ export default function TeamOverviewSection({ team, token }) {
       </div>
 
       <div className="ws-toolbar">
-        <Link to={`${base}/finanzas`} className="btn btn-accent">Generar cuotas del mes</Link>
+        <Link to={`${base}/finanzas`} className="btn btn-accent">Cobranza del mes</Link>
         <Link to={`${base}/finanzas`} className="btn btn-ws">Registrar un pago</Link>
-        <Link to={`${base}/jugadores`} className="btn btn-ws">Administrar plantel</Link>
+        <Link to={`${base}/jugadores`} className="btn btn-ws">Administrar el padrón</Link>
       </div>
 
       {members.length === 0 ? (
@@ -100,7 +100,7 @@ export default function TeamOverviewSection({ team, token }) {
             llevar su estado de cuenta y mandarles recordatorios sin perseguir a nadie por WhatsApp.
             No hace falta estar en una liga para esto.
           </p>
-          <Link to={`${base}/jugadores`} className="btn btn-accent">Ir a Jugadores</Link>
+          <Link to={`${base}/jugadores`} className="btn btn-accent">Ir al Padrón</Link>
         </div>
       ) : (
         <>

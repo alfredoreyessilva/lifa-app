@@ -9,6 +9,8 @@ import { isOrgMember } from '../utils/orgMembers.js';
 import { teamOwnerRequired } from '../middleware/ownership.js';
 import { publicStatementLimiter, reportPaymentLimiter } from '../middleware/rateLimit.js';
 import { ensureCloudinaryConfigured, uploadBufferToCloudinary } from '../utils/cloudinary.js';
+import { HOY_MX } from '../utils/sqlDates.js';
+import { runMonthlyChargeGeneration } from '../utils/monthlyCharges.js';
 
 const router = express.Router();
 
@@ -32,6 +34,22 @@ const router = express.Router();
 const CHARGE_CATEGORIES = ['mensualidad', 'inscripcion', 'uniforme', 'torneo', 'equipamiento', 'multa', 'otro'];
 const PAYMENT_METHODS   = ['transferencia', 'efectivo', 'deposito', 'otro'];
 const ACCOUNT_STATUSES  = ['activo', 'baja', 'beca'];
+
+// Cada cuánto, como mucho, el panel de UN equipo vuelve a disparar la
+// generación de mensualidades. Refrescar el panel veinte veces seguidas
+// dispara UNA sentencia, no veinte: las otras diecinueve serían no-ops (el
+// índice las salta) pero cada una cuesta un viaje a Neon. El mapa vive en
+// memoria del proceso y se pierde al redesplegar; el peor caso es que se
+// vuelva a correr una vez, que es inofensivo por construcción.
+const CICLO_THROTTLE_MS = 10 * 60 * 1000;
+const ultimaCorridaPorEquipo = new Map();
+
+function tocaCorrerCiclo(teamId) {
+  const previa = ultimaCorridaPorEquipo.get(teamId);
+  if (previa && Date.now() - previa < CICLO_THROTTLE_MS) return false;
+  ultimaCorridaPorEquipo.set(teamId, Date.now());
+  return true;
+}
 
 function formatMoney(amount, currency = 'MXN') {
   const n = Number(amount);
@@ -202,6 +220,25 @@ function normalizeChargeItems(body) {
 router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
 
   const teamId = req.team.id;
+
+  // Vía perezosa de la mensualidad automática. El cron que debería generarla
+  // es externo al repositorio y su frecuencia no está documentada en ningún
+  // archivo del proyecto: si lleva semanas muerto, ESTO es lo que garantiza
+  // que el cargo del mes exista. Es la misma función idempotente que llama el
+  // cron, así que no puede duplicar nada (ver utils/monthlyCharges.js).
+  //
+  // El pre-chequeo es gratis: teamOwnerRequired ya trajo la fila completa del
+  // equipo, así que un club con el ciclo apagado —la mayoría— no paga ni una
+  // consulta extra.
+  //
+  // Se espera el resultado en vez de dispararlo y seguir: si no, el tesorero
+  // abre el panel, NO ve la mensualidad del mes y tiene que refrescar. El
+  // costo es un viaje más, como mucho una vez cada diez minutos por equipo,
+  // sobre un handler que ya hace siete consultas.
+  let ciclo = { created: 0, error: null };
+  if (req.team.monthly_charge_enabled && tocaCorrerCiclo(teamId)) {
+    ciclo = await runMonthlyChargeGeneration(db, { teamId });
+  }
   // Sale del padrón del club (club_members), NO del roster de torneo.
   // Un equipo independiente, o uno al que su liga todavía no inscribe en
   // ninguna rama, tiene aquí a toda su gente igual.
@@ -219,7 +256,7 @@ router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(
   const agg = await db.prepare(`
     SELECT member_id AS member_id,
            ${BALANCE_SUM_SQL} AS balance,
-           COALESCE(SUM(CASE WHEN kind = 'charge' AND status = 'open' AND due_date < CURRENT_DATE THEN amount ELSE 0 END), 0) AS overdue_charges,
+           COALESCE(SUM(CASE WHEN kind = 'charge' AND status = 'open' AND due_date < ${HOY_MX} THEN amount ELSE 0 END), 0) AS overdue_charges,
            MIN(CASE WHEN kind = 'charge' AND status = 'open' THEN due_date END) AS next_due_date
     FROM club_ledger_entries
     WHERE team_id = ?
@@ -248,7 +285,7 @@ router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(
     SELECT COALESCE(SUM(amount), 0) AS total
     FROM club_ledger_entries
     WHERE team_id = ? AND kind = 'payment' AND status IN ('confirmed', 'settled')
-      AND created_at >= date_trunc('month', CURRENT_DATE)
+      AND created_at >= date_trunc('month', ${HOY_MX})
   `).get(teamId);
 
   // Seis meses de cobranza para la gráfica del Resumen.
@@ -257,7 +294,7 @@ router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(
            COALESCE(SUM(amount), 0) AS total
     FROM club_ledger_entries
     WHERE team_id = ? AND kind = 'payment' AND status IN ('confirmed', 'settled')
-      AND created_at >= date_trunc('month', CURRENT_DATE) - INTERVAL '5 months'
+      AND created_at >= date_trunc('month', ${HOY_MX}) - INTERVAL '5 months'
     GROUP BY 1
     ORDER BY 1
   `).all(teamId);
@@ -281,6 +318,11 @@ router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(
     LIMIT 12
   `).all(teamId);
 
+  // Historial de lotes de cargos. Antes solo alimentaba el modal de "repetir el
+  // mes pasado", que ya no existe; se queda como lectura porque con la
+  // mensualidad automática el tesorero necesita una respuesta barata a "¿sí
+  // cobró este mes el sistema?". `is_auto` distingue el lote del ciclo del que
+  // capturó una persona.
   const recentBatches = await db.prepare(`
     SELECT batch_id,
            MIN(created_at)   AS created_at,
@@ -290,9 +332,12 @@ router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(
            MAX(amount)       AS max_amount,
            SUM(amount)       AS total_amount,
            MAX(period_label) AS period_label,
+           MIN(due_date)     AS due_date,
+           bool_or(auto_cycle_key IS NOT NULL) AS is_auto,
            COUNT(*)          AS member_count
     FROM club_ledger_entries
     WHERE team_id = ? AND kind = 'charge' AND batch_id IS NOT NULL
+      AND status <> 'void'
     GROUP BY batch_id
     ORDER BY MIN(created_at) DESC
     LIMIT 12
@@ -307,6 +352,17 @@ router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(
       contact_phone: req.team.contact_phone,
       contact_email: req.team.contact_email,
       player_billing_reminders_enabled: req.team.player_billing_reminders_enabled,
+      monthly_charge_enabled: req.team.monthly_charge_enabled,
+      monthly_charge_day: req.team.monthly_charge_day,
+      monthly_charge_started_on: req.team.monthly_charge_started_on,
+    },
+    // Resultado de la última corrida del ciclo. `last_run_failed` existe para
+    // que el panel pueda avisar: un catch silencioso aquí reproduciría el mismo
+    // modo de falla —dejar de facturar sin que nadie se entere— que motivó todo
+    // este diseño.
+    billing_cycle: {
+      last_run_created: ciclo.created,
+      last_run_failed: Boolean(ciclo.error),
     },
     kpis: {
       collected_this_month: Number(collectedThisMonth?.total || 0),
@@ -379,61 +435,45 @@ router.post('/teams/:id/charges', authRequired, teamOwnerRequired, asyncHandler(
   // Un cargo en cero (becado) no es movimiento contable — se omite en silencio.
   const billable = items.filter((i) => i.amount > 0);
 
-  for (const { member_id, amount } of billable) {
+  // Un solo INSERT multi-fila, no uno por jugador en un bucle. Antes, si la
+  // conexión se caía en el jugador 20 de 40, quedaba MEDIO lote creado, ya
+  // visible en los saldos de veinte familias, y no hay acción de "cancelar el
+  // lote": había que cancelar cargo por cargo, cada uno con su ajuste.
+  //
+  // Una sentencia es atómica pase lo que pase, y eso importa aquí porque en
+  // este proyecto una transacción NO se puede repartir en varias llamadas:
+  // db.prepare toma una conexión del pool por consulta y del otro lado hay un
+  // pooler en modo transacción.
+  if (billable.length > 0) {
+    const filas = billable.map(() => `(?, ?, 'charge', ?, ?, ?, ?, ?, ?, ?, ?, 'team')`).join(', ');
+    const args = billable.flatMap(({ member_id, amount }) => [
+      teamId, member_id, category, cleanConcept, amount, due_date, cleanPeriod, cleanNote, batchId, req.user.id,
+    ]);
     await db.prepare(`
       INSERT INTO club_ledger_entries
         (team_id, member_id, kind, category, concept, amount, due_date, period_label, note, batch_id, created_by_user_id, created_by_side)
-      VALUES (?, ?, 'charge', ?, ?, ?, ?, ?, ?, ?, ?, 'team')
-    `).run(teamId, member_id, category, cleanConcept, amount, due_date, cleanPeriod, cleanNote, batchId, req.user.id);
+      VALUES ${filas}
+    `).run(...args);
   }
 
   res.status(201).json({ created: billable.length, skipped: items.length - billable.length, batch_id: batchId });
 }));
 
-// Repetir un lote anterior con nueva fecha de vencimiento ("las cuotas de
-// octubre igual que las de septiembre"). Respeta el monto de cada jugador.
-router.post('/teams/:id/charges/repeat', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
-  const teamId = req.team.id;
-  const { source_batch_id, due_date, period_label } = req.body;
-
-  if (!isNonEmptyString(source_batch_id)) return res.status(400).json({ error: 'Falta el lote de origen' });
-  if (!due_date || Number.isNaN(new Date(due_date).getTime())) return res.status(400).json({ error: 'La fecha de vencimiento no es válida' });
-
-  const source = await db.prepare(`
-    SELECT * FROM club_ledger_entries
-    WHERE batch_id = ? AND team_id = ? AND kind = 'charge'
-  `).all(source_batch_id, teamId);
-  if (source.length === 0) return res.status(404).json({ error: 'No se encontró el lote de origen' });
-
-  const template = source[0];
-  const amountByPlayer = new Map(source.map((r) => [r.member_id, Number(r.amount)]));
-  const requested = Array.isArray(req.body.member_ids) && req.body.member_ids.length > 0
-    ? [...new Set(req.body.member_ids.map(Number))]
-    : [...amountByPlayer.keys()];
-
-  // Solo jugadores que sigan en el plantel y que estuvieran en el lote original
-  // — si alguien se dio de baja entre un mes y otro, no se le vuelve a cobrar.
-  const stillInTeam = await membersOfTeam(teamId, requested);
-  const memberIds = requested.filter((id) => stillInTeam.has(id) && amountByPlayer.has(id));
-  if (memberIds.length === 0) return res.status(400).json({ error: 'Ningún jugador válido para repetir el cargo' });
-
-  const batchId = crypto.randomUUID();
-  const cleanPeriod = isNonEmptyString(period_label) ? period_label.trim().toUpperCase() : template.period_label;
-
-  for (const memberId of memberIds) {
-    await db.prepare(`
-      INSERT INTO club_ledger_entries
-        (team_id, member_id, kind, category, concept, amount, due_date, period_label, note, batch_id, created_by_user_id, created_by_side)
-      VALUES (?, ?, 'charge', ?, ?, ?, ?, ?, ?, ?, ?, 'team')
-    `).run(
-      teamId, memberId, template.category, template.concept, amountByPlayer.get(memberId),
-      due_date, cleanPeriod, template.note, batchId, req.user.id
-    );
-  }
-
-  res.status(201).json({ created: memberIds.length, batch_id: batchId });
-}));
-
+// Aquí vivía POST /teams/:id/charges/repeat ("repetir el mes pasado").
+//
+// Se retiró: la mensualidad ya no se repite a mano, la genera sola el ciclo
+// automático (utils/monthlyCharges.js). El endpoint tenía además dos defectos
+// que el ciclo elimina de raíz en vez de parchar:
+//
+//  1. Le volvía a cobrar a quien ya estaba de baja. Solo comprobaba que la
+//     fila siguiera existiendo en club_members, no su situación — y una baja
+//     es justamente una fila que sigue existiendo (ver DELETE de un miembro:
+//     si tiene movimientos no se borra, se le pone status='baja').
+//  2. Repetía también los cargos que se habían CANCELADO en el lote original,
+//     porque la consulta del lote no filtraba por status.
+//
+// El gemelo de liga → equipo (/leagues/:leagueId/charges/repeat, en
+// routes/billing.js) es otro libro y se queda.
 // ─── Registrar un pago recibido (lo captura el club) ────────────────────────
 
 router.post('/teams/:id/members/:memberId/payments', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
@@ -568,7 +608,7 @@ router.post('/teams/:id/members', authRequired, teamOwnerRequired, asyncHandler(
   const teamId = req.team.id;
   const {
     display_name, birth_date, position, jersey_number, photo_url, curp,
-    monthly_amount, group_label, tutor_name, tutor_phone, tutor_email, note,
+    monthly_amount, status, group_label, tutor_name, tutor_phone, tutor_email, note,
   } = req.body;
 
   // Un solo campo de nombre. No hay apellido obligatorio: un club puede tener
@@ -583,6 +623,13 @@ router.post('/teams/:id/members', authRequired, teamOwnerRequired, asyncHandler(
   if (jersey === undefined) return res.status(400).json({ error: 'El número debe ser un entero entre 0 y 999' });
   if (tutor_email && !isValidEmail(tutor_email)) {
     return res.status(400).json({ error: 'El correo del tutor no es válido' });
+  }
+  // La situación se guarda desde el alta. Antes se ignoraba: quien registrabas
+  // como "Becado" nacía "Activo", y al mes siguiente "usar la cuota de cada
+  // quien" le generaba un cargo. Con la mensualidad automática eso dejaría de
+  // necesitar que alguien apretara un botón para cobrarle de más.
+  if (status !== undefined && !ACCOUNT_STATUSES.includes(status)) {
+    return res.status(400).json({ error: 'Estatus de jugador no válido' });
   }
   if (monthly_amount !== undefined && monthly_amount !== null && monthly_amount !== ''
       && (Number.isNaN(Number(monthly_amount)) || Number(monthly_amount) < 0)) {
@@ -606,14 +653,14 @@ router.post('/teams/:id/members', authRequired, teamOwnerRequired, asyncHandler(
   // otra aquí apuntándole. Esa fila en `players` era el problema — metía al
   // cliente del club en la misma tabla que los jugadores de roster de torneo.
   //
-  // 14 columnas, 14 placeholders. Se cuentan a mano a propósito: el bug de
+  // 15 columnas, 15 placeholders. Se cuentan a mano a propósito: el bug de
   // `POST /leagues` (19 placeholders para 18 columnas) vivió meses tirando 500
   // en silencio porque nadie los contó.
   const member = await db.prepare(`
     INSERT INTO club_members
       (team_id, display_name, birth_date, position, jersey_number, photo_url, curp,
-       share_token, monthly_amount, group_label, tutor_name, tutor_phone, tutor_email, note, joined_date)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE)
+       share_token, monthly_amount, status, group_label, tutor_name, tutor_phone, tutor_email, note, joined_date)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${HOY_MX})
     RETURNING *
   `).get(
     teamId,
@@ -625,6 +672,7 @@ router.post('/teams/:id/members', authRequired, teamOwnerRequired, asyncHandler(
     cleanCurp,
     crypto.randomUUID(),
     monthly_amount === undefined || monthly_amount === null || monthly_amount === '' ? null : Number(monthly_amount),
+    ACCOUNT_STATUSES.includes(status) ? status : 'activo',
     cleanText(group_label, 40),
     cleanText(tutor_name, 80),
     isNonEmptyString(tutor_phone) ? tutor_phone.replace(/[^\d+]/g, '') : null,
@@ -820,7 +868,7 @@ router.post('/teams/:id/members/import-roster', authRequired, teamOwnerRequired,
       INSERT INTO club_members
         (team_id, display_name, birth_date, position, jersey_number, photo_url, curp,
          share_token, group_label, joined_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_DATE)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ${HOY_MX})
     `).run(
       teamId,
       `${row.first_name} ${row.last_name}`.trim(),
@@ -857,10 +905,79 @@ router.post('/teams/:id/members/:memberId/rotate-token', authRequired, teamOwner
 
 // ─── Ajustes del equipo ─────────────────────────────────────────────────────
 
+// Solo se tocan los campos que vinieron en el cuerpo, igual que el PATCH de un
+// miembro del padrón.
+//
+// Antes esto hacía Boolean(req.body?.player_billing_reminders_enabled) sin
+// preguntar si la clave venía: en cuanto el panel mandó el interruptor del
+// ciclo mensual, ese mismo PATCH apagaba los recordatorios en silencio.
 router.patch('/teams/:id/settings', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
-  const enabled = Boolean(req.body?.player_billing_reminders_enabled);
-  await db.prepare('UPDATE teams SET player_billing_reminders_enabled = ? WHERE id = ?').run(enabled, req.team.id);
-  res.json({ player_billing_reminders_enabled: enabled });
+  const {
+    player_billing_reminders_enabled: recordatorios,
+    monthly_charge_enabled: cicloActivo,
+    monthly_charge_day: diaDeCobro,
+  } = req.body || {};
+
+  let dia;
+  if (diaDeCobro !== undefined && diaDeCobro !== null && diaDeCobro !== '') {
+    dia = Number(diaDeCobro);
+    if (!Number.isInteger(dia) || dia < 1 || dia > 28) {
+      return res.status(400).json({
+        error: 'La fecha de pago debe ser un día del 1 al 28. Los días 29, 30 y 31 no existen en todos los meses.',
+      });
+    }
+  }
+
+  // Encender el ciclo sin fecha de pago dejaría al generador sin saber cuándo
+  // cobrar, y el club creería que ya quedó configurado.
+  const diaFinal = dia !== undefined ? dia : req.team.monthly_charge_day;
+  if (cicloActivo === true && !diaFinal) {
+    return res.status(400).json({ error: 'Antes de activar el cobro automático hay que elegir la fecha de pago' });
+  }
+
+  const sets = [];
+  const args = [];
+
+  if (recordatorios !== undefined) {
+    sets.push('player_billing_reminders_enabled = ?');
+    args.push(Boolean(recordatorios));
+  }
+  if (dia !== undefined) {
+    sets.push('monthly_charge_day = ?');
+    args.push(dia);
+  }
+  if (cicloActivo !== undefined) {
+    sets.push('monthly_charge_enabled = ?');
+    args.push(Boolean(cicloActivo));
+    // El ancla se mueve SOLO en la transición apagado → encendido, y se
+    // compara contra el valor que la fila tiene AHORA (el UPDATE lee el valor
+    // viejo de la columna). Es lo que impide que un club que apagó el ciclo en
+    // marzo y lo vuelve a encender en diciembre reciba un mes retroactivo.
+    sets.push(`monthly_charge_started_on = CASE
+      WHEN ?::boolean = TRUE AND monthly_charge_enabled = FALSE THEN ${HOY_MX}
+      ELSE monthly_charge_started_on END`);
+    args.push(Boolean(cicloActivo));
+  }
+
+  if (sets.length === 0) return res.status(400).json({ error: 'No hay nada que actualizar' });
+
+  args.push(req.team.id);
+  const team = await db.prepare(`
+    UPDATE teams SET ${sets.join(', ')}
+    WHERE id = ?
+    RETURNING player_billing_reminders_enabled, monthly_charge_enabled,
+              monthly_charge_day, monthly_charge_started_on
+  `).get(...args);
+
+  // Al encender el ciclo se genera de inmediato, para que el tesorero vea el
+  // resultado en la misma pantalla en vez de esperar a un cron que no controla.
+  let ciclo = { created: 0, error: null };
+  if (cicloActivo === true) {
+    ultimaCorridaPorEquipo.delete(req.team.id);
+    ciclo = await runMonthlyChargeGeneration(db, { teamId: req.team.id });
+  }
+
+  res.json({ ...team, billing_cycle: { last_run_created: ciclo.created, last_run_failed: Boolean(ciclo.error) } });
 }));
 
 // ─── Estado de cuenta público del jugador (SIN sesión) ──────────────────────
@@ -888,8 +1005,11 @@ router.get('/statement/:shareToken', publicStatementLimiter, asyncHandler(async 
   if (!account) return res.status(404).json({ error: 'Este estado de cuenta no existe o fue reemplazado' });
 
   const entries = await db.prepare(`
+    -- Sin la columna note: es la nota INTERNA del tesorero ("la mamá pidió prórroga"),
+    -- y el campo que la captura promete que no aparece aquí. No se pintaba,
+    -- pero viajaba en el JSON y se leía con la pestaña de red del navegador.
     SELECT id, kind, category, concept, amount, currency, due_date, period_label, status,
-           direction, payment_method, reference, proof_url, note, reverses_entry_id,
+           direction, payment_method, reference, proof_url, reverses_entry_id,
            voided_at, created_at
     FROM club_ledger_entries
     WHERE team_id = ? AND member_id = ?
@@ -899,7 +1019,7 @@ router.get('/statement/:shareToken', publicStatementLimiter, asyncHandler(async 
   const agg = await db.prepare(`
     SELECT ${BALANCE_SUM_SQL} AS balance,
            MIN(CASE WHEN kind = 'charge' AND status = 'open' THEN due_date END) AS next_due_date,
-           COALESCE(SUM(CASE WHEN kind = 'charge' AND status = 'open' AND due_date < CURRENT_DATE THEN amount ELSE 0 END), 0) AS overdue_charges
+           COALESCE(SUM(CASE WHEN kind = 'charge' AND status = 'open' AND due_date < ${HOY_MX} THEN amount ELSE 0 END), 0) AS overdue_charges
     FROM club_ledger_entries
     WHERE team_id = ? AND member_id = ?
   `).get(account.team_id, account.member_id);

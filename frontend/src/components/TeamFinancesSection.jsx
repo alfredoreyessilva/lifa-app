@@ -7,7 +7,6 @@ import LedgerEntryList from './LedgerEntryList.jsx';
 import PlayerChargeForm from './PlayerChargeForm.jsx';
 import PlayerPaymentForm from './PlayerPaymentForm.jsx';
 import ClubMemberForm from './ClubMemberForm.jsx';
-import RepeatPlayerChargeModal from './RepeatPlayerChargeModal.jsx';
 import MonthlyFlowChart from './MonthlyFlowChart.jsx';
 import { money, moneyShort, fmtDate, timeAgo, balanceClass } from '../utils/money.js';
 
@@ -45,7 +44,7 @@ function whatsappReminderUrl(member, teamName) {
 }
 
 // Cuotas del club hacia sus jugadores. Es el libro equipo → jugador
-// (member_ledger_entries), el gemelo del que la liga usa para cobrarle al
+// (club_ledger_entries), el gemelo del que la liga usa para cobrarle al
 // equipo — pero aquí el papá también escribe: reporta su pago desde el link
 // público y el club lo confirma.
 export default function TeamFinancesSection({ team, token }) {
@@ -57,6 +56,7 @@ export default function TeamFinancesSection({ team, token }) {
   const [openMemberId, setOpenMemberId] = useState(null);
   const [ledger, setLedger] = useState(null);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [cicloAbierto, setCicloAbierto] = useState(false);
 
   useEffect(() => { refresh(); }, [team.id, token]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -92,13 +92,24 @@ export default function TeamFinancesSection({ team, token }) {
     await reloadLedger(memberId ?? openMemberId);
   }
 
-  async function toggleReminders() {
+  // Un solo camino para los tres ajustes de cobranza. El backend aplica solo
+  // las claves que le llegan, así que mandar una no apaga las otras.
+  async function guardarAjustes(cambios) {
     if (!data) return;
     setSavingSettings(true);
+    setError('');
     try {
-      const next = !data.team.member_billing_reminders_enabled;
-      await api.updatePlayerBillingSettings(team.id, { member_billing_reminders_enabled: next }, token);
-      setData((d) => ({ ...d, team: { ...d.team, member_billing_reminders_enabled: next } }));
+      const guardado = await api.updatePlayerBillingSettings(team.id, cambios, token);
+      // Al encender el ciclo el backend genera de inmediato, así que se
+      // recarga todo en vez de parchar el estado local: los cargos nuevos ya
+      // cambiaron saldos, KPIs y actividad reciente.
+      if (guardado?.billing_cycle?.last_run_created > 0) {
+        setNotice(`Se generaron ${guardado.billing_cycle.last_run_created} cuotas del mes.`);
+        setTimeout(() => setNotice(''), 5000);
+        await refresh();
+      } else {
+        setData((d) => ({ ...d, team: { ...d.team, ...cambios } }));
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -139,7 +150,7 @@ export default function TeamFinancesSection({ team, token }) {
         <div className="empty-teach-icon">💰</div>
         <h3>Primero arma el padrón de tu club</h3>
         <p>
-          Las cuotas se le cobran a la gente que tengas en tu padrón. Ve a la sección Jugadores
+          Las cuotas se le cobran a la gente que tengas en tu padrón. Ve a la sección Padrón
           y da de alta a quienes entrenan contigo — no necesitas estar en una liga ni inscrito
           en ningún torneo para empezar a cobrarles.
         </p>
@@ -151,6 +162,16 @@ export default function TeamFinancesSection({ team, token }) {
     <div>
       {error && <div className="form-error">{error}</div>}
       {notice && <div className="form-success">{notice}</div>}
+
+      {/* La generación automática no tumba el panel si falla, pero eso no puede
+          significar que nadie se entere: sin este aviso, un club dejaría de
+          facturar en silencio, que es justo lo que el ciclo vino a evitar. */}
+      {data.billing_cycle?.last_run_failed && (
+        <div className="form-error">
+          No se pudieron generar las cuotas de este mes automáticamente. Puedes crearlas
+          con <strong>Generar cargo</strong> mientras lo revisamos.
+        </div>
+      )}
 
       <div className="stat-strip">
         <div className="stat-tile">
@@ -225,18 +246,24 @@ export default function TeamFinancesSection({ team, token }) {
         </div>
       )}
 
+      <CobranzaAutomatica
+        team={data.team}
+        abierto={cicloAbierto}
+        onToggleAbierto={() => setCicloAbierto((v) => !v)}
+        guardando={savingSettings}
+        onGuardar={guardarAjustes}
+        miembrosConCuota={members.filter((m) => m.status === 'activo' && m.monthly_amount > 0).length}
+      />
+
       <div className="ws-toolbar">
         <button className="btn btn-accent" onClick={() => setModal({ type: 'charge' })}>
-          Generar cuotas
-        </button>
-        <button className="btn btn-ws" onClick={() => setModal({ type: 'repeat' })}>
-          Repetir el mes pasado
+          Generar cargo
         </button>
         <label className="spacer" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--ws-ink-dim)' }}>
           <input
             type="checkbox"
-            checked={!!data.team.member_billing_reminders_enabled}
-            onChange={toggleReminders}
+            checked={!!data.team.player_billing_reminders_enabled}
+            onChange={() => guardarAjustes({ player_billing_reminders_enabled: !data.team.player_billing_reminders_enabled })}
             disabled={savingSettings}
           />
           Avisarme de cuotas vencidas
@@ -382,7 +409,7 @@ export default function TeamFinancesSection({ team, token }) {
       )}
 
       {modal?.type === 'charge' && (
-        <Modal title="Generar cuotas" onClose={() => setModal(null)}>
+        <Modal title="Generar un cargo" onClose={() => setModal(null)}>
           <PlayerChargeForm
             members={members}
             categories={data.categories}
@@ -395,18 +422,6 @@ export default function TeamFinancesSection({ team, token }) {
         </Modal>
       )}
 
-      {modal?.type === 'repeat' && (
-        <Modal title="Repetir cargos de un mes anterior" onClose={() => setModal(null)}>
-          <RepeatPlayerChargeModal
-            batches={data.recent_batches}
-            onCancel={() => setModal(null)}
-            onSubmit={async (payload) => {
-              await api.repeatPlayerCharges(team.id, payload, token);
-              await afterWrite();
-            }}
-          />
-        </Modal>
-      )}
 
       {modal?.type === 'payment' && (
         <Modal title={`Registrar pago — ${modal.member.display_name}`} onClose={() => setModal(null)}>
@@ -480,4 +495,115 @@ export default function TeamFinancesSection({ team, token }) {
       )}
     </div>
   );
+}
+
+// Configuración del cobro automático de la mensualidad.
+//
+// Reemplaza al botón "Repetir el mes pasado". La diferencia de fondo: aquel
+// pedía que alguien se acordara de apretarlo el día correcto todos los meses;
+// esto se configura una vez y el cargo nace solo.
+//
+// El club elige UNA fecha —el día en que se paga— y no dos. No hay
+// "vencimiento" aparte: el cargo se debe desde el día siguiente a la fecha de
+// pago, y si no se paga se acumula con el del mes que entra.
+function CobranzaAutomatica({ team, abierto, onToggleAbierto, guardando, onGuardar, miembrosConCuota }) {
+  const activo = !!team.monthly_charge_enabled;
+  const dia = team.monthly_charge_day || 1;
+  const [diaElegido, setDiaElegido] = useState(String(dia));
+
+  // El cargo nace cinco días antes de la fecha de pago (constante del backend,
+  // ver utils/monthlyCharges.js). Esto solo lo dice en palabras.
+  const proxima = proximaGeneracion(dia);
+
+  return (
+    <div className="pending-tray" style={{ marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 260 }}>
+          <div className="pending-tray-head" style={{ marginBottom: 4 }}>
+            {activo ? "Cobro automático activo" : "Cobro automático apagado"}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--ws-ink-dim)" }}>
+            {activo
+              ? `Fecha de pago: día ${dia} de cada mes · ${miembrosConCuota} ${miembrosConCuota === 1 ? "jugador entra" : "jugadores entran"} en el cobro · próxima generación ${proxima}`
+              : "La mensualidad de cada quien se genera sola cada mes, sin que tengas que acordarte."}
+          </div>
+        </div>
+        <button type="button" className="btn btn-ws btn-sm" onClick={onToggleAbierto}>
+          {abierto ? "Cerrar" : "Configurar"}
+        </button>
+      </div>
+
+      {abierto && (
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--ws-line)" }}>
+          <div className="field" style={{ maxWidth: 260 }}>
+            <label>Fecha de pago</label>
+            <select value={diaElegido} onChange={(e) => setDiaElegido(e.target.value)} disabled={guardando}>
+              {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                <option key={d} value={d}>Día {d} de cada mes</option>
+              ))}
+            </select>
+            <small style={{ color: "var(--ws-ink-faint)" }}>
+              El cargo aparece cinco días antes, para que la familia lo vea venir. Del día
+              siguiente en adelante cuenta como adeudo. Solo del 1 al 28: los días 29, 30 y 31
+              no existen en todos los meses.
+            </small>
+          </div>
+
+          <div style={{ fontSize: 12, color: "var(--ws-ink-dim)", margin: "12px 0" }}>
+            Se le genera a cada jugador <strong>activo</strong> con cuota definida, por el monto de su
+            ficha. A los becados y a los dados de baja no se les genera nada. Lo esporádico
+            —uniforme, viaje, arbitraje— se sigue cobrando con <strong>Generar cargo</strong>.
+          </div>
+
+          <div className="ws-toolbar" style={{ marginTop: 0 }}>
+            {activo ? (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-ws btn-sm"
+                  disabled={guardando || String(dia) === diaElegido}
+                  onClick={() => onGuardar({ monthly_charge_day: Number(diaElegido) })}
+                >
+                  Guardar la fecha
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ color: "var(--danger)" }}
+                  disabled={guardando}
+                  onClick={() => onGuardar({ monthly_charge_enabled: false })}
+                >
+                  Apagar el cobro automático
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-accent btn-sm"
+                disabled={guardando}
+                onClick={() => onGuardar({ monthly_charge_enabled: true, monthly_charge_day: Number(diaElegido) })}
+              >
+                {guardando ? "Activando…" : "Activar el cobro automático"}
+              </button>
+            )}
+          </div>
+
+          {!activo && (
+            <div style={{ fontSize: 12, color: "var(--ws-ink-faint)", marginTop: 8 }}>
+              Al activarlo se genera el mes en curso si su fecha de pago todavía no pasa.
+              Nunca se generan meses viejos.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// "1 de octubre" — la próxima fecha de pago a partir de hoy.
+function proximaGeneracion(dia) {
+  const hoy = new Date();
+  let fecha = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
+  if (fecha < hoy) fecha = new Date(hoy.getFullYear(), hoy.getMonth() + 1, dia);
+  return fecha.toLocaleDateString("es-MX", { day: "numeric", month: "long" });
 }

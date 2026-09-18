@@ -1,3 +1,5 @@
+import { HOY_MX } from './sqlDates.js';
+
 // Recordatorios de cobranza, disparados por el mismo cron externo que ya llama
 // a POST /api/notifications/trigger. Se llaman al final de ese handler
 // (routes/notifications.js), después de los avisos de partidos.
@@ -153,7 +155,7 @@ export async function runBillingReminders(db) {
 // marcando por movimiento aunque el aviso sea agregado, así que cada cargo
 // respeta su propio tope de 4 recordatorios igual que en el libro de la liga.
 
-const DUE_SOON_WINDOW = `e.due_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + ${DUE_SOON_DAYS})`;
+const DUE_SOON_WINDOW = `e.due_date BETWEEN ${HOY_MX} AND (${HOY_MX} + ${DUE_SOON_DAYS})`;
 
 function playerCountLabel(n) {
   return Number(n) === 1 ? '1 jugador' : `${n} jugadores`;
@@ -222,7 +224,7 @@ export async function runPlayerBillingReminders(db) {
       e.kind = 'charge'
       AND e.status = 'open'
       AND e.due_date IS NOT NULL
-      AND e.due_date < CURRENT_DATE
+      AND e.due_date < ${HOY_MX}
       AND e.overdue_reminder_count < ${OVERDUE_MAX_REMINDERS}
       AND (
         e.last_overdue_reminder_at IS NULL

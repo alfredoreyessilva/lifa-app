@@ -6,6 +6,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { authRequired } from '../middleware/auth.js';
 import { leagueOwnerRequired, teamOwnerRequired } from '../middleware/ownership.js';
 import { runBillingReminders, runPlayerBillingReminders } from '../utils/billingReminders.js';
+import { runMonthlyChargeGeneration } from '../utils/monthlyCharges.js';
 
 const router = express.Router();
 
@@ -463,7 +464,23 @@ router.post('/trigger', asyncHandler(async (req, res) => {
   // ─────────────────────────────────────────────────────────────────────────
   await runPlayerBillingReminders(db);
 
-  res.json({ ok: true });
+  // ─────────────────────────────────────────────────────────────────────────
+  // Fase 6 — mensualidad automática del club. Va DESPUÉS de los
+  // recordatorios y no antes: un cargo que nace hoy vence dentro de cinco
+  // días, así que alcanza el aviso de "por vencer" de la próxima corrida sin
+  // necesidad de adelantarlo, y así los recordatorios siguen siendo lo último
+  // que ve una corrida sobre datos estables.
+  //
+  // Es idempotente: si el panel ya la generó hoy, esto no inserta nada. El
+  // conteo sube a la respuesta porque es la ÚNICA señal que el servicio de
+  // cron externo puede observar — este handler no deja más rastro que su JSON.
+  const mensualidad = await runMonthlyChargeGeneration(db);
+
+  res.json({
+    ok: true,
+    monthly_charges_created: mensualidad.created,
+    monthly_charges_error: mensualidad.error,
+  });
 }));
 
 // Notificaciones de organizaciones (bandeja de entrada)

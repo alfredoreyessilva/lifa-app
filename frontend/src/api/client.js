@@ -556,8 +556,6 @@ export const api = {
     request(`/player-billing/teams/${teamId}/members/${memberId}/entries`, { token }),
   createPlayerCharges: (teamId, payload, token) =>
     request(`/player-billing/teams/${teamId}/charges`, { method: 'POST', body: payload, token }),
-  repeatPlayerCharges: (teamId, payload, token) =>
-    request(`/player-billing/teams/${teamId}/charges/repeat`, { method: 'POST', body: payload, token }),
   recordMemberPayment: (teamId, memberId, payload, token) =>
     request(`/player-billing/teams/${teamId}/members/${memberId}/payments`, { method: 'POST', body: payload, token }),
   confirmPlayerPayment: (entryId, token) =>

@@ -121,6 +121,88 @@ const intruso = (await call('/auth/register', { method: 'POST', body: { name: 'X
 ok((await call(`/player-billing/teams/${TEAM}/overview`, { token: intruso })).status === 403, 'otro usuario recibe 403');
 ok((await call(`/player-billing/teams/${TEAM}/overview`)).status === 401, 'sin sesión da 401');
 
+console.log('');
+console.log('=== 9. La situación se guarda desde el alta ===');
+// Antes esto se ignoraba: quien registrabas como becado nacía activo, y al mes
+// siguiente se le generaba cargo. Con el cobro automático se le generaría solo,
+// sin que nadie apretara nada.
+const BECADO = await add({ display_name: 'Becado Real', monthly_amount: 1200, status: 'beca' });
+const DEBAJA = await add({ display_name: 'Ya No Entrena', monthly_amount: 900 });
+ov = await overview();
+const statusBecado = ov.data.members.find((m) => m.member_id === BECADO).status;
+ok(statusBecado === 'beca', 'status=beca se guarda en el alta (antes nacía activo)', '=' + statusBecado);
+const malStatus = await call('/player-billing/teams/' + TEAM + '/members', { method: 'POST', token: T,
+  body: { display_name: 'Inventado', status: 'jubilado' } });
+ok(malStatus.status === 400, 'un status inválido se rechaza con 400', '=' + malStatus.status);
+
+console.log('');
+console.log('=== 10. Mensualidad automática ===');
+// Se elige una fecha de pago que caiga dentro de la ventana de generación
+// (entre hoy y hoy+5) para que la prueba no dependa del día en que se corra.
+function diaDeCobroQueGenera() {
+  const hoy = new Date();
+  const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  const hasta = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 5);
+  for (let d = 1; d <= 28; d++) {
+    for (const salto of [0, 1]) {
+      const cand = new Date(hoy.getFullYear(), hoy.getMonth() + salto, d);
+      if (cand >= desde && cand <= hasta) return d;
+    }
+  }
+  return null;
+}
+const DIA = diaDeCobroQueGenera();
+
+// A este se le da de baja ANTES de activar el ciclo. Como ya tiene movimientos,
+// el DELETE lo deja en status='baja' en vez de borrarlo — que es exactamente el
+// caso que 'repetir el mes pasado' volvía a cobrar.
+await call('/player-billing/teams/' + TEAM + '/charges', { method: 'POST', token: T, body: {
+  category: 'uniforme', concept: 'Uniforme', due_date: '2026-10-15',
+  items: [{ member_id: DEBAJA, amount: 100 }] } });
+await call('/player-billing/teams/' + TEAM + '/members/' + DEBAJA, { method: 'DELETE', token: T });
+ov = await overview();
+ok(ov.data.members.find((m) => m.member_id === DEBAJA).status === 'baja', 'quedó dado de baja, no borrado');
+
+const activar = await call('/player-billing/teams/' + TEAM + '/settings', { method: 'PATCH', token: T,
+  body: { monthly_charge_enabled: true, monthly_charge_day: DIA } });
+ok(activar.status === 200, 'se activa el cobro automático', '=' + activar.status);
+
+const autoDe = async (id) => (await pool.query(
+  'SELECT id, period_label, amount FROM club_ledger_entries WHERE team_id=$1 AND member_id=$2 AND auto_cycle_key IS NOT NULL ORDER BY id',
+  [TEAM, id]
+)).rows;
+
+const autoJuan = await autoDe(JUAN);
+ok(autoJuan.length === 1, 'a un activo con cuota se le genera su mensualidad', '=' + autoJuan.length);
+ok(Number(autoJuan[0] && autoJuan[0].amount) === 800, 'por el monto de su ficha');
+ok((await autoDe(BECADO)).length === 0, 'a un BECADO no se le genera nada, aunque tenga cuota');
+ok((await autoDe(DEBAJA)).length === 0, 'a un dado de BAJA no se le genera nada');
+ok((await autoDe(ANA)).length === 0, 'a quien tiene la cuota en 0 tampoco');
+
+const periodos = new Set((await pool.query(
+  'SELECT DISTINCT period_label FROM club_ledger_entries WHERE team_id=$1 AND auto_cycle_key IS NOT NULL',
+  [TEAM]
+)).rows.map((r) => r.period_label));
+ok(periodos.size === 1, 'un club recién activado recibe UN mes, no doce', '=' + periodos.size);
+
+// La segunda corrida sale de la vía perezosa del panel: PATCH /settings limpia
+// el acelerador, así que este GET sí vuelve a ejecutar la generación.
+const antesIdem = (await autoDe(JUAN)).length;
+await overview();
+await overview();
+const despuesIdem = (await autoDe(JUAN)).length;
+ok(despuesIdem === antesIdem, 'correr la generación otra vez NO crea un segundo cargo del mismo mes',
+  'antes=' + antesIdem + ' ahora=' + despuesIdem);
+
+console.log('');
+console.log('=== 11. La nota interna no sale en el link público ===');
+await call('/player-billing/teams/' + TEAM + '/charges', { method: 'POST', token: T, body: {
+  category: 'multa', concept: 'Multa', due_date: '2026-11-01', note: 'HABLAR-CON-EL-COACH',
+  items: [{ member_id: JUAN, amount: 50 }] } });
+const pubJuan = await call('/player-billing/statement/' + tokJuan);
+ok(!JSON.stringify(pubJuan.data).includes('HABLAR-CON-EL-COACH'),
+  'la nota interna de un cargo no viaja en el estado de cuenta del papá');
+
 console.log(`\n========  ${pass} ok, ${fail} fallas  ========`);
 console.log(JSON.stringify({ TEAM, JUAN, CARLOS, ANA }));
 await pool.end();
