@@ -23,7 +23,18 @@ function getPool() {
     //    de que Neon las corte de su lado.
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
+      // No es decorativo, pero tampoco manda: cuando DATABASE_URL trae
+      // ?sslmode=..., `pg` parsea la cadena y PISA este objeto
+      // (Object.assign en connection-parameters.js), así que el valor real
+      // sale de la URL. Solo se usa si la cadena viene SIN sslmode — y ahí
+      // `true` es lo que evita conectar sin validar el certificado.
+      //
+      // Decía `false`, que pedía justo lo contrario. No tenía efecto porque
+      // sslmode=require se traduce hoy a verify-full, pero en pg v9 ese mismo
+      // `require` pasa a significar "cifra y no valides" (semántica libpq):
+      // la validación se habría apagado sola en un `npm update`, sin que
+      // cambiara una línea. Por eso la URL dice verify-full y esto dice true.
+      ssl: { rejectUnauthorized: true },
       max: Number(process.env.PG_POOL_MAX) || 10,
       connectionTimeoutMillis: 10_000,
       idleTimeoutMillis: 30_000,

@@ -35,7 +35,9 @@ if (!process.env.DATABASE_URL) {
 
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  // `true` a propósito, y solo aplica si DATABASE_URL viene sin sslmode:
+  // si la trae, la cadena pisa esto. Ver el comentario en config/db.js.
+  ssl: { rejectUnauthorized: true },
   max: 1,
 });
 

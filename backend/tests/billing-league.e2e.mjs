@@ -17,7 +17,7 @@ async function call(path, { method = 'GET', body, token } = {}) {
   return { status: res.status, data: await res.json().catch(() => ({})) };
 }
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: true } });
 
 console.log('\n=== 1. Liga con un equipo ===');
 const reg = await call('/auth/register', { method: 'POST', body: { name: 'Presi Liga', email: `liga${stamp}@example.com`, password: 'prueba123' } });
