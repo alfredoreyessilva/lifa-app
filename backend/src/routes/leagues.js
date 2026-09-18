@@ -439,6 +439,16 @@ function toNull(value) {
   return value === undefined ? null : value;
 }
 
+// Igual que toNull pero para un id numérico: un <select> vacío manda '', no
+// undefined, y '' en una columna INTEGER truena la consulta completa
+// (22P02, "invalid input syntax for type integer"). Vacío aquí significa "no
+// lo toques", igual que undefined, porque estas columnas se escriben con
+// COALESCE(?, col).
+function toId(value) {
+  if (value === undefined || value === null || value === '') return null;
+  return value;
+}
+
 router.put('/:id', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
   const {
     name, logo_url, cover_url, country_id, state, states, description, timezone,
@@ -463,7 +473,7 @@ router.put('/:id', authRequired, leagueOwnerRequired, asyncHandler(async (req, r
   // México. Solo se valida si "states" viene en el body — si esta petición
   // no toca el estado (ej. solo cambia el logo), no se le exige de nuevo.
   let country = null;
-  const effectiveCountryId = country_id !== undefined ? country_id : league.country_id;
+  const effectiveCountryId = toId(country_id) ?? league.country_id;
   if (effectiveCountryId) {
     country = await db.prepare('SELECT * FROM countries WHERE id = ?').get(effectiveCountryId);
     if (!country) return res.status(400).json({ error: 'El país seleccionado no es válido' });
@@ -499,7 +509,7 @@ router.put('/:id', authRequired, leagueOwnerRequired, asyncHandler(async (req, r
     WHERE id = ?
   `).run(
     toNull(name ? name.trim() : name),
-    toNull(logo_url), toNull(cover_url), toNull(country_id),
+    toNull(logo_url), toNull(cover_url), toId(country_id),
     toNull(stateParam), toStatesJson(isMexico ? states : undefined),
     toNull(description), toNull(timezone),
     toNull(facebook_url), toNull(instagram_url), toNull(twitter_url),

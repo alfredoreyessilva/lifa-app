@@ -24,6 +24,16 @@ function toNull(value) {
   return value === undefined ? null : value;
 }
 
+// Igual que toNull pero para un id numérico: un <select> vacío manda '', no
+// undefined, y '' en una columna INTEGER truena la consulta completa
+// (22P02, "invalid input syntax for type integer"). Vacío aquí significa "no
+// lo toques", igual que undefined, porque estas columnas se escriben con
+// COALESCE(?, col).
+function toId(value) {
+  if (value === undefined || value === null || value === '') return null;
+  return value;
+}
+
 // Convierte un array de URLs a texto JSON para guardarlo en una columna
 // jsonb — si el valor no vino en la petición, devuelve null (para que el
 // COALESCE en el UPDATE conserve el valor que ya existía).
@@ -1722,7 +1732,7 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
         country_id  = COALESCE(?, country_id),
         description = COALESCE(?, description)
       WHERE id = ?
-    `).run(toNull(country_id), toNull(description), t.organization_id);
+    `).run(toId(country_id), toNull(description), t.organization_id);
   }
 
   const updatedTeam = await getTeamWithOrgFields(t.id);

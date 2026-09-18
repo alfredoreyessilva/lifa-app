@@ -31,6 +31,35 @@ append-only, se resuelve al leer y no se migra) están en
 Solo lo que **falta**. Lo que ya se cerró está en `docs/CHANGELOG.md` con su
 verificación.
 
+- **`PUT /manage/teams/:id` no es atómico (2026-09-18).** Son tres escrituras
+  sueltas: `UPDATE teams`, `UPDATE organizations` y `syncTeamLinksToMatches()`
+  (una consulta por partido). Cualquier error después de la primera deja el
+  equipo **guardado** y a la persona viendo "Error interno del servidor" — el
+  mensaje miente a medias. Es exactamente lo que confundió en el bug del país
+  vacío (ver el CHANGELOG). No es una fuga activa: hoy no se conoce ningún error
+  entre el paso 1 y el 3. Lo que queda vivo es el **modo de falla**, que es caro
+  de diagnosticar cuando vuelve a aparecer.
+
+  Los dos caminos, con su costo:
+
+  1. **Una sola sentencia con CTEs**, el patrón que este proyecto ya eligió
+     (`POST /organizations/:id/transfer-owner`). Los pasos 1 y 2 se juntan sin
+     problema; el 3 obliga a convertir el bucle en un `UPDATE matches … FROM`.
+  2. **Exponer una transacción de verdad** — `db.transaction(async (tx) => …)`.
+     La maquinaria ya existe: `initSchema()` saca **un** cliente del pool y hace
+     `BEGIN`/`SAVEPOINT`/`COMMIT` sobre él, atravesando el mismo endpoint
+     `-pooler` de Neon, y funciona. Lo que falta es exponerla: `db` solo exporta
+     `prepare` y `exec`. Matiz que corrige la lectura fácil de la regla de
+     CLAUDE.md: un pooler en modo transacción **sí** soporta transacciones
+     mientras vivan en **una sola conexión**; lo que no soporta es repartirlas
+     entre varias, que es justo lo que hace `db.prepare` (una conexión por
+     consulta). Mientras la transacción vive, el pooler fija esa conexión, así
+     que tiene que ser corta.
+
+  La opción 2 es la preferida: sirve para cualquier otra ruta con el mismo
+  problema y no obliga a reescribir el bucle de partidos en SQL. Va como cambio
+  aparte, porque toca `db.js`, del que cuelga todo.
+
 - **El pie del estado de cuenta público es ilegible (2026-09-18).** El párrafo
   "¿Algo no cuadra? Escríbele a tu club…" de `PlayerStatementPage.jsx` usa
   `--ws-ink-faint` (#6b7378) y cae **fuera** de la tarjeta negra, directo sobre

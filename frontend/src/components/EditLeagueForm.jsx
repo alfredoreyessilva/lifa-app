@@ -63,7 +63,9 @@ export default function EditLeagueForm({ league, onSubmit, onCancel }) {
     if (validationError) { setError(validationError); return; }
 
     setLoading(true);
-    try { await onSubmit(form); }
+    // Mismo caso que en TeamForm: el <select> de país manda '' cuando la liga
+    // no tiene uno, y del otro lado es una columna INTEGER.
+    try { await onSubmit({ ...form, country_id: form.country_id || null }); }
     catch (e) { setError(e.message); setLoading(false); }
   }
 

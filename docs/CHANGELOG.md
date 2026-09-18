@@ -15,6 +15,43 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Guardar un equipo respondía "Error interno del servidor" (2026-09-18)**: el
+  formulario de equipo (logo, color, links predeterminados) fallaba con un 500
+  en 91 de los 92 equipos, pero **el cambio sí se guardaba**. Los dos síntomas
+  son la misma causa: `PUT /manage/teams/:id` escribe en dos pasos y no es
+  atómico. Primero actualiza `teams` (por eso el logo quedaba guardado) y
+  después toca `organizations`, donde viven país y descripción del equipo. El
+  `<select>` de país manda `''` cuando no hay ninguno elegido, `toNull` solo
+  traducía `undefined`, y `COALESCE('', country_id)` contra una columna
+  `INTEGER` truena con `22P02 invalid input syntax for type integer: ""`. El
+  equipo quedaba guardado y la persona veía un error.
+
+  Con los links se veía peor que con el logo: lo último que corre en esa ruta
+  es `syncTeamLinksToMatches()`, que copia los links predeterminados a los
+  partidos sin jugar. Como el 500 pasaba antes, los links se guardaban en el
+  equipo pero **nunca llegaban a los partidos** — el efecto visible de
+  ponerlos.
+
+  Se arregla en los dos lados, como pide la regla 6: un `toId()` junto a
+  `toNull()` en `manage.js` y `leagues.js` (vacío = "no lo toques", igual que
+  `undefined`), y los formularios mandan `country_id || null`, que ya era la
+  convención de `RegisterLeague` y `RegisterOrganizationPage`. `TeamForm`
+  además deja de mandar país y descripción cuando **no** es un equipo
+  independiente: no los muestra, y mandarlos con el valor de arranque pisaba la
+  descripción de la organización con `''`. `PUT /leagues/:id` tenía el mismo
+  bug latente (hoy las 11 ligas tienen país, así que nadie lo había pegado) y
+  de paso dejaba de guardar los estados de México cuando el país llegaba vacío.
+
+  Verificado: las dos consultas contra producción dentro de una transacción con
+  `ROLLBACK` (la vieja truena con 22P02, la nueva pasa) y el endpoint completo
+  contra una rama de Neon — el payload del frontend viejo y el del nuevo
+  responden 200, la descripción de la organización ya no se pisa y los links sí
+  llegan a los partidos. Las 135 pruebas unitarias siguen pasando. **No** se
+  revisó en el navegador: el cambio de UI es solo qué campos viaja el formulario.
+
+  Queda abierto que la ruta no sea atómica: cualquier error después del primer
+  `UPDATE` sigue dejando el equipo guardado y a la persona viendo un 500.
+
 - **QA visual del cobro automático, la que faltaba (2026-09-18)**: se recorrió
   el panel en el navegador contra una rama de Neon, que era el último pendiente
   de la verificación. Lo que **sí** quedó bien: el bloque pasa de "Cobro

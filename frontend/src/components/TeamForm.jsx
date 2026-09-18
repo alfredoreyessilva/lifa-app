@@ -109,9 +109,15 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel, ind
     if (validationError) { setError(validationError); return; }
 
     setLoading(true);
+    // País y descripción viven en la ORGANIZACIÓN del equipo, no en "teams", y
+    // solo se editan en el formulario del equipo independiente. Desde el panel
+    // de liga ni siquiera se muestran, así que tampoco se mandan: mandarlos con
+    // el valor con el que arrancó el formulario pisaba la descripción de la
+    // organización con una cadena vacía.
+    const { country_id, description, ...resto } = form;
     try {
       await onSubmit({
-        ...form,
+        ...resto,
         name:          form.name.trim(),
         location:      form.location.trim(),
         contact_email: form.contact_email.trim(),
@@ -124,6 +130,10 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel, ind
         // Vacío se manda como null para que el panel caiga de vuelta al
         // amarillo de CFBAMX en vez de guardar una cadena vacía.
         brand_color:   form.brand_color.trim() || null,
+        // El <select> de país manda '' cuando no hay ninguno elegido, y del
+        // otro lado es una columna INTEGER: '' la truena (22P02) y el guardado
+        // completo respondía "Error interno del servidor".
+        ...(independent ? { country_id: country_id || null, description } : {}),
       });
     } catch (e) {
       setError(e.message);
