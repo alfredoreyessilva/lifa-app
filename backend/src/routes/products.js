@@ -43,7 +43,7 @@ function validateProductFields(body, { partial } = {}) {
 // Listado público del inventario de una organización — lo consume el
 // perfil público (OrganizationDetailPage). Filtra por is_active (existe y
 // se vende) Y show_on_platform (la tienda decidió que esto sí es del
-// nicho y quiere que se vea en LIFA App). El bot de WhatsApp NO usa este
+// nicho y quiere que se vea en CFBAMX). El bot de WhatsApp NO usa este
 // endpoint — usa el catálogo completo directo desde bot.js, porque ahí sí
 // debe poder responder sobre cualquier producto, sea o no del nicho.
 // Sin authRequired a propósito, igual que GET /organizations/:id.

@@ -98,7 +98,7 @@ export async function generateMatchCard(match, formatKey, dateParts, status) {
   ctx.textAlign = 'center';
   ctx.fillStyle = theme.flag;
   ctx.font = `600 30px ${theme.fontEyebrow}`;
-  ctx.fillText((match.league_name || 'LIFA').toUpperCase(), cx, y);
+  ctx.fillText((match.league_name || 'CFBAMX').toUpperCase(), cx, y);
   y += 42;
 
   // Nombre del torneo, justo debajo de la liga — mismo tratamiento visual
@@ -174,7 +174,7 @@ export async function generateMatchCard(match, formatKey, dateParts, status) {
 
   drawTextPanel(ctx, panelLines, cx, panelY, panelW, theme);
 
-  // --- Footer: marca LIFA ---
+  // --- Footer: marca CFBAMX ---
   drawFooter(ctx, cx, h, theme);
 
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png', 0.95));

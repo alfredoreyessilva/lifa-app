@@ -160,7 +160,7 @@ router.post('/webhook', asyncHandler(async (req, res) => {
   // A propósito NO se filtra por show_on_platform: el bot atiende a
   // CUALQUIER cliente que le escriba a este número, sea o no del nicho de
   // fútbol americano, así que necesita ver todo lo que la tienda vende
-  // (is_active), no solo lo que decidió mostrar en el directorio de LIFA.
+  // (is_active), no solo lo que decidió mostrar en el directorio de CFBAMX.
   const products = await db.prepare(`
     SELECT name, description, price, currency, stock, size_variant
     FROM products WHERE organization_id = ? AND is_active = TRUE

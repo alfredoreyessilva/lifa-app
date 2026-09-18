@@ -57,7 +57,7 @@ export default function PlayerShareButton({ player, currentTeam, stats }) {
         await navigator.share({
           files: [file],
           title: `${player.first_name} ${player.last_name}`,
-          text: 'Mira esta tarjeta de jugador en LIFA',
+          text: 'Mira esta tarjeta de jugador en CFBAMX',
         });
       } catch (err) {
         if (err.name !== 'AbortError') console.error(err);

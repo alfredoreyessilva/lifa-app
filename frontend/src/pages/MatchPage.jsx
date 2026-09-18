@@ -86,9 +86,9 @@ export default function MatchPage() {
 
   useEffect(() => {
     if (match) {
-      document.title = `${match.home_team} vs ${match.away_team} · LIFA`;
+      document.title = `${match.home_team} vs ${match.away_team} · CFBAMX`;
     }
-    return () => { document.title = 'LIFA'; };
+    return () => { document.title = 'CFBAMX'; };
   }, [match]);
 
   async function handleShare() {
@@ -98,7 +98,7 @@ export default function MatchPage() {
       const result = await shareLink(
         window.location.href,
         `${match.home_team} vs ${match.away_team}`,
-        'Mira este partido en LIFA'
+        'Mira este partido en CFBAMX'
       );
       if (result === 'copied') {
         setShareState('copied');

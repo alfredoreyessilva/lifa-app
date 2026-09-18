@@ -11,7 +11,7 @@ import { generateRankingCard, SHARE_CARD_FORMATS } from '../utils/rankingShareCa
 // context ("categoría · rama"), poolName }. `tournament` (o `title` como
 // respaldo) es el texto resaltado.
 export default function RankingImageButton({ ranking, header = {} }) {
-  const heroLabel = header.tournament || header.title || 'lifa';
+  const heroLabel = header.tournament || header.title || 'CFBAMX';
   const [status, setStatus] = useState('idle'); // idle | generating | ready | error
   const [previewUrl, setPreviewUrl] = useState(null);
   const [blobByFormat, setBlobByFormat] = useState({});
@@ -73,7 +73,7 @@ export default function RankingImageButton({ ranking, header = {} }) {
         await navigator.share({
           files: [file],
           title: `Ranking de predicciones${header.tournament || header.title ? ` — ${header.tournament || header.title}` : ''}`,
-          text: 'Mira el ranking de predicciones en LIFA',
+          text: 'Mira el ranking de predicciones en CFBAMX',
         });
       } catch {
         // Varios navegadores rechazan como AbortError sin haber mostrado

@@ -127,7 +127,7 @@ export async function generatePlayerCard(player, currentTeam, stats, formatKey) 
 
   drawTextPanel(ctx, panelLines, cx, panelY, panelW, theme);
 
-  // --- Footer: marca LIFA ---
+  // --- Footer: marca CFBAMX ---
   drawFooter(ctx, cx, h, theme);
 
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png', 0.95));

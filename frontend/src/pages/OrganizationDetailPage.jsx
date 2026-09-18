@@ -174,7 +174,7 @@ export default function OrganizationDetailPage() {
           (!org.plan_expires_at || new Date(org.plan_expires_at) > new Date()) && (
           <div className="container" style={{ maxWidth: 520 }}>
             <a
-              href={`https://wa.me/${org.whatsapp_display_number.replace(/\D/g, '')}?text=${encodeURIComponent(`Hola, vi ${org.name} en LIFA App y quiero preguntar por un producto`)}`}
+              href={`https://wa.me/${org.whatsapp_display_number.replace(/\D/g, '')}?text=${encodeURIComponent(`Hola, vi ${org.name} en CFBAMX y quiero preguntar por un producto`)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="btn btn-flag"

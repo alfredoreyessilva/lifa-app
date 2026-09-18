@@ -999,7 +999,7 @@ export async function initSchema() {
     // vende" (lo consulta el bot de WhatsApp, que debe ver TODO el
     // inventario activo para atender cualquier pregunta del cliente, sea
     // o no del nicho). show_on_platform dice "esto aparece en el
-    // directorio público de LIFA App" — para tiendas que venden más allá
+    // directorio público de CFBAMX" — para tiendas que venden más allá
     // de fútbol americano y no quieren mostrar ahí lo que no aplica.
     // Default TRUE: no le agrega fricción a la mayoría de tiendas (donde
     // casi todo su catálogo SÍ es del nicho); solo desactivan lo que no.

@@ -4,7 +4,7 @@ import { api } from '../api/client.js';
 // Vive DENTRO de la misma tarjeta de registro/login (no es una ruta ni una
 // pantalla aparte) — el objetivo es que la persona pueda revisar su correo
 // en otra pestaña, copiar el código, y volver aquí mismo sin haber
-// "salido" nunca de la página de LIFA.
+// "salido" nunca de la página de CFBAMX.
 export default function EmailVerificationForm({ email, token, onVerified, onSkip }) {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');

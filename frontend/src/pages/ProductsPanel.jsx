@@ -192,7 +192,7 @@ export default function ProductsPanel() {
             checked={form.show_on_platform}
             onChange={(e) => update('show_on_platform', e.target.checked)}
           />
-          Mostrar en LIFA App (déjalo desmarcado si este producto no es del nicho de fútbol americano —
+          Mostrar en CFBAMX (déjalo desmarcado si este producto no es del nicho de fútbol americano —
           seguirá disponible en tu bot de WhatsApp para todos tus clientes de todas formas)
         </label>
 
@@ -226,7 +226,7 @@ export default function ProductsPanel() {
               {!p.is_active && <p style={{ fontSize: 12, color: 'var(--flag)' }}>Inactivo (oculto del perfil público)</p>}
               {p.is_active && !p.show_on_platform && (
                 <p style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
-                  🔒 Solo visible en tu bot de WhatsApp (oculto del directorio de LIFA App)
+                  🔒 Solo visible en tu bot de WhatsApp (oculto del directorio de CFBAMX)
                 </p>
               )}
               <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>

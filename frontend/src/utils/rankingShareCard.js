@@ -90,7 +90,7 @@ function drawHeader(ctx, w, h, theme, header, rowCount, totalParticipants) {
   y += 40;
 
   // Torneo — es el título de la imagen, en blanco
-  const hero = (header.tournament || header.title || 'LIFA').toUpperCase();
+  const hero = (header.tournament || header.title || 'CFBAMX').toUpperCase();
   const heroSize = fitText(ctx, hero, w * 0.86, 62, theme.fontDisplay);
   ctx.fillStyle = theme.ink;
   ctx.font = `700 ${heroSize}px ${theme.fontDisplay}`;

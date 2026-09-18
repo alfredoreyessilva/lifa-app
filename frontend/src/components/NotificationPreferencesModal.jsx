@@ -37,7 +37,7 @@ export default function NotificationPreferencesModal({
   async function handleSave(e) {
     e.preventDefault();
     if (!inApp && !pushEnabled) {
-      setError('Debes seleccionar al menos un canal (Bandeja de LIFA o Notificaciones Push).');
+      setError('Debes seleccionar al menos un canal (Bandeja de CFBAMX o Notificaciones Push).');
       return;
     }
     setError('');
@@ -100,7 +100,7 @@ export default function NotificationPreferencesModal({
                 style={{ marginTop: 3, accentColor: 'var(--flag)' }}
               />
               <div>
-                <strong>📥 En mi bandeja de LIFA</strong>
+                <strong>📥 En mi bandeja de CFBAMX</strong>
                 <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: 2 }}>
                   Guarda el partido en "Partidos que sigo" en tu cuenta (no requiere permisos del navegador).
                 </div>

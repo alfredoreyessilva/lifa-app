@@ -1,4 +1,4 @@
-# Calendarios de Fútbol Americano México (LIFA App)
+# CFBAMX — Calendarios de Fútbol Americano México
 
 App full-stack para publicar calendarios, resultados y transmisiones de ligas de fútbol americano en México. Cada usuario puede administrar varias organizaciones desde una sola cuenta (ligas, equipos, y más adelante empresas/medios); los equipos pueden entregarse como perfil independiente a su propio representante.
 
@@ -31,13 +31,17 @@ append-only, se resuelve al leer y no se migra) están en
 Solo lo que **falta**. Lo que ya se cerró está en `docs/CHANGELOG.md` con su
 verificación.
 
-- **El proyecto se llama de tres formas distintas, y ninguna está declarada como
-  la oficial.** Este README dice "Calendarios de Fútbol Americano México (LIFA
-  App)", `frontend/src/config/legal.js` habla de **CFBAMX**, y en el código y el
-  roadmap se le dice **LIFA**. No es cosmético: el nombre con el que se emiten
-  los Términos, se factura y se registra un dominio tiene que ser uno solo. Se
-  resuelve al llenar los datos legales, porque ahí se elige la razón social —
-  pero conviene decidirlo a propósito y no que quede el que se escribió primero.
+- **El nombre del proyecto ya está decidido: CFBAMX.** El texto visible al
+  usuario, los comentarios y los nombres de paquete ya dicen CFBAMX. Lo que
+  sigue diciendo `lifa` es infraestructura heredada que no se renombró a
+  propósito, porque cambiarla rompe cosas en producción: la carpeta del repo
+  (`lifa-app/`), el servicio de Render (`lifa-backend-p0hq.onrender.com`), las
+  llaves de `localStorage` (`lifa_token` — cambiarla desloguea a todos los
+  usuarios ya registrados) y las carpetas de Cloudinary (`lifa-app/logos`,
+  `lifa-app/comprobantes`). Cada una se puede migrar por separado cuando
+  convenga; ninguna es urgente. Lo que sí sigue pendiente es elegir la razón
+  social al llenar los datos legales, que es de lo que dependen los Términos y
+  la facturación.
 - **No hay archivo `LICENSE`.** El repositorio no declara nada sobre qué se
   puede hacer con este código. Es decisión de negocio, no técnica: o el repo es
   privado, o lleva una licencia propietaria explícita. Hoy no es ninguna de las
@@ -308,7 +312,7 @@ Dos recorridos de punta a punta en `backend/tests/`. **Nunca contra producción*
 
 ## Monetización (afiliados de viaje)
 
-La plataforma monetiza mediante comisión de afiliado en dos accesos de `MatchPage`: 🏨 Hotel y ✈️ Vuelo. Ninguno de los dos vende nada directamente — ambos mandan al usuario a un tercero (Booking.com, Aviasales) que sí procesa la reserva y el pago; LIFA solo cobra comisión cuando esa reserva se completa.
+La plataforma monetiza mediante comisión de afiliado en dos accesos de `MatchPage`: 🏨 Hotel y ✈️ Vuelo. Ninguno de los dos vende nada directamente — ambos mandan al usuario a un tercero (Booking.com, Aviasales) que sí procesa la reserva y el pago; CFBAMX solo cobra comisión cuando esa reserva se completa.
 
 Todo corre a través de una sola cuenta de **Travelpayouts** (red de afiliados de viaje), sin necesidad de tener una empresa constituida — basta con RFC persona física con actividad empresarial para poder facturar la comisión más adelante.
 
@@ -1610,7 +1614,7 @@ cobra por sí mismo** — de hecho es lo único que hace el plan `pro`.
 - **De gestión** (`.../manage`) — trae todo, incluido lo inactivo.
 
 `show_on_platform` es la tienda diciendo *"esto sí es del nicho y quiero que se
-vea en LIFA"*: una tienda deportiva vende mucho que no es americano.
+vea en CFBAMX"*: una tienda deportiva vende mucho que no es americano.
 
 **El bot NO filtra por `show_on_platform`, a propósito.** Atiende a cualquier
 cliente que le escriba a ese número, sea o no del nicho, así que necesita ver
@@ -1795,7 +1799,7 @@ No iniciado. Página de precios pública para el plan "pro", analítica de conve
 > estrategia, no compromiso de calendario.
 >
 > Nota de procedencia: esta sección viene de una sesión de planeación con Claude
-> (8–14 sep 2026) sobre qué le da a LIFA App valor real para ligas y equipos —
+> (8–14 sep 2026) sobre qué le da a CFBAMX valor real para ligas y equipos —
 > el objetivo declarado del proyecto es ser "la casa del fútbol americano en
 > México". Es **estrategia de producto, no un compromiso de calendario** — a
 > diferencia de "Roadmap de negocio" (arriba), que es infraestructura/operación
@@ -1829,7 +1833,7 @@ adelantó al resto: es lo que hace que el admin de la liga vuelva cada semana.
 - Estadísticas avanzadas / "Liga Pro": la captura por partido y jugador ya existe (`player_match_stats`, `MatchStatsModal.jsx`) — falta la capa agregada (líderes de liga, histórico multi-temporada, tablero para prensa).
 - Módulo de patrocinadores self-serve (ya hay tracking de impresiones/clics en `track.js`, falta el checkout).
 - Transmisión monetizada (PPV o pase de temporada).
-- Dominio propio sin marca LIFA; tienda oficial de la liga (`products.js`/bot de WhatsApp ya existen para tiendas tipo `store` —ver "Tiendas y bot de WhatsApp"—, falta adaptarlo a mercancía de liga); módulo de disciplina (expulsión → suspensión automática); credenciales físicas impresas; seguro de jugadores vía aseguradora aliada.
+- Dominio propio sin marca CFBAMX; tienda oficial de la liga (`products.js`/bot de WhatsApp ya existen para tiendas tipo `store` —ver "Tiendas y bot de WhatsApp"—, falta adaptarlo a mercancía de liga); módulo de disciplina (expulsión → suspensión automática); credenciales físicas impresas; seguro de jugadores vía aseguradora aliada.
 
 **Para equipos**
 - ~~**Cobro de cuotas a jugadores** (equipo → jugador)~~ — **hecho**, y resultó ser gratuito y no de pago: es lo que engancha al club (su historial de cobranza vive en la plataforma y no se va con el tesorero que sale cada año). Ver sección "Cuotas del club" más arriba. Lo monetizable de encima sigue pendiente: pasarela con comisión, y los servicios alrededor (uniformes, seguro, viajes).

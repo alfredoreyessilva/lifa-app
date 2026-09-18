@@ -8,7 +8,7 @@
 //   - Si es una persona normal -> servimos el index.html real de la SPA, sin ningún cambio.
 
 const BACKEND_URL = process.env.BACKEND_API_URL || 'https://lifa-backend-p0hq.onrender.com';
-const SITE_NAME = 'LIFA — Calendarios de Football Americano';
+const SITE_NAME = 'CFBAMX — Calendarios de Football Americano';
 const DEFAULT_IMAGE = 'https://res.cloudinary.com/dnatxlasg/image/upload/v1783883178/facebook_profile_1024_ezngmz.png';
 
 const BOT_REGEX = /facebookexternalhit|Facebot|Twitterbot|WhatsApp|TelegramBot|LinkedInBot|Slackbot|Discordbot|Googlebot|Google-InspectionTool|bingbot|Pinterest|redditbot|vkShare|Applebot|SkypeUriPreview|Iframely|Embedly|W3C_Validator/i;

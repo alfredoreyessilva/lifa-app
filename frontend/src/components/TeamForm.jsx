@@ -357,7 +357,7 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel, ind
                   checked={form.show_on_platform}
                   onChange={(e) => update('show_on_platform', e.target.checked)}
                 />
-                <span>Mostrar mi equipo en el home de LIFA App</span>
+                <span>Mostrar mi equipo en el home de CFBAMX</span>
               </label>
               <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: 6 }}>
                 Es tu decisión: puedes usar todas las herramientas de tu equipo sin aparecer aquí, y activarlo o desactivarlo cuando quieras desde tu panel.

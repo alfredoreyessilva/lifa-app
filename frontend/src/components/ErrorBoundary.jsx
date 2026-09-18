@@ -3,7 +3,7 @@ import * as Sentry from '@sentry/react';
 
 // Por defecto, si cualquier componente lanza un error no controlado durante
 // el render, React desmonta TODO el árbol desde la raíz hacia abajo — en
-// LIFA eso se traducía en una pantalla en blanco, con TopBar, SponsorBar y
+// CFBAMX eso se traducía en una pantalla en blanco, con TopBar, SponsorBar y
 // footer incluidos. Este ErrorBoundary atrapa esos errores dentro de su
 // propio subárbol para mostrar un mensaje de "algo salió mal" en vez de
 // dejar todo en blanco.

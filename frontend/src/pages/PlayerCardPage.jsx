@@ -68,8 +68,8 @@ export default function PlayerCardPage() {
   }, [playerId]);
 
   useEffect(() => {
-    if (card) document.title = `${card.player.first_name} ${card.player.last_name} · LIFA`;
-    return () => { document.title = 'LIFA'; };
+    if (card) document.title = `${card.player.first_name} ${card.player.last_name} · CFBAMX`;
+    return () => { document.title = 'CFBAMX'; };
   }, [card]);
 
   if (error) {

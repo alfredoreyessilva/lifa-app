@@ -43,7 +43,7 @@ export default function RegisterTeamPage() {
 
       <p style={{ color: 'var(--ink-dim)', fontSize: 12, marginTop: 20 }}>
         ¿Tu equipo pertenece a una liga? Pídele a su representante que te agregue desde su panel, o{' '}
-        <a href="/registrar-liga">registra la liga</a> si todavía no existe en LIFA App.
+        <a href="/registrar-liga">registra la liga</a> si todavía no existe en CFBAMX.
       </p>
     </div>
   );

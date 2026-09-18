@@ -206,7 +206,7 @@ export default function CalendarViewer({
     const result = await shareLink(
       window.location.href,
       shareLabel,
-      `Mira el calendario de ${shareText || title} en LIFA`
+      `Mira el calendario de ${shareText || title} en CFBAMX`
     );
     if (result === 'copied') {
       setCopied(true);

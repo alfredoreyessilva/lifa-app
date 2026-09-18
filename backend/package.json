@@ -1,5 +1,5 @@
 {
-  "name": "lifa-backend",
+  "name": "cfbamx-backend",
   "version": "1.0.0",
   "type": "module",
   "main": "src/server.js",

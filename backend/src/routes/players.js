@@ -209,7 +209,7 @@ router.get('/branches/:branchId/teams/:teamId/roster/template', authRequired, br
   ]);
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'LIFA App';
+  wb.creator = 'CFBAMX';
   const ws = wb.addWorksheet('Roster');
 
   // Membrete: logos en la esquina + datos de contexto. La tabla llenable
