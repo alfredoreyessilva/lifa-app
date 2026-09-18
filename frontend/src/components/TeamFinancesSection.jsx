@@ -275,9 +275,10 @@ export default function TeamFinancesSection({ team, token }) {
           <div className="empty-teach-icon">🧾</div>
           <h3>Todavía no le cobras a nadie</h3>
           <p>
-            Ponle su cuota a cada jugador en la tabla de abajo y después dale a
-            <strong> Generar cuotas</strong>. A partir del mes que entra las vuelves a crear
-            con un clic, y cada familia puede ver lo que debe sin tener que preguntarte.
+            Ponle su cuota a cada jugador en la tabla de abajo y prende el
+            <strong> cobro automático</strong>: de ahí en adelante la mensualidad se genera
+            sola cada mes, y cada familia puede ver lo que debe sin tener que preguntarte.
+            Lo esporádico —uniforme, viaje, arbitraje— se cobra con <strong>Generar cargo</strong>.
           </p>
           <button className="btn btn-accent" onClick={() => setModal({ type: 'charge' })}>
             Generar las primeras cuotas
@@ -513,7 +514,7 @@ function CobranzaAutomatica({ team, abierto, onToggleAbierto, guardando, onGuard
 
   // El cargo nace cinco días antes de la fecha de pago (constante del backend,
   // ver utils/monthlyCharges.js). Esto solo lo dice en palabras.
-  const proxima = proximaGeneracion(dia);
+  const proximoPago = proximaFechaDePago(dia);
 
   return (
     <div className="pending-tray" style={{ marginBottom: 20 }}>
@@ -524,7 +525,7 @@ function CobranzaAutomatica({ team, abierto, onToggleAbierto, guardando, onGuard
           </div>
           <div style={{ fontSize: 12, color: "var(--ws-ink-dim)" }}>
             {activo
-              ? `Fecha de pago: día ${dia} de cada mes · ${miembrosConCuota} ${miembrosConCuota === 1 ? "jugador entra" : "jugadores entran"} en el cobro · próxima generación ${proxima}`
+              ? `Fecha de pago: día ${dia} de cada mes · ${miembrosConCuota} ${miembrosConCuota === 1 ? "jugador entra" : "jugadores entran"} en el cobro · próximo pago ${proximoPago}`
               : "La mensualidad de cada quien se genera sola cada mes, sin que tengas que acordarte."}
           </div>
         </div>
@@ -600,8 +601,12 @@ function CobranzaAutomatica({ team, abierto, onToggleAbierto, guardando, onGuard
   );
 }
 
-// "1 de octubre" — la próxima fecha de pago a partir de hoy.
-function proximaGeneracion(dia) {
+// "1 de octubre" — la próxima fecha de PAGO a partir de hoy. Ojo: no es la
+// fecha en que se genera el cargo, que cae cinco días antes (ver
+// DIAS_DE_ANTICIPACION en utils/monthlyCharges.js). Se llamó
+// `proximaGeneracion` y la franja lo anunciaba como "próxima generación", así
+// que prometía cargos el 18 cuando en realidad aparecen el 13.
+function proximaFechaDePago(dia) {
   const hoy = new Date();
   let fecha = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
   if (fecha < hoy) fecha = new Date(hoy.getFullYear(), hoy.getMonth() + 1, dia);
