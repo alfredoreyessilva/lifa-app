@@ -65,8 +65,8 @@ entradas traen el post-mortem del bug que las provocó.
   explícito) y el objeto quedó en `rejectUnauthorized: true` en vez de borrarse:
   cuando la URL no trae `sslmode`, la clave `ssl` no aparece en lo parseado y
   entonces el objeto **sí** manda — borrarlo habría dejado ese caso conectando
-  sin TLS. Falta cambiar la variable `DATABASE_URL` en Render, que no vive en
-  el repo.
+  sin TLS. La variable `DATABASE_URL` de Render se cambió a mano el mismo día,
+  así que el repo y el servicio quedaron consistentes.
 
   **Verificación**: el reporte de mensualidades corrió contra producción con la
   cadena nueva y el aviso de SSL desapareció; `npm test` dio 54/54; y las dos

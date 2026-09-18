@@ -41,13 +41,6 @@ verificación.
   en la superficie oscura, o darle un color que aguante el verde— y no quería
   resolverla a ojo.
 
-- **Falta cambiar `DATABASE_URL` en Render a `?sslmode=verify-full`
-  (2026-09-18).** El repo ya quedó consistente, pero esa variable vive en el
-  panel de Render y no en ningún archivo. Hoy no cambia nada —`require` y
-  `verify-full` se comportan igual en `pg` 8—; importa antes de subir a `pg` v9,
-  donde `require` pasa a significar "cifra pero no valides". El porqué completo
-  está en el CHANGELOG.
-
 - **Nadie sabe cada cuánto corre el cron, y ahora de él depende el dinero.**
   `POST /api/notifications/trigger` lo llama un servicio **externo al
   repositorio**: no está en `.github/workflows/`, no hay `render.yaml`, no hay
