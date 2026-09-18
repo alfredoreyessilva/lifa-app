@@ -24,7 +24,7 @@ async function call(path, { method = 'GET', body, token } = {}) {
   return { status: res.status, data: await res.json().catch(() => ({})) };
 }
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: true } });
 
 console.log('\n=== 1. Equipo INDEPENDIENTE, sin liga ni roster de torneo ===');
 const reg = await call('/auth/register', { method: 'POST', body: { name: 'Tesorero', email: `e2e${stamp}@example.com`, password: 'prueba123' } });
@@ -139,19 +139,26 @@ console.log('');
 console.log('=== 10. Mensualidad automática ===');
 // Se elige una fecha de pago que caiga dentro de la ventana de generación
 // (entre hoy y hoy+5) para que la prueba no dependa del día en que se corra.
-function diaDeCobroQueGenera() {
+function fechaDeCobroQueGenera() {
   const hoy = new Date();
   const desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
   const hasta = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 5);
   for (let d = 1; d <= 28; d++) {
     for (const salto of [0, 1]) {
       const cand = new Date(hoy.getFullYear(), hoy.getMonth() + salto, d);
-      if (cand >= desde && cand <= hasta) return d;
+      if (cand >= desde && cand <= hasta) return cand;
     }
   }
   return null;
 }
-const DIA = diaDeCobroQueGenera();
+// Se guarda la FECHA completa y no solo el día: la guarda blanda del generador
+// compara el MES de vencimiento, así que para probarla hace falta saber en qué
+// mes va a caer el cargo automático. Escribir ese mes a mano es justo lo que
+// hacía que esta sección pasara o fallara según el día en que se corriera.
+const FECHA_COBRO = fechaDeCobroQueGenera();
+const DIA = FECHA_COBRO.getDate();
+const dosDigitos = (n) => String(n).padStart(2, '0');
+const isoDe = (f) => f.getFullYear() + '-' + dosDigitos(f.getMonth() + 1) + '-' + dosDigitos(f.getDate());
 
 // A este se le da de baja ANTES de activar el ciclo. Como ya tiene movimientos,
 // el DELETE lo deja en status='baja' en vez de borrarlo — que es exactamente el
@@ -163,6 +170,16 @@ await call('/player-billing/teams/' + TEAM + '/members/' + DEBAJA, { method: 'DE
 ov = await overview();
 ok(ov.data.members.find((m) => m.member_id === DEBAJA).status === 'baja', 'quedó dado de baja, no borrado');
 
+// Juan y Guero arrastran una mensualidad MANUAL de la sección 3 con una fecha
+// escrita a mano, así que no sirven para probar la generación: caen dentro o
+// fuera de la guarda blanda según el día en que se corra la suite. Estos dos
+// nacen aquí, cada uno con su caso explícito y con fechas calculadas.
+const NUEVO = await add({ display_name: 'Recien Inscrito', monthly_amount: 800 });
+const CON_MANUAL = await add({ display_name: 'Ya Le Cobraron', monthly_amount: 700 });
+await call('/player-billing/teams/' + TEAM + '/charges', { method: 'POST', token: T, body: {
+  category: 'mensualidad', concept: 'Mensualidad cobrada a mano',
+  due_date: isoDe(FECHA_COBRO), items: [{ member_id: CON_MANUAL, amount: 700 }] } });
+
 const activar = await call('/player-billing/teams/' + TEAM + '/settings', { method: 'PATCH', token: T,
   body: { monthly_charge_enabled: true, monthly_charge_day: DIA } });
 ok(activar.status === 200, 'se activa el cobro automático', '=' + activar.status);
@@ -172,12 +189,22 @@ const autoDe = async (id) => (await pool.query(
   [TEAM, id]
 )).rows;
 
-const autoJuan = await autoDe(JUAN);
-ok(autoJuan.length === 1, 'a un activo con cuota se le genera su mensualidad', '=' + autoJuan.length);
-ok(Number(autoJuan[0] && autoJuan[0].amount) === 800, 'por el monto de su ficha');
+const autoNuevo = await autoDe(NUEVO);
+ok(autoNuevo.length === 1, 'a un activo con cuota se le genera su mensualidad', '=' + autoNuevo.length);
+ok(Number(autoNuevo[0] && autoNuevo[0].amount) === 800, 'por el monto de su ficha');
 ok((await autoDe(BECADO)).length === 0, 'a un BECADO no se le genera nada, aunque tenga cuota');
 ok((await autoDe(DEBAJA)).length === 0, 'a un dado de BAJA no se le genera nada');
 ok((await autoDe(ANA)).length === 0, 'a quien tiene la cuota en 0 tampoco');
+// La guarda blanda: el ciclo no vuelve a cobrar un mes que un humano ya cobró
+// a mano. Sin ella, encender el cobro automático a media temporada le duplica
+// el mes en curso a todo el club.
+const autoConManual = await autoDe(CON_MANUAL);
+ok(autoConManual.length === 0, 'a quien ya le cobraron ese mes A MANO no se le duplica', '=' + autoConManual.length);
+// Y el reverso, que es lo que separa a la guarda de un simple "ya existe una
+// fila": el cargo manual de Guero quedó en 'void' en la sección 4, y un cargo
+// CANCELADO no debe impedirle al ciclo cobrar.
+const autoCarlos = await autoDe(CARLOS);
+ok(autoCarlos.length === 1, 'un manual CANCELADO sí deja pasar al automático', '=' + autoCarlos.length);
 
 const periodos = new Set((await pool.query(
   'SELECT DISTINCT period_label FROM club_ledger_entries WHERE team_id=$1 AND auto_cycle_key IS NOT NULL',
@@ -187,11 +214,14 @@ ok(periodos.size === 1, 'un club recién activado recibe UN mes, no doce', '=' +
 
 // La segunda corrida sale de la vía perezosa del panel: PATCH /settings limpia
 // el acelerador, así que este GET sí vuelve a ejecutar la generación.
-const antesIdem = (await autoDe(JUAN)).length;
+// Se mide sobre NUEVO y no sobre Juan: Juan puede tener 0 cargos automáticos
+// porque lo bloquea la guarda blanda, y 0 === 0 haría pasar esta prueba aunque
+// la generación estuviera rota. Por eso se exige además que antes hubiera 1.
+const antesIdem = (await autoDe(NUEVO)).length;
 await overview();
 await overview();
-const despuesIdem = (await autoDe(JUAN)).length;
-ok(despuesIdem === antesIdem, 'correr la generación otra vez NO crea un segundo cargo del mismo mes',
+const despuesIdem = (await autoDe(NUEVO)).length;
+ok(despuesIdem === antesIdem && antesIdem === 1, 'correr la generación otra vez NO crea un segundo cargo del mismo mes',
   'antes=' + antesIdem + ' ahora=' + despuesIdem);
 
 console.log('');
