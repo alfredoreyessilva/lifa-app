@@ -14,6 +14,20 @@
   --surface: #2a6e30;
   --surface-dim: rgba(0, 0, 0, 0.15);
 
+  /* ---- Tarjetas "abiertas" de la app pública ----
+     La tarjeta del partido en MatchPage y las fichas de equipo y de sede
+     (.team-profile-modal) van en negro, no en el verde de --card: sobre el
+     fondo de cancha una tarjeta verde casi no se despega, y el amarillo de
+     --flag en sus botones pierde fuerza. Las tarjetas del calendario
+     (.match-grid) y el grid de equipos/sedes siguen en verde: ahí la tarjeta
+     es un elemento de la lista, no la pantalla. Las portadas sin imagen
+     (.team-profile-banner) tampoco cambian — ahí el verde es el contenido.
+     La vista previa del editor (.team-editor-preview) usa el mismo negro a
+     propósito: dice "así se ve tu ficha", así que tiene que verse igual. */
+  --card-open: #101211;
+  --card-open-line: rgba(255, 255, 255, 0.14);
+  --card-open-section: rgba(255, 255, 255, 0.05);
+
   --font-display: 'Anton', sans-serif;
   --font-eyebrow: 'Oswald', sans-serif;
   --font-body: 'Inter', sans-serif;
@@ -634,9 +648,14 @@ a { color: inherit; }
   text-transform: uppercase;
   color: var(--ink-dim);
 }
+/* El hex del color del club (TeamForm) es el único campo del editor que no vive
+   dentro de un .field: se suma a estas tres reglas en vez de copiarles las
+   declaraciones. El type="color" se queda fuera a propósito — ahí el fondo es
+   el color que se está eligiendo, no decoración. */
 .field input,
 .field select,
-.field textarea {
+.field textarea,
+.team-editor-preview input:not([type="color"]):not([type="file"]) {
   background: var(--field);
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -646,13 +665,15 @@ a { color: inherit; }
   font-size: 14px;
 }
 .field input::placeholder,
-.field textarea::placeholder {
+.field textarea::placeholder,
+.team-editor-preview input:not([type="color"]):not([type="file"])::placeholder {
   color: var(--flag);
   opacity: 1;
 }
 .field input:focus,
 .field select:focus,
-.field textarea:focus {
+.field textarea:focus,
+.team-editor-preview input:not([type="color"]):not([type="file"]):focus {
   outline: 2px solid var(--flag);
   outline-offset: 1px;
   border-color: transparent;
@@ -1029,8 +1050,8 @@ a { color: inherit; }
 
 /* ---------- Team profile modal ---------- */
 .team-profile-modal {
-  background: var(--card);
-  border: 1px solid var(--line-strong);
+  background: var(--card-open);
+  border: 1px solid var(--card-open-line);
   border-radius: 10px;
   width: 100%;
   max-width: 480px;
@@ -1073,7 +1094,7 @@ a { color: inherit; }
   width: 96px;
   height: 96px;
   border-radius: 50%;
-  border: 4px solid var(--card);
+  border: 4px solid var(--card-open);
   background: var(--field);
   display: flex;
   align-items: center;
@@ -1107,7 +1128,7 @@ a { color: inherit; }
 .team-profile-section {
   margin-bottom: 16px;
   text-align: left;
-  background: var(--field-deep);
+  background: var(--card-open-section);
   border-radius: 6px;
   padding: 12px 16px;
 }
@@ -1169,11 +1190,24 @@ a { color: inherit; }
 
 /* ---------- Team editor (formulario con vista pública editable) ---------- */
 .team-editor-preview {
-  background: var(--card);
-  border: 1px solid var(--line-strong);
+  background: var(--card-open);
+  border: 1px solid var(--card-open-line);
   border-radius: 10px;
   overflow: hidden;
   margin-bottom: 8px;
+}
+
+/* Los campos editables de la vista previa van del mismo gris que la tarjeta,
+   no en el verde de --field: la vista previa promete "así se ve tu ficha", y
+   ahí esos valores se pintan como texto sobre negro. Lo que dice qué se puede
+   escribir es el borde, no el color de fondo. Va acotado al preview: en el
+   resto de los formularios de la app el campo verde se queda como está.
+   El único que se salva es el selector de color del club (type="color"): ahí
+   el fondo es el dato. */
+.team-editor-preview input:not([type="color"]):not([type="file"]),
+.team-editor-preview select,
+.team-editor-preview textarea {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 /* Banner editable */
@@ -2086,8 +2120,20 @@ a.match-card-new {
   max-width: 620px;
   margin: 24px auto;
 }
-.match-nav .match-card-new {
+/* La tarjeta del partido abierto va en negro como las fichas de equipo y de
+   sede que la acompañan: las cuatro se leen como una sola pantalla. Aquí no es
+   un <Link> sino un <div>, así que tampoco cambia de color al pasar el mouse. */
+.match-nav .match-card-new,
+.match-nav .match-card-new:hover {
   margin: 0;
+  background: var(--card-open);
+  border-color: var(--card-open-line);
+}
+/* El borde rojo de "en vivo" manda sobre el de la tarjeta negra: .match-card-new--live
+   por sí solo pesa menos que el selector de arriba y se lo comía. */
+.match-nav .match-card-new--live,
+.match-nav .match-card-new--live:hover {
+  border-color: var(--live);
 }
 .match-nav-arrow {
   flex: 0 0 auto;

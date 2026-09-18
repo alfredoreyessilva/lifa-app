@@ -15,6 +15,41 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Las tarjetas que se abren sobre la cancha van en negro (2026-09-17)**: la
+  tarjeta del partido en MatchPage y las fichas de equipo y de sede
+  (`.team-profile-modal`, en modal o embebidas) pasaron del verde `--card` a un
+  negro propio (`--card-open`). El verde sobre el fondo de cancha casi no se
+  despegaba y el amarillo de los botones perdía fuerza; al abrir un partido, sus
+  cuatro tarjetas —partido, local, visitante y sede— ahora se leen como una sola
+  pantalla. **No cambian** las portadas sin imagen ni los logos sin imagen: ahí
+  el degradado verde es el contenido, no el fondo. Tampoco cambian las tarjetas
+  del calendario ni el grid de equipos/sedes, donde la tarjeta es un renglón de
+  una lista y no la pantalla.
+
+  La vista previa del editor (`.team-editor-preview`, en el formulario de equipo
+  y de sede y en "Así se ve el perfil de tu equipo") va del mismo negro **a
+  propósito**: promete "así se ve tu ficha", así que tiene que verse igual. Por
+  lo mismo sus campos editables dejaron de ser verdes — públicamente ese valor
+  es texto sobre negro, y lo que marca qué se puede escribir es el borde. Se
+  salvan el selector de color del club (`type="color"`), donde el fondo es el
+  dato, y todos los formularios fuera del preview, que siguen en verde.
+
+  Dos detalles de cascada: la tarjeta de MatchPage heredaba el `:hover` verde de
+  las del calendario aunque ahí es un `<div>` y no un `<Link>`, y el borde rojo
+  de "en vivo" pesaba menos que el selector nuevo y se lo comía; los dos quedaron
+  fijados explícitamente. El campo del hex del color del club, de paso, dejó de
+  salir blanco del navegador: era el único campo del editor fuera de un
+  `.field`, así que nunca heredó los estilos del formulario.
+
+  **Verificación**: es un cambio de solo CSS, así que se probó con el
+  `styles.css` real en el navegador sobre el marcado de MatchPage y del editor,
+  **sin levantar el backend** para no tocar la base de producción. Comprobado por
+  estilos calculados: las cuatro tarjetas en `rgb(16,18,17)`, el hover de la de
+  MatchPage sin cambio de color, el borde rojo de "en vivo" intacto, la tarjeta
+  del calendario todavía en verde `rgb(52,126,58)` y un `.field` fuera del
+  preview también. 81 unitarias de frontend en verde. Falta verla contra datos
+  reales al desplegar.
+
 - **Fase B de la separación del padrón: un solo campo de nombre, y el padrón
   deja de llamarse "players" (2026-09-17)**: cierra lo que la fase A dejó a
   medias a propósito. El nombre de un miembro del club es ahora **un solo
