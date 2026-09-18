@@ -31,26 +31,22 @@ append-only, se resuelve al leer y no se migra) están en
 Solo lo que **falta**. Lo que ya se cerró está en `docs/CHANGELOG.md` con su
 verificación.
 
-- **⚠️ El cobro automático de la mensualidad no se ha verificado contra una
-  base real (2026-09-18).** Es lo primero que hay que hacer antes de que un
-  club lo use. Lo que sí pasó: las 135 pruebas unitarias, el chequeo de
-  sintaxis del backend y el build de Vite. Lo que **no**:
+- **El pie del estado de cuenta público es ilegible (2026-09-18).** El párrafo
+  "¿Algo no cuadra? Escríbele a tu club…" de `PlayerStatementPage.jsx` usa
+  `--ws-ink-faint` (#6b7378) y cae **fuera** de la tarjeta negra, directo sobre
+  el verde de la cancha: da **1.16:1** de contraste, donde AA para texto chico
+  exige 4.5:1. En la práctica no se ve. Es el mismo problema que arregló el
+  commit `eadac84` para las tarjetas sobre la cancha, pero este párrafo quedó
+  fuera. No se tocó aquí porque la solución es una decisión de diseño —meterlo
+  en la superficie oscura, o darle un color que aguante el verde— y no quería
+  resolverla a ojo.
 
-  - **Las dos suites e2e no se corrieron.** La de jugador trae 12 aserciones
-    nuevas (que `status='beca'` se guarde al dar de alta, que a un `baja` y a un
-    `beca` no se les genere mensualidad, que un club recién activado reciba UN
-    mes, que correr la generación dos veces no duplique, y que la nota interna
-    no salga en el link público). Línea base documentada: 47 y 0; deberían
-    quedar en **59 y 0**. Instrucciones en `backend/tests/README.md`.
-  - **Nada se abrió en el navegador**: ni el bloque de "Cobro automático" en
-    Finanzas, ni la pestaña renombrada, ni el estado de cuenta del papá.
-  - **El índice `idx_club_ledger_auto_cycle` no se ha visto existir.** Importa
-    porque `run()` de `initSchema()` se traga el error de una migración que
-    falle: hay que confirmarlo con
-    `node scripts/report-mensualidades-duplicadas.mjs`, que además reporta si
-    algún club ya tenía doble cobro histórico. El generador se niega a insertar
-    si el índice no está, así que el modo de falla es visible y no silencioso.
-  - **La frecuencia del cron externo sigue sin confirmarse** (ver más abajo).
+- **Falta cambiar `DATABASE_URL` en Render a `?sslmode=verify-full`
+  (2026-09-18).** El repo ya quedó consistente, pero esa variable vive en el
+  panel de Render y no en ningún archivo. Hoy no cambia nada —`require` y
+  `verify-full` se comportan igual en `pg` 8—; importa antes de subir a `pg` v9,
+  donde `require` pasa a significar "cifra pero no valides". El porqué completo
+  está en el CHANGELOG.
 
 - **Nadie sabe cada cuánto corre el cron, y ahora de él depende el dinero.**
   `POST /api/notifications/trigger` lo llama un servicio **externo al
@@ -328,6 +324,13 @@ Copy-Item .env.example .env
 ```
 
 El `.env.example` trae comentarios explicando cada variable, incluyendo cómo generar `JWT_SECRET`.
+
+La cadena termina en `?sslmode=verify-full`, y eso **no** es cosmético: `pg`
+parsea `DATABASE_URL` y con lo que saca de ahí **pisa** el objeto `ssl` que
+`config/db.js` le pasa a mano (`Object.assign` en `connection-parameters.js`),
+así que el nivel real de verificación TLS lo decide la URL, no el código. Ese
+objeto solo manda cuando la cadena viene **sin** `sslmode`, y por eso dice
+`rejectUnauthorized: true`: es el único caso en que evita conectar sin validar.
 
 ```powershell
 npm run seed     # opcional: crea datos de ejemplo (ligas, categorías, partidos)

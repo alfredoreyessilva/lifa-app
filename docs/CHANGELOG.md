@@ -15,6 +15,83 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **QA visual del cobro automático, la que faltaba (2026-09-18)**: se recorrió
+  el panel en el navegador contra una rama de Neon, que era el último pendiente
+  de la verificación. Lo que **sí** quedó bien: el bloque pasa de "Cobro
+  automático apagado" a "activo" con su resumen correcto (`3 jugadores entran en
+  el cobro` — excluyendo a la becada), el selector de fecha solo ofrece del 1 al
+  28 igual que la restricción del backend, al activarlo se generaron los tres
+  cargos al instante con su vencimiento, **a la becada no se le generó nada**, la
+  pestaña ya dice "Padrón", y el estado de cuenta del papá muestra "Mensualidad
+  de septiembre 2026 · SEP-2026" sin filtrar el teléfono del tutor. Los únicos
+  errores de consola eran de Google Sign-In rechazando `localhost` como origen,
+  que es artefacto de desarrollo local.
+
+  Salieron **tres defectos que ninguna prueba automática podía ver**, porque las
+  tres son texto o color:
+
+  1. **La franja prometía cargos cinco días tarde.** Decía "próxima generación 18
+     de octubre", pero ese valor es la **fecha de pago**: el cargo nace cinco
+     días antes, el 13. La función que lo calculaba se llamaba
+     `proximaGeneracion` y su propio comentario ya decía "la próxima fecha de
+     pago" — el nombre y la etiqueta se habían separado del valor. Ahora dice
+     "próximo pago" y la función se llama `proximaFechaDePago`.
+  2. **El estado vacío seguía describiendo el botón que se eliminó.** Mandaba a
+     un botón llamado "Generar cuotas" (no existe con ese nombre) y prometía que
+     "a partir del mes que entra las vuelves a crear con un clic" — que es
+     exactamente "Repetir el mes pasado", retirado ese mismo día. Ahora manda a
+     prender el cobro automático y aclara que `Generar cargo` es para lo
+     esporádico.
+  3. **El pie del estado de cuenta no se ve** (1.16:1 de contraste). Queda
+     abierto en el README: la solución es de diseño, no de copia.
+
+- **La conexión a Postgres pedía no validar el certificado, y `pg` la estaba
+  ignorando (2026-09-18)**: los once lugares que abren un pool —`config/db.js`,
+  los ocho scripts de `scripts/` y las dos suites e2e— pasaban
+  `ssl: { rejectUnauthorized: false }`. Ese parámetro **no tenía efecto**: `pg`
+  hace `Object.assign({}, config, parse(connectionString))`, y como
+  `DATABASE_URL` traía `?sslmode=require`, lo parseado devolvía `ssl = {}` y
+  borraba el objeto de arriba. El resultado es que el código pedía *no* validar
+  el certificado y `pg` validaba de todos modos, que es lo correcto pero por
+  accidente. Se comprobó conectando a producción con `ssl: false`, que si el
+  config explícito mandara significaría "sin TLS" y Neon rechazaría: conectó.
+
+  Importaba arreglarlo por lo que venía después. `pg` 8.22 avisa en cada
+  arranque que en la v9 los modos `require`, `prefer` y `verify-ca` adoptarán
+  la semántica de libpq, donde `require` significa "cifra pero no valides". O
+  sea: el día de un `npm update` la validación del certificado se habría
+  apagado **sola**, sin que cambiara una línea del repo y sin ningún error. La
+  cadena ahora dice `sslmode=verify-full` (hoy idéntico en comportamiento, pero
+  explícito) y el objeto quedó en `rejectUnauthorized: true` en vez de borrarse:
+  cuando la URL no trae `sslmode`, la clave `ssl` no aparece en lo parseado y
+  entonces el objeto **sí** manda — borrarlo habría dejado ese caso conectando
+  sin TLS. Falta cambiar la variable `DATABASE_URL` en Render, que no vive en
+  el repo.
+
+  **Verificación**: el reporte de mensualidades corrió contra producción con la
+  cadena nueva y el aviso de SSL desapareció; `npm test` dio 54/54; y las dos
+  suites e2e corrieron contra una rama de Neon (`ssl-verify-full-test`) con
+  **61 aserciones y 0 fallas**. La rama se borró al terminar.
+
+- **La sección 10 del e2e de cuotas probaba al jugador equivocado (2026-09-18)**:
+  la sección nueva de mensualidad automática afirmaba sobre Juan, que en la
+  sección 3 ya había recibido una mensualidad **manual** con fecha escrita a
+  mano (`2026-09-30`). Cuando el día de cobro calculado caía en ese mismo mes
+  —o sea, casi todo septiembre— se disparaba la guarda blanda de
+  `utils/monthlyCharges.js` ("el ciclo no cobra un mes que un humano ya cobró a
+  mano"), no se generaba nada y las dos aserciones fallaban. **El motor estaba
+  bien**: en la misma corrida, Guero sí recibió su cargo automático, y la única
+  diferencia entre los dos es que su cargo manual estaba en `void`.
+
+  Es decir, la suite era frágil por fecha: corriéndola el 29 de septiembre
+  habría pasado sola. Ahora la sección crea sus propios miembros y calcula las
+  fechas en vez de escribirlas, y se ganaron dos aserciones que no existían: que
+  a quien ya le cobraron ese mes a mano **no** se le duplica, y que un cargo
+  manual **cancelado** sí deja pasar al automático. De paso se arregló una
+  aserción que no probaba nada —comparaba `0 === 0` sobre Juan, así que pasaba
+  aunque la generación estuviera rota—. La suite pasó de 38 aserciones con 2
+  fallas a **40 con 0**.
+
 - **La mensualidad del club se cobra sola (2026-09-18)**: se retiró el botón
   "Repetir el mes pasado" (`POST /teams/:id/charges/repeat`,
   `RepeatPlayerChargeModal.jsx`) y en su lugar el club configura **una sola
