@@ -145,39 +145,35 @@ verificación.
   en la superficie oscura, o darle un color que aguante el verde— y no quería
   resolverla a ojo.
 
-- **Falta encender el cron del repositorio (2026-09-19).** El trabajo está
-  hecho —`.github/workflows/cron.yml` existe y su script se probó tal cual
-  contra el backend— pero **no corre todavía**, porque le faltan dos secretos
-  que solo se pueden crear desde la interfaz de GitHub (Settings → Secrets and
-  variables → Actions):
+- **Falta apagar el cron viejo (2026-09-19).** El del repositorio ya está
+  **encendido y verificado**: sus dos secretos existen y la primera corrida
+  manual devolvió `HTTP 200` con `partidos_error: null` y la cobranza corrida.
+  Lo que queda es el otro lado: hay un servicio **externo** llamando al mismo
+  endpoint, nadie recuerda cuál es, y mientras siga vivo se está pagando dos
+  veces la misma cosa.
+
+  No corre prisa y no rompe nada —llamar de más es inofensivo por diseño— pero
+  hasta apagarlo el proyecto sigue dependiendo de un panel que nadie
+  identifica, que era el pendiente original.
+
+  **Cómo saber si sigue vivo**: en `/admin` → pestaña **Cron**, mira las
+  llamadas de un día completo. El workflow solo puede producir ~96 (una cada 15
+  min, y GitHub casi siempre entrega menos). Si ves bastantes más, los dos están
+  llamando.
+
+  Para referencia, los dos secretos del repositorio (GitHub → Settings →
+  Secrets and variables → Actions) son:
 
   | Secreto | Valor |
   |---|---|
   | `CRON_TARGET_URL` | `https://lifa-backend-p0hq.onrender.com/api/notifications/trigger` |
   | `CRON_SECRET` | el mismo valor que la variable `CRON_SECRET` **del servicio en Render** |
 
-  Los dos son secretos **del repositorio en GitHub**, no del `.env`: el workflow
-  corre en los servidores de GitHub y `backend/.env` está en `.gitignore`, así
-  que nunca lo ve. `CRON_TARGET_URL` además el backend no la lee nunca — es
-  solo para decirle al workflow a dónde llamar.
-
-  Ojo con el segundo: tiene que coincidir con lo que tiene **Render**, no con
-  lo que tengas en tu `.env` local. Si difieren, el workflow da 401 cada 15
-  minutos. Y si `CRON_SECRET` no está definida en Render, el endpoint rechaza
-  todo — esa guarda se agregó el 2026-09-19.
-
-  El workflow ya se está ejecutando cada 15 minutos (`schedule` se activa solo
-  en cuanto el archivo llega a la rama default), pero mientras falten los
-  secretos **avisa y se sale sin error, sin llamar a nada**. Es a propósito: si
-  fallara, GitHub mandaría un correo cada 15 minutos hasta crearlos. Que no esté
-  configurado se ve donde tiene que verse — la pestaña **Cron** del panel de
-  administración, en 🔴, porque nadie está llamando.
-
-  En cuanto los secretos estén, empieza a llamar de verdad y la pestaña lo
-  muestra. El cron viejo se puede dejar encendido mientras se comprueba —llamar
-  de más es inofensivo por diseño— y apagarlo después, que es lo que cierra de
-  verdad el pendiente de depender del panel de un proveedor que nadie
-  identifica.
+  Van en GitHub y **no** en el `.env`: el workflow corre en los servidores de
+  GitHub y `backend/.env` está en `.gitignore`, así que nunca lo ve.
+  `CRON_TARGET_URL` además el backend no la lee nunca. Si alguna vez hay que
+  rotarlos, `CRON_SECRET` tiene que coincidir con el de **Render**, no con el
+  del `.env` local.
 
   Dos avisos sobre GitHub Actions, para no descubrirlos tarde:
 
@@ -362,9 +358,11 @@ historial y **falla ruidosamente** — si el backend no responde, si el HTTP no 
 manda correo.
 
 La única excepción es que falten sus dos secretos (`CRON_TARGET_URL` y
-`CRON_SECRET`, **todavía sin crear** — ver "Pendientes abiertos"): ahí avisa y
-se sale sin error, para no mandar un correo cada 15 minutos mientras se
-configura. `workflow_dispatch` lo dispara a mano desde la pestaña Actions, con
+`CRON_SECRET`, ya creados el 2026-09-19): ahí avisa y se sale sin error, para
+no mandar un correo cada 15 minutos mientras se configura. Los secretos los
+limpia de espacios y saltos de línea antes de usarlos — pegarlos arrastra un
+`
+` con una facilidad pasmosa, y eso tumbó la primera corrida real. `workflow_dispatch` lo dispara a mano desde la pestaña Actions, con
 un input `force`.
 
 El secreto se acepta en **dos formatos**, `x-cron-secret: <secreto>` y
