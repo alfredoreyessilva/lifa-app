@@ -113,9 +113,9 @@ verificación.
   llaves de `localStorage` (`lifa_token` — cambiarla desloguea a todos los
   usuarios ya registrados) y las carpetas de Cloudinary (`lifa-app/logos`,
   `lifa-app/comprobantes`). Cada una se puede migrar por separado cuando
-  convenga; ninguna es urgente. Lo que sí sigue pendiente es elegir la razón
-  social al llenar los datos legales, que es de lo que dependen los Términos y
-  la facturación.
+  convenga; ninguna es urgente. La razón social ya se eligió: opera José Alfredo
+  Reyes Silva como persona física, y CFBAMX es el nombre comercial (ver
+  `frontend/src/config/legal.js`).
 - **La zona horaria solo se corrigió en el libro del CLUB.** `CURRENT_DATE` se
   evalúa en UTC (Neon), seis horas adelante de México: un cargo que vence hoy
   se marcaba vencido desde las 18:00 del mismo día. Se cambió por
@@ -180,7 +180,6 @@ verificación.
   "Categoría / Número / Posición" y "Cuota / Situación" desbordan el ancho del
   modal. Es preexistente y está medido en "Fase B".
 - **Reactivar comisión de Hotel sin Drive**: desde que se quitó Travelpayouts Drive (ver "Monetización"), el botón 🏨 Hotel no genera comisión. Ya no depende de la aprobación de Booking.com dentro de Travelpayouts (ese flujo se fue junto con Drive) — la alternativa ya integrada en el código es configurar `VITE_HOTEL_AFFILIATE_ID` con un ID de afiliado directo de Booking.com. Falta conseguir/confirmar ese ID y configurarlo en Vercel.
-- **Rellenar los datos legales** — **son cuatro datos y un solo archivo**: `frontend/src/config/legal.js` (razón social o nombre de quien opera, domicilio fiscal, correo de contacto y ciudad/estado de jurisdicción). En cuanto los cuatro tengan contenido, los Términos de Servicio vuelven a publicarse solos y el Aviso de Privacidad queda completo; no hay nada más que tocar. **Hoy `/terminos` no existe** (ver `docs/CHANGELOG.md`). Es lo único que bloquea cerrar la Fase 1 del roadmap de negocio. Nota de prioridad entre los dos: el **Aviso de Privacidad** es el más urgente, porque sigue público, es el que exige la LFPDPPP y es el link que usa la pantalla de consentimiento de Google — sin razón social ni contacto ARCO está incompleto como aviso legal.
 - **Configurar la competencia de ONEFA** — es captura, no código: su temporada
   está en curso y todavía no tiene fases ni títulos declarados, así que su
   página pública no muestra tabla. Se hace desde Estructura → rama →
@@ -1957,7 +1956,7 @@ Objetivo: que la plataforma genere flujo de cobro real sin que cada venta depend
 - ⏳ Aprobación de Booking.com: sin acción de código, solo esperar a que crezca el tráfico y volver a pedir revisión (ver "Pendientes abiertos" arriba).
 
 **Fase 1 — Fundación de confiabilidad**
-- ✅ Páginas legales (`/terminos`, `/privacidad`) escritas, y sus datos centralizados en `frontend/src/config/legal.js`. ⏳ Los cuatro datos siguen sin llenar: mientras tanto los Términos están ocultos y el Aviso publicado pero incompleto.
+- ✅ Páginas legales (`/terminos`, `/privacidad`) escritas y **publicadas**: los cuatro datos de `frontend/src/config/legal.js` se llenaron el 2026-09-19, así que `/terminos` volvió a existir y el Aviso de Privacidad quedó completo.
 - ✅ Monitoreo de errores (Sentry) en frontend y backend, verificado en producción.
 - ✅ CI en GitHub Actions (pruebas unitarias + build + chequeo de sintaxis en cada push).
 - ⏳ Pendiente: subir Render y Neon a un plan de pago (hoy se "duerme" en free tier — ver "Pendientes conocidos").

@@ -14,7 +14,7 @@ export default function TermsOfService() {
 
       <p>
         Estos Términos de Servicio ("Términos") rigen el uso de CFBAMX — Calendarios de Football
-        Americano México (el "Servicio"), operado por {LEGAL.razonSocial}
+        Americano México (el "Servicio"), operado por {LEGAL.razonSocial}{' '}
         ("nosotros"). Al crear una cuenta o usar el Servicio aceptas estos Términos. Si no estás de
         acuerdo, no debes usar el Servicio.
       </p>

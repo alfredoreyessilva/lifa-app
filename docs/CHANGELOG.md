@@ -15,6 +15,21 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Los datos legales quedaron llenos y `/terminos` volvió a existir (2026-09-19)**: los
+  cuatro campos de `frontend/src/config/legal.js` llevaban vacíos desde que se centralizaron el
+  2026-09-16, y con `LEGAL_DATA_READY` en `false` la ruta `/terminos` no existía y su enlace no
+  salía en el pie. Ya están llenos: **José Alfredo Reyes Silva** como persona física, domicilio en
+  Cancún, Quintana Roo, `tacticalfootballmx@gmail.com` para derechos ARCO y Cancún, Quintana Roo
+  como jurisdicción. **CFBAMX es nombre comercial, no una sociedad**, y no hizo falta constituir
+  nada: el texto de las dos páginas ya estaba escrito para ese caso ("X, responsable de CFBAMX…").
+  **El RFC no se publica en ningún lado** — `razonSocial` solo pide el nombre *tal como aparece*
+  en el RFC, que es cosa distinta. De paso se corrigió un defecto que el campo vacío escondía: en
+  `TermsOfService.jsx` la razón social salía pegada al paréntesis ("…Reyes Silva("nosotros")"),
+  porque JSX se come el salto de línea entre `{expresión}` y el texto que sigue en vez de dejar un
+  espacio; se arregló con un `{' '}` explícito. Verificado en el navegador, no solo leyendo el
+  código: `/terminos` y `/privacidad` con los cuatro datos en su lugar y el pie mostrando los dos
+  enlaces. 81/81 pruebas del frontend pasan.
+
 - **Guardar un equipo respondía "Error interno del servidor" (2026-09-18)**: el
   formulario de equipo (logo, color, links predeterminados) fallaba con un 500
   en 91 de los 92 equipos, pero **el cambio sí se guardaba**. Los dos síntomas

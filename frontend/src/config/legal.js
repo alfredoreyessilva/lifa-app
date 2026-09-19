@@ -19,19 +19,19 @@
 export const LEGAL = {
   // Nombre de la persona física o moral que opera el Servicio, tal como
   // aparece en el RFC. Ej: "Juan Pérez García" o "Deportes Digitales S.A. de C.V."
-  razonSocial: '',
+  razonSocial: 'José Alfredo Reyes Silva',
 
   // Domicilio fiscal o de contacto. Es obligatorio en un Aviso de Privacidad
   // conforme a la LFPDPPP. Ej: "Av. Reforma 123, Col. Centro, CDMX, C.P. 06000"
-  domicilio: '',
+  domicilio: 'Calle Río Hondo #8, Residencial Andalucía, Cancún, Quintana Roo, C.P. 77500',
 
   // Correo donde se reciben dudas y solicitudes de derechos ARCO.
   // Ej: "contacto@cfbamx.com"
-  correoContacto: '',
+  correoContacto: 'tacticalfootballmx@gmail.com',
 
   // Ciudad/estado cuyos tribunales resuelven controversias, para los
   // Términos de Servicio. Ej: "Ciudad de México"
-  jurisdiccion: '',
+  jurisdiccion: 'Cancún, Quintana Roo',
 };
 
 // true solo cuando los cuatro campos están llenos.
