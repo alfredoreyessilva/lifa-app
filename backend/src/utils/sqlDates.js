@@ -1,6 +1,11 @@
-// SQL de fechas compartido por los dos libros de cobranza y por el generador
-// de mensualidades. Vive aparte porque los tres lo necesitan y tener tres
-// copias de la misma expresión es como nacen los desajustes de un día.
+// SQL de fechas compartido por los dos libros de cobranza, el generador de
+// mensualidades y el candado diario del cron (utils/cronSchedule.js). Vive
+// aparte porque los cuatro lo necesitan y tener cuatro copias de la misma
+// expresión es como nacen los desajustes de un día.
+//
+// Y no es hipotético: pasó. El libro equipo→jugadores se pasó a esta expresión
+// y el de liga→equipo se quedó en CURRENT_DATE, así que durante un tiempo los
+// dos libros no estaban de acuerdo en qué día era. Se corrigió el 2026-09-19.
 
 // La fecha de HOY en México, no en UTC.
 //

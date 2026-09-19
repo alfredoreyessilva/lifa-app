@@ -2,6 +2,7 @@ import express from 'express';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { HOY_MX } from '../utils/sqlDates.js';
 
 const router = express.Router();
 
@@ -12,6 +13,78 @@ function adminRequired(req, res, next) {
   }
   next();
 }
+
+/* ===================== SALUD DEL CRON ===================== */
+
+// Cuántos días de historia pinta el panel.
+const DIAS = 14;
+
+// El cron que dispara POST /api/notifications/trigger es EXTERNO al
+// repositorio y durante mucho tiempo nadie supo cada cuánto corría ni si
+// seguía vivo (ver "Pendientes abiertos" del README). Este endpoint contesta
+// las dos preguntas desde adentro, con lo que la propia app registró, en vez
+// de entrar al panel de un proveedor.
+//
+// La frecuencia NO se configura en ningún lado: se MIDE. Un día completo con
+// 96 llamadas son 15 minutos entre una y otra. Por eso el umbral de "atrasado"
+// tampoco es un número fijo — se calcula del ritmo observado, y así el panel
+// sirve igual si el cron corre cada 15 minutos que si corre una vez al día.
+router.get(`/cron`, authRequired, adminRequired, asyncHandler(async (req, res) => {
+  const resumen = await db.prepare(`
+    SELECT to_char(${HOY_MX}, 'YYYY-MM-DD') AS hoy_mx,
+           (SELECT MAX(last_call_at) FROM cron_runs WHERE phase = 'trigger') AS ultima_llamada,
+           (SELECT ROUND(EXTRACT(EPOCH FROM (NOW() - MAX(last_call_at))) / 60)
+              FROM cron_runs WHERE phase = 'trigger') AS minutos_desde
+  `).get();
+
+  const dias = await db.prepare(`
+    SELECT to_char(ran_on, 'YYYY-MM-DD') AS dia,
+           COALESCE(MAX(calls) FILTER (WHERE phase = 'trigger'), 0) AS llamadas,
+           MAX(last_call_at) FILTER (WHERE phase = 'trigger') AS ultima_llamada,
+           BOOL_OR(phase = 'cobranza' AND finished_at IS NOT NULL) AS cobranza_ok,
+           MAX(finished_at) FILTER (WHERE phase = 'cobranza') AS cobranza_a_las,
+           (ARRAY_AGG(result) FILTER (WHERE phase = 'cobranza' AND result IS NOT NULL))[1] AS cobranza_resultado
+    FROM cron_runs
+    WHERE ran_on >= ${HOY_MX} - ${DIAS}
+    GROUP BY ran_on
+    ORDER BY ran_on DESC
+  `).all();
+
+  // Ya viene como texto YYYY-MM-DD desde SQL, igual que `dia` en la otra
+  // consulta: las dos tienen que compararse como cadena.
+  const hoyMx = resumen.hoy_mx;
+  const hoy   = dias.find((d) => d.dia === hoyMx) || null;
+  const minutos = resumen.minutos_desde === null ? null : Number(resumen.minutos_desde);
+
+  // El ritmo se estima con el último día COMPLETO, no con el de hoy: hoy va a
+  // la mitad y daría siempre una frecuencia inventada.
+  const completo = dias.find((d) => d.dia !== hoyMx && Number(d.llamadas) > 0);
+  const cadenciaMin = completo ? Math.round(1440 / Number(completo.llamadas)) : null;
+
+  // Sin un día completo todavía, se asume lo más lento posible (una vez al día)
+  // para no gritar en falso el primer día.
+  const esperado = cadenciaMin ?? 1440;
+  const limite = Math.max(2 * esperado, 90);
+
+  let estado;
+  if (minutos === null)        estado = 'sin_señal';
+  else if (minutos > 36 * 60)  estado = 'sin_señal';
+  else if (minutos > limite)   estado = 'atrasado';
+  else                         estado = 'ok';
+
+  res.json({
+    estado,
+    hoy_mx: hoyMx,
+    ultima_llamada: resumen.ultima_llamada,
+    minutos_desde_ultima_llamada: minutos,
+    minutos_de_tolerancia: limite,
+    cadencia_estimada_min: cadenciaMin,
+    cadencia_medida_el: completo ? completo.dia : null,
+    llamadas_hoy: hoy ? Number(hoy.llamadas) : 0,
+    cobranza_corrio_hoy: hoy ? Boolean(hoy.cobranza_ok) : false,
+    dias,
+  });
+}));
 
 /* ===================== ESTADÍSTICAS ===================== */
 

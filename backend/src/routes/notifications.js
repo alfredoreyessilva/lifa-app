@@ -7,6 +7,7 @@ import { authRequired } from '../middleware/auth.js';
 import { leagueOwnerRequired, teamOwnerRequired } from '../middleware/ownership.js';
 import { runBillingReminders, runPlayerBillingReminders } from '../utils/billingReminders.js';
 import { runMonthlyChargeGeneration } from '../utils/monthlyCharges.js';
+import { runOncePerDay, registrarLlamada, podarBitacora } from '../utils/cronSchedule.js';
 
 const router = express.Router();
 
@@ -283,13 +284,22 @@ router.post('/unfollow-match', authRequired, asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// Trigger del cron job
-router.post('/trigger', asyncHandler(async (req, res) => {
-  const secret = req.headers['x-cron-secret'];
-  if (secret !== process.env.CRON_SECRET) {
-    return res.status(401).json({ error: 'No autorizado' });
-  }
-
+// ─────────────────────────────────────────────────────────────────────────────
+// Bloque de ALTA frecuencia: todo lo que depende de la hora de un partido.
+//
+// Vive en su propia función, y no en línea dentro del handler, por dos motivos
+// que en realidad son uno solo — es la mitad del cron que necesita correr cada
+// pocos minutos, y es la mitad que puede fallar sin que eso le cueste nada a
+// la otra.
+//
+// Antes estaba todo en el mismo handler, así que cualquier error aquí impedía
+// que corrieran la cobranza y la generación de mensualidades. El caso más
+// claro era la primera línea: `ensureVapid()` LANZA si faltan las variables
+// VAPID, y estaba antes de todo, de modo que una configuración de push
+// incompleta bastaba para que el club dejara de facturar — dos cosas que no
+// tienen absolutamente nada que ver entre sí.
+// ─────────────────────────────────────────────────────────────────────────────
+async function faseDePartidos() {
   ensureVapid();
 
   const now = Date.now();
@@ -373,10 +383,14 @@ router.post('/trigger', asyncHandler(async (req, res) => {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Fase 3 — recordatorios a la BANDEJA de la liga (in-app, sin push a nadie).
+  // Recordatorios de captura a la BANDEJA de la liga (in-app, sin push a nadie).
   // Van a la tabla `notifications` (recipient_type='league'), igual que los
-  // avisos de admin. Son de una sola vez: al enviarlos se marca la bandera
-  // correspondiente y el cron ya no vuelve a mirar ese partido.
+  // avisos de admin. Se quedan en el bloque frecuente, y no en el diario,
+  // porque cuelgan de la hora de un partido igual que los avisos de arriba:
+  // su disparo es "una hora después del fin nominal", no "una vez al día".
+  //
+  // Son de una sola vez: al enviarlos se marca la bandera correspondiente y
+  // el cron ya no vuelve a mirar ese partido.
   //
   // El fin nominal de un partido se calcula como match_date + ventana de la
   // categoría (auto_status_window_hours, 3h por defecto). El recordatorio
@@ -449,37 +463,101 @@ router.post('/trigger', asyncHandler(async (req, res) => {
     );
     await db.prepare('UPDATE matches SET reminded_not_started = TRUE WHERE id = ?').run(match.id);
   }
+}
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Fase 4 — recordatorios de cobranza (liga → equipos): cargos por vencer y
-  // vencidos van a la bandeja del equipo. La lógica vive en utils/ para no
-  // mezclar el modelo de cobranza con este archivo; es idempotente y no lanza.
-  // ─────────────────────────────────────────────────────────────────────────
-  await runBillingReminders(db);
+// Trigger del cron job.
+//
+// UN endpoint, DOS cadencias. Se puede llamar con la frecuencia que sea y las
+// dos mitades quedan bien servidas:
+//
+//   - Los avisos de partido corren en CADA llamada. Su ventana es de una hora,
+//     así que quieren la frecuencia más alta que el scheduler dé (~15 min).
+//   - La cobranza y la mensualidad corren UNA VEZ AL DÍA, la reclame quien la
+//     reclame. Ver utils/cronSchedule.js para por qué el candado es de la base
+//     y no del código.
+//
+// Esto es lo que vuelve irrelevante el pendiente de "nadie sabe cada cuánto
+// corre el cron" para la corrección del sistema: sigue siendo un dato que hay
+// que ir a buscar, pero ya no es la diferencia entre facturar y no facturar.
+//
+// `?force=1` vuelve a correr las fases diarias aunque ya hayan corrido hoy.
+// Va detrás del mismo CRON_SECRET y sirve para probar y para recuperar a mano.
+//
+// El secreto se acepta en DOS formatos: `x-cron-secret: <secreto>`, que es el
+// de siempre, y `Authorization: Bearer <secreto>`. El segundo no es capricho:
+// varios schedulers mandan solo ese (Vercel Cron, entre otros), y aceptar los
+// dos es lo que deja cambiar de proveedor sin tocar el backend. Es el mismo
+// secreto, no dos.
+router.post('/trigger', asyncHandler(async (req, res) => {
+  const esperado = process.env.CRON_SECRET;
+  const cabecera = req.headers.authorization || '';
+  const recibido = req.headers['x-cron-secret']
+    || (cabecera.startsWith('Bearer ') ? cabecera.slice(7) : null);
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Fase 5 — recordatorios de cuotas (equipo → jugadores). Va aparte de la
-  // fase anterior porque es otro libro (player_ledger_entries) y otro criterio
-  // de aviso: uno agregado por equipo, no uno por movimiento.
-  // ─────────────────────────────────────────────────────────────────────────
-  await runPlayerBillingReminders(db);
+  // El `!esperado` va primero: sin CRON_SECRET configurado, los dos lados
+  // serían undefined y cualquiera podría disparar el cron.
+  if (!esperado || recibido !== esperado) {
+    return res.status(401).json({ error: 'No autorizado' });
+  }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Fase 6 — mensualidad automática del club. Va DESPUÉS de los
-  // recordatorios y no antes: un cargo que nace hoy vence dentro de cinco
-  // días, así que alcanza el aviso de "por vencer" de la próxima corrida sin
-  // necesidad de adelantarlo, y así los recordatorios siguen siendo lo último
-  // que ve una corrida sobre datos estables.
+  const forzar = req.query.force === '1' || req.query.force === 'true';
+
+  // El latido, antes que nada: deja constancia de que el cron llamó, incluso
+  // si todo lo de abajo se cae. Es de lo que sale la respuesta a "¿cada cuánto
+  // corre?" y "¿sigue vivo?" en el panel de administración.
+  const llamadasHoy = await registrarLlamada(db);
+
+  // ── Cada corrida ──
+  // Se captura el error en vez de dejarlo subir: lo que sigue es dinero y no
+  // depende de nada de esto. Pero capturar no puede significar esconder — el
+  // mensaje sube a la respuesta, que es el único rastro que deja este handler.
+  let partidosError = null;
+  try {
+    await faseDePartidos();
+  } catch (err) {
+    console.error('[cron] la fase de partidos falló:', err);
+    partidosError = err.message;
+  }
+
+  // ── Una vez al día ──
+  // Las tres fases de dinero, en este orden a propósito: la mensualidad va
+  // DESPUÉS de los recordatorios porque un cargo que nace hoy vence dentro de
+  // cinco días, así que alcanza el aviso de "por vencer" de mañana sin
+  // necesidad de adelantarlo, y los recordatorios siguen siendo lo último que
+  // ve una corrida sobre datos estables.
   //
-  // Es idempotente: si el panel ya la generó hoy, esto no inserta nada. El
-  // conteo sube a la respuesta porque es la ÚNICA señal que el servicio de
-  // cron externo puede observar — este handler no deja más rastro que su JSON.
-  const mensualidad = await runMonthlyChargeGeneration(db);
+  // Las tres son idempotentes por su cuenta (banderas por fila las dos
+  // primeras, índice único la tercera), así que el candado diario es una
+  // mejora de cadencia, no la garantía de nada: si alguna corriera de más, no
+  // pasaría nada malo. Por eso también se puede seguir llamando desde el panel
+  // (la vía perezosa de la mensualidad) sin coordinarse con esto.
+  const cobranza = await runOncePerDay(db, 'cobranza', async () => {
+    const liga        = await runBillingReminders(db);
+    const jugadores   = await runPlayerBillingReminders(db);
+    const mensualidad = await runMonthlyChargeGeneration(db);
+    // La bitácora se poda aquí y no en cada llamada: es mantenimiento, y este
+    // bloque ya tiene la garantía de correr una sola vez al día.
+    const podadas = await podarBitacora(db);
+    return {
+      billing_reminders:        liga,
+      player_billing_reminders: jugadores,
+      monthly_charges_created:  mensualidad.created,
+      monthly_charges_error:    mensualidad.error,
+      bitacora_podada:          podadas,
+    };
+  }, { force: forzar });
 
   res.json({
     ok: true,
-    monthly_charges_created: mensualidad.created,
-    monthly_charges_error: mensualidad.error,
+    llamadas_hoy: llamadasHoy,
+    partidos_error: partidosError,
+    cobranza,
+    // Se conservan en la raíz porque eran lo único que esta respuesta decía
+    // hasta ahora, y del otro lado hay un servicio que no podemos inspeccionar.
+    // `null` cuando el bloque diario no corrió: un 0 ahí se leería como
+    // "corrió y no generó nada", que es justo lo contrario.
+    monthly_charges_created: cobranza.resultado?.monthly_charges_created ?? null,
+    monthly_charges_error:   cobranza.resultado?.monthly_charges_error   ?? null,
   });
 }));
 

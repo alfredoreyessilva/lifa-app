@@ -1,0 +1,119 @@
+# Dispara el cron de la app. Vive AQUÍ, y no en el panel de un proveedor de
+# fuera, porque ese era exactamente el problema: nadie sabía cada cuánto corría
+# ni si seguía vivo, y del cron dependen los avisos de partido y la cobranza.
+# Aquí queda versionado, se ve en el historial y falla ruidosamente.
+#
+# ── Qué hace cada llamada ──
+#
+# El endpoint reparte solo el trabajo entre sus dos cadencias: los avisos de
+# partido corren en cada llamada y la cobranza una vez al día (el candado vive
+# en la base, ver backend/src/utils/cronSchedule.js). Por eso este archivo
+# puede llamar seguido sin pensarlo.
+#
+# ── Antes de encenderlo ──
+#
+# Hay que crear dos secretos del repositorio (Settings → Secrets and variables
+# → Actions):
+#
+#   CRON_TARGET_URL   https://<tu-backend>.onrender.com/api/notifications/trigger
+#   CRON_SECRET       el mismo valor que la variable CRON_SECRET del backend
+#
+# Mientras falten, el workflow AVISA y se sale sin error. No falla a propósito:
+# 'schedule' se activa en cuanto este archivo llega a la rama default, así que
+# fallar sería mandarte un correo de GitHub cada 15 minutos hasta que los
+# crearas. Que no esté configurado se ve donde tiene que verse — la pestaña
+# Cron del panel de administración, en rojo, porque nadie está llamando.
+#
+# Cualquier OTRO problema (HTTP != 200, o la fase de partidos tronando) sí
+# falla el paso, que es lo que hace que GitHub avise por correo.
+#
+# ── Y el cron viejo ──
+#
+# Se puede dejar corriendo mientras se comprueba este: llamar de más es
+# inofensivo por diseño. Una vez que el panel de administración (pestaña Cron)
+# muestre las llamadas de aquí, apaga el de afuera para no pagar dos veces la
+# misma cosa.
+
+name: Cron
+
+on:
+  schedule:
+    # Cada 15 minutos. GitHub NO garantiza puntualidad: en horas pico esta cola
+    # se atrasa, y a veces se salta corridas. Se aguanta porque ninguna de las
+    # dos mitades depende de la puntualidad — los avisos de partido tienen una
+    # ventana de una hora y la cobranza es idempotente y diaria.
+    - cron: '*/15 * * * *'
+  # Para dispararlo a mano desde la pestaña Actions.
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Volver a correr las fases diarias aunque ya hayan corrido hoy'
+        type: boolean
+        default: false
+
+# Si una corrida se atora, que no se encimen.
+concurrency:
+  group: cron
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Llamar al endpoint del cron
+        env:
+          URL:    ${{ secrets.CRON_TARGET_URL }}
+          SECRET: ${{ secrets.CRON_SECRET }}
+          FORCE:  ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${URL:-}" ] || [ -z "${SECRET:-}" ]; then
+            echo "::warning::Faltan los secretos CRON_TARGET_URL y/o CRON_SECRET; no se llamó a nada."
+            echo "El cron del repositorio todavía no está configurado. Ver 'Pendientes abiertos' del README."               >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          destino="$URL"
+          if [ "${FORCE:-false}" = "true" ]; then
+            destino="${destino}?force=1"
+            echo "Forzando las fases diarias."
+          fi
+
+          # --max-time cubre el arranque en frío de Render (el plan gratis
+          # duerme la instancia y tarda ~50s en despertar).
+          #
+          # El cuerpo se guarda aparte del código HTTP para poder enseñarlo en
+          # el log pase lo que pase: cuando algo falla, el JSON del endpoint
+          # dice más que el número.
+          codigo=$(curl -sS -o respuesta.json -w '%{http_code}' \
+            --max-time 120 --retry 2 --retry-delay 10 --retry-connrefused \
+            -X POST "$destino" -H "x-cron-secret: $SECRET")
+
+          echo "HTTP $codigo"
+          cat respuesta.json; echo
+
+          if [ "$codigo" != "200" ]; then
+            echo "::error::El cron respondió $codigo."
+            exit 1
+          fi
+
+          # El endpoint responde 200 aunque la fase de partidos truene, a
+          # propósito: no debe tumbar la cobranza. Pero que no tumbe nada no
+          # significa que se deba ignorar — se marca el paso como fallido para
+          # que GitHub avise por correo.
+          if ! grep -q '"partidos_error":null' respuesta.json; then
+            echo "::error::La fase de partidos falló (ver partidos_error en la respuesta)."
+            exit 1
+          fi
+
+          # Resumen legible en la pestaña Actions, sin abrir el log.
+          {
+            echo "### Cron"
+            echo ""
+            echo '```json'
+            cat respuesta.json
+            echo ""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1757,6 +1757,66 @@ export async function initSchema() {
         ON bot_messages(organization_id, wa_from, created_at DESC)
     `);
 
+    // ── Bitácora de corridas del cron, y candado de las fases diarias ──
+    //
+    // `POST /api/notifications/trigger` hace dos trabajos con cadencias
+    // incompatibles: los avisos de partido necesitan correr cada pocos minutos
+    // (su ventana es de una hora) y la cobranza necesita correr una vez al
+    // día. Como el cron es externo al repositorio y su frecuencia no se
+    // conoce, hoy una de las dos mitades está mal servida y no se sabe cuál.
+    //
+    // Esta tabla resuelve la mitad diaria sin tocar nada afuera: la corrida
+    // de cobranza RECLAMA el día insertando su fila, y quien no gane la
+    // reclamación se salta esas fases. Que el cron llame cada 15 minutos o
+    // una vez al día deja de importar.
+    //
+    // La garantía es de la BASE, no del código — mismo criterio que
+    // idx_club_ledger_auto_cycle: dos llamadas simultáneas del cron no pueden
+    // colarse las dos, porque la segunda choca contra el UNIQUE y su
+    // ON CONFLICT DO NOTHING la deja sin fila que devolver. Con una
+    // comprobación en JS habría ventana de carrera de verdad.
+    //
+    // `ran_on` es la fecha en México (HOY_MX), no CURRENT_DATE: con Neon en
+    // UTC, el día se cortaría a las 18:00 hora local y la corrida de la tarde
+    // contaría como del día siguiente.
+    //
+    // `finished_at` NULL con `started_at` viejo = corrida que se cayó a medias
+    // (el proceso murió sin poder soltar su reclamación). La siguiente llamada
+    // la retoma; sin eso, un reinicio a media corrida dejaría el día bloqueado
+    // hasta la medianoche.
+    await run(`
+      CREATE TABLE IF NOT EXISTS cron_runs (
+        id          SERIAL PRIMARY KEY,
+        phase       TEXT NOT NULL,
+        ran_on      DATE NOT NULL,
+        started_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        finished_at TIMESTAMPTZ,
+        result      JSONB,
+        UNIQUE (phase, ran_on)
+      )
+    `);
+
+    // ── El latido del cron ──
+    //
+    // La tabla nació guardando solo la corrida DIARIA de cobranza (una fila
+    // por día). Estas dos columnas le agregan el otro uso: contar CADA llamada
+    // al endpoint, que es lo que contesta la pregunta abierta del README —
+    // "nadie sabe cada cuánto corre el cron" — sin entrar al panel de nadie.
+    //
+    // Son dos formas de fila en la misma tabla, y el discriminante es `phase`:
+    //
+    //   phase='trigger'   una fila por día, `calls` se incrementa en cada
+    //                     llamada y `last_call_at` es la más reciente.
+    //                     `finished_at`/`result` no se usan.
+    //   phase='cobranza'  una fila por día, la reclamación del bloque diario.
+    //                     `calls` se queda en 0; lo que importa es
+    //                     `started_at`/`finished_at`/`result`.
+    //
+    // Una fila por día y no una por llamada: con el cron cada 15 minutos serían
+    // ~35 mil filas al año para responder algo que un contador contesta igual.
+    await run(`ALTER TABLE cron_runs ADD COLUMN IF NOT EXISTS calls INTEGER NOT NULL DEFAULT 0`);
+    await run(`ALTER TABLE cron_runs ADD COLUMN IF NOT EXISTS last_call_at TIMESTAMPTZ`);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se

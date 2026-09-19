@@ -432,6 +432,9 @@ export const api = {
   // Admin — estadísticas
   adminGetStats: (token) => request('/admin/stats', { token }),
 
+  // Admin — salud del cron externo (¿sigue vivo? ¿cada cuánto corre?)
+  adminGetCron: (token) => request('/admin/cron', { token }),
+
   // Admin — patrocinadores
   adminCreateSponsor: (payload, token) =>
     request('/admin/sponsors', { method: 'POST', body: payload, token }),

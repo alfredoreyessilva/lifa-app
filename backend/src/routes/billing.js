@@ -6,6 +6,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { isOrgMember } from '../utils/orgMembers.js';
 import { isNonEmptyString, isValidUrl } from '../utils/validation.js';
 import { leagueOwnerRequired, teamOwnerRequired } from '../middleware/ownership.js';
+import { HOY_MX } from '../utils/sqlDates.js';
 
 const router = express.Router();
 
@@ -188,7 +189,7 @@ router.get('/leagues/:leagueId/overview', authRequired, leagueOwnerRequired, asy
   const agg = await db.prepare(`
     SELECT team_id,
            ${BALANCE_SUM_SQL} AS balance,
-           COALESCE(SUM(CASE WHEN kind = 'charge' AND status = 'open' AND due_date < CURRENT_DATE THEN amount ELSE 0 END), 0) AS overdue_charges,
+           COALESCE(SUM(CASE WHEN kind = 'charge' AND status = 'open' AND due_date < ${HOY_MX} THEN amount ELSE 0 END), 0) AS overdue_charges,
            MIN(CASE WHEN kind = 'charge' AND status = 'open' THEN due_date END) AS next_due_date
     FROM team_ledger_entries
     WHERE league_id = ?
@@ -709,7 +710,7 @@ router.get('/teams/:id/statement', authRequired, teamOwnerRequired, asyncHandler
   const agg = await db.prepare(`
     SELECT ${BALANCE_SUM_SQL} AS balance,
            MIN(CASE WHEN kind = 'charge' AND status = 'open' THEN due_date END) AS next_due_date,
-           COALESCE(SUM(CASE WHEN kind = 'charge' AND status = 'open' AND due_date < CURRENT_DATE THEN amount ELSE 0 END), 0) AS overdue_charges
+           COALESCE(SUM(CASE WHEN kind = 'charge' AND status = 'open' AND due_date < ${HOY_MX} THEN amount ELSE 0 END), 0) AS overdue_charges
     FROM team_ledger_entries
     WHERE league_id = ? AND team_id = ?
   `).get(leagueId, teamId);

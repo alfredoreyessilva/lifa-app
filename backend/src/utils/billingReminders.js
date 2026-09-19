@@ -1,8 +1,12 @@
 import { HOY_MX } from './sqlDates.js';
 
 // Recordatorios de cobranza, disparados por el mismo cron externo que ya llama
-// a POST /api/notifications/trigger. Se llaman al final de ese handler
-// (routes/notifications.js), después de los avisos de partidos.
+// a POST /api/notifications/trigger. Se llaman desde el bloque DIARIO de ese
+// handler (routes/notifications.js), no en cada corrida: los avisos de partido
+// quieren frecuencia alta y esto no, así que las dos cadencias se separaron
+// con el candado de utils/cronSchedule.js. Que corran de más no rompería nada
+// —siguen siendo idempotentes por sus banderas por fila—, pero barrer los dos
+// libros completos cada quince minutos no le sirve a nadie.
 //
 // Son DOS libros distintos y cada uno tiene su función exportada:
 //   - runBillingReminders        → liga → equipos (aviso por movimiento)
@@ -22,6 +26,20 @@ import { HOY_MX } from './sqlDates.js';
 const DUE_SOON_DAYS = 3;
 const OVERDUE_REPEAT_DAYS = 3;
 const OVERDUE_MAX_REMINDERS = 4;
+
+// Las dos ventanas de fecha viven aquí arriba y las comparten los DOS libros.
+//
+// Antes estaban duplicadas —una copia por libro— y fue exactamente ahí donde
+// se separaron: el libro de jugadores se pasó a HOY_MX y el de la liga se
+// quedó en CURRENT_DATE. Como Neon corre en UTC, a la liga se le avisaba de un
+// cargo "vencido" desde las 18:00 hora de México del MISMO día en que vencía,
+// y el equipo recibía el regaño el día que le tocaba pagar. Es el desajuste
+// que documenta utils/sqlDates.js, arreglado en un libro y no en el otro.
+//
+// Las dos asumen que la tabla viene aliaseada como `e`, que es como la nombran
+// las cuatro consultas de este archivo.
+const DUE_SOON_WINDOW = `e.due_date BETWEEN ${HOY_MX} AND (${HOY_MX} + ${DUE_SOON_DAYS})`;
+const OVERDUE_WINDOW  = `e.due_date < ${HOY_MX}`;
 
 function formatAmount(amount, currency = 'MXN') {
   const n = Number(amount);
@@ -68,7 +86,7 @@ export async function runBillingReminders(db) {
         AND e.status = 'open'
         AND e.reminded_due_soon = FALSE
         AND e.due_date IS NOT NULL
-        AND e.due_date BETWEEN CURRENT_DATE AND (CURRENT_DATE + ${DUE_SOON_DAYS})
+        AND ${DUE_SOON_WINDOW}
         AND l.billing_reminders_enabled = TRUE
     `).all();
 
@@ -97,7 +115,7 @@ export async function runBillingReminders(db) {
       WHERE e.kind = 'charge'
         AND e.status = 'open'
         AND e.due_date IS NOT NULL
-        AND e.due_date < CURRENT_DATE
+        AND ${OVERDUE_WINDOW}
         AND e.overdue_reminder_count < ${OVERDUE_MAX_REMINDERS}
         AND (
           e.last_overdue_reminder_at IS NULL
@@ -154,8 +172,6 @@ export async function runBillingReminders(db) {
 // Las banderas por fila (reminded_due_soon / overdue_reminder_count) se siguen
 // marcando por movimiento aunque el aviso sea agregado, así que cada cargo
 // respeta su propio tope de 4 recordatorios igual que en el libro de la liga.
-
-const DUE_SOON_WINDOW = `e.due_date BETWEEN ${HOY_MX} AND (${HOY_MX} + ${DUE_SOON_DAYS})`;
 
 function playerCountLabel(n) {
   return Number(n) === 1 ? '1 jugador' : `${n} jugadores`;
@@ -224,7 +240,7 @@ export async function runPlayerBillingReminders(db) {
       e.kind = 'charge'
       AND e.status = 'open'
       AND e.due_date IS NOT NULL
-      AND e.due_date < ${HOY_MX}
+      AND ${OVERDUE_WINDOW}
       AND e.overdue_reminder_count < ${OVERDUE_MAX_REMINDERS}
       AND (
         e.last_overdue_reminder_at IS NULL

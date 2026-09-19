@@ -20,6 +20,7 @@ export default function AdminPanel() {
       <div className="tab-bar" style={{ marginBottom: 24 }}>
         {[
           { key: 'stats',    label: 'Estadísticas' },
+          { key: 'cron',     label: 'Cron' },
           { key: 'sponsors', label: 'Patrocinadores' },
           { key: 'leagues',  label: 'Ligas' },
           { key: 'organizations', label: 'Organizaciones' },
@@ -36,6 +37,7 @@ export default function AdminPanel() {
       </div>
 
       {tab === 'stats'    && <StatsTab    token={token} />}
+      {tab === 'cron'     && <CronTab     token={token} />}
       {tab === 'sponsors' && <SponsorsTab token={token} />}
       {tab === 'leagues'  && <LeaguesTab  token={token} />}
       {tab === 'organizations' && <OrganizationsTab token={token} />}
@@ -308,6 +310,170 @@ function LeaguesByStateList({ data }) {
         </div>
       ))}
     </div>
+  );
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   CRON — ¿sigue vivo y cada cuánto corre?
+══════════════════════════════════════════════════════════════ */
+
+// El cron que dispara POST /api/notifications/trigger vive FUERA del
+// repositorio, y durante mucho tiempo la única forma de saber si seguía
+// corriendo era entrar al panel del proveedor. De ahí esta pestaña: la app
+// registra cada llamada, así que puede contestar sola las dos preguntas que
+// importan — "¿sigue vivo?" y "¿cada cuánto?".
+//
+// La cadencia no se configura: se mide. 96 llamadas en un día completo son 15
+// minutos entre una y otra.
+
+const CRON_ESTADOS = {
+  ok:         { icono: '🟢', texto: 'Corriendo',  color: 'var(--positive)' },
+  atrasado:   { icono: '🟡', texto: 'Atrasado',   color: 'var(--flag)' },
+  sin_señal:  { icono: '🔴', texto: 'Sin señal',  color: 'var(--danger)' },
+};
+
+function haceCuanto(min) {
+  if (min === null || min === undefined) return 'nunca';
+  if (min < 1)  return 'hace menos de un minuto';
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? 'hace 1 día' : `hace ${d} días`;
+}
+
+function cadaCuanto(min) {
+  if (!min) return '—';
+  if (min < 60) return `cada ${min} min`;
+  const h = Math.round(min / 60);
+  return h === 24 ? 'una vez al día' : `cada ${h} h`;
+}
+
+function hora(valor) {
+  if (!valor) return '—';
+  return new Date(valor).toLocaleTimeString('es-MX', {
+    hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City',
+  });
+}
+
+// Resume en una línea qué hizo la corrida diaria de cobranza. El objeto que
+// guarda la bitácora es el mismo que el endpoint del cron devuelve.
+function avisos(n) {
+  return n === 1 ? '1 aviso' : `${n} avisos`;
+}
+
+function resumenCobranza(r) {
+  if (!r) return '—';
+  const piezas = [];
+  const liga = r.billing_reminders;
+  const jug  = r.player_billing_reminders;
+  if (liga && (liga.dueSoon || liga.overdue)) piezas.push(`liga: ${avisos(liga.dueSoon + liga.overdue)}`);
+  if (jug  && (jug.dueSoon  || jug.overdue))  piezas.push(`clubes: ${avisos(jug.dueSoon + jug.overdue)}`);
+  if (r.monthly_charges_created)              piezas.push(`${r.monthly_charges_created} mensualidades`);
+  if (r.monthly_charges_error)                piezas.push(`⚠ ${r.monthly_charges_error}`);
+  return piezas.length ? piezas.join(' · ') : 'nada que hacer';
+}
+
+function CronTab({ token }) {
+  const [datos, setDatos] = useState(null);
+  const [error, setError] = useState('');
+
+  const cargar = () => {
+    setError('');
+    api.adminGetCron(token).then(setDatos).catch((e) => setError(e.message));
+  };
+
+  useEffect(cargar, [token]);
+
+  if (error) return <div className="form-error">{error}</div>;
+  if (!datos) return <div className="loading">Cargando…</div>;
+
+  const estado = CRON_ESTADOS[datos.estado] ?? CRON_ESTADOS.sin_señal;
+
+  return (
+    <>
+      <div
+        className="admin-stat-card"
+        style={{ borderLeft: `4px solid ${estado.color}`, marginBottom: 'var(--space-5)' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 28 }}>{estado.icono}</span>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: estado.color }}>{estado.texto}</div>
+            <div className="admin-stat-label">
+              Última llamada {haceCuanto(datos.minutos_desde_ultima_llamada)}
+              {datos.minutos_de_tolerancia
+                ? ` · se considera atrasado pasados ${datos.minutos_de_tolerancia} min`
+                : ''}
+            </div>
+          </div>
+          <button className="btn btn-ghost" style={{ marginLeft: 'auto' }} onClick={cargar}>
+            Actualizar
+          </button>
+        </div>
+      </div>
+
+      <div className="admin-stats-grid">
+        <div className="admin-stat-card">
+          <div className="admin-stat-icon">⏱️</div>
+          <div className="admin-stat-value" style={{ fontSize: 22 }}>
+            {cadaCuanto(datos.cadencia_estimada_min)}
+          </div>
+          <div className="admin-stat-label">
+            Cadencia medida{datos.cadencia_medida_el ? ` el ${datos.cadencia_medida_el}` : ''}
+          </div>
+        </div>
+        <div className="admin-stat-card">
+          <div className="admin-stat-icon">📞</div>
+          <div className="admin-stat-value">{datos.llamadas_hoy}</div>
+          <div className="admin-stat-label">Llamadas hoy ({datos.hoy_mx})</div>
+        </div>
+        <div className="admin-stat-card">
+          <div className="admin-stat-icon">{datos.cobranza_corrio_hoy ? '✅' : '⏳'}</div>
+          <div className="admin-stat-value" style={{ fontSize: 22 }}>
+            {datos.cobranza_corrio_hoy ? 'Sí' : 'Todavía no'}
+          </div>
+          <div className="admin-stat-label">La cobranza corrió hoy</div>
+        </div>
+      </div>
+
+      <h3>Últimos días</h3>
+      {datos.dias.length === 0 ? (
+        <p className="admin-stat-label">
+          Todavía no hay ninguna llamada registrada. Si el cron externo sigue configurado,
+          debería aparecer aquí en cuanto vuelva a correr.
+        </p>
+      ) : (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Día</th>
+              <th className="col-num">Llamadas</th>
+              <th>Última</th>
+              <th>Cobranza</th>
+              <th>Qué hizo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {datos.dias.map((d) => (
+              <tr key={d.dia}>
+                <td>{d.dia}{d.dia === datos.hoy_mx ? ' (hoy)' : ''}</td>
+                <td className="col-num" style={{ fontVariantNumeric: 'tabular-nums' }}>{d.llamadas}</td>
+                <td>{hora(d.ultima_llamada)}</td>
+                <td>{d.cobranza_ok ? `✅ ${hora(d.cobranza_a_las)}` : '—'}</td>
+                <td>{resumenCobranza(d.cobranza_resultado)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <p className="admin-stat-label" style={{ marginTop: 'var(--space-4)' }}>
+        Los avisos de partido corren en cada llamada; la cobranza y las mensualidades,
+        una vez al día. La bitácora guarda 120 días.
+      </p>
+    </>
   );
 }
 

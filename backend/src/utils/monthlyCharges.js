@@ -17,6 +17,12 @@ import { HOY_MX } from './sqlDates.js';
 // de dinero significa que si ese cron se cae, se reconfigura mal o nadie se
 // acuerda de él, el club deja de facturar EN SILENCIO.
 //
+// Del lado del cron eso ya está acotado: utils/cronSchedule.js hace que esta
+// función corra UNA vez al día la llamen las veces que la llamen, así que su
+// frecuencia dejó de importar mientras el cron siga vivo. Lo que ese candado
+// NO puede arreglar es que el cron se muera del todo — para eso sigue estando
+// la vía perezosa del panel, y por eso las dos siguen existiendo.
+//
 // Por eso esto se llama desde dos lados —el cron y la carga del panel— y la
 // garantía de no duplicar no vive en el código sino en la base: el índice
 // único parcial idx_club_ledger_auto_cycle (ver config/db.js). Correrla dos

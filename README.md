@@ -56,9 +56,9 @@ van partidas en tres.
 |Transmisiones|95%|Nada abierto|
 |Equipos independientes|90%|Traspaso de dueño: hoy un equipo sin acceso a su cuenta no se puede reclamar|
 |Cuotas del club (equipo → jugador)|88%|Prorrateo de quien entra a media quincena; auditoría del padrón; UI para rotar el link; el pie del estado de cuenta a 1.16:1 de contraste|
-|Cobranza (liga → equipo)|85%|`CURRENT_DATE` sin corregir en `billingReminders.js`; cobro en línea|
+|Cobranza (liga → equipo)|88%|Cobro en línea. La zona horaria se cerró el 2026-09-19 (eran cuatro lugares, no dos)|
 |Roster de jugadores|85%|Credencial digital con QR|
-|Notificaciones y push|80%|Bandeja propia para jugador/tutor — hoy imposible: `notifications` tiene `CHECK (recipient_type IN ('league','team'))` y los jugadores no tienen cuenta|
+|Notificaciones y push|85%|Bandeja propia para jugador/tutor — hoy imposible: `notifications` tiene `CHECK (recipient_type IN ('league','team'))` y los jugadores no tienen cuenta. Que el recordatorio de cobranza SALGA de la plataforma (correo al tutor) sigue sin construirse|
 |Tiendas y bot de WhatsApp|70% · **0% operativo**|Todo el código está; falta el número de WhatsApp Business, saldo de Anthropic y cubrir `bot_messages` en el Aviso de Privacidad|
 |Monetización (afiliados de viaje)|50%|Vuelo funciona; Hotel no genera comisión sin un `VITE_HOTEL_AFFILIATE_ID` de Booking.com|
 
@@ -82,15 +82,29 @@ van partidas en tres.
 |4 — Ciclo de vida del cliente|15%|Falta el onboarding por correo; `RESEND_API_KEY` ya está configurada, así que es construir los correos|
 |5 — Crecimiento|5%|Página de precios, analítica de conversión, SEO más allá del sitemap|
 
-**Lo que no aparece arriba y sin embargo urge**: nadie sabe cada cuánto corre el
-cron, y desde el cobro automático de él depende que se generen los cargos. No
-tiene porcentaje porque no es una parte a medio construir — es un dato que hay
-que ir a buscar al panel de un proveedor de fuera. Ver "Pendientes abiertos".
+**Lo que no aparece arriba**: nadie sabe cada cuánto corre el cron. No tiene
+porcentaje porque no es una parte a medio construir — es un dato que hay que ir
+a buscar al panel de un proveedor de fuera. Desde el 2026-09-19 ya no es
+urgente: el endpoint aguanta cualquier frecuencia sin romperse (ver "Cadencia
+del cron"), así que dejó de ser la diferencia entre facturar y no facturar. Pero
+sigue abierto, porque un cron MUERTO sigue siendo un cron muerto. Ver
+"Pendientes abiertos".
 
 ## Pendientes abiertos
 
 Solo lo que **falta**. Lo que ya se cerró está en `docs/CHANGELOG.md` con su
 verificación.
+
+- **El mismo desfase de zona horaria sigue vivo en el roster (2026-09-19).**
+  La cobranza ya usa `HOY_MX` de punta a punta, pero `routes/players.js` cierra
+  una membresía con `end_date = CURRENT_DATE` (líneas 177 y 498) y
+  `player_team_memberships.start_date` tiene `DEFAULT CURRENT_DATE`. Con Neon en
+  UTC, una baja registrada después de las 18:00 hora de México queda fechada al
+  día siguiente. No se arregló junto con la cobranza porque no es dinero y
+  porque el `DEFAULT` de la columna es un cambio de esquema con su propio
+  riesgo — pero es el mismo bug y hay que cerrarlo. (`routes/admin.js:39` usa
+  `CURRENT_DATE` para una ventana de analítica de 30 días: ahí seis horas no
+  cambian nada y puede quedarse.)
 
 - **`PUT /manage/teams/:id` no es atómico (2026-09-18).** Son tres escrituras
   sueltas: `UPDATE teams`, `UPDATE organizations` y `syncTeamLinksToMatches()`
@@ -131,14 +145,39 @@ verificación.
   en la superficie oscura, o darle un color que aguante el verde— y no quería
   resolverla a ojo.
 
-- **Nadie sabe cada cuánto corre el cron, y ahora de él depende el dinero.**
-  `POST /api/notifications/trigger` lo llama un servicio **externo al
-  repositorio**: no está en `.github/workflows/`, no hay `render.yaml`, no hay
-  `node-cron`, y su frecuencia no está escrita en ningún archivo del proyecto —
-  vive en el panel de un proveedor de fuera. Hasta ahora eso solo atrasaba
-  avisos; desde el cobro automático, también la generación de cargos. La vía
-  perezosa del panel lo cubre (por eso se construyó así), pero **hay que entrar
-  a ese panel, confirmar que sigue corriendo, y anotar aquí cada cuánto.**
+- **Falta encender el cron del repositorio (2026-09-19).** El trabajo está
+  hecho —`.github/workflows/cron.yml` existe y su script se probó tal cual
+  contra el backend— pero **no corre todavía**, porque le faltan dos secretos
+  que solo se pueden crear desde la interfaz de GitHub (Settings → Secrets and
+  variables → Actions):
+
+  | Secreto | Valor |
+  |---|---|
+  | `CRON_TARGET_URL` | `https://<el-backend>.onrender.com/api/notifications/trigger` |
+  | `CRON_SECRET` | el mismo valor que la variable `CRON_SECRET` del backend |
+
+  El workflow ya se está ejecutando cada 15 minutos (`schedule` se activa solo
+  en cuanto el archivo llega a la rama default), pero mientras falten los
+  secretos **avisa y se sale sin error, sin llamar a nada**. Es a propósito: si
+  fallara, GitHub mandaría un correo cada 15 minutos hasta crearlos. Que no esté
+  configurado se ve donde tiene que verse — la pestaña **Cron** del panel de
+  administración, en 🔴, porque nadie está llamando.
+
+  En cuanto los secretos estén, empieza a llamar de verdad y la pestaña lo
+  muestra. El cron viejo se puede dejar encendido mientras se comprueba —llamar
+  de más es inofensivo por diseño— y apagarlo después, que es lo que cierra de
+  verdad el pendiente de depender del panel de un proveedor que nadie
+  identifica.
+
+  Dos avisos sobre GitHub Actions, para no descubrirlos tarde:
+
+  1. **`schedule` no es puntual.** En horas pico la cola se atrasa y a veces se
+     salta corridas. Se aguanta porque ninguna de las dos mitades depende de la
+     puntualidad (ver "Cadencia del cron"), pero no esperes 96 llamadas exactas.
+  2. **GitHub deshabilita los workflows programados tras 60 días sin actividad
+     en el repositorio.** Si el proyecto se queda quieto dos meses, el cron se
+     apaga solo y GitHub avisa por correo. La pestaña Cron lo pondría en
+     🔴 sin señal.
 
 - **Falta decidir el prorrateo de quien entra a media quincena.** Hoy el ciclo
   le cobra el mes completo a quien esté `activo` al generar, y solo se salta los
@@ -177,15 +216,6 @@ verificación.
   convenga; ninguna es urgente. La razón social ya se eligió: opera José Alfredo
   Reyes Silva como persona física, y CFBAMX es el nombre comercial (ver
   `frontend/src/config/legal.js`).
-- **La zona horaria solo se corrigió en el libro del CLUB.** `CURRENT_DATE` se
-  evalúa en UTC (Neon), seis horas adelante de México: un cargo que vence hoy
-  se marcaba vencido desde las 18:00 del mismo día. Se cambió por
-  `utils/sqlDates.js` (`HOY_MX`) en `routes/playerBilling.js` y en
-  `runPlayerBillingReminders`, pero **`runBillingReminders` (liga → equipo)
-  sigue usando `CURRENT_DATE`** en `utils/billingReminders.js:71,100`. Es el
-  mismo bug y la misma sustitución de una línea; se dejó fuera para no meter el
-  libro de la liga en un cambio del panel del club, y porque toca correr las
-  dos suites e2e antes y después.
 - **Falta UI para rotar el link del estado de cuenta.** El endpoint
   (`POST /teams/:id/members/:memberId/rotate-token`) y el método del cliente
   (`api.rotateMemberShareToken`) existen, pero **ningún componente los llama**:
@@ -267,6 +297,135 @@ verificación.
   que no tienen cuenta en la plataforma) y por cuánto tiempo — hoy esa tabla no
   tiene borrado por antigüedad y crece sin límite.
 
+## Cadencia del cron
+
+Un solo endpoint —`POST /api/notifications/trigger`, con `x-cron-secret`— y
+**dos cadencias**. Se puede llamar con la frecuencia que sea: el endpoint se
+encarga de que cada mitad corra a su ritmo.
+
+| Bloque | Cuándo corre | Qué hace |
+|---|---|---|
+| Partidos | **cada** llamada | Push de "próximo" / "en vivo", y los avisos a la bandeja de la liga de marcador faltante y partido no iniciado |
+| Cobranza | **una vez al día** | `runBillingReminders` (liga→equipo), `runPlayerBillingReminders` (equipo→jugadores) y `runMonthlyChargeGeneration` |
+
+**Por qué no podían compartir cadencia.** Los avisos de partido leen una ventana
+de una hora (`match_date BETWEEN NOW() - 3h AND NOW() + 1h`): con un cron diario,
+casi ningún partido cae dentro y el aviso no se manda nunca. La cobranza es lo
+contrario — con una corrida al día sobra, y más que eso es barrer los dos libros
+completos decenas de veces sin nada nuevo que encontrar. Antes de separarlas una
+de las dos mitades estaba mal servida y, como la frecuencia del cron no se
+conocía, no había forma de saber cuál.
+
+**El candado diario es de la base, no del código** (`utils/cronSchedule.js`),
+mismo criterio que `idx_club_ledger_auto_cycle`: la corrida reclama el día
+insertando su fila en `cron_runs`, que tiene `UNIQUE (phase, ran_on)` y
+`ON CONFLICT DO NOTHING`. Quien no gane la reclamación se salta esas fases. Seis
+llamadas simultáneas dejan exactamente una corriendo; con un `SELECT` y un `if`
+en JS habría ventana de carrera de verdad, y del otro lado de esa ventana está
+la generación de dinero.
+
+Tres detalles de esa mecánica:
+
+- `ran_on` usa `HOY_MX`, no `CURRENT_DATE`. Con Neon en UTC el día se cortaría a
+  las 18:00 hora de México — el mismo desfase que documenta `utils/sqlDates.js`.
+- Una corrida que reclamó y **murió sin terminar** (`finished_at IS NULL` y
+  `started_at` de hace más de 15 min) la retoma la siguiente llamada. Sin eso,
+  un reinicio a media corrida dejaría el día bloqueado hasta la medianoche.
+- Si la tarea diaria lanza, la reclamación **se suelta**, para que el cron
+  reintente hoy mismo y no mañana.
+
+**`?force=1`** vuelve a correr las fases diarias aunque ya hayan corrido hoy. Va
+detrás del mismo `CRON_SECRET` y sirve para probar y para recuperar a mano.
+
+**El candado no sustituye a la vía perezosa del panel.** Acota que el cron corra
+*de más*; no puede hacer nada si el cron se muere del todo. Por eso
+`runMonthlyChargeGeneration` se sigue llamando también desde
+`GET /teams/:id/overview` — ver "La mensualidad se genera sola".
+
+### Quién lo dispara
+
+`.github/workflows/cron.yml`, cada 15 minutos. Vive en el repositorio y no en
+el panel de un proveedor de fuera porque eso era exactamente el problema: nadie
+sabía cuál era ni si seguía corriendo. Aquí queda versionado, se ve en el
+historial y **falla ruidosamente** — si el backend no responde, si el HTTP no es
+200, o si `partidos_error` no viene `null`, el paso sale con error y GitHub
+manda correo.
+
+La única excepción es que falten sus dos secretos (`CRON_TARGET_URL` y
+`CRON_SECRET`, **todavía sin crear** — ver "Pendientes abiertos"): ahí avisa y
+se sale sin error, para no mandar un correo cada 15 minutos mientras se
+configura. `workflow_dispatch` lo dispara a mano desde la pestaña Actions, con
+un input `force`.
+
+El secreto se acepta en **dos formatos**, `x-cron-secret: <secreto>` y
+`Authorization: Bearer <secreto>`. Es el mismo secreto: varios schedulers
+mandan solo el segundo (Vercel Cron entre ellos), y aceptar los dos es lo que
+deja cambiar de proveedor sin tocar el backend.
+
+### ¿Sigue vivo? ¿Cada cuánto corre? — pestaña Cron del panel admin
+
+`GET /api/admin/cron` y la pestaña **Cron** de `/admin` contestan las dos
+preguntas con lo que la propia app registró. Cada llamada al endpoint incrementa
+un contador en `cron_runs` (fila `phase='trigger'`, una por día, con `calls` y
+`last_call_at`). Una fila por día y no una por llamada: con el cron cada 15
+minutos serían ~35 mil filas al año para responder lo mismo.
+
+**La cadencia no se configura, se mide.** 96 llamadas en un día completo son 15
+minutos entre una y otra. Por eso el umbral de "atrasado" tampoco es fijo: sale
+del ritmo observado, `max(2 × cadencia, 90 min)`, con un techo duro de 36 h para
+"sin señal". Así el panel sirve igual con un cron de 15 minutos que con uno
+diario — que era justamente el dato que no se tenía.
+
+| Estado | Cuándo |
+|---|---|
+| 🟢 Corriendo | el silencio cabe en la tolerancia |
+| 🟡 Atrasado | pasó de la tolerancia, pero menos de 36 h |
+| 🔴 Sin señal | más de 36 h sin llamar, o nunca |
+
+La cadencia se estima con el último día **completo**, nunca con el de hoy: hoy
+va a la mitad y daría siempre una frecuencia inventada. La bitácora se poda a
+120 días, desde el bloque diario.
+
+### Las dos mitades ya no se tumban entre sí
+
+La fase de partidos vive en su propia función (`faseDePartidos()`) con su
+try/catch, y su error sube a la respuesta como `partidos_error`. Antes estaba
+todo en línea en el mismo handler, y la **primera** instrucción era
+`ensureVapid()`, que lanza si faltan las variables VAPID: una configuración de
+push incompleta —o cualquier error en los avisos de partido— devolvía 500 y la
+cobranza y la generación de mensualidades no corrían. Dos cosas que no tienen
+nada que ver entre sí.
+
+### Qué devuelve
+
+Es el único rastro que deja este handler, así que trae todo lo que pasó:
+
+```json
+{
+  "ok": true,
+  "llamadas_hoy": 37,
+  "partidos_error": null,
+  "cobranza": {
+    "corrio": true,
+    "motivo": null,
+    "resultado": {
+      "billing_reminders":        { "dueSoon": 0, "overdue": 2 },
+      "player_billing_reminders": { "dueSoon": 1, "overdue": 0 },
+      "monthly_charges_created":  23,
+      "monthly_charges_error":    null,
+      "bitacora_podada":          0
+    }
+  },
+  "monthly_charges_created": 23,
+  "monthly_charges_error": null
+}
+```
+
+`corrio: false` con `motivo: "ya corrió hoy"` es lo normal en toda llamada que no
+sea la primera del día. Las dos claves de la raíz se conservan porque eran lo
+único que esta respuesta decía antes y del otro lado hay un servicio que no
+podemos inspeccionar; valen `null` —no `0`— cuando el bloque diario no corrió.
+
 ## Estructura
 
 ```
@@ -291,7 +450,8 @@ lifa-app/
                               (reemplaza al representante), o sumar un administrador más a una
                               liga/equipo (org_admin, agrega sin reemplazar a nadie)
         admin.js             Endpoints exclusivos para role = 'admin' (incluye aprobar ligas)
-        notifications.js     Suscripción push + endpoint /trigger para el cronjob externo
+        notifications.js     Suscripción push + endpoint /trigger del cron
+                              (dos cadencias en un endpoint — ver "Cadencia del cron")
         players.js           Roster por equipo+rama: alta manual, plantilla de Excel (logos vía
                               exceljs), foto/CURP por jugador, stats de partido y tarjeta pública
         billing.js            Cobranza liga → equipos (ver sección "Cobranza")
@@ -616,9 +776,10 @@ formularios casi idénticos que se desincronizan en cuanto se toca uno.
 
 ### Recordatorios
 
-`utils/billingReminders.js` (`runBillingReminders`) se ejecuta al final de
-`POST /api/notifications/trigger` — el mismo cron externo que ya manda los avisos de
-partidos, sin configuración nueva. Solo corre para ligas con
+`utils/billingReminders.js` (`runBillingReminders`) se ejecuta en el bloque
+**diario** de `POST /api/notifications/trigger` — el mismo cron externo que ya
+manda los avisos de partidos, sin configuración nueva. Una vez al día lo llamen
+las veces que lo llamen; ver "Cadencia del cron". Solo corre para ligas con
 `billing_reminders_enabled = TRUE`. Cadencia fija: "por vencer" una vez cuando
 faltan ≤3 días; "vencido" cada 3 días, hasta 4 veces. Todo va a la bandeja in-app
 del equipo (tabla `notifications`, tipos `billing_charge_new` / `billing_due_soon` /
@@ -917,10 +1078,11 @@ recalcula.
 
 ### Recordatorios
 
-`utils/billingReminders.js` ahora exporta **dos** funciones, llamadas ambas al
-final de `POST /api/notifications/trigger`: la de siempre (liga→equipo) y
-`runPlayerBillingReminders`. Misma cadencia (por vencer una vez a ≤3 días;
-vencido cada 3 días, hasta 4 veces) y mismas banderas por fila.
+`utils/billingReminders.js` ahora exporta **dos** funciones, llamadas ambas en
+el bloque **diario** de `POST /api/notifications/trigger` (ver "Cadencia del
+cron"): la de siempre (liga→equipo) y `runPlayerBillingReminders`. Misma
+cadencia (por vencer una vez a ≤3 días; vencido cada 3 días, hasta 4 veces) y
+mismas banderas por fila.
 
 La diferencia: el aviso va **agregado, uno por equipo y por corrida**
 ("3 jugadores tienen cuotas vencidas — $2,400 en total"), no uno por movimiento.

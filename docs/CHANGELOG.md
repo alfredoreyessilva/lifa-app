@@ -15,6 +15,166 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El cron dejó de ser una caja negra: vive en el repo y se ve en el panel
+  (2026-09-19)**: era el pendiente más viejo de esta lista — `POST
+  /api/notifications/trigger` lo llamaba un servicio externo cuya frecuencia no
+  estaba escrita en ningún archivo, y la única forma de saber si seguía vivo era
+  entrar al panel de un proveedor que nadie recordaba cuál era. Se atacó por los
+  dos lados.
+
+  **Se ve desde adentro.** La app registra ahora **cada** llamada: una fila por
+  día en `cron_runs` con un contador (`calls`, `last_call_at`), no una fila por
+  llamada — con el cron cada 15 minutos serían ~35 mil filas al año para
+  responder lo mismo. Con eso, `GET /api/admin/cron` y una pestaña nueva **Cron**
+  en el panel de administración contestan las dos preguntas: *¿sigue vivo?* y
+  *¿cada cuánto corre?*
+
+  La cadencia **no se configura, se mide**: 96 llamadas en un día completo son
+  15 minutos entre una y otra. Por eso el umbral de "atrasado" tampoco es un
+  número fijo — sale del ritmo observado (`max(2 × cadencia, 90 min)`), con un
+  techo duro de 36 h para "sin señal". Así el panel sirve igual si el cron corre
+  cada 15 minutos que si corre una vez al día, que era justo el dato que no se
+  tenía. La bitácora se poda a 120 días desde el bloque diario.
+
+  **Y deja de depender de un panel ajeno.** `.github/workflows/cron.yml` llama al
+  endpoint cada 15 minutos, con `workflow_dispatch` (y un input `force`) para
+  dispararlo a mano. Falla ruidosamente si el backend no responde, si el HTTP no
+  es 200, o si `partidos_error` no es `null` — así GitHub manda correo en vez de
+  que el fallo se quede en un log que nadie abre. La excepción son sus dos
+  secretos (`CRON_TARGET_URL` y `CRON_SECRET`, que **faltan por crear**): si no
+  están, avisa y se sale sin error. `schedule` se activa solo en cuanto el
+  archivo llega a la rama default, así que fallar ahí serían correos de GitHub
+  cada 15 minutos hasta configurarlo; que no esté configurado se ve en la
+  pestaña Cron, en rojo, que es donde tiene que verse.
+
+  GitHub no garantiza puntualidad en `schedule`, y se aguanta porque ninguna de
+  las dos mitades depende de ella (ver "Cadencia del cron").
+
+  El cron viejo se puede dejar corriendo mientras tanto — llamar de más es
+  inofensivo por diseño — y apagarlo cuando la pestaña muestre las llamadas del
+  nuevo.
+
+  De paso, el endpoint acepta el secreto en **dos formatos**: `x-cron-secret`,
+  el de siempre, y `Authorization: Bearer`. Es el mismo secreto; varios
+  schedulers mandan solo el segundo (Vercel Cron entre ellos), y aceptar los dos
+  es lo que deja cambiar de proveedor sin tocar el backend. Se agregó también la
+  guarda de que `CRON_SECRET` exista: sin ella, con la variable sin definir los
+  dos lados eran `undefined` y cualquiera podía disparar el cron.
+
+  Verificado contra una rama de Neon (`pruebas-cron-salud`, ya borrada) y en el
+  navegador. El contador sube 1→2→3 en llamadas sucesivas; `Authorization:
+  Bearer` entra y un secreto malo da 401, igual que sin header. Los cinco
+  estados del panel, uno por uno: con cadencia de 15 min, 89 minutos de silencio
+  son `ok`, 91 son `atrasado` y 37 h son `sin_señal`; con cadencia diaria, 20 h
+  y 35 h siguen siendo `ok` y 37 h no; la bitácora vacía es `sin_señal`. El
+  script del workflow corrido tal cual contra el backend local: 200, `?force=1`,
+  y salida 1 con anotación `::error::` cuando el secreto es malo. La pestaña
+  revisada en el navegador en sus dos estados (🟢 Corriendo y 🟡 Atrasado). Las
+  dos suites e2e **21 ok / 0 fallas** y **40 ok / 0 fallas**; 54 unitarias del
+  backend y 81 del frontend en verde.
+
+  **Dos defectos que salieron al probar en el navegador y se arreglaron**:
+  `HOY_MX` devuelve un `DATE` que `pg` convierte a `Date` de JS, así que
+  `String(d).slice(0,10)` daba `"Sat Sep 19"` y nunca casaba con el
+  `to_char(…, 'YYYY-MM-DD')` de la otra consulta — el panel decía "0 llamadas
+  hoy" con cuatro llamadas registradas, y estimaba la cadencia con el día en
+  curso. Y la última columna de la tabla usaba `--ws-ink-dim` sobre el verde de
+  la cancha, el mismo problema de contraste que el README ya tiene anotado para
+  el pie del estado de cuenta público.
+
+- **El libro liga→equipo llevaba seis horas al día dando cargos por vencidos
+  (2026-09-19)**: `utils/sqlDates.js` existe desde que se descubrió que
+  `CURRENT_DATE` se evalúa en la zona del servidor y Neon corre en UTC, seis
+  horas adelante. Pero esa corrección se aplicó **solo al libro
+  equipo→jugadores**: el de liga→equipo se quedó con `CURRENT_DATE` en cuatro
+  lugares, así que los dos libros no estaban de acuerdo en qué día era.
+
+  Efecto concreto, medido contra la base: un cargo que vence el 19 se contaba
+  como **vencido desde las 18:00 hora de México del día 19**. Seis horas
+  diarias, todos los días, en las que el equipo veía "vencido" en su estado de
+  cuenta el mismo día que le tocaba pagar — y, si la liga tenía los
+  recordatorios encendidos, recibía el aviso 🔴 "Cargo vencido" esa misma tarde.
+
+  Los cuatro lugares: las dos consultas de `utils/billingReminders.js`
+  (por vencer y vencido) y los dos KPI de `overdue_charges` de
+  `routes/billing.js` — el del panel de cobranza de la liga y el del estado de
+  cuenta del equipo. Los cuatro pasaron a `HOY_MX`. **El frontend no se tocó
+  porque no calcula nada**: pinta el `overdue_amount` que le manda el backend,
+  así que el valor se cambió en el único lado que lo produce.
+
+  Para que no se vuelva a separar, las dos expresiones de fecha
+  (`DUE_SOON_WINDOW` y `OVERDUE_WINDOW`) subieron al principio de
+  `billingReminders.js` y ahora **las comparten los dos libros**, en vez de
+  tener una copia cada uno — que es exactamente cómo se separaron. Es el mismo
+  argumento que ya justificaba `sqlDates.js`, aplicado un nivel más arriba.
+
+  Verificado contra una rama de Neon (`pruebas-tz-cobranza`, ya borrada). Las
+  dos expresiones evaluadas en instantes fijos delimitan la ventana del bug:
+  coinciden a las 17:59 hora de México y discrepan de las 18:00 a las 23:59.
+  Con tres cargos sembrados en la frontera (venció ayer / vence hoy / vence
+  mañana), el KPI suma **solo el de ayer**, y una corrida real del cron
+  clasifica `{dueSoon: 2, overdue: 1}` y escribe los tres avisos correctos en
+  la bandeja del equipo. Las dos suites e2e: **21 ok / 0 fallas** y **40 ok / 0
+  fallas**. 54 pruebas unitarias en verde.
+
+  **Queda fuera, a propósito**: `routes/players.js` cierra una membresía con
+  `end_date = CURRENT_DATE` (dos lugares) y `player_team_memberships.start_date`
+  tiene `DEFAULT CURRENT_DATE`. Es el mismo desfase, pero en el roster y no en
+  el dinero: una baja registrada a las 7 pm queda fechada mañana. Anotado en
+  "Pendientes abiertos".
+
+- **El cron dejó de mezclar dos cadencias incompatibles (2026-09-19)**: `POST
+  /api/notifications/trigger` hacía en la misma corrida dos trabajos que piden
+  ritmos opuestos. Los avisos de partido leen una ventana de una hora
+  (`match_date BETWEEN NOW() - 3h AND NOW() + 1h`), así que con un cron diario
+  casi ningún partido cae dentro y el aviso **no se manda nunca**. La cobranza y
+  la generación de mensualidades, al revés, con una corrida al día sobran: más
+  que eso es barrer los dos libros completos decenas de veces sin nada nuevo que
+  encontrar. Como el cron es externo al repositorio y **su frecuencia no se
+  conoce** (sigue en "Pendientes abiertos"), una de las dos mitades llevaba
+  tiempo mal servida y no había forma de saber cuál.
+
+  Ahora el endpoint sigue siendo uno solo y sigue siendo seguro llamarlo con la
+  frecuencia que sea: los avisos de partido corren en **cada** llamada y las tres
+  fases de dinero corren **una vez al día**. La garantía es de la base y no del
+  código, mismo criterio que `idx_club_ledger_auto_cycle`: la corrida diaria
+  reclama el día insertando su fila en la tabla nueva `cron_runs`
+  (`UNIQUE (phase, ran_on)` + `ON CONFLICT DO NOTHING`), y quien no gane la
+  reclamación se salta esas fases. `ran_on` usa `HOY_MX` y no `CURRENT_DATE`,
+  o el día se cortaría a las 18:00 hora local. Una corrida que reclamó y murió
+  sin terminar (`finished_at IS NULL`, `started_at` de hace más de 15 min) la
+  retoma la siguiente llamada, así que un reinicio a media corrida no bloquea el
+  día hasta la medianoche. `?force=1`, detrás del mismo `CRON_SECRET`, vuelve a
+  correr las fases diarias a mano.
+
+  **Lo que de verdad estaba roto era otra cosa, y salió al separar**: la fase de
+  partidos empezaba con `ensureVapid()`, que **lanza** si faltan las variables
+  VAPID, y era la primera línea del handler. O sea que una configuración de push
+  incompleta —o cualquier error en los avisos de partido— devolvía 500 y la
+  cobranza y la generación de mensualidades **no corrían**, dos cosas que no
+  tienen nada que ver con push. Comprobado contra la rama de Neon, no leyendo el
+  código: con el código viejo y sin llaves VAPID, `POST /trigger` da **HTTP 500**
+  y no factura nada; con el nuevo da 200, reporta `partidos_error` y la cobranza
+  corre igual. La fase de partidos vive ahora en su propia función
+  (`faseDePartidos()`) con su try/catch, y el error **sube a la respuesta** en
+  vez de quedarse en un `console.error`: es el único rastro que este handler deja
+  para un servicio de cron que no podemos inspeccionar. Por lo mismo, la
+  respuesta ahora incluye los conteos de los dos libros de recordatorios, que
+  antes se descartaban (`await runBillingReminders(db)` sin asignar).
+
+  Esto **no** cierra el pendiente de la frecuencia del cron —sigue habiendo que
+  entrar a ese panel— pero sí deja de ser la diferencia entre facturar y no
+  facturar. La vía perezosa del panel sigue existiendo por la razón de siempre:
+  el candado diario acota que el cron corra **de más**, no que se muera del todo.
+
+  Verificado contra una rama de Neon (`pruebas-cron-cadencia`, ya borrada):
+  primera llamada corre y la segunda se salta; `?force=1` vuelve a correr; **6
+  llamadas en paralelo dejan exactamente una** con `corrio: true`; una corrida
+  marcada como muerta hace 20 min se retoma y una de hace 2 min no; secreto
+  equivocado sigue dando 401. Las dos suites e2e de cobranza después del cambio:
+  **40 ok / 0 fallas** y **21 ok / 0 fallas**. 54 pruebas unitarias del backend
+  en verde.
+
 - **Los datos legales quedaron llenos y `/terminos` volvió a existir (2026-09-19)**: los
   cuatro campos de `frontend/src/config/legal.js` llevaban vacíos desde que se centralizaron el
   2026-09-16, y con `LEGAL_DATA_READY` en `false` la ruta `/terminos` no existía y su enlace no
