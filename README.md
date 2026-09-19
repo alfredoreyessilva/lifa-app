@@ -153,8 +153,18 @@ verificación.
 
   | Secreto | Valor |
   |---|---|
-  | `CRON_TARGET_URL` | `https://<el-backend>.onrender.com/api/notifications/trigger` |
-  | `CRON_SECRET` | el mismo valor que la variable `CRON_SECRET` del backend |
+  | `CRON_TARGET_URL` | `https://lifa-backend-p0hq.onrender.com/api/notifications/trigger` |
+  | `CRON_SECRET` | el mismo valor que la variable `CRON_SECRET` **del servicio en Render** |
+
+  Los dos son secretos **del repositorio en GitHub**, no del `.env`: el workflow
+  corre en los servidores de GitHub y `backend/.env` está en `.gitignore`, así
+  que nunca lo ve. `CRON_TARGET_URL` además el backend no la lee nunca — es
+  solo para decirle al workflow a dónde llamar.
+
+  Ojo con el segundo: tiene que coincidir con lo que tiene **Render**, no con
+  lo que tengas en tu `.env` local. Si difieren, el workflow da 401 cada 15
+  minutos. Y si `CRON_SECRET` no está definida en Render, el endpoint rechaza
+  todo — esa guarda se agregó el 2026-09-19.
 
   El workflow ya se está ejecutando cada 15 minutos (`schedule` se activa solo
   en cuanto el archivo llega a la rama default), pero mientras falten los
