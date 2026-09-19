@@ -75,6 +75,33 @@ jobs:
             exit 0
           fi
 
+          # Los secretos los pega una persona, y pegar arrastra espacios y
+          # saltos de línea con una facilidad pasmosa — sobre todo copiando de
+          # un bloque de código o de una tabla. Las consecuencias no se parecen
+          # en nada a su causa: un salto de linea al final de la URL da
+          # "curl: (3) URL rejected: Malformed input to a URL function", y uno
+          # al final del secreto da un 401 que parece un secreto equivocado.
+          # Por eso se limpian antes de usarlos, en vez de confiar en que quien
+          # los pegó no haya arrastrado nada.
+          #
+          # En la URL se borra TODO espacio: una URL no puede llevar ninguno.
+          # En el secreto solo los de las puntas, por si alguno los tuviera de
+          # verdad en medio.
+          URL="$(printf '%s' "$URL" | tr -d '[:space:]')"
+          SECRET="${SECRET#"${SECRET%%[![:space:]]*}"}"
+          SECRET="${SECRET%"${SECRET##*[![:space:]]}"}"
+
+          # Si aun así no parece una URL, se dice QUÉ está mal. El error de
+          # curl no menciona el secreto por ningún lado y manda a buscar al
+          # lugar equivocado.
+          case "$URL" in
+            https://*|http://*) ;;
+            *)
+              echo "::error::CRON_TARGET_URL no parece una URL. Debe empezar con https:// y"                    "no llevar comillas, acentos graves ni espacios. Vuelve a pegarla en"                    "Settings → Secrets and variables → Actions."
+              exit 1
+              ;;
+          esac
+
           destino="$URL"
           if [ "${FORCE:-false}" = "true" ]; then
             destino="${destino}?force=1"
