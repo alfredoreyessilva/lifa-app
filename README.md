@@ -26,6 +26,67 @@ Las reglas de trabajo (nunca probar contra producción, los libros de dinero son
 append-only, se resuelve al leer y no se migra) están en
 [`CLAUDE.md`](CLAUDE.md).
 
+## Qué tan avanzado está cada parte (2026-09-19)
+
+Una foto de dónde está el proyecto, para no tener que reconstruirla leyendo las
+dos mil líneas de abajo. Aquí solo está el **tamaño** de lo que falta; el
+detalle de cada pendiente vive en "Pendientes abiertos" y en la sección de su
+dominio.
+
+**Qué mide el porcentaje.** Qué tanto está terminado del **alcance declarado**
+de esa parte, no de todo lo imaginable. Un 95% no dice que ya no se pueda
+construir nada más ahí: dice que lo que esta versión se propuso hacer está
+hecho y que lo que queda está anotado y es chico. Lo que se decidió dejar fuera
+—el "Fuera de esta versión" de cada sección— **no cuenta como faltante**, o
+todo quedaría en 40% para siempre. Son números a ojo, puestos y actualizados a
+mano: cuando una parte se mueva, se mueve también su renglón.
+
+**La lectura de una línea: el producto está construido, el negocio no.** Nueve
+dominios funcionales están terminados o casi, y lo que impide cobrar —pasarela
+de pago e infraestructura que no se duerma— no es código. Por eso las tablas
+van partidas en tres.
+
+### Dominios funcionales
+
+|Parte|%|Lo que falta|
+|-|-|-|
+|Calendarios y estructura (liga → torneo → categoría → rama → partido)|95%|QA visual de `TournamentMatchesPanel`|
+|Tabla de posiciones y modelo de competencia|90%|Configurar ONEFA (captura, no código); `computeQualification` con criterios fijos|
+|Predicciones y quinielas|95%|Nada abierto; lo demás se dejó fuera a propósito|
+|Transmisiones|95%|Nada abierto|
+|Equipos independientes|90%|Traspaso de dueño: hoy un equipo sin acceso a su cuenta no se puede reclamar|
+|Cuotas del club (equipo → jugador)|88%|Prorrateo de quien entra a media quincena; auditoría del padrón; UI para rotar el link; el pie del estado de cuenta a 1.16:1 de contraste|
+|Cobranza (liga → equipo)|85%|`CURRENT_DATE` sin corregir en `billingReminders.js`; cobro en línea|
+|Roster de jugadores|85%|Credencial digital con QR|
+|Notificaciones y push|80%|Bandeja propia para jugador/tutor — hoy imposible: `notifications` tiene `CHECK (recipient_type IN ('league','team'))` y los jugadores no tienen cuenta|
+|Tiendas y bot de WhatsApp|70% · **0% operativo**|Todo el código está; falta el número de WhatsApp Business, saldo de Anthropic y cubrir `bot_messages` en el Aviso de Privacidad|
+|Monetización (afiliados de viaje)|50%|Vuelo funciona; Hotel no genera comisión sin un `VITE_HOTEL_AFFILIATE_ID` de Booking.com|
+
+### Plataforma
+
+|Parte|%|Lo que falta|
+|-|-|-|
+|Páginas legales|**100%**|Cerrado el 2026-09-19: los cuatro datos llenos, `/terminos` publicado y el Aviso completo|
+|Seguridad|75%|Los roles de organización no se distinguen y ya hay dinero de por medio; rotar `CLOUDINARY_API_SECRET`; invitaciones que no caducan; nada impide escribir en producción desde local|
+|Pruebas automatizadas|40%|Las 135 cubren **solo funciones puras**. Todo `routes/` empieza consultando Postgres y no está cubierto en el CI — auth incluido. Las dos e2e de cobranza se corren a mano|
+|Concentración de archivos|sin urgencia|Cinco archivos concentran demasiado; solo `db.js` tiene techo real (9s de arranque). Ver "Pendientes conocidos"|
+
+### Roadmap de negocio, por fase
+
+|Fase|%|Qué la mueve|
+|-|-|-|
+|0 — Cerrar lo que estaba a medias|70%|Solo esperar tráfico para volver a pedir revisión a Booking.com|
+|1 — Fundación de confiabilidad|80%|Subieron las legales a ✅. Quedan el plan de pago de Render/Neon y rotar el secreto de Cloudinary|
+|2 — Automatizar el cobro|**0%**|No hay ninguna pasarela instalada. Es el bloqueador de fondo y el punto de no retorno: en cuanto una liga cobra por la plataforma, no se va|
+|3 — Red de seguridad técnica|40%|135 pruebas y CI hechos; falta probar lo que toca la base, monitoreo de uptime y que el CI bloquee el deploy|
+|4 — Ciclo de vida del cliente|15%|Falta el onboarding por correo; `RESEND_API_KEY` ya está configurada, así que es construir los correos|
+|5 — Crecimiento|5%|Página de precios, analítica de conversión, SEO más allá del sitemap|
+
+**Lo que no aparece arriba y sin embargo urge**: nadie sabe cada cuánto corre el
+cron, y desde el cobro automático de él depende que se generen los cargos. No
+tiene porcentaje porque no es una parte a medio construir — es un dato que hay
+que ir a buscar al panel de un proveedor de fuera. Ver "Pendientes abiertos".
+
 ## Pendientes abiertos
 
 Solo lo que **falta**. Lo que ya se cerró está en `docs/CHANGELOG.md` con su
@@ -601,10 +662,10 @@ club" más abajo), pero en una tabla hermana (`club_ledger_entries`), no en esta
 aquí `league_id`/`team_id` son `NOT NULL`, los índices están afinados para
 liga→equipo y `billingReminders.js` barre esta tabla completa. Lo que se reusó
 fue el modelo — append-only, cancelación por reversa, saldo calculado — no las
-filas. Dos cosas que allá sí existen y aquí siguen pendientes: **el pagador
-reporta su pago con comprobante** y el cobrador lo confirma, y una pasada de
-estilo al panel (`BillingLeaguePanel` ya puede adoptar `.data-table`,
-`ConfirmDialog` y `LedgerEntryList`, que nacieron para el panel del equipo).
+filas. El préstamo terminó yendo en las dos direcciones: la conciliación nació
+aquí y se reusó allá, y las piezas de interfaz (`.data-table`, `ConfirmDialog`,
+`LedgerEntryList`, `utils/money.js`) nacieron allá y se adoptaron aquí. Hoy los
+dos libros tienen las dos cosas — son los dos puntos tachados de arriba.
 
 ## Cuotas del club (equipo → jugadores)
 
