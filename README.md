@@ -222,6 +222,26 @@ verificación.
   que pide la cola sin señal — recibe **la lista completa**, es idempotente de
   nacimiento y tolera que el roster haya cambiado entre la captura y el envío.
 
+- **Capturar sin señal no está probado en un teléfono (2026-09-20).** La capa
+  está construida y la receta completa del README corrió de punta a punta contra
+  la compilación real, pero con **Chromium y el modo offline de Playwright**:
+  eso apaga la red, y no mata la pestaña, ni se queda sin batería, ni tiene al
+  administrador de memoria de Android cerrando la app a media captura. Que es
+  justo el escenario para el que existe todo esto.
+
+  Es verificación, no código, y pide un teléfono de verdad en una cancha de
+  verdad. Dos cosas que conviene tener listas antes de esa prueba:
+
+  1. **La app no se instala bien en iPhone.** El `manifest.webmanifest` declara
+     un solo icono SVG y **no hay `apple-touch-icon`**; iOS ignora los iconos del
+     manifest y usa esa etiqueta. En Android/Chrome la instalación sí funciona.
+     Una app instalada aguanta mucho mejor que una pestaña, así que esto no es
+     cosmético para el caso de la cancha.
+  2. **El riesgo que no se puede tapar sigue ahí** (ver "Capturar sin señal"):
+     mientras no suben, las capturas viven solo en ese teléfono. La pantalla lo
+     dice y el navegador avisa al salir, pero nada de eso se ha visto en manos
+     de alguien que no escribió el código.
+
 - **El pase de lista no tiene suite e2e (2026-09-20).** Sus rutas se probaron a
   mano contra la rama de Neon —los cinco casos del `PUT` (marcar, reintentar,
   corregir, jugador ajeno, lista vacía) y las cuatro fronteras de permiso— y el
