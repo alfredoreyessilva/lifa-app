@@ -6,7 +6,7 @@ import { authRequired } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isNonEmptyString, isValidUrl, isValidEmail } from '../utils/validation.js';
 import { isOrgMember } from '../utils/orgMembers.js';
-import { teamOwnerRequired } from '../middleware/ownership.js';
+import { teamClubRequired } from '../middleware/ownership.js';
 import { publicStatementLimiter, reportPaymentLimiter } from '../middleware/rateLimit.js';
 import { ensureCloudinaryConfigured, uploadBufferToCloudinary } from '../utils/cloudinary.js';
 import { HOY_MX } from '../utils/sqlDates.js';
@@ -150,8 +150,8 @@ async function membersOfTeam(teamId, memberIds) {
 
 // Acceso a un movimiento por su id. No hay id de equipo en la URL, así que se
 // resuelve el equipo desde el movimiento y se repite el criterio de
-// teamOwnerRequired (org del equipo, org de la liga, dueño de cualquiera de
-// las dos, o admin de plataforma).
+// teamClubRequired: la organización DEL EQUIPO, su dueño, o admin de
+// plataforma. La liga no, que es el punto.
 async function assertEntryAccess(req, res, entryId) {
   const entry = await db.prepare('SELECT * FROM club_ledger_entries WHERE id = ?').get(entryId);
   if (!entry) {
@@ -163,23 +163,23 @@ async function assertEntryAccess(req, res, entryId) {
     res.status(404).json({ error: 'Equipo no encontrado' });
     return null;
   }
-  const league = team.league_id
-    ? await db.prepare('SELECT * FROM leagues WHERE id = ?').get(team.league_id)
-    : null;
 
-  const isTeamMember   = await isOrgMember(req.user.id, team.organization_id);
-  const isLeagueMember = league ? await isOrgMember(req.user.id, league.organization_id) : false;
+  // Un movimiento del libro del club es del club. La liga no entra por aquí,
+  // igual que no entra por teamClubRequired: confirmar o cancelar un pago de
+  // una familia es exactamente la clase de acceso que el modelo le quitó
+  // (README, "Roles y fronteras de información"). Antes sí entraba, por dos
+  // caminos — membresía en la organización de la liga y owner_user_id de la
+  // liga—, y los dos se fueron.
+  const isTeamMember = await isOrgMember(req.user.id, team.organization_id);
 
   if (
     req.user.role === 'admin' ||
     isTeamMember ||
-    isLeagueMember ||
-    team.owner_user_id === req.user.id ||
-    (league && league.owner_user_id === req.user.id)
+    team.owner_user_id === req.user.id
   ) {
     return { entry, team };
   }
-  res.status(403).json({ error: 'No tienes permiso sobre esta cobranza' });
+  res.status(403).json({ error: 'El padrón y las cuotas de este equipo solo los administra el equipo' });
   return null;
 }
 
@@ -217,7 +217,7 @@ function normalizeChargeItems(body) {
 
 // ─── Panorama del equipo ────────────────────────────────────────────────────
 
-router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.get('/teams/:id/overview', authRequired, teamClubRequired, asyncHandler(async (req, res) => {
 
   const teamId = req.team.id;
 
@@ -227,7 +227,7 @@ router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(
   // que el cargo del mes exista. Es la misma función idempotente que llama el
   // cron, así que no puede duplicar nada (ver utils/monthlyCharges.js).
   //
-  // El pre-chequeo es gratis: teamOwnerRequired ya trajo la fila completa del
+  // El pre-chequeo es gratis: teamClubRequired ya trajo la fila completa del
   // equipo, así que un club con el ciclo apagado —la mayoría— no paga ni una
   // consulta extra.
   //
@@ -384,7 +384,7 @@ router.get('/teams/:id/overview', authRequired, teamOwnerRequired, asyncHandler(
 }));
 
 // Libro de un jugador, visto por el club.
-router.get('/teams/:id/members/:memberId/entries', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.get('/teams/:id/members/:memberId/entries', authRequired, teamClubRequired, asyncHandler(async (req, res) => {
   const teamId = req.team.id;
   const memberId = Number(req.params.memberId);
 
@@ -410,7 +410,7 @@ router.get('/teams/:id/members/:memberId/entries', authRequired, teamOwnerRequir
 
 // ─── Crear cargos ───────────────────────────────────────────────────────────
 
-router.post('/teams/:id/charges', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.post('/teams/:id/charges', authRequired, teamClubRequired, asyncHandler(async (req, res) => {
   const teamId = req.team.id;
 
   const metaErr = validateChargeMeta(req.body);
@@ -476,7 +476,7 @@ router.post('/teams/:id/charges', authRequired, teamOwnerRequired, asyncHandler(
 // routes/billing.js) es otro libro y se queda.
 // ─── Registrar un pago recibido (lo captura el club) ────────────────────────
 
-router.post('/teams/:id/members/:memberId/payments', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.post('/teams/:id/members/:memberId/payments', authRequired, teamClubRequired, asyncHandler(async (req, res) => {
   const teamId = req.team.id;
   const memberId = Number(req.params.memberId);
 
@@ -604,7 +604,7 @@ function parseJersey(value) {
   return Number.isInteger(n) && n >= 0 && n <= 999 ? n : undefined; // undefined = inválido
 }
 
-router.post('/teams/:id/members', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.post('/teams/:id/members', authRequired, teamClubRequired, asyncHandler(async (req, res) => {
   const teamId = req.team.id;
   const {
     display_name, birth_date, position, jersey_number, photo_url, curp,
@@ -691,7 +691,7 @@ router.post('/teams/:id/members', authRequired, teamOwnerRequired, asyncHandler(
 // campos que vinieron en el cuerpo — así el botón de WhatsApp puede mandar
 // únicamente { mark_reminded: true } sin borrar el resto con NULLs.
 
-router.patch('/teams/:id/members/:memberId', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.patch('/teams/:id/members/:memberId', authRequired, teamClubRequired, asyncHandler(async (req, res) => {
   const teamId = req.team.id;
   const memberId = Number(req.params.memberId);
 
@@ -787,7 +787,7 @@ router.patch('/teams/:id/members/:memberId', authRequired, teamOwnerRequired, as
 // usuario) antes de atreverse a borrar su fila de `players`. Ya no: el miembro
 // del club es una fila que solo le pertenece a este club. Borrarlo aquí no
 // puede tocar el roster de ningún torneo, porque no comparten nada.
-router.delete('/teams/:id/members/:memberId', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.delete('/teams/:id/members/:memberId', authRequired, teamClubRequired, asyncHandler(async (req, res) => {
   const teamId = req.team.id;
   const memberId = Number(req.params.memberId);
 
@@ -821,7 +821,7 @@ router.delete('/teams/:id/members/:memberId', authRequired, teamOwnerRequired, a
 //
 // A quien ya está en el padrón se le salta (por CURP si lo hay, si no por
 // nombre + apellido), así que se puede correr dos veces sin duplicar a nadie.
-router.post('/teams/:id/members/import-roster', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.post('/teams/:id/members/import-roster', authRequired, teamClubRequired, asyncHandler(async (req, res) => {
   const teamId = req.team.id;
   const branchId = req.body?.branch_id ? Number(req.body.branch_id) : null;
   const groupLabel = cleanText(req.body?.group_label, 40);
@@ -886,7 +886,7 @@ router.post('/teams/:id/members/import-roster', authRequired, teamOwnerRequired,
 
 // Regenerar el link del papá (si se filtró en un grupo equivocado). El token
 // viejo deja de funcionar en cuanto se reemplaza.
-router.post('/teams/:id/members/:memberId/rotate-token', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.post('/teams/:id/members/:memberId/rotate-token', authRequired, teamClubRequired, asyncHandler(async (req, res) => {
   const teamId = req.team.id;
   const memberId = Number(req.params.memberId);
 
@@ -911,7 +911,7 @@ router.post('/teams/:id/members/:memberId/rotate-token', authRequired, teamOwner
 // Antes esto hacía Boolean(req.body?.player_billing_reminders_enabled) sin
 // preguntar si la clave venía: en cuanto el panel mandó el interruptor del
 // ciclo mensual, ese mismo PATCH apagaba los recordatorios en silencio.
-router.patch('/teams/:id/settings', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.patch('/teams/:id/settings', authRequired, teamClubRequired, asyncHandler(async (req, res) => {
   const {
     player_billing_reminders_enabled: recordatorios,
     monthly_charge_enabled: cicloActivo,

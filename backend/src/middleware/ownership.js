@@ -129,6 +129,68 @@ export const teamOwnerRequired = asyncHandler(async (req, res, next) => {
   return res.status(403).json({ error: 'No tienes permiso sobre este equipo' });
 });
 
+// Da acceso al DOMINIO DEL CLUB de un equipo: su padrón (`club_members`) y sus
+// cuotas (`club_ledger_entries`). Es la guarda que NO deja entrar a la liga, y
+// ahí está toda su razón de ser.
+//
+// La diferencia con `teamOwnerRequired` es deliberada y es el corazón del
+// modelo (README, "Roles y fronteras de información"): una liga administra el
+// perfil, el roster y el calendario de sus equipos —para eso sigue existiendo
+// la otra guarda—, pero el padrón del club no lo ve nunca, en ningún estado
+// del equipo. Ahí viven CURP, fecha de nacimiento, foto, contacto del tutor y
+// el `share_token` de cada familia, de gente en buena parte menor de edad; y
+// ese token ES la credencial del estado de cuenta, así que filtrarlo es dar
+// acceso, no solo mostrar un dato.
+//
+// Antes del permiso hay una pregunta más temprana: si el equipo todavía no ha
+// sido entregado, las cuotas del club **no están encendidas** y se responde
+// 409, no 403. No es un problema de quién pregunta —es que la función no
+// existe todavía para ese equipo—. Un 403 le diría a la liga "no tienes
+// permiso" y la dejaría buscando cuál conseguir, cuando lo que hay que hacer
+// es entregar el equipo a su representante. Y de paso es lo que garantiza que
+// la liga nunca llegue a ver un padrón: antes de la entrega no existe ninguno.
+export const teamClubRequired = asyncHandler(async (req, res, next) => {
+  const teamId = Number(req.params.id || req.params.teamId);
+  const team = await db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId);
+  if (!team) return res.status(404).json({ error: 'Equipo no encontrado' });
+
+  // "Entregado" se pregunta por las dos vías a propósito. La definitiva es
+  // tener miembros en la organización del equipo; `owner_user_id` es el
+  // respaldo de siempre (mismo patrón que el resto de este archivo) y hoy
+  // hace falta de verdad, porque reclamar un equipo todavía solo llena esa
+  // columna sin dar de alta a nadie en organization_members. Cuando la
+  // entrega puebla la organización, este respaldo se puede retirar.
+  const miembros = team.organization_id
+    ? await db.prepare(
+        `SELECT COUNT(*)::int AS count FROM organization_members WHERE organization_id = ? AND status = 'active'`
+      ).get(team.organization_id)
+    : null;
+  const entregado = Boolean(team.owner_user_id) || Number(miembros?.count || 0) > 0;
+
+  if (!entregado) {
+    return res.status(409).json({
+      error: 'Las cuotas del club se activan cuando el equipo recibe su acceso. '
+        + 'Entrégale el perfil a su representante desde la ficha del equipo.',
+    });
+  }
+
+  // El administrador de la PLATAFORMA sigue pasando, igual que en todas las
+  // guardas de este archivo. Es una excepción consciente y no un descuido:
+  // quien opera la plataforma ya puede leer la base directamente, así que
+  // cerrarle la API no protegería el dato, solo movería el camino. Si algún
+  // día se quiere cerrar de verdad, se quita esta línea y ya.
+  const esMiembroDelEquipo = await isOrgMember(req.user.id, team.organization_id);
+  if (req.user.role === 'admin' || esMiembroDelEquipo || team.owner_user_id === req.user.id) {
+    req.team = team;
+    // La liga NO se resuelve ni se cuelga de `req` aquí: nada del dominio del
+    // club depende de ella, y dejarla puesta invitaría a usarla para decidir
+    // un permiso, que es justo lo que esta guarda vino a impedir.
+    return next();
+  }
+
+  return res.status(403).json({ error: 'El padrón y las cuotas de este equipo solo los administra el equipo' });
+});
+
 // Para gestionar invitaciones de un equipo (generar/revocar representante):
 // a propósito NO se le permite esto al representante del equipo mismo, solo
 // a quien administra la liga completa (o un admin) — para que nadie pueda

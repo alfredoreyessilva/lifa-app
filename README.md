@@ -1490,20 +1490,23 @@ Dos decisiones sobre los valores guardados:
 
 ### Cómo está hoy, y qué falta
 
-El paso 1 ya está hecho (2026-09-20): el esquema acepta los seis roles y el
-catálogo existe, probado. **Nada de eso cambió el comportamiento todavía** —
-ninguna ruta usa todavía el catálogo nuevo, así que la app se comporta igual
-que antes. Lo que sigue corriendo hoy:
+Pasos 1 y 2 hechos (2026-09-20). El esquema acepta los seis roles, el catálogo
+existe y **la liga ya no entra al dominio del club**: `/api/player-billing`
+completo exige ahora membresía de la organización del equipo. Lo que **falta**
+es el nivel de rol —quién dentro del equipo— y todo el frontend. Lo que sigue
+corriendo hoy:
 
 - `isOrgMember()` trata todos los roles como equivalentes por defecto, y el
   único que le pasa una lista más corta es `organizationAdminRequired`. En la
   base no hay un solo `editor`: todo invitado entra como `admin`
   (`invites.js`), y `admin` puede todo — los dos libros incluidos.
-- `teamOwnerRequired` deja pasar a los miembros de la organización de la
-  **liga**, así que hoy un administrador de liga puede pedir
-  `GET /player-billing/teams/:id/overview` y recibir el padrón completo: CURP,
-  fecha de nacimiento, foto, contacto del tutor y el `share_token` de cada
-  familia. Es lo primero que cierra este modelo.
+- ~~`teamOwnerRequired` deja pasar a los miembros de la organización de la
+  liga al padrón del club~~ — **cerrado el 2026-09-20**. `teamClubRequired` es
+  la guarda nueva y no pregunta por la liga en ninguna de sus ramas. Un equipo
+  sin entregar responde **409** ("las cuotas se activan cuando el equipo recibe
+  su acceso") y uno entregado, **403** a quien no sea del equipo.
+  `teamOwnerRequired` sigue igual y sigue usándose para lo que la liga sí
+  administra: perfil, roster y calendario.
 - `DELETE /manage/teams/:id` es un `DELETE FROM teams` pelón, y el esquema
   encadena `teams → club_members → club_ledger_entries`. El botón está en el
   panel de la liga y el diálogo no menciona nada de eso.
@@ -1523,10 +1526,18 @@ verificable.
    migración se verificó contra la base real dentro de una transacción con
    `ROLLBACK`: acepta los seis valores, rechaza uno inventado y no movió
    ninguna de las 19 filas.
-2. Partir `teamOwnerRequired` en `middleware/ownership.js`: una guarda para lo
-   que la liga sí administra y otra, solo para miembros de la organización del
-   equipo, para el dominio del club. Aquí ya cambia el comportamiento, así que
-   van las dos suites e2e antes y después.
+2. ~~Partir `teamOwnerRequired`~~ — **hecho el 2026-09-20**. No se partió en
+   dos mitades sino que se **agregó** `teamClubRequired` y `teamOwnerRequired`
+   quedó intacta: la liga no perdió nada de lo que sí le toca. `playerBilling.js`
+   entero pasó a la guarda nueva (12 rutas), y `assertEntryAccess` —que dejaba
+   entrar a la liga por otros dos caminos, membresía en su organización y
+   `owner_user_id` de la liga— también. Las dos suites e2e dieron **40/0 y 21/0
+   antes y después**, idénticas; pero ninguna cubre este cambio, porque las dos
+   usan un equipo independiente cuyo dueño es el propio actor y nunca hay una
+   liga intentando entrar. Se verificó aparte, con un recorrido de 13
+   comprobaciones sobre los tres estados (sin entregar → 409, entregado y
+   preguntando la liga → 403, entregado y preguntando el equipo → 200), más que
+   la liga no puede cancelar un movimiento del libro del club.
 3. `allowedRoles` en `routes/billing.js` y `routes/playerBilling.js`, más el
    409 de cuotas mientras el equipo no tenga dueño.
 4. Invitación con rol, y la entrega que puebla la organización
