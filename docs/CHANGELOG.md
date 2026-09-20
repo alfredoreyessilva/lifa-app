@@ -38,12 +38,18 @@ entradas traen el post-mortem del bug que las provocó.
   diálogo **no** es un acuse —es un selector de variante y no bloquea el
   confirmar—, así que usarlo aquí habría sido una casilla que no hace nada.
 
-  **Verificado**: compila y las 81 pruebas del frontend siguen pasando. **No**
-  se hizo clic en el botón real, por lo mismo que la entrada de arriba: llegar
-  a esa pantalla pide sesión y un padrón con datos personales de menores, que
-  no se cargan para una prueba (regla 7). Lo que falta para poder verificarla
-  de verdad es un equipo **sintético** en la rama `desarrollo-local`, con
-  nombres y teléfonos inventados.
+  **Verificado en el navegador**, con un equipo y un miembro **sintéticos**
+  creados en la rama `desarrollo-local` (nombres y teléfono inventados). La
+  fila reprodujo primero el problema tal cual: con teléfono capturado salían
+  *Recordar · Ficha · + Pago · Movimientos* y **ningún** "Copiar link". Ya en
+  la ficha, la sección nueva se ve bien y el diálogo de confirmación aparece
+  **en lugar** de la ficha, no encima — que es la razón de cerrar el modal al
+  abrirlo.
+
+  La rotación se comprobó de punta a punta y no solo de vista: el
+  `share_token` cambió, el link **viejo** pasó a responder **404** y el nuevo
+  **200**. Y al mandar el recordatorio después, el mensaje de WhatsApp ya
+  llevaba el token nuevo, así que el refresco posterior a rotar sí propaga.
 
 - **El botón "Recordar" ya abre WhatsApp de verdad (2026-09-19)**: en
   `TeamFinancesSection.jsx` había dos `await` antes del `window.open`, y los
@@ -73,9 +79,14 @@ entradas traen el post-mortem del bug que las provocó.
   `await`— y el nuevo llega con `true`. Lo que **no** se pudo reproducir aquí
   es el bloqueo en sí: el único motor instalado es Chromium, que es el
   permisivo de esta historia, y además Playwright lo corre con el bloqueador de
-  pop-ups desactivado. O sea, se verificó la **causa** y no el síntoma. Tampoco
-  se hizo clic en el botón real: llegar a esa pantalla pide sesión y un padrón
-  con datos personales de menores, que no se cargan para una prueba (regla 7).
+  pop-ups desactivado. O sea, ahí se verificó la **causa** y no el síntoma.
+
+  **El botón real sí se probó** (2026-09-19, más tarde): con un equipo y un
+  miembro **sintéticos** —nombres y teléfono inventados— creados en la rama
+  `desarrollo-local`, porque para entonces el padrón no tenía datos de nadie.
+  El clic abrió WhatsApp en pestaña nueva con el mensaje y el link ya escritos,
+  y `last_reminded_at` quedó grabado en la misma corrida: las dos mitades que
+  antes se excluían ahora ocurren juntas, que era exactamente el punto.
 
 - **El roster también se fecha en México, no en UTC (2026-09-19)**: la cobranza
   ya había cerrado este desfase; al roster le faltaban tres lugares. Los dos
