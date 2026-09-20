@@ -54,7 +54,7 @@ van partidas en tres.
 |Tabla de posiciones y modelo de competencia|90%|Configurar ONEFA (captura, no código); `computeQualification` con criterios fijos|
 |Predicciones y quinielas|95%|Nada abierto; lo demás se dejó fuera a propósito|
 |Transmisiones|95%|Nada abierto|
-|Equipos independientes|90%|Traspaso de dueño: hoy un equipo sin acceso a su cuenta no se puede reclamar|
+|Equipos independientes|90%|Traspaso de dueño: hoy un equipo sin acceso a su cuenta no se puede reclamar. Lo resuelve el modelo de roles decidido el 2026-09-19 (varios dueños a la vez), cuando se construya|
 |Cuotas del club (equipo → jugador)|90%|Prorrateo de quien entra a media quincena; auditoría del padrón; el pie del estado de cuenta a 1.16:1 de contraste. La UI para rotar el link se cerró el 2026-09-19|
 |Cobranza (liga → equipo)|88%|Cobro en línea. La zona horaria se cerró el 2026-09-19 (eran cuatro lugares, no dos)|
 |Roster de jugadores|85%|Credencial digital con QR. La zona horaria de altas y bajas se cerró el 2026-09-19 (eran tres lugares más)|
@@ -67,7 +67,7 @@ van partidas en tres.
 |Parte|%|Lo que falta|
 |-|-|-|
 |Páginas legales|**100%**|Cerrado el 2026-09-19: los cuatro datos llenos, `/terminos` publicado y el Aviso completo|
-|Seguridad|80%|Los roles de organización no se distinguen y ya hay dinero de por medio; rotar `CLOUDINARY_API_SECRET`; invitaciones que no caducan. Escribir en producción desde local ya tiene candado (2026-09-19)|
+|Seguridad|80%|El modelo de roles y fronteras quedó decidido el 2026-09-19 (ver su sección) — falta construirlo, y hasta entonces todo invitado entra como `admin` y la liga ve el padrón de sus equipos; rotar `CLOUDINARY_API_SECRET`; invitaciones que no caducan|
 |Pruebas automatizadas|40%|Las 148 cubren **solo funciones puras**. Todo `routes/` empieza consultando Postgres y no está cubierto en el CI — auth incluido. Las dos e2e de cobranza se corren a mano|
 |Concentración de archivos|sin urgencia|Cinco archivos concentran demasiado; solo `db.js` tiene techo real (9s de arranque). Ver "Pendientes conocidos"|
 
@@ -181,24 +181,24 @@ verificación.
   agregar después sin tocar la idempotencia, porque `auto_cycle_key` no depende
   del monto.
 
-- **Dos decisiones de producto sobre qué le concede un club a su liga.** Las dos
-  salen de que `teamOwnerRequired` deja pasar también a los administradores de
-  la organización de la LIGA, y ninguna es técnica:
-
-  1. **Borrar un equipo arrasa con su contabilidad.**
-     `DELETE /api/manage/teams/:id` es un `DELETE FROM teams` pelón, y el
-     esquema encadena `teams → club_members → club_ledger_entries`. El panel de
-     la liga ya tiene ese botón (`LeagueStructurePanel.jsx`, 🗑 "Eliminar
-     equipo"), así que una liga "limpiando equipos viejos" borra la cobranza
-     privada de ese club con sus familias — y el diálogo no menciona nada de
-     eso. Lo mínimo sería responder 409 si hay movimientos; lo correcto,
-     dar de baja en vez de borrar.
-  2. **El padrón con CURP y fechas de nacimiento de menores lo ve la liga.**
-     Un administrador de liga puede pedir el `overview` de cualquiera de sus
-     equipos y recibir CURP, fecha de nacimiento, foto y contacto del tutor de
-     todo el padrón, más el libro completo. Es justo lo que se separó de
-     `players` para proteger (regla 7 de CLAUDE.md), y el README dice que el
-     padrón lo arma el club, siempre.
+- **El modelo de roles y fronteras ya está decidido; falta construirlo
+  (2026-09-19).** Quién ve qué, y qué puede hacer cada rol, se resolvió entero
+  y vive en "Roles y fronteras de información", con la tabla de roles por tipo
+  de organización y los cinco pasos para construirlo. Lo que queda abierto es
+  el código, no la decisión. Cuando se construya cierra, de un golpe: el padrón
+  del club deja de ser visible para la liga —hoy sí lo es, con CURP, fechas de
+  nacimiento y el `share_token` de cada familia—, borrar un equipo con
+  contabilidad deja de ser posible, el `editor` se vuelve un rol de verdad
+  ("Editor de partidos (Visor)") y nacen tesorero, editor de roster y coach.
+  > Tres cosas que este README daba por ciertas y no lo eran, corregidas al
+  > revisar el código para tomar estas decisiones. `organizationAdminRequired`
+  > **sí** le pasa una lista de roles más corta a `isOrgMember()`. Las acciones
+  > destructivas de una organización ya estaban cerradas: quitar al dueño
+  > responde 409 y `transfer-owner` exige serlo. Y el escenario que se
+  > describía —invitar a alguien como "editor" y dejarle abierta la cobranza—
+  > **no podía pasar**, porque no hay forma de crear un `editor`: todo invitado
+  > entra como `admin`. Lo que sí pasa, y es lo que hay que cerrar, es que
+  > `admin` puede absolutamente todo.
 
 - **El nombre del proyecto ya está decidido: CFBAMX.** El texto visible al
   usuario, los comentarios y los nombres de paquete ya dicen CFBAMX. Lo que
@@ -214,26 +214,18 @@ verificación.
 - **No hay auditoría del padrón.** Se sabe cuál es la cuota de alguien, no
   quién se la cambió ni cuándo. El patrón a imitar ya existe: el trío
   `created_by_user_id` / `voided_by_user_id` / `reverses_entry_id` del libro.
+- **Falta recortar la tarjeta pública del jugador (2026-09-19).** La regla 7
+  de `CLAUDE.md` quedó reescrita y casi todo se cumple ya, pero dos cosas no:
+  la foto sale **siempre** —y no solo en la página, también dentro de la
+  imagen que `playerShareCard.js` arma para compartir en redes— y la tarjeta
+  publica el historial de equipos del jugador, que es de la "tarjeta
+  histórica" y no de la de temporada. Falta el interruptor por roster
+  (`branch_teams.show_photos`, apagado por default) y sacar la trayectoria de
+  `GET /players/:id/card`. Ver "Qué se publica de un roster, y qué no".
 - **No hay archivo `LICENSE`.** El repositorio no declara nada sobre qué se
   puede hacer con este código. Es decisión de negocio, no técnica: o el repo es
   privado, o lleva una licencia propietaria explícita. Hoy no es ninguna de las
   dos cosas por omisión, no por elección.
-- **Los roles de organización no se distinguen, y ya hay dinero de por medio.**
-  `organization_members.role` acepta `owner` / `admin` / `editor`, pero
-  `utils/orgMembers.js` los da por equivalentes: `isOrgMember()` acepta los tres
-  por defecto y **ninguna ruta le pasa una lista más corta**. Consecuencia real:
-  a quien invitas como "editor" para que te ayude a capturar partidos le queda
-  abierta también la cobranza — puede registrar cargos, confirmar pagos y
-  cancelar movimientos contables, en los dos libros.
-  El mecanismo para cerrarlo **ya existe y está escrito para esto**: el
-  parámetro `allowedRoles` de `isOrgMember()`, que hoy nadie usa. Faltaría
-  pasárselo en `routes/billing.js`, `routes/playerBilling.js` y en las acciones
-  destructivas (borrar la organización, quitar administradores), y decidir qué
-  puede hacer un `editor`. No es refactor: es elegir la lista en cada punto.
-  > Esto estaba anotado en el README dentro del bullet de "Invitar
-  > administrador", y al partir el histórico se fue a `docs/CHANGELOG.md`, donde
-  > se lee como nota de algo pasado y no como limitación vigente. Por eso está
-  > aquí ahora.
 - **Renombrar `/api/player-billing`** — es lo único que quedó de la fase B (ya
   hecha; ver "Cuotas del club"). El prefijo y el archivo `routes/playerBilling.js`
   siguen diciendo "player" donde quieren decir "miembro del club". Se dejó fuera
@@ -1325,6 +1317,232 @@ mensaje ya armado), inscripciones en línea, convocatorias, y el bloque de
 "oportunidades para el club" (proveedores) — ese último no se construye hasta
 que haya oferta real registrada, porque con espacios vacíos se lee como
 publicidad y abarata justo la pantalla que se quería ver seria.
+
+## Roles y fronteras de información
+
+**Decidido el 2026-09-19, todavía sin construir.** Lo que corre hoy es lo de
+"Cómo está hoy" al final de esta sección; lo de arriba es el modelo completo,
+escrito aquí para que la implementación no tenga que volver a discutirlo.
+
+Lo que resuelve: "administrar una organización" era una sola cosa —se podía
+todo o no se podía nada— y eso dejó de alcanzar el día que hubo dos libros de
+dinero y un padrón con CURP de menores. Son dos preguntas distintas y se
+responden por separado: **qué información pertenece a quién**, y **qué puede
+hacer cada persona dentro de una organización**.
+
+### Las tres fronteras
+
+Cada dato pertenece a exactamente un dominio, y el dominio decide quién lo ve.
+
+| Dominio | Qué incluye | Quién lo ve |
+|---|---|---|
+| **Torneo** | Calendario, partidos, marcadores, posiciones, transmisiones y el roster (`players` + `player_team_memberships`) | Liga y equipo. En público el roster va **recortado** — ver "Qué se publica de un roster" |
+| **Cuenta equipo ↔ liga** | `team_ledger_entries`: lo que la liga le cobra al equipo y lo que el equipo reporta | Los dos, cada quien su lado. Es compartida por definición |
+| **Club privado** | `club_members` (CURP, nacimiento, foto, tutor, `share_token`) y `club_ledger_entries` | **Solo el equipo. La liga nunca, en ningún estado** |
+
+La regla de una línea: **la liga ve competencia y lo que el equipo le debe; no
+ve gente ni dinero de adentro del club.**
+
+Por qué el roster sí y el padrón no, si los dos guardan fecha de nacimiento y
+CURP de menores: no es el dato, es el propósito. La liga necesita la edad para
+validar que un jugador puede competir en su categoría, y el equipo se la
+entrega **al inscribirse en la rama** — esa inscripción *es* el consentimiento,
+y por eso no hace falta un paso aparte de "compartir roster". Nada de eso pide
+saber cuánto paga de mensualidad, quién es su tutor, ni cuál es el link de su
+estado de cuenta.
+
+> Extiende la tabla "El padrón del club NO es el roster de torneo" de la
+> sección anterior: ahí se separaron las dos poblaciones, aquí se dice quién
+> puede mirar cada una.
+
+### Qué se publica de un roster, y qué no
+
+Decidido el 2026-09-19. Es la regla 7 de `CLAUDE.md`, y aquí está su porqué.
+
+El roster es el único dato de una persona que este proyecto publica, así que
+tiene tres niveles y no dos:
+
+| Nivel | Qué se ve | Quién |
+|---|---|---|
+| **Público** | Nombre, número y posición. La foto **solo** si el equipo la habilitó para ese roster | Cualquiera |
+| **Completo** | Todo lo anterior más `curp` y `birth_date` | La liga, y el equipo que lo tiene o lo tuvo en su roster |
+| **Nunca** | El padrón del club (`club_members`) | Nadie fuera del equipo — la liga tampoco |
+
+Nombre, número y posición es lo que trae un programa de mano impreso: alcanza
+para seguir una competencia y no sirve para nada más. La transparencia que pide
+un torneo se cubre entera con eso.
+
+**La foto nace apagada.** Es el dato más expuesto de los cuatro por mucho — el
+nombre y el número identifican a alguien dentro de una cancha, una cara lo
+identifica en la calle — y no se queda en la página: `playerShareCard.js` la
+mete en una **imagen generada para compartir en redes**. El interruptor va por
+roster (`branch_teams`, que es exactamente una fila por rama + equipo) y lo
+prende el equipo cuando tiene el consentimiento de las familias. El default es
+la decisión real, porque es lo que va a quedar en la mayoría de los equipos.
+
+**La edad se filtra igual, y no tiene arreglo.** Un roster de "Infantil 2012"
+dice el año de nacimiento de todos aunque `birth_date` no salga. Es inseparable
+de competir por edades; se anota para no prometer lo que no se cumple.
+
+**El equipo anterior no pierde el acceso.** Un roster es el registro histórico
+del equipo que lo armó, y un equipo tiene derecho a consultar el suyo de hace
+veinte años. La tarjeta de un jugador es un dato dentro de ese registro, no una
+entidad con vida propia que haya que ir borrando de los archivos ajenos.
+
+**La tarjeta es de una temporada, no de una carrera.** Se crea una vez por cada
+temporada que la persona juega y describe **esa** participación. Por eso la
+tarjeta pública **no** lleva el historial de equipos: acumular logros en un solo
+lugar es otra función —que el jugador "recolecte" su tarjeta y pase a su
+**tarjeta histórica**, en su propia cuenta— y esa no existe, no está diseñada y
+no se diseñó aquí. Que alguien cambie de equipo se nota porque deja de aparecer
+en un roster y aparece en otro; en el fútbol americano de México no hay
+coordinación entre instituciones que verifique perfiles en internet, así que
+publicar la trayectoria no resuelve nada y sí expone de más.
+
+> Lo que falta construir de esto: el interruptor de la foto
+> (`branch_teams.show_photos`, apagado por default) y sacar la trayectoria de
+> `GET /players/:id/card`. Lo demás ya corre — el `SELECT` de la tarjeta nombra
+> sus columnas una por una y el 404 por roster ya está puesto. Ojo con las
+> **estadísticas acumuladas** de esa misma tarjeta: hoy suman todos los
+> partidos de todas las temporadas, que es comportamiento de tarjeta histórica
+> y no de tarjeta de temporada. Se resuelve cuando se diseñe "recolectar
+> tarjeta", no antes.
+
+### El ciclo de vida de un equipo
+
+| Estado | La liga puede | El equipo puede |
+|---|---|---|
+| **Registrado, sin entregar** | Perfil, roster, calendario y cobranza liga→equipo. Eliminarlo, salvo que ya tenga movimientos | Nada todavía: su organización existe, pero está vacía |
+| **Entregado** | Roster de sus ramas, cuenta liga↔equipo y calendario. **No** padrón, **no** cuotas, **no** eliminarlo, **no** invitar | Todo lo suyo, incluido repartir su propio acceso |
+| **Revocado** | Lo mismo que en "entregado": sigue sin padrón ni cuotas | Nadie, hasta que un representante nuevo reclame. El padrón queda dormido, no se borra |
+
+Tres consecuencias que no son obvias:
+
+- **Las cuotas del club nacen apagadas.** Mientras el equipo no tenga dueño
+  propio, `/api/player-billing` responde 409 en vez de dejar capturar un
+  padrón. No es una limitación que sobre: es lo que garantiza que la liga nunca
+  llegue a ver uno, porque antes de la entrega no existe ninguno. El efecto de
+  lado es bueno — el club se da de alta solo, que es justo el enganche de esta
+  función.
+- **Entregado es entregado.** Una vez reclamado el equipo, la liga deja de
+  poder invitar gente a él: solo sus dueños reparten su acceso. Sin esta regla
+  el modelo tenía puerta trasera — revocar al representante, generar una
+  invitación nueva, reclamarla uno mismo y quedar como dueño del equipo llega
+  exactamente a donde se acaba de prohibir, nada más que por otro camino.
+- **La entrega no crea la organización del equipo, la puebla.** Ya existe: una
+  migración de `db.js` le crea una org `team-<id>` a todo equipo que no la
+  tenga, en cada arranque. Lo que le falta a un equipo sin entregar no es la
+  organización, son los miembros — el backfill solo da de alta a quien tenga
+  `owner_user_id`, y un equipo que creó su liga lo tiene nulo. Por eso la liga
+  es hoy la única vía de entrada, y por eso cerrarla sale barato.
+
+### Los roles
+
+Una liga y un equipo no necesitan los mismos roles, así que no comparten
+catálogo. Los dos tienen dueño y administrador; de ahí para abajo, cada uno
+tiene los suyos.
+
+**Liga**
+
+| Rol | Valor | Alcance |
+|---|---|---|
+| **Dueño** | `owner` | Todo. Invita y quita a cualquiera, incluidos otros dueños. Entrega equipos. Varios a la vez |
+| **Administrador** | `admin` | Todo lo operativo: estructura, equipos, partidos, sedes, transmisiones y cobranza. No invita ni quita dueños |
+| **Tesorero de liga** | `treasurer` | Solo cobranza liga→equipos: cargos, confirmar y rechazar pagos, ajustes y configuración. Nada de estructura, partidos ni rosters |
+| **Editor de partidos (Visor)** | `editor` | Solo partidos que ya existen, en toda la liga: marcador, estado, fecha, hora, sede y links. No los crea ni los borra. Nada de rosters ni de dinero |
+
+**Equipo**
+
+| Rol | Valor | Alcance |
+|---|---|---|
+| **Dueño** | `owner` | Todo, incluidas las dos cuentas y el padrón. Invita a cualquiera, incluidos otros dueños. Varios a la vez |
+| **Administrador** | `admin` | Todo menos invitar o quitar dueños |
+| **Tesorero** | `treasurer` | Padrón del club, cuotas, y la cuenta con la liga. Nada de perfil ni de roster |
+| **Editor de roster** | `roster_editor` | Roster de torneo: alta, baja, plantilla de Excel, foto, número y posición. Nada de padrón ni de dinero |
+| **Coach** | `coach` | El equipo en solo lectura: perfil, calendario y roster. Sin padrón ni contabilidad. Sin más funciones por ahora, a propósito |
+
+**Medio, tienda, clínica y marca** se quedan con `owner` y `admin`: no manejan
+dinero ni datos de menores en la plataforma, y no hay para qué inventarles
+roles que nadie pidió.
+
+El `CHECK` de `organization_members.role` pasa a la unión de los seis valores,
+pero **cuáles son válidos depende del tipo de organización**, y eso se valida
+al invitar, no en el esquema: un `coach` no significa nada en una liga, y un
+visor no significa nada en un equipo.
+
+Dos decisiones sobre los valores guardados:
+
+- **El visor reusa `'editor'`**, que ya estaba en el `CHECK` desde que se creó
+  `organization_members` y que **ninguna fila usa** — nunca hubo endpoint ni
+  pantalla que lo produjera. Por eso no lleva migración de datos ni ventana de
+  incompatibilidad al desplegar, que es justo el costo que sí tiene renombrar
+  `/api/player-billing` (ver "Pendientes abiertos"). En pantalla nunca se lee
+  "editor" a secas: es **"Editor de partidos (Visor)"**, porque *visor* es como
+  se le dice en la cancha a quien toma los marcadores y le da validez al
+  partido. Hacia allá es donde va a crecer ese rol.
+- **Varios dueños a la vez, todos iguales**, en cualquier tipo de organización.
+  El caso que lo pidió es el equipo que lleva una familia: describirlo como un
+  dueño y dos administradores dice algo que no es. La única regla es que no
+  puede quedar en cero, y esa ya existe en
+  `DELETE /organizations/:id/members/:userId`. Con eso se va `transfer-owner`:
+  sin dueño principal no hay puesto que ceder — se invita a otro dueño y quien
+  quiera se retira.
+
+### Cómo está hoy, y qué falta
+
+El paso 1 ya está hecho (2026-09-20): el esquema acepta los seis roles y el
+catálogo existe, probado. **Nada de eso cambió el comportamiento todavía** —
+ninguna ruta usa todavía el catálogo nuevo, así que la app se comporta igual
+que antes. Lo que sigue corriendo hoy:
+
+- `isOrgMember()` trata todos los roles como equivalentes por defecto, y el
+  único que le pasa una lista más corta es `organizationAdminRequired`. En la
+  base no hay un solo `editor`: todo invitado entra como `admin`
+  (`invites.js`), y `admin` puede todo — los dos libros incluidos.
+- `teamOwnerRequired` deja pasar a los miembros de la organización de la
+  **liga**, así que hoy un administrador de liga puede pedir
+  `GET /player-billing/teams/:id/overview` y recibir el padrón completo: CURP,
+  fecha de nacimiento, foto, contacto del tutor y el `share_token` de cada
+  familia. Es lo primero que cierra este modelo.
+- `DELETE /manage/teams/:id` es un `DELETE FROM teams` pelón, y el esquema
+  encadena `teams → club_members → club_ledger_entries`. El botón está en el
+  panel de la liga y el diálogo no menciona nada de eso.
+- La liga puede revocar al representante de un equipo
+  (`DELETE /invites/teams/:teamId/owner`) y volver a repartir su acceso.
+
+El orden para construirlo no es arbitrario: cada paso deja el anterior
+verificable.
+
+1. ~~Migración aditiva del `CHECK` en `db.js`, y el catálogo de roles por tipo
+   de organización~~ — **hecho el 2026-09-20**. El catálogo quedó en
+   `utils/orgRoles.js` y **no** en `utils/orgMembers.js` como decía este plan:
+   ese importa `db`, así que nada de ahí se puede probar sin Postgres, y la
+   gracia era justamente que entrara al CI. `db.js` **importa** la lista de
+   roles en vez de repetirla, así que la base no puede aceptar un rol que el
+   código no conozca (regla 6). Trae 24 pruebas nuevas —148 → 172— y la
+   migración se verificó contra la base real dentro de una transacción con
+   `ROLLBACK`: acepta los seis valores, rechaza uno inventado y no movió
+   ninguna de las 19 filas.
+2. Partir `teamOwnerRequired` en `middleware/ownership.js`: una guarda para lo
+   que la liga sí administra y otra, solo para miembros de la organización del
+   equipo, para el dominio del club. Aquí ya cambia el comportamiento, así que
+   van las dos suites e2e antes y después.
+3. `allowedRoles` en `routes/billing.js` y `routes/playerBilling.js`, más el
+   409 de cuotas mientras el equipo no tenga dueño.
+4. Invitación con rol, y la entrega que puebla la organización
+   (`routes/invites.js`, `routes/organizations.js`).
+5. Frontend: selector de rol al invitar, las etiquetas nuevas, y esconder lo
+   que cada rol no puede hacer.
+
+`DELETE /manage/teams/:id` —409 si hay movimientos, y prohibido a la liga una
+vez entregado el equipo— es independiente de los cinco pasos y cabe en
+cualquier momento.
+
+> Vale la pena dejar escrito que el terreno estaba limpio: al 2026-09-19 los
+> dos libros tenían **cero movimientos**, ningún equipo había sido entregado y
+> no existía ni un `editor`. No hay datos que migrar, y esa es justo la razón
+> para hacerlo ahora y no después.
+
 ## Tabla de posiciones y modelo de competencia
 
 Lo que resuelve: hasta ahora la app sabía **qué partidos se juegan**, pero no
@@ -1985,7 +2203,11 @@ siempre había una:
   va en cuadrícula) y `TeamInfoPanel` la pastilla completa "✓ Verificado".
 - No existe flujo de traspaso de dueño para un equipo independiente (sí existe
   para uno de liga, vía invitación — `routes/invites.js`) — si el que lo
-  registró pierde acceso a su cuenta, hoy no hay forma de reclamarlo.
+  registró pierde acceso a su cuenta, hoy no hay forma de reclamarlo. Lo
+  resuelve el modelo decidido el 2026-09-19: con **varios dueños a la vez**
+  (ver "Roles y fronteras de información") quien registra el equipo puede
+  invitar a un segundo dueño desde el principio, y perder una cuenta deja de
+  ser fatal.
 
 ## Transmisiones — un medio se suma a un partido
 

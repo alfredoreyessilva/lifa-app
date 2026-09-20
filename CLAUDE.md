@@ -79,10 +79,27 @@ reusando la vieja, que es el respaldo.
 esquema, backend y frontend. Un `CHECK` "mejorado" sin tocar el código que
 escribe ese valor ya tiró todos los pagos reportados desde el link del papá.
 
-**7. Los datos de un menor no salen en ninguna pantalla pública.** El padrón del
-club (`club_members`) guarda CURP, fecha de nacimiento y foto de gente en buena
-parte menor de edad, y **nunca** tiene ficha pública. `GET /players/:id/card` es
-público: exige membresía de torneo y devuelve solo los cinco campos que pinta.
+**7. Un roster se publica recortado; el padrón del club no se publica.** Son dos
+poblaciones distintas —ver README, "Roles y fronteras de información"— y cada una
+tiene su regla:
+
+- **Roster de torneo, en público**: nombre, número y posición, nada más. La foto
+  **solo** si el equipo la habilitó para ese roster, y nace apagada. `curp` y
+  `birth_date` no salen nunca. Por eso `GET /players/:id/card` nombra sus
+  columnas una por una en vez de `SELECT *`, y responde 404 —no 403— a quien
+  nunca estuvo en un roster de torneo.
+- **Roster completo**, con CURP y fecha de nacimiento: la liga, y el equipo que
+  lo tiene o lo tuvo en su roster. Un roster es el registro histórico de ese
+  equipo y no caduca.
+- **Padrón del club** (`club_members`): no sale en público **ni se le muestra a
+  la liga**, en ningún estado del equipo. Ahí viven CURP, fecha de nacimiento,
+  foto, contacto del tutor y el `share_token` de familias que en buena parte son
+  de menores.
+
+La tarjeta de un jugador es el registro de **la temporada que está jugando**, no
+un perfil que lo persigue: no publica su historial de equipos. Que alguien
+cambie de equipo se nota porque deja de aparecer en un roster y aparece en otro,
+que es como se entera todo el mundo en la práctica.
 
 **8. El esquema se agrega, no se edita.** `db.js` corre ~150 instrucciones
 idempotentes en cada arranque, protegidas con `pg_advisory_xact_lock()` y un

@@ -1,6 +1,7 @@
 import pg from 'pg';
 import { HOY_MX } from '../utils/sqlDates.js';
 import { decidirCandadoProduccion, hoyEnMexico } from '../utils/prodGuard.js';
+import { TODOS_LOS_ROLES } from '../utils/orgRoles.js';
 
 const { Pool } = pg;
 
@@ -1922,6 +1923,32 @@ export async function initSchema() {
       ALTER TABLE player_team_memberships
         ALTER COLUMN start_date SET DEFAULT ${HOY_MX}
     `);
+
+    // ── Los roles de una organización dejan de ser tres ──
+    //
+    // El CHECK original aceptaba solo owner/admin/editor. El modelo decidido
+    // el 2026-09-19 (README, "Roles y fronteras de información") suma tesorero,
+    // editor de roster y coach, y le da a 'editor' un significado concreto: el
+    // VISOR que toma marcadores en la cancha.
+    //
+    // El CREATE TABLE de arriba NO se toca (regla 8). Y no migra ni una fila:
+    // el CHECK nuevo es un SUPERCONJUNTO del viejo, así que todo lo ya escrito
+    // lo cumple — al 2026-09-19 solo había filas 'owner' y 'admin'.
+    //
+    // La lista sale de utils/orgRoles.js y no se escribe a mano aquí: es un
+    // valor que viaja por la API, y la regla 6 dice que se cambia en los tres
+    // lados o en ninguno. Importándola, no hay forma de que la base acepte un
+    // rol que el código no conoce, ni al revés.
+    //
+    // Qué roles valen para cada TIPO de organización no cabe en este CHECK —el
+    // tipo vive en `organizations`, otra tabla— y por eso se valida al invitar.
+    await run(`ALTER TABLE organization_members DROP CONSTRAINT IF EXISTS organization_members_role_check`);
+    await run(`
+      ALTER TABLE organization_members
+        ADD CONSTRAINT organization_members_role_check
+        CHECK (role IN (${TODOS_LOS_ROLES.map((r) => `'${r}'`).join(', ')}))
+    `);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se
