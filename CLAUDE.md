@@ -15,17 +15,20 @@ el README; lo histórico, en `docs/CHANGELOG.md`.
 backend/    Node 22 + Express, ESM. Postgres en Neon.
   src/config/db.js      El esquema COMPLETO (38 tablas) + migraciones al arrancar
   src/routes/           Aquí vive todo el SQL — 18 archivos
-  src/middleware/       auth (JWT) · ownership (10 guardas) · rateLimit
+  src/middleware/       auth (JWT) · ownership (19 guardas, por permiso) · rateLimit
   src/utils/            Funciones PURAS — lo único que se puede probar sin Postgres
+    orgRoles.js         Qué puede cada rol, por tipo de organización. Fuente única
   scripts/              Diagnóstico y limpieza de un solo uso
 frontend/   React 18 + Vite. Rutas en español, API en inglés.
   src/api/client.js     Única puerta al backend. Ningún componente hace fetch por su cuenta.
 frontend/api/           2 funciones serverless de Vercel (sitemap, social-preview)
+frontend/public/sw.js   Service worker. HOY SOLO HACE PUSH: no cachea nada
 ```
 
 Dónde buscar antes de preguntar: **README** tiene una sección por dominio
 (Cobranza · Cuotas del club · Tabla de posiciones · Predicciones y quinielas ·
-Roster · Equipos independientes · Transmisiones · Tiendas y bot de WhatsApp ·
+Roster · Roster público y pase de lista · Estadísticas por jugada · Capturar
+sin señal · Equipos independientes · Transmisiones · Tiendas y bot de WhatsApp ·
 Seguridad), cada una con el porqué de sus decisiones.
 
 ## Correrlo y probarlo
@@ -36,9 +39,10 @@ cd frontend && npm install && npm run dev    # :5173
 npm test                                      # en cualquiera de los dos: node --test, <1s
 ```
 
-148 pruebas unitarias (67 backend + 81 frontend) corren en el CI en cada push.
-Las dos suites de punta a punta de cobranza **no**: necesitan Postgres vivo.
-Instrucciones en `backend/tests/README.md`.
+177 pruebas unitarias (96 backend + 81 frontend) corren en el CI en cada push.
+Las **tres** suites de punta a punta —las dos de cobranza y la de invitaciones
+y roles— **no**: necesitan Postgres vivo. Instrucciones en
+`backend/tests/README.md`.
 
 ---
 
@@ -71,7 +75,7 @@ reusando la vieja, que es el respaldo.
 
 - No tocar `BALANCE_SUM_SQL`, los estados de un pago (`pending` / `rejected` /
   `withdrawn` / `void`) ni `reverses_entry_id` sin correr las dos suites e2e
-  antes y después. Ahí ya se pagó el precio de dos bugs de saldo.
+  de cobranza antes y después. Ahí ya se pagó el precio de dos bugs de saldo.
 - `rejected` y `withdrawn` tienen estado propio a propósito: compartir `void`
   inflaba el saldo por el monto completo.
 
@@ -83,8 +87,10 @@ escribe ese valor ya tiró todos los pagos reportados desde el link del papá.
 poblaciones distintas —ver README, "Roles y fronteras de información"— y cada una
 tiene su regla:
 
-- **Roster de torneo, en público**: nombre, número y posición, nada más. La foto
-  **solo** si el equipo la habilitó para ese roster, y nace apagada. `curp` y
+- **Roster de torneo, en público**: nombre, número y posición, nada más. Que
+  una categoría publique su roster —y si además publica la foto— lo decide la
+  **liga al crearla**, y las dos cosas nacen apagadas; encima de ese techo, el
+  **equipo** puede apagar su propia foto pero nunca encenderla. `curp` y
   `birth_date` no salen nunca. Por eso `GET /players/:id/card` nombra sus
   columnas una por una en vez de `SELECT *`, y responde 404 —no 403— a quien
   nunca estuvo en un roster de torneo.
@@ -110,6 +116,15 @@ al final con su `ALTER`.
 cuenta del papá (`/cuenta/:token`) vive fuera de `ProtectedRoute` y el token *es*
 la credencial. Exigir sesión ahí es exactamente la fricción que mata el cobro.
 
+**10. Registramos la actividad; la regla es de la liga.** La plataforma guarda
+lo que pasó —quién asistió, quién anotó, quién pagó— y entrega el conteo. No
+decide quién puede jugar playoffs, no bloquea una alineación ni pinta a nadie
+en rojo. El criterio cambia de liga en liga y de temporada en temporada: una
+plataforma que lo ejerce se equivoca en cuanto la liga lo cambia, y encima se
+vuelve responsable de una decisión que no le toca. Es la regla 4 vista desde el
+otro lado — con el dato crudo guardado, cualquier criterio se puede aplicar
+después; guardado ya interpretado, no hay vuelta.
+
 ---
 
 ## Convenciones de código
@@ -120,8 +135,11 @@ la credencial. Exigir sesión ahí es exactamente la fricción que mata el cobro
 - **SQL**: `db.prepare('... WHERE id = ?')` con `?` — se traducen a `$n` solos.
   `.get()` una fila · `.all()` varias · `.run()` escribe.
 - **Todo handler async va envuelto en `asyncHandler`**, o el error se pierde.
-- **Los permisos viven en `middleware/ownership.js`**, no en línea dentro de la
-  ruta. Para membresía, `isOrgMember()`.
+- **Los permisos viven en `utils/orgRoles.js`** —qué puede cada rol, por tipo
+  de organización— y las guardas de `middleware/ownership.js` los piden por
+  nombre: `guardaDeLiga('cobranza_liga')`, `guardaDeEquipo('estructura', 'ver')`.
+  Nunca una lista de roles escrita a mano dentro de una ruta. Para membresía,
+  `isOrgMember()`.
 - **Una transacción real no se reparte en varias llamadas**: `db.prepare` toma
   una conexión del pool por consulta y del otro lado hay un pooler en modo
   transacción. Si algo tiene que ser atómico, va en **una sola sentencia** con
@@ -139,7 +157,9 @@ correrlo contra datos reales. Una prueba unitaria no podía atrapar que el estad
 de un partido terminado es `'finished'` y no `'final'`, porque el dato de prueba
 lo inventaba el mismo código que se estaba probando.
 
-- Cambio de cobranza → las dos suites e2e contra una rama de Neon, antes y después.
+- Cambio de cobranza → las dos suites e2e de cobranza contra una rama de Neon,
+  antes y después. Cambio de permisos, invitaciones o entrega de un equipo →
+  `invites-roles.e2e.mjs`, la tercera.
 - Cambio de UI → abrirlo en el navegador. Si no se verificó, se dice que no se verificó.
 - Cambio de esquema o de consulta → correrlo contra los datos reales dentro de
   una transacción con `ROLLBACK` y `lock_timeout`, y comprobar que las filas que

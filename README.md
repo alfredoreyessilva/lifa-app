@@ -26,7 +26,7 @@ Las reglas de trabajo (nunca probar contra producción, los libros de dinero son
 append-only, se resuelve al leer y no se migra) están en
 [`CLAUDE.md`](CLAUDE.md).
 
-## Qué tan avanzado está cada parte (2026-09-19)
+## Qué tan avanzado está cada parte (2026-09-20)
 
 Una foto de dónde está el proyecto, para no tener que reconstruirla leyendo las
 dos mil líneas de abajo. Aquí solo está el **tamaño** de lo que falta; el
@@ -42,9 +42,13 @@ todo quedaría en 40% para siempre. Son números a ojo, puestos y actualizados a
 mano: cuando una parte se mueva, se mueve también su renglón.
 
 **La lectura de una línea: el producto está construido, el negocio no.** Nueve
-dominios funcionales están terminados o casi, y lo que impide cobrar —pasarela
-de pago e infraestructura que no se duerma— no es código. Por eso las tablas
-van partidas en tres.
+de los diez dominios funcionales están terminados o casi, y lo que impide
+cobrar —pasarela de pago e infraestructura que no se duerma— no es código. Por
+eso las tablas van partidas en tres.
+
+El décimo es la excepción y por eso está en cero: el roster público, el pase de
+lista y la captura de estadísticas se definieron el 2026-09-20 y no tienen una
+línea escrita. Es alcance nuevo, no algo que se haya quedado a medias.
 
 ### Dominios funcionales
 
@@ -54,9 +58,10 @@ van partidas en tres.
 |Tabla de posiciones y modelo de competencia|90%|Configurar ONEFA (captura, no código); `computeQualification` con criterios fijos|
 |Predicciones y quinielas|95%|Nada abierto; lo demás se dejó fuera a propósito|
 |Transmisiones|95%|Nada abierto|
-|Equipos independientes|90%|Traspaso de dueño: hoy un equipo sin acceso a su cuenta no se puede reclamar. Lo resuelve el modelo de roles decidido el 2026-09-19 (varios dueños a la vez), cuando se construya|
+|Equipos independientes|95%|El modelo de roles, construido el 2026-09-20, ya deja invitar a un **segundo dueño** desde el principio, así que perder una cuenta deja de ser fatal. Lo que no existe es el rescate: un equipo cuyo único dueño ya perdió acceso sigue sin poderse reclamar|
 |Cuotas del club (equipo → jugador)|90%|Prorrateo de quien entra a media quincena; auditoría del padrón; el pie del estado de cuenta a 1.16:1 de contraste. La UI para rotar el link se cerró el 2026-09-19|
 |Cobranza (liga → equipo)|88%|Cobro en línea. La zona horaria se cerró el 2026-09-19 (eran cuatro lugares, no dos)|
+|Roster público, pase de lista y estadísticas|**0%** · definido|Nada construido, y nada a medias: el modelo entero se decidió el 2026-09-20 —qué publica cada categoría, `match_attendance`, la captura por jugada sin señal, los permisos `asistencia` y `estadisticas`—. Arrastra trabajo de plataforma que hoy no existe: el service worker solo hace push y no cachea nada|
 |Roster de jugadores|85%|Credencial digital con QR. La zona horaria de altas y bajas se cerró el 2026-09-19 (eran tres lugares más)|
 |Notificaciones y push|85%|Bandeja propia para jugador/tutor — hoy imposible: `notifications` tiene `CHECK (recipient_type IN ('league','team'))` y los jugadores no tienen cuenta. Que el recordatorio de cobranza SALGA de la plataforma (correo al tutor) sigue sin construirse|
 |Tiendas y bot de WhatsApp|70% · **0% operativo**|Todo el código está; falta el número de WhatsApp Business, saldo de Anthropic y cubrir `bot_messages` en el Aviso de Privacidad|
@@ -67,8 +72,8 @@ van partidas en tres.
 |Parte|%|Lo que falta|
 |-|-|-|
 |Páginas legales|**100%**|Cerrado el 2026-09-19: los cuatro datos llenos, `/terminos` publicado y el Aviso completo|
-|Seguridad|80%|El modelo de roles y fronteras quedó decidido el 2026-09-19 (ver su sección) — falta construirlo, y hasta entonces todo invitado entra como `admin` y la liga ve el padrón de sus equipos; rotar `CLOUDINARY_API_SECRET`; invitaciones que no caducan|
-|Pruebas automatizadas|40%|Las 148 cubren **solo funciones puras**. Todo `routes/` empieza consultando Postgres y no está cubierto en el CI — auth incluido. Las dos e2e de cobranza se corren a mano|
+|Seguridad|90%|El modelo de roles y fronteras quedó **construido** el 2026-09-20 (ver su sección): seis roles, guardas que se piden por permiso y la liga fuera del padrón del club. Quedan rotar `CLOUDINARY_API_SECRET`, las invitaciones que no caducan, `DELETE /manage/teams/:id` —que destruye contabilidad sin avisar— y la tarjeta pública del jugador, que todavía publica foto e historial contra la regla 7|
+|Pruebas automatizadas|45%|Las 177 del CI (96 backend + 81 frontend) cubren **solo funciones puras**. Todo `routes/` empieza consultando Postgres y sigue fuera del CI. Lo que sí lo toca son las **tres** suites e2e —las dos de cobranza y la de invitaciones y roles, que estrenó la cobertura de auth— y esas se corren a mano|
 |Concentración de archivos|sin urgencia|Cinco archivos concentran demasiado; solo `db.js` tiene techo real (9s de arranque). Ver "Pendientes conocidos"|
 
 ### Roadmap de negocio, por fase
@@ -78,7 +83,7 @@ van partidas en tres.
 |0 — Cerrar lo que estaba a medias|70%|Solo esperar tráfico para volver a pedir revisión a Booking.com|
 |1 — Fundación de confiabilidad|80%|Subieron las legales a ✅. Quedan el plan de pago de Render/Neon y rotar el secreto de Cloudinary|
 |2 — Automatizar el cobro|**0%**|No hay ninguna pasarela instalada. Es el bloqueador de fondo y el punto de no retorno: en cuanto una liga cobra por la plataforma, no se va|
-|3 — Red de seguridad técnica|40%|148 pruebas y CI hechos; falta probar lo que toca la base, monitoreo de uptime y que el CI bloquee el deploy|
+|3 — Red de seguridad técnica|45%|177 pruebas y CI hechos, y tres suites e2e que sí prueban contra la base; falta que esas corran solas, monitoreo de uptime y que el CI bloquee el deploy|
 |4 — Ciclo de vida del cliente|15%|Falta el onboarding por correo; `RESEND_API_KEY` ya está configurada, así que es construir los correos|
 |5 — Crecimiento|5%|Página de precios, analítica de conversión, SEO más allá del sitemap|
 
@@ -181,24 +186,49 @@ verificación.
   agregar después sin tocar la idempotencia, porque `auto_cycle_key` no depende
   del monto.
 
-- **El modelo de roles y fronteras ya está decidido; falta construirlo
-  (2026-09-19).** Quién ve qué, y qué puede hacer cada rol, se resolvió entero
-  y vive en "Roles y fronteras de información", con la tabla de roles por tipo
-  de organización y los cinco pasos para construirlo. Lo que queda abierto es
-  el código, no la decisión. Cuando se construya cierra, de un golpe: el padrón
-  del club deja de ser visible para la liga —hoy sí lo es, con CURP, fechas de
-  nacimiento y el `share_token` de cada familia—, borrar un equipo con
-  contabilidad deja de ser posible, el `editor` se vuelve un rol de verdad
-  ("Editor de partidos (Visor)") y nacen tesorero, editor de roster y coach.
-  > Tres cosas que este README daba por ciertas y no lo eran, corregidas al
-  > revisar el código para tomar estas decisiones. `organizationAdminRequired`
-  > **sí** le pasa una lista de roles más corta a `isOrgMember()`. Las acciones
-  > destructivas de una organización ya estaban cerradas: quitar al dueño
-  > responde 409 y `transfer-owner` exige serlo. Y el escenario que se
-  > describía —invitar a alguien como "editor" y dejarle abierta la cobranza—
-  > **no podía pasar**, porque no hay forma de crear un `editor`: todo invitado
-  > entra como `admin`. Lo que sí pasa, y es lo que hay que cerrar, es que
-  > `admin` puede absolutamente todo.
+- **`DELETE /manage/teams/:id` destruye contabilidad sin avisar
+  (2026-09-20).** Es un `DELETE FROM teams` pelón y el esquema encadena
+  `teams → club_members → club_ledger_entries`: borrar un equipo se lleva el
+  padrón del club y su libro de cuotas, que es justo lo que la regla 5 de
+  `CLAUDE.md` declara inborrable. El diálogo del panel solo advierte que los
+  partidos pierden el vínculo. Y la guarda es `teamOwnerRequired`, la misma
+  del perfil, así que la liga alcanza también a un equipo **ya entregado**, que
+  ya no es suyo. Bajo el modelo corregido el 2026-09-20 esto además está mal
+  nombrado: "dar de baja" debería terminar una participación, no destruir un
+  equipo.
+
+- **Roster público y pase de lista: definido, sin construir (2026-09-20).**
+  Es lo que le da pantalla propia al visor, que hasta ahora entraba al panel de
+  la liga con casi todo apagado. El modelo completo —qué se publica, los dos
+  estados del pase de lista más el tercero que es la ausencia de fila,
+  `match_attendance`, el permiso `asistencia` y los cuatro endpoints— está en
+  "Roster público y pase de lista". Se lleva de paso el interruptor de la foto
+  (`branch_teams.show_photos`) y con él la mitad del pendiente de la tarjeta
+  del jugador.
+
+  La otra mitad del trabajo del visor —capturar lo que pasa en el campo—
+  también quedó definida el mismo día, en "Estadísticas por jugada": se captura
+  **jugada por jugada** y el box score se deriva, con las reglas de
+  acreditación del manual de estadísticos de la NCAA (que es con lo que ONEFA
+  juega) y los nombres de SportsML. Subir solo los totales sigue siendo válido:
+  `player_match_stats` pasa a ser esa ruta, y el partido se lee de una o de la
+  otra, nunca de las dos.
+
+  Capturar **sin señal** dejó de ser una decisión abierta y es requisito: tiene
+  su propia sección, y de ahí salió que la identidad de una jugada sea una
+  llave generada en el celular. Arrastra trabajo de plataforma que hoy no
+  existe — el service worker solo hace push y no cachea nada.
+
+  **Ya no queda ninguna decisión abierta de esta línea.** La jugada mínima se
+  definió el 2026-09-20 contra cómo se lleva esto de verdad —una cuadrilla de
+  tres en la NCAA, once columnas y por serie en preparatoria, la defensiva
+  siempre al final— y de ahí salieron los tres niveles de captura y la serie
+  como unidad.
+
+  **La hoja de visoría no se diseña todavía, y es una decisión, no un olvido**
+  (2026-09-20). Primero corre la captura por jugada; la hoja se arma con lo que
+  esa captura ya esté produciendo, y diseñarla antes es diseñar contra un dato
+  que nadie ha visto.
 
 - **El nombre del proyecto ya está decidido: CFBAMX.** El texto visible al
   usuario, los comentarios y los nombres de paquete ya dicen CFBAMX. Lo que
@@ -222,6 +252,11 @@ verificación.
   histórica" y no de la de temporada. Falta el interruptor por roster
   (`branch_teams.show_photos`, apagado por default) y sacar la trayectoria de
   `GET /players/:id/card`. Ver "Qué se publica de un roster, y qué no".
+
+  Desde el 2026-09-20 el interruptor ya no es un pendiente suelto: **nace con
+  el roster público** (ver "Roster público y pase de lista"), que es la
+  pantalla que la regla 7 describe. Sacar la trayectoria de la tarjeta sigue
+  siendo aparte y no depende de eso.
 - **No hay archivo `LICENSE`.** El repositorio no declara nada sobre qué se
   puede hacer con este código. Es decisión de negocio, no técnica: o el repo es
   privado, o lleva una licencia propietaria explícita. Hoy no es ninguna de las
@@ -1320,9 +1355,11 @@ publicidad y abarata justo la pantalla que se quería ver seria.
 
 ## Roles y fronteras de información
 
-**Decidido el 2026-09-19, todavía sin construir.** Lo que corre hoy es lo de
-"Cómo está hoy" al final de esta sección; lo de arriba es el modelo completo,
-escrito aquí para que la implementación no tenga que volver a discutirlo.
+**Decidido el 2026-09-19 y construido el 2026-09-20.** Los cinco pasos están
+hechos y el modelo corre de punta a punta; lo que quedó abierto —y lo que
+deliberadamente no se construyó— está en "Cómo está hoy, y qué falta" al final
+de esta sección. Lo de aquí en adelante es el modelo completo, y se deja
+escrito porque sigue siendo el porqué de cada guarda, no un plan pendiente.
 
 Lo que resuelve: "administrar una organización" era una sola cosa —se podía
 todo o no se podía nada— y eso dejó de alcanzar el día que hubo dos libros de
@@ -1451,8 +1488,15 @@ Son dos estados, no tres, y solo se avanza:
 
 | Estado | La liga puede | El equipo puede |
 |---|---|---|
-| **Registrado, sin entregar** | Perfil, roster, calendario y cobranza liga→equipo. Entregarlo, y cancelar esa entrega mientras nadie la reclame. Eliminarlo, salvo que ya tenga movimientos | Nada todavía: su organización existe, pero está vacía |
-| **Entregado** | Roster de sus ramas, cuenta liga↔equipo y calendario. **No** padrón, **no** cuotas, **no** eliminarlo, **no** invitar, **no** volver a entregarlo | Todo lo suyo, incluido repartir su propio acceso |
+| **Registrado, sin entregar** | Perfil, roster, calendario y cobranza liga→equipo. Entregarlo, y cancelar esa entrega mientras nadie la reclame. Eliminarlo | Nada todavía: su organización existe, pero está vacía |
+| **Entregado** | Roster de sus ramas, cuenta liga↔equipo y calendario. **No** padrón, **no** cuotas, **no** invitar, **no** volver a entregarlo | Todo lo suyo, incluido repartir su propio acceso |
+
+> **Eliminar es la casilla que todavía no cumple, y esta tabla lo decía al
+> revés (corregido el 2026-09-20).** Prometía "eliminarlo, salvo que ya tenga
+> movimientos" y, del lado entregado, "**no** eliminarlo": ninguna de las dos
+> es cierta. `DELETE /manage/teams/:id` no pregunta por movimientos y pasa por
+> `teamOwnerRequired`, que es la guarda del perfil — así que la liga alcanza
+> también a un equipo ya entregado. Está en "Pendientes abiertos".
 
 Su participación en los torneos de la liga no es una columna de esta tabla: no
 depende del estado, y se mueve por su cuenta.
@@ -1561,10 +1605,14 @@ Lo que sigue abierto, y **no** es parte de estos cinco pasos:
   Separarlo es un cambio de modelo de datos con su propia sección, abajo.
 - `DELETE /manage/teams/:id` es un `DELETE FROM teams` pelón, y el esquema
   encadena `teams → club_members → club_ledger_entries`. El botón está en el
-  panel de la liga y el diálogo no menciona nada de eso. Bajo el modelo
+  panel de la liga y el diálogo no menciona nada de eso. Su guarda es
+  `teamOwnerRequired` —la del perfil—, así que la liga alcanza también a un
+  equipo ya entregado: es la misma confusión de `teams.league_id` del punto
+  anterior, pero aquí lo que está del otro lado es un borrado. Bajo el modelo
   corregido esto además está mal nombrado: "dar de baja" debería terminar una
   participación, no destruir un equipo.
-- **El visor no tiene pantalla propia.** Con el paso 5, un visor entra al panel
+- **El visor no tiene pantalla propia** — *y desde el 2026-09-20 ya está
+  diseñada la mitad que le faltaba: ver "Roster público y pase de lista".* Con el paso 5, un visor entra al panel
   de la liga con casi todo apagado: le queda el partido y nada más. Funciona y
   no filtra nada, pero es el panel de otro con botones escondidos, no una
   herramienta para lo que esa persona de verdad hace el día del partido —pasar
@@ -2376,6 +2424,648 @@ en el alta manual, botón de foto por jugador. `api/client.js`:
 - La deduplicación al re-subir solo compara contra el roster **de esa misma rama** — un jugador puede quedar duplicado a propósito si se da de alta por separado en otra rama o equipo (mismo comportamiento que el alta manual, que siempre crea un jugador nuevo).
 - Credencial digital de jugador con QR (ver "Roadmap de producto" más abajo): el roster ya existe con este nivel de detalle, la credencial/QR todavía no.
 
+## Roster público y pase de lista
+
+**Decidido el 2026-09-20, sin construir.** Es lo que le da pantalla propia al
+visor, que era el pendiente que dejó abierto el modelo de roles. Nada de esto
+existe hoy: no hay una sola superficie pública donde se vea quién juega — las
+públicas son liga, torneo, calendario, partido y la tarjeta del jugador.
+
+Esta sección es la primera mitad. La segunda —el mismo patrón aplicado a la
+captura de lo que pasa en el campo— está en "Estadísticas por jugada".
+
+### Un botón, dos funciones
+
+La liga publica sus rosters. En la vista pública del partido, cada equipo
+ofrece **Roster**: quien llega de fuera ve a los participantes de ese equipo en
+esa rama; quien tiene el permiso `asistencia` ve la misma lista **con el pase
+de lista al lado**. No son dos pantallas ni dos botones: es la misma lista, y
+lo que cambia es si se puede marcar.
+
+Que el roster se abra **desde el partido** es lo que hace que el mismo botón
+sirva para las dos cosas. La asistencia es a un partido; un roster suelto, sin
+partido en contexto, no tiene a qué marcarle nada.
+
+### Qué se publica, y quién lo decide
+
+Lo que manda es la regla 7 de `CLAUDE.md`, y esta pantalla es justo la que esa
+regla describe: **nombre, número y posición**. `curp` y `birth_date` no salen
+nunca, y el endpoint nombra sus columnas una por una en vez de `SELECT *`, como
+ya hace `GET /players/:id/card`.
+
+**La decisión se toma al crear la categoría**, no después y no en un ajuste
+escondido. Ahí se pregunta si los rosters de esa categoría son **públicos o
+privados** y, si son públicos, **con foto o sin foto**. Es el lugar correcto
+porque una categoría *es* un corte de edad y de nivel: quien la está creando
+sabe en ese momento si está armando la Infantil o la Mayor, y es justo cuando
+la pregunta significa algo. Preguntarlo por equipo obligaría a acertarle
+veinte veces a la misma decisión.
+
+Dos columnas nuevas en `categories`, las dos **apagadas por default**:
+
+| Columna | Qué decide |
+|---|---|
+| `roster_public` | Si el roster de esa categoría sale en público |
+| `roster_photos` | Si además puede salir la foto |
+
+**El equipo puede bajar el techo, nunca subirlo.** La categoría fija hasta
+dónde se permite; `branch_teams.show_photos` deja que un equipo apague la suya
+aunque la categoría la permita. La foto se publica solo si las dos están de
+acuerdo:
+
+```sql
+categories.roster_photos AND COALESCE(branch_teams.show_photos, TRUE)
+```
+
+Nulo significa "sigue a la categoría", y por eso un equipo que nunca tocó nada
+no bloquea a su liga. Lo que **no** existe es la operación contraria: ningún
+equipo puede encender lo que su categoría dejó apagado. Así la regla 7 se
+sostiene —el equipo conserva el veto sobre las caras de sus jugadores— sin que
+la liga tenga que perseguir a veinte equipos para publicar un programa de mano.
+
+> **Esto corrige la regla 7, no la contradice.** Decía que la foto la habilita
+> el equipo, y sigue siendo cierto: lo que se agrega encima es un techo de la
+> liga, que solo puede quitar permiso, nunca darlo.
+
+### La nota que va en esa pantalla
+
+La pregunta se acompaña de una recomendación nuestra, no de una prohibición.
+La liga decide; nosotros decimos lo que sabemos:
+
+> **Recomendación de CFBAMX.** Si esta categoría es de menores de edad, te
+> sugerimos dejar el roster privado. Publicar el nombre, el número y la cara de
+> un menor en una página abierta no le aporta nada a la competencia y sí lo
+> expone fuera de la cancha. Lo que el proceso de competencia sí necesita
+> —quién está inscrito, quién asistió, quién es elegible— la liga y el equipo
+> ya lo ven sin que nada de eso sea público.
+
+Va como recomendación y no como candado por la regla 10: la liga conoce su
+torneo y sus familias, y una plataforma que decide por ella se equivoca en
+cuanto aparece el caso que no previó. Lo que sí hacemos es que el default
+—apagado— sea el que no lastima a nadie si la pregunta se contesta a las
+prisas.
+
+**La asistencia NO es pública**, ni marcada ni sumada, encienda la categoría lo
+que encienda. Son faltas de gente que en buena parte es menor de edad, y
+publicarlas es exactamente lo que la regla 7 existe para no hacer.
+
+### El pase de lista
+
+Dos estados y nada más: **presente** y **ausente**. Y un tercero que no se
+guarda porque es la ausencia de fila: **sin pasar lista**.
+
+> **"Sin pasar lista" no es "faltó", y de esa diferencia cuelga todo.** Si el
+> visor no llegó, nadie faltó. Guardar solo dos estados obligaría a inventar
+> uno de los dos para los partidos que nadie capturó, y la liga acabaría
+> castigando a quien no debía. Por eso la fila **no existe** hasta que alguien
+> pasa lista, y el acumulado reporta las tres cifras por separado.
+
+Nada de "justificado" ni de "no uniformado": un justificado no es un hecho que
+el visor observe en la cancha, es una decisión que alguien toma, y esa decisión
+es de la liga.
+
+### Lo que la plataforma no hace
+
+**Registramos la actividad; la regla es de la liga.** Nadie aquí calcula si un
+jugador es elegible para playoffs, ni bloquea una alineación, ni pinta a nadie
+en rojo. Se entrega el conteo —presentes, ausentes, sin marcar— y la liga
+aplica el criterio que tenga, que además cambia de liga en liga y de temporada
+en temporada. Una plataforma que ejerce la regla se equivoca en cuanto la liga
+la cambia, y encima se vuelve responsable de una decisión que no le toca.
+
+### Modelo
+
+Tabla propia, `match_attendance`:
+
+```sql
+CREATE TABLE IF NOT EXISTS match_attendance (
+  id                SERIAL PRIMARY KEY,
+  match_id          INTEGER NOT NULL REFERENCES matches(id)  ON DELETE CASCADE,
+  player_id         INTEGER NOT NULL REFERENCES players(id)  ON DELETE CASCADE,
+  team_id           INTEGER NOT NULL REFERENCES teams(id)    ON DELETE CASCADE,
+  status            TEXT NOT NULL CHECK (status IN ('present','absent')),
+  marked_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  marked_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(match_id, player_id)
+)
+```
+
+**Por qué no es una columna de `player_match_stats`**, que ya está indexada por
+el mismo par (jugador, partido):
+
+- Ahí la ausencia de fila significa "nadie capturó estadísticas". Meter la
+  asistencia obligaría a crear filas de puros ceros para decir "vino", y
+  entonces "0 yardas" dejaría de distinguirse de "no jugó".
+- Son dos actos distintos, capturados por gente distinta y en momentos
+  distintos: el pase de lista es antes del partido y siempre ocurre; las
+  estadísticas son después y casi nunca.
+- La asistencia necesita saber **quién la marcó y cuándo**, porque de ella
+  cuelga una decisión. `player_match_stats` no guarda ninguna de las dos cosas.
+
+**El acumulado no se guarda, se suma** (regla 4). No hay ningún
+`games_attended` en ninguna tabla: presentes, ausentes y sin marcar salen de
+contar filas contra los partidos de esa rama en los que jugó ese equipo. Un
+pase de lista corregido corrige el acumulado solo.
+
+**Corregir es sobrescribir**, no un libro append-only: `UNIQUE(match_id,
+player_id)` con `ON CONFLICT DO UPDATE`, y `marked_by_user_id` / `marked_at` se
+quedan con quien lo dejó así. No es dinero y no lleva la maquinaria de la regla
+5. Si algún día una liga disputa una asistencia esto no alcanza y habrá que
+agregarle historial — queda escrito para no descubrirlo en ese momento.
+
+**Quién aparece en la lista**: el roster de ese equipo en esa rama **vigente a
+la fecha del partido**, no el de hoy. Un jugador dado de baja en octubre sí
+estaba en el partido de septiembre, y su fila de asistencia se queda donde
+está. La fecha se compara en hora de México, como el resto de las altas y bajas
+del roster.
+
+**Un partido sin equipos vinculados no se puede pasar lista.**
+`matches.home_team_id` y `away_team_id` son nullable: un partido creado por
+nombre y nunca sincronizado no sabe de qué equipo habla. Ahí la pantalla tiene
+que decir que falta conectar los equipos —el botón "Conectar equipos con sus
+partidos" del panel de la liga— y no ofrecer una lista vacía que se lea como
+"no hay jugadores".
+
+### Quién marca y quién ve
+
+Un permiso nuevo, `asistencia`, en el catálogo de `utils/orgRoles.js`:
+
+| Tipo | Rol | `asistencia` |
+|---|---|---|
+| Liga | `owner` | ✅ |
+| Liga | `admin` | ✅ |
+| Liga | `editor` (visor) | ✅ |
+| Liga | `treasurer` | ❌ |
+| Equipo | todos | ❌ escribir · ✅ leer lo suyo, vía `ver` |
+
+**No hace falta un "actuar como visor".** El emprendedor que registró la liga a
+veces pasa lista él mismo, y no tiene por qué crear una segunda cuenta ni
+cambiarse de rol para eso: su rol de dueño **ya trae** el permiso. Un rol no es
+un disfraz que uno se pone; es lo que uno puede. Es también por qué el permiso
+se llama `asistencia` y no "ser visor".
+
+Del lado del equipo, leer la asistencia de los suyos cae en `ver`, la línea
+base — **incluido el coach**, que es justo quien necesita saber a quién le
+falta antes de que sea tarde. No cae en los dos dominios que `ver` nunca
+arrastra (`cuotas_club` y `cobranza_liga`): la asistencia es del dominio
+torneo, como el roster. Un equipo ve **lo suyo** y nunca el pase de lista del
+rival.
+
+### Endpoints
+
+| Método | Ruta | Quién |
+|---|---|---|
+| `GET` | `/public/branches/:branchId/teams/:teamId/roster` | **Público** — recortado por la regla 7 |
+| `GET` | `/matches/:matchId/attendance` | Permiso `asistencia` de la liga, o `ver` del equipo (solo su lado) |
+| `PUT` | `/matches/:matchId/attendance` | Permiso `asistencia` |
+| `GET` | `/branches/:branchId/teams/:teamId/attendance` | El acumulado. Liga y equipo |
+
+**El `PUT` recibe la lista completa de un equipo, no un jugador a la vez.** Un
+pase de lista se hace de un jalón y con la cancha enfrente; mandar cuarenta
+llamadas sueltas deja la mitad capturada cuando se cae el internet del campo,
+que es justo donde esto se va a usar. Recibir la lista entera lo vuelve además
+idempotente de nacimiento, que es lo que pide la cola de envío de "Capturar sin
+señal" — el pase de lista ocurre en la cancha y tiene que funcionar sin datos. Va como **una sola sentencia** con
+`INSERT … ON CONFLICT`, por la regla de que una transacción no se reparte entre
+varias llamadas.
+
+### Antes de darlo por hecho
+
+Las dos cosas que este proyecto ya aprendió a la mala aplican enteras aquí:
+
+- Suite e2e contra una rama de Neon, con datos que **no** invente el mismo
+  código que se está probando: un roster con bajas a media temporada, un
+  partido sin equipos vinculados y un pase de lista corregido dos veces.
+- La pantalla, abierta en el navegador con los tres papeles —público, visor y
+  coach— antes de decir que quedó.
+
+## Estadísticas por jugada
+
+**Decidido el 2026-09-20, sin construir.** Es el mismo patrón que el pase de
+lista y el tercer botón de la vista pública del partido: **Estadísticas** le
+muestra el box score a cualquiera, y a quien tiene el permiso `estadisticas` le
+abre el panel de captura. Lo que cambia es el modelo, y aquí sí había estándar
+que no valía la pena reinventar.
+
+### Lo que ya existe afuera, y qué se toma de cada cosa
+
+Se buscó antes de diseñar. Hay cuatro referencias y **ninguna se adopta
+entera** — cada una aporta una cosa distinta:
+
+| Referencia | Qué es | Qué se toma |
+|---|---|---|
+| **NCAA Football Statisticians' Manual** | El reglamento de **cómo se acredita** cada estadística. No es un formato de datos | Las reglas de acreditación, tal cual |
+| **SportsML 3.1** (IPTC) | Vocabulario XML abierto con el diccionario de estadísticas de fútbol americano | Los **nombres** de los campos |
+| **StatCrew / Genius Sports XML** | El formato de intercambio de facto del fútbol colegial de EE. UU. | La forma del archivo, si algún día hay que exportar |
+| **nflfastR / nflverse** | Diccionario abierto de play-by-play, documentado y consultable | Qué columnas tiene una jugada en la práctica |
+
+**El manual de la NCAA es el que de verdad importa aquí**, porque ONEFA juega
+con reglas NCAA: las reglas de acreditación no hay que inventarlas ni
+discutirlas, ya están escritas. Dos ejemplos de lo que resuelve y que nadie
+adivinaría solo:
+
+- Un pase tirado a propósito al suelo (*intentional grounding*) **no** cuenta
+  como intento de pase. Se le acredita al pasador un **acarreo** con la pérdida
+  hasta el punto de la falta.
+- La yarda perdida en una captura se **parte entre los dos taqueadores**, y si
+  el número es impar el reparto lo decide el estadístico oficial.
+
+Escribirlo aquí es lo que evita que alguien "arregle" esa aritmética más
+adelante creyendo que es un bug.
+
+De **SportsML** se toman los nombres y nada más: `passes-attempts`,
+`passes-completions`, `rushes-attempts`, `rushes-yards`, `receptions-total`,
+`field-goals-made`, `extra-points-made`, `touchdowns-passing`… Adoptar su XML
+completo sería absurdo —son cientos de atributos, la mayoría para prensa
+deportiva profesional— pero nombrar nuestras columnas como él las nombra hace
+que exportar algún día sea un mapeo y no una traducción.
+
+### La jugada es el átomo
+
+Se captura **jugada por jugada**, y el box score se deriva de ahí. No es la
+opción barata y se eligió a propósito:
+
+- **Es lo que de verdad pasa en el campo.** El visor ya lleva la jugada en
+  papel; el panel sustituye ese papel, no le agrega trabajo nuevo.
+- **Es lo único que responde "quién anotó"**, que es justo lo que la hoja de
+  visoría necesita y lo que las 16 columnas de contadores de hoy nunca van a
+  poder contestar.
+- **Todo lo demás se deriva.** Yardas, intentos, porcentajes, líderes: nada de
+  eso se guarda, se suma. Es la regla 4 aplicada a estadísticas.
+
+Dos tablas. La jugada, y quién participó en ella:
+
+```sql
+CREATE TABLE IF NOT EXISTS match_capture_sessions (
+  id                 SERIAL PRIMARY KEY,
+  match_id           INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+  capture_level      TEXT NOT NULL,   -- scoring · offense · full
+  claimed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  claimed_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  released_at        TIMESTAMP,
+  is_authoritative   BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE IF NOT EXISTS match_plays (
+  id                SERIAL PRIMARY KEY,
+  match_id          INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+  session_id        INTEGER NOT NULL REFERENCES match_capture_sessions(id) ON DELETE CASCADE,
+  client_play_id    TEXT NOT NULL,           -- UUID que nace en el celular
+  sequence          INTEGER NOT NULL,        -- orden de captura, NO identidad
+  drive_number      INTEGER NOT NULL,        -- la serie: agrupa, no hace falta tabla
+  period            TEXT NOT NULL,           -- '1'..'4', 'OT1'…
+  clock             TEXT,                    -- solo en la 1a jugada de la serie
+  offense_team_id   INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  down              INTEGER,                 -- se DERIVA; solo se guarda si se corrigió
+  distance          INTEGER,                 -- idem
+  yard_line         INTEGER,                 -- solo en la 1a jugada de la serie
+  play_type         TEXT NOT NULL,           -- rush · pass · kickoff · punt ·
+                                             -- field_goal · extra_point ·
+                                             -- two_point · penalty · kneel · spike
+  yards_gained      INTEGER,
+  points            INTEGER NOT NULL DEFAULT 0,
+  scoring_team_id   INTEGER REFERENCES teams(id) ON DELETE SET NULL,
+  notes             TEXT,
+  created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(match_id, client_play_id)
+);
+
+CREATE TABLE IF NOT EXISTS play_participants (
+  id        SERIAL PRIMARY KEY,
+  play_id   INTEGER NOT NULL REFERENCES match_plays(id) ON DELETE CASCADE,
+  player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  role      TEXT NOT NULL,   -- passer · rusher · receiver · tackler · assist ·
+                             -- sack · interceptor · fumbler · recoverer ·
+                             -- kicker · punter · returner
+  yards     INTEGER,
+  UNIQUE(play_id, player_id, role)
+);
+```
+
+**La identidad es `client_play_id`, no `(match_id, sequence)`**, porque esto se
+captura sin señal y `sequence` la asigna el dispositivo: dos dispositivos
+empiezan los dos en 1. El porqué completo, y todo lo demás que el modo sin
+señal impone, está en "Capturar sin señal".
+
+**Por qué `play_participants` aparte y no doce columnas de jugador en la
+jugada.** Un pase completo con captura tiene pasador, receptor y dos
+taqueadores; un acarreo tiene uno. Doce columnas nulables obligan a leer todas
+para saber cuáles vienen llenas, y cada estadística nueva es una columna más. En
+una tabla de participantes, "intentos de pase de fulano" es contar filas con
+`role = 'passer'` — que es exactamente la forma que tienen los nombres de
+SportsML.
+
+### Qué tan fina es la jugada mínima
+
+**Decidido el 2026-09-20**, y no por lo que es barato sino por cómo se lleva
+esto de verdad. Lo que se fue a ver antes de decidir:
+
+- En la **NCAA** el play-by-play completo **no lo hace una persona**: es una
+  cuadrilla de tres —quien identifica al jugador, quien narra la jugada y quien
+  la teclea—. Pedirle eso a un visor solo es pedirle el trabajo de tres.
+- Las guías para **preparatoria** recomiendan lo contrario de lo que suena
+  profesional: *"para la mayoría de los programas, capturar resultado por
+  jugada es demasiado fino; lleva los totales de cada jugador **por serie**"*, y
+  ofrecen una hoja de **11 columnas que una sola persona puede manejar**.
+- La **estadística defensiva es la que rompe la captura en vivo**. La
+  recomendación de todos lados es la misma: primero taqueos y capturas, los
+  balones sueltos entre series.
+- **SnapStat**, hecho por un papá que capturó más de cien partidos, tomó la
+  decisión que más dice: el **reloj se captura 10–15 veces por partido, no
+  120** — nada más en los cambios de posesión.
+
+La conclusión que sale de ahí es una sola: **lo que cuesta capturar no son las
+jugadas, son los campos que obligan a mirar a otro lado.** Quién llevó el balón
+y cuántas yardas ganó lo ve la misma persona que está siguiendo la jugada. Quién
+taqueó hay que buscarlo en el montón, y el reloj hay que voltear a verlo.
+
+### La jugada mínima: qué hizo el balón
+
+Una jugada es **válida** con tres cosas, y nada más:
+
+1. `play_type` — pase, acarreo, patada, despeje, gol de campo, punto extra…
+2. **Al menos un participante con el balón**: `passer` + `receiver` en un pase
+   completo, `rusher` en un acarreo, `kicker`, `returner`.
+3. `yards_gained` — cero es un valor, no un hueco (un pase incompleto es cero).
+
+Si la jugada anotó, además `points` y `scoring_team_id`. Eso es todo.
+
+**Lo que NO entra en el mínimo, con su razón:**
+
+| Campo | Por qué queda fuera |
+|---|---|
+| Taqueadores y asistencias | Es el campo que exige una segunda persona. La NCAA le pone un observador dedicado; las guías de preparatoria dicen que se agregue después |
+| Reloj | Se captura **por serie**, no por jugada: de 120 capturas a 10–15 |
+| Down y distancia | **Se derivan** (ver abajo) |
+| Penalizaciones | Se agregan encima de la jugada que ya existe, cuando haya con quién |
+
+Todo esto se agrega **sobre la misma fila** cuando la liga pueda. No hay
+migración entre un nivel y otro: una jugada simplemente tiene más
+participantes.
+
+### El down no se captura, se deriva
+
+Dentro de una serie, si se sabe dónde empezó y cuántas yardas ganó cada jugada,
+**se sabe en qué down va**: 1 y 10 desde la 25, ganó 4 → 2 y 6; ganó 6 → 1 y 10
+otra vez. Es la regla 4 aplicada a la captura.
+
+Lo que rompe la cadena son las penalizaciones y los cambios de posesión que no
+se anotaron. Por eso la pantalla **muestra el down derivado y deja corregirlo**:
+el visor no captura el down, lo desmiente cuando se desvía. Se captura la
+posición al **inicio de la serie** y el resto sale solo.
+
+Es la diferencia entre teclear cuatro campos por jugada y confirmar uno.
+
+### La serie es la unidad que abarata todo
+
+`match_plays` gana `drive_number`. No es un capricho de modelo: es lo que hace
+posible todo lo de arriba, porque los tres campos caros son **por serie y no
+por jugada**:
+
+- quién tiene el balón,
+- el reloj,
+- la posición de arranque.
+
+Los tres se capturan una vez por serie —diez o quince veces por partido— y se
+quedan en la primera jugada de esa serie; en las demás van en nulo. No hace
+falta una tabla de series: una serie **es** un grupo de jugadas con el mismo
+`drive_number`, y se resuelve al leer.
+
+### Tres niveles, una sola bitácora
+
+El visor elige al empezar qué va a capturar, y **la sesión lo declara**:
+
+| Nivel | Qué captura | Cuánto cuesta | Qué produce |
+|---|---|---|---|
+| `scoring` | Solo las jugadas que anotaron | ~8 capturas · cualquiera | **Quién anotó**. No produce box score |
+| `offense` | Todas las jugadas, mitad ofensiva | ~120 capturas · una persona que sabe de futbol | Box score de ataque completo |
+| `full` | Lo anterior más taqueos y capturas | ~120 capturas · dos personas | Box score completo |
+
+Los tres **escriben las mismas filas**. Una liga que arranca en `scoring` y en
+dos temporadas llega a `full` no migra nada: sus jugadas viejas se quedan como
+están y las nuevas traen más participantes. Eso es lo que compra la tabla
+`play_participants`, y es la razón de que exista.
+
+> **El nivel no es una preferencia, es un dato del que depende cómo se lee ese
+> partido.** Si un partido capturado en `scoring` alimentara el box score
+> derivado, ese box score diría que el equipo entero corrió 80 yardas en el
+> partido —las de los touchdowns— y nada más. Sería un número **falso y con
+> cara de verdadero**, que es la peor clase. Por eso el nivel se declara al
+> empezar y viaja con la sesión.
+
+### Dos formas de capturar, una sola forma de leer
+
+Capturar jugada por jugada **no puede ser obligatorio**. Una liga chica, o un
+visor que ese día no alcanzó, tienen que poder subir nada más los totales. Pero
+si el mismo número se puede escribir en dos lugares, hay dos verdades — y eso
+es lo que este proyecto no hace.
+
+La salida es la que la regla 4 ya usa para la fase de un partido (`phase_id` o
+`week_label`): **el dato se resuelve al leer, en cascada, y hay un solo ganador
+por partido.**
+
+1. ¿Ese partido tiene una sesión buena (`is_authoritative`) con nivel
+   `offense` o `full`? El box score **se deriva de sus jugadas**.
+2. ¿No la tiene —porque no se capturó, o porque se capturó en nivel
+   `scoring`—? Se lee `player_match_stats`, la tabla de 16 contadores que ya
+   existe, que pasa a ser la **captura por totales**.
+
+El nivel `scoring` es el caso que obliga a que el paso 1 pregunte por el nivel
+y no solo por "¿hay jugadas?": un partido con ocho jugadas de anotación **sí**
+tiene jugadas, y derivar de ahí daría un box score falso con cara de
+verdadero. Sus jugadas sirven para "quién anotó" y para nada más.
+
+Nunca se mezclan, nunca se suman entre sí, y nadie copia lo derivado dentro de
+la otra tabla. Un partido capturado por jugada y otro capturado por totales
+conviven en la misma temporada sin que la liga tenga que saberlo: la tabla de
+líderes los lee igual.
+
+**Corregir una acreditación derivada** —la liga revisa el video y el
+touchdown era del otro— se hace corrigiendo **la jugada**, no el total. Si
+alguna vez hace falta forzar un total contra lo que dicen las jugadas, va en
+una columna `*_override` **nueva**, nunca sobrescribiendo: regla 4, y el dato
+viejo es el respaldo.
+
+**El marcador del partido no cambia de dueño en esta versión.**
+`matches.home_score` / `away_score` se siguen capturando a mano con el permiso
+`marcadores`, que ya funciona. La suma de `points` de las jugadas es una
+**segunda lectura** que el panel puede contrastar para avisar "esto no cuadra",
+no un reemplazo. Cambiar de dónde sale el marcador publicado es otro cambio,
+con su propia ventana de riesgo, y no tiene por qué viajar con este.
+
+### Quién captura y quién ve
+
+Un permiso nuevo, `estadisticas`, con el mismo reparto que `asistencia`:
+`owner`, `admin` y `editor` (visor) de la liga lo traen; el tesorero no. El
+equipo no captura, y lee lo suyo por `ver`. Vale igual lo de la sección
+anterior: el dueño de la liga ya lo trae, así que el emprendedor que captura él
+mismo no necesita otra cuenta ni cambiarse de rol.
+
+El box score **sí es público** —a diferencia de la asistencia—: es el resultado
+deportivo, que es justo lo que un torneo publica. Lo que no sale nunca es de
+quién es cada dato personal detrás del jugador, que ya está cubierto por la
+regla 7.
+
+### Las tres decisiones que quedaban, y cómo se cerraron
+
+Ninguna sigue abierta. Se dejan escritas con su porqué, porque las tres se van
+a volver a preguntar.
+
+- ~~Capturar sin internet~~ — **resuelto el 2026-09-20, y es requisito**: ver
+  "Capturar sin señal", que además cambió la identidad de una jugada.
+- ~~Qué tan fina es la captura mínima~~ — **decidido el 2026-09-20**: ver
+  "Qué tan fina es la jugada mínima", arriba.
+- ~~Si `player_match_stats` se renombra a los nombres de SportsML~~ —
+  **decidido el 2026-09-20: no se renombra.** Se queda como está.
+
+  No compra nada que no se pueda hacer igual de bien el día que haga falta. Lo
+  único que ese renombre habilitaría es exportar a un formato estándar, y eso
+  se resuelve con una tabla de equivalencias de veinte líneas
+  (`pass_yards` → `passes-yards-gross`) escrita **el día que alguien de verdad
+  pida esa exportación**, que hoy no ha pasado.
+
+  Lo que sí cuesta es real: son 20 referencias en tres archivos
+  (`config/db.js`, `routes/players.js`, `MatchStatsModal.jsx`), es un valor
+  guardado, así que va con migración, y por la regla 6 se mueve en los tres
+  lados o en ninguno — con la misma ventana de incompatibilidad al desplegar
+  que tiene anotada el renombre de `/api/player-billing`.
+
+  Y hay una razón de fondo para no preocuparse: **los nombres de SportsML
+  importan en la salida derivada, no en las columnas**. El box score que sale
+  de las jugadas se calcula al leer, así que se puede nombrar como se quiera,
+  cuando se quiera, sin tocar una sola fila. Ahí es donde se usa el
+  vocabulario, y ahí es gratis.
+
+## Capturar sin señal
+
+**Decidido el 2026-09-20, sin construir.** Es requisito, no mejora. Muchas
+canchas no tienen señal, y una captura que exige conexión por jugada
+sencillamente no se usa: se vuelve al papel en el segundo partido. Gobierna las
+dos pantallas del visor —el pase de lista y la captura por jugada— así que se
+diseña una vez y sirve para las dos.
+
+### Lo que hay hoy, y lo que no
+
+- `public/sw.js` **existe, pero solo hace push**: no tiene un manejador
+  `fetch` y no cachea nada.
+- Se registra dentro de `SubscribeButton.jsx`, o sea **solo si alguien se
+  suscribió a las notificaciones**. Un visor que nunca tocó ese botón no tiene
+  service worker.
+- No hay `manifest.json`: la app no se instala en el teléfono.
+- El token dura **7 días** (`middleware/auth.js`), así que una jornada completa
+  sin señal no lo tumba. Eso sí está resuelto y no hay que tocarlo.
+
+De las tres piezas que esto necesita —que la pantalla cargue sin señal, que los
+datos ya estén ahí, y que lo capturado se guarde y suba después— hoy **no hay
+ninguna**.
+
+### Se prepara con señal, se captura sin ella
+
+Una descarga **explícita y previa**, no un cache oportunista. El visor abre el
+partido con señal —en su casa, en el estacionamiento— y presiona **Preparar
+partido**: eso baja el partido, los dos rosters vigentes a esa fecha y la
+pantalla misma.
+
+> **Por qué explícita.** El cache oportunista —"se guarda lo que hayas
+> visitado"— falla exactamente cuando importa: el visor que nunca abrió esa
+> pantalla con señal llega a la cancha sin nada, y ahí ya no hay forma de
+> avisarle. Una descarga que se pide se puede verificar **antes** de salir, y
+> la pantalla puede decir "listo, este partido ya se captura sin señal". La
+> diferencia entre las dos es quién se entera del problema y cuándo.
+
+### La llave de una jugada la pone el cliente
+
+`UNIQUE(match_id, sequence)`, como estaba escrito en "Estadísticas por jugada",
+**no sobrevive al modo sin señal**: `sequence` la asigna el dispositivo, y dos
+dispositivos empiezan los dos en 1. La identidad se mueve a una llave que nace
+en el celular, junto con la jugada:
+
+| Campo | Qué es |
+|---|---|
+| `client_play_id` | Un UUID (`crypto.randomUUID()`) generado al capturar la jugada, offline |
+| `UNIQUE(match_id, client_play_id)` | La identidad real. El envío hace `ON CONFLICT DO NOTHING` |
+| `sequence` | Se queda, pero como **orden de captura**, ya no como identidad |
+
+**Este proyecto ya usa ese patrón**: `auto_cycle_key` en la mensualidad del
+club, que hace que generar el mismo ciclo dos veces no cobre dos veces. Aquí
+compra lo mismo: subir el mismo lote dos veces es gratis, que es justo lo que
+pasa cuando el internet del campo va y viene.
+
+### El orden sale de `sequence`, nunca de `created_at`
+
+El `created_at` de una jugada capturada sin señal es **el momento en que se
+subió**, no el momento en que pasó: un partido entero puede llegar con el mismo
+segundo. El orden sale de `sequence` dentro de su sesión de captura.
+
+Queda escrito porque ordenar por fecha es lo primero que alguien va a intentar,
+el resultado se ve razonable en un partido capturado en vivo, y el partido
+capturado sin señal sale revuelto sin que nada falle.
+
+### Un partido, un capturista a la vez
+
+Una **sesión de captura** —`match_capture_sessions`, la tabla que también
+carga el nivel— reclama el partido. Un segundo dispositivo ve "Fulano está
+capturando este partido desde las 10:32 — ¿tomar el control?", y tomarlo es
+explícito y queda registrado con quién y cuándo.
+
+Sin eso, dos visores capturando el mismo partido producen dos medias listas que
+**nadie puede volver a unir**: no hay forma automática de saber si dos jugadas
+parecidas son la misma capturada dos veces o dos jugadas distintas.
+
+Y la contraparte, que importa más: **nunca se descarta lo capturado**. Si
+alguien capturó sin haber reclamado el partido, sus jugadas suben igual, en su
+propia sesión, y el panel muestra las dos para que **una persona** elija cuál
+es la buena — que es lo único que hace `is_authoritative`. La
+plataforma no adivina cuál era la buena — es la regla 10 otra vez, y la misma
+idea de la regla 4 de que un dato mal capturado se corrige y no se borra.
+
+### El riesgo que no se puede tapar
+
+Mientras las jugadas viven solo en el celular del visor, viven **en un solo
+lugar**: si borra los datos del navegador o pierde el teléfono, se perdieron.
+Es el mismo riesgo que tiene la hoja de papel que esto sustituye —no uno
+nuevo— pero la pantalla tiene que decirlo en voz alta en vez de dejarlo
+implícito:
+
+- un contador visible de **"47 jugadas sin subir"**, siempre a la vista;
+- un aviso al intentar salir con jugadas pendientes;
+- y el envío en cuanto vuelva la señal, sin que nadie tenga que acordarse.
+
+Lo que convierte esto en una pérdida no es que el dato viva en el teléfono, es
+que nadie se entere de que todavía vive ahí.
+
+### Lo que hay que construir, en orden
+
+1. **El service worker cachea la aplicación y se registra al arrancar**, no
+   dentro del botón de notificaciones. Hoy es lo primero que falta y no depende
+   de nada más.
+2. **La capa local en IndexedDB**: el partido preparado, los rosters y la cola
+   de lo capturado. No es dependencia nueva — es API del navegador.
+   `localStorage` no sirve aquí: es chico, es síncrono y ya carga el token.
+3. **La cola de envío**, que reintenta sola y sobrevive a recargar la página y
+   a volver a entrar.
+4. **Los dos endpoints idempotentes**: el lote de jugadas con
+   `client_play_id`, y el `PUT` de asistencia, que ya nace idempotente porque
+   recibe la lista completa.
+5. **`manifest.json`** para que se pueda instalar. No es requisito para que
+   funcione sin señal, pero una app instalada aguanta mucho mejor que una
+   pestaña que el teléfono puede matar a media captura.
+
+### Antes de darlo por hecho
+
+Esto no se puede verificar leyendo el código ni con una prueba unitaria, y es
+justo la clase de cosa que se rompe en la cancha y no en el escritorio:
+
+- Con el modo avión prendido, de punta a punta: preparar el partido con señal,
+  apagarla, pasar lista, capturar veinte jugadas, **recargar la página**,
+  capturar diez más, volver a encender la señal y comprobar que subieron las
+  treinta, en orden y una sola vez.
+- El mismo lote enviado dos veces, a propósito, comprobando que la segunda vez
+  no duplica nada.
+- Dos dispositivos sobre el mismo partido, comprobando que el segundo avisa en
+  vez de revolver.
+
 ## Equipos independientes (sin liga)
 
 Hasta ahora un equipo solo podía existir colgado de una liga (`teams.league_id
@@ -2445,13 +3135,17 @@ siempre había una:
   su ficha pública~~ — **ya no aplica**: `TeamCard` muestra la palomita (con
   `title`/`aria-label` que le dan el significado, porque la tarjeta es chica y
   va en cuadrícula) y `TeamInfoPanel` la pastilla completa "✓ Verificado".
-- No existe flujo de traspaso de dueño para un equipo independiente (sí existe
-  para uno de liga, vía invitación — `routes/invites.js`) — si el que lo
-  registró pierde acceso a su cuenta, hoy no hay forma de reclamarlo. Lo
-  resuelve el modelo decidido el 2026-09-19: con **varios dueños a la vez**
-  (ver "Roles y fronteras de información") quien registra el equipo puede
-  invitar a un segundo dueño desde el principio, y perder una cuenta deja de
-  ser fatal.
+- ~~No existe flujo de traspaso de dueño para un equipo independiente~~ —
+  **resuelto a medias el 2026-09-20**. Con el modelo de roles construido hay
+  **varios dueños a la vez**: quien registra el equipo puede invitar a un
+  segundo dueño desde el principio (la invitación con rol `owner` pide el
+  permiso `duenos`, que solo un dueño tiene), y perder una cuenta deja de ser
+  fatal. Lo que sigue sin existir es el **rescate**: si el único dueño ya
+  perdió acceso, no hay un flujo para reclamar ese equipo. La salida existe
+  pero es de dos pasos y no está en ninguna pantalla: un administrador de la
+  plataforma invita a la persona como `admin` —a `owner` no puede, ese permiso
+  es solo de un dueño— y después le cede el puesto con `transfer-owner`, que
+  sí lo deja pasar por encima de `duenos`.
 
 ## Transmisiones — un medio se suma a un partido
 
