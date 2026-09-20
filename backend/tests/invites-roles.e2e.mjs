@@ -234,6 +234,29 @@ ok((await call(`/manage/matches/${MATCH}`, { method: 'PUT', token: TESOLIGA, bod
 ok((await call(`/player-billing/teams/${TEAM2}/overview`, { token: TESOLIGA })).status === 403,
   'ni el padrón de un club: ningún rol de liga lo alcanza, y ese es el corazón del modelo');
 
+
+console.log('\n=== 15. El editor de roster sí puede hacer su trabajo ===');
+// Lo que faltaba probar: que el rol no solo VEA su pestaña sino que pueda
+// escribir. Un rol que existe pero no alcanza a hacer su trabajo es peor que
+// no tenerlo — se reparte, la persona entra, y no puede.
+await call(`/manage/branches/${BRANCH}/teams`, { method: 'POST', token: LIGA, body: { team_id: TEAM2 } });
+const rutaRoster = `/players/branches/${BRANCH}/teams/${TEAM2}/roster`;
+
+ok((await call(rutaRoster, { token: ROSTER2 })).status === 200, 'el editor de roster LEE el roster de la rama');
+const altaJugador = await call(rutaRoster, {
+  method: 'POST', token: ROSTER2,
+  body: { first_name: 'Juan', last_name: 'Pérez', jersey_number: 7, position: 'QB' },
+});
+ok(altaJugador.status === 200 || altaJugador.status === 201,
+  'y DA DE ALTA a un jugador, que es su trabajo', `=${altaJugador.status}`);
+ok((await call(`${rutaRoster}/template`, { token: ROSTER2 })).status === 200,
+  'y baja la plantilla de Excel');
+
+ok((await call(rutaRoster, { method: 'POST', token: COACH2, body: { first_name: 'X', last_name: 'Y' } })).status === 403,
+  'el coach NO da de alta en el roster: lo lee desde el panel, no lo edita');
+ok((await call(rutaRoster, { method: 'POST', token: TESO2, body: { first_name: 'X', last_name: 'Y' } })).status === 403,
+  'y el tesorero tampoco — lleva dinero, no jugadores');
+
 console.log(`\n========  ${pass} ok, ${fail} fallas  ========`);
 await pool.end();
 process.exit(fail ? 1 : 0);

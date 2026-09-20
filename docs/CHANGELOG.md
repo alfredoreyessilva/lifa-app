@@ -160,7 +160,7 @@ entradas traen el post-mortem del bug que las provocó.
   5 pruebas unitarias nuevas (91 → 96); 22 comprobaciones de SQL contra la base
   real dentro de una transacción con `ROLLBACK`; las dos suites de cobranza en
   40/0 y 21/0, idénticas a las del paso 2; y una suite e2e nueva
-  —`tests/invites-roles.e2e.mjs`, **54 comprobaciones**— porque ninguna de las
+  —`tests/invites-roles.e2e.mjs`, **59 comprobaciones**— porque ninguna de las
   dos de cobranza toca esto: las dos usan un equipo independiente cuyo dueño es
   el propio actor, así que nunca hay una liga entregando nada.
 

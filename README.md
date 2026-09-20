@@ -1693,7 +1693,7 @@ dentro de una transacción con `ROLLBACK` —el CHECK acepta los seis valores y
 rechaza uno inventado, `invites.role` quedó NULL en las 7 filas que ya había, y
 no se movió ningún miembro de otra organización—; las dos suites de cobranza en
 **40/0 y 21/0**, idénticas a las del paso 2; y una **suite e2e nueva**,
-`tests/invites-roles.e2e.mjs`, con **54 comprobaciones** sobre las rutas vivas.
+`tests/invites-roles.e2e.mjs`, con **59 comprobaciones** sobre las rutas vivas.
 Esa última es lo único que podía atrapar que un 403 le tocara a quien no era, y
 cubre las dos mitades: que el tesorero del club sí vea el padrón y el coach no,
 que el visor edite el marcador y no pueda borrar el partido, que ningún rol de
