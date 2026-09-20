@@ -19,7 +19,12 @@ function getVisitorId() {
   }
 }
 
-async function request(path, { method = 'GET', body, token } = {}) {
+// `keepalive` es para las peticiones que tienen que sobrevivir a que el
+// navegador cambie de pestaña o de app en el mismo instante — hoy, la que
+// registra el recordatorio de WhatsApp. Sin él, el navegador puede cancelar
+// la petición a medias y el recordatorio se pierde. Trae un límite de 64 KB
+// de cuerpo, de sobra para lo que lo usamos.
+async function request(path, { method = 'GET', body, token, keepalive = false } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -27,6 +32,7 @@ async function request(path, { method = 'GET', body, token } = {}) {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
+    keepalive,
   });
 
   const data = await res.json().catch(() => ({}));
@@ -577,6 +583,12 @@ export const api = {
   // el DELETE de arriba: lo que los separa es el método.
   updateTeamMember: (teamId, memberId, payload, token) =>
     request(`/player-billing/teams/${teamId}/members/${memberId}`, { method: 'PATCH', body: payload, token }),
+  // Marca "ya le recordé" y nada más. Va aparte de updateTeamMember por el
+  // `keepalive`: quien la llama acaba de abrir WhatsApp en otra pestaña, y
+  // esta petición tiene que sobrevivir a ese cambio (ver TeamFinancesSection).
+  markMemberReminded: (teamId, memberId, token) =>
+    request(`/player-billing/teams/${teamId}/members/${memberId}`,
+      { method: 'PATCH', body: { mark_reminded: true }, token, keepalive: true }),
   rotateMemberShareToken: (teamId, memberId, token) =>
     request(`/player-billing/teams/${teamId}/members/${memberId}/rotate-token`, { method: 'POST', token }),
   updatePlayerBillingSettings: (teamId, payload, token) =>

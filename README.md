@@ -220,11 +220,6 @@ verificación.
 - **No hay auditoría del padrón.** Se sabe cuál es la cuota de alguien, no
   quién se la cambió ni cuándo. El patrón a imitar ya existe: el trío
   `created_by_user_id` / `voided_by_user_id` / `reverses_entry_id` del libro.
-- **El botón "Recordar" puede quedar bloqueado por el navegador.** Hay dos
-  `await` antes del `window.open` (`TeamFinancesSection.jsx`), y Safari —y casi
-  siempre Firefox— bloquean una ventana que no cuelga síncronamente del clic.
-  El tesorero ve "recordado hoy" y no se abrió nada: peor que no marcar, porque
-  la plataforma registra un recordatorio que nunca se mandó.
 - **No hay archivo `LICENSE`.** El repositorio no declara nada sobre qué se
   puede hacer con este código. Es decisión de negocio, no técnica: o el repo es
   privado, o lleva una licencia propietaria explícita. Hoy no es ninguna de las

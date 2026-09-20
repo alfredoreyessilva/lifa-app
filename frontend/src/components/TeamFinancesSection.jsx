@@ -117,14 +117,32 @@ export default function TeamFinancesSection({ team, token }) {
     }
   }
 
-  async function remind(member) {
-    // Marcar el recordatorio ANTES de abrir WhatsApp: si se hace después, el
-    // navegador ya cambió de pestaña y la petición se puede quedar a medias.
-    try {
-      await api.updateTeamMember(team.id, member.member_id, { mark_reminded: true }, token);
-      await refresh();
-    } catch { /* que no se pierda el recordatorio por un fallo de red */ }
+  function remind(member) {
+    // El window.open va PRIMERO y SÍNCRONO, colgando del clic.
+    //
+    // Los navegadores solo dejan abrir una pestaña si la llamada cuelga del
+    // clic; detrás de un `await` ya no la consideran iniciada por la persona y
+    // la bloquean —Safari siempre, Firefox casi siempre—. Aquí eso producía la
+    // peor falla posible de esta pantalla: la petición de abajo SÍ corría, la
+    // tabla decía "recordado hoy"… y el mensaje nunca salió. El tesorero se
+    // queda tranquilo y la familia nunca se entera. Peor que no marcar nada,
+    // porque no hay forma de notarlo.
+    //
+    // Se puede abrir de inmediato porque whatsappReminderUrl() es pura: arma el
+    // texto con lo que ya está en memoria, no consulta nada. Nunca hubo razón
+    // para esperar.
     window.open(whatsappReminderUrl(member, team.name), '_blank', 'noopener');
+
+    // Y el registro va DESPUÉS, con keepalive.
+    //
+    // El orden estaba al revés justamente para proteger este registro: abrir
+    // WhatsApp cambia de pestaña (en celular, de app) y una petición normal se
+    // puede quedar a medias ahí. El miedo era real, pero la solución no era el
+    // orden: `keepalive` existe para las peticiones que tienen que sobrevivir a
+    // ese cambio. Así se tienen las dos cosas, que es lo que este botón promete.
+    api.markMemberReminded(team.id, member.member_id, token)
+      .then(refresh)
+      .catch(() => { /* que no se pierda el mensaje por un fallo de red */ });
   }
 
   async function copyLink(member) {

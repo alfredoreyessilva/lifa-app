@@ -15,6 +15,38 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El botón "Recordar" ya abre WhatsApp de verdad (2026-09-19)**: en
+  `TeamFinancesSection.jsx` había dos `await` antes del `window.open`, y los
+  navegadores solo dejan abrir una pestaña si la llamada cuelga **síncronamente**
+  del clic. Safari la bloquea siempre y Firefox casi siempre, y la falla que eso
+  producía era de las malas: la petición que marca `last_reminded_at` **sí**
+  corría, así que la tabla decía "recordado hoy" y el mensaje nunca salía. El
+  tesorero se queda tranquilo, la familia nunca se entera, y no hay forma de
+  notarlo. Peor que si el botón no hubiera hecho nada.
+
+  El orden estaba al revés **a propósito**, y el comentario lo decía: si se
+  marca después, abrir WhatsApp cambia de pestaña —en celular, de app— y la
+  petición se puede quedar a medias. El miedo era correcto; lo que no era
+  correcto es que hubiera que elegir. Ahora el `window.open` va primero y
+  síncrono (se puede, porque `whatsappReminderUrl()` es pura: arma el texto con
+  lo que ya está en memoria y no consulta nada), y el registro va después con
+  `keepalive`, que existe exactamente para las peticiones que tienen que
+  sobrevivir a ese cambio. `request()` de `api/client.js` acepta ahora esa
+  opción, y `markMemberReminded()` va aparte de `updateTeamMember()` para no
+  cambiarle la firma a los otros dos lugares que la usan.
+
+  **Verificado en el navegador, y vale la pena decir hasta dónde.** Lo que se
+  midió es `navigator.userActivation.isActive` en el instante del
+  `window.open`, que es la condición que los bloqueadores revisan: con una
+  petición lenta (6 s, como la de un tesorero con datos móviles) el patrón
+  viejo llega con `false` —la activación por gesto **expiró** durante el
+  `await`— y el nuevo llega con `true`. Lo que **no** se pudo reproducir aquí
+  es el bloqueo en sí: el único motor instalado es Chromium, que es el
+  permisivo de esta historia, y además Playwright lo corre con el bloqueador de
+  pop-ups desactivado. O sea, se verificó la **causa** y no el síntoma. Tampoco
+  se hizo clic en el botón real: llegar a esa pantalla pide sesión y un padrón
+  con datos personales de menores, que no se cargan para una prueba (regla 7).
+
 - **El roster también se fecha en México, no en UTC (2026-09-19)**: la cobranza
   ya había cerrado este desfase; al roster le faltaban tres lugares. Los dos
   `UPDATE` que cierran una membresía en `routes/players.js` (mover a un jugador
