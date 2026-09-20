@@ -1,0 +1,14 @@
+{
+  "name": "CFBAMX — Calendarios de Football Americano",
+  "short_name": "CFBAMX",
+  "description": "Calendarios, resultados y rosters del fútbol americano en México.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#3a8d3f",
+  "theme_color": "#3a8d3f",
+  "lang": "es-MX",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

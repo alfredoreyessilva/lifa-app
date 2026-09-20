@@ -1,0 +1,134 @@
+// La cola de lo capturado sin señal: qué se guarda, cómo se juntan dos
+// capturas de lo mismo y cuándo se reintenta. El porqué está en el README,
+// "Capturar sin señal" (decidido el 2026-09-20).
+//
+// Vive aparte de `offlineDb.js` —que es quien habla con IndexedDB— por la misma
+// razón que `orgRoles.js` en el backend: aquí está la regla que decide si un
+// pase de lista capturado en la cancha se pierde o no, y eso tiene que poder
+// probarse sin navegador. `offlineDb.js` no se puede probar en el CI; esto sí.
+//
+// Todo lo de aquí es PURO: recibe listas y devuelve listas. No toca IndexedDB,
+// no toca la red y no mira el reloj por su cuenta (el `ahora` se pasa).
+
+// Cuántas veces se reintenta antes de dejar de insistir solo. No se descarta
+// nunca: lo que pasa de aquí se queda en la cola, visible, para que alguien
+// decida. La regla 10 otra vez — la plataforma no tira un dato por su cuenta.
+export const MAX_INTENTOS = 8;
+
+// Espera entre reintentos, en segundos: 5s, 15s, 45s… hasta 5 minutos. Empieza
+// corto porque el caso común es que la señal vuelva en el estacionamiento, y
+// se alarga para no quemar batería en una cancha donde no hay nada.
+const ESPERAS = [5, 15, 45, 120, 300];
+
+// Cuánto esperar DESPUÉS de que fallaran `fallos` intentos: con uno fallido,
+// 5 segundos; con dos, 15; y así hasta el tope. El índice arranca en 0 porque
+// se pregunta después del primer fallo, no antes del primer intento — lo recién
+// capturado no espera nada (ver `pendientesListos`).
+export function esperaDeIntento(fallos = 1) {
+  return ESPERAS[Math.min(Math.max(fallos - 1, 0), ESPERAS.length - 1)] * 1000;
+}
+
+// ── La llave: qué cuenta como "lo mismo" ──────────────────────────────────
+//
+// Un pase de lista es el estado COMPLETO de un equipo en un partido, así que
+// dos capturas del mismo par (partido, equipo) no son dos cosas que subir: son
+// la misma, y gana la última. Por eso la cola se fusiona en vez de acumular.
+//
+// Esto es consecuencia directa de que el `PUT` reciba la lista entera. Con un
+// endpoint por jugador habría que subir cuarenta llamadas EN ORDEN y aguantar
+// que la número 19 falle; así, lo que se sube es el estado final y ya.
+export function clavePendiente(pendiente) {
+  if (!pendiente || !pendiente.kind) return null;
+  if (pendiente.kind === 'attendance') {
+    return `attendance:${pendiente.matchId}:${pendiente.teamId}`;
+  }
+  // Un tipo que este código no conoce no se fusiona con nada: se encola tal
+  // cual, con su propia llave. Falla del lado de no perder datos.
+  return `${pendiente.kind}:${pendiente.id ?? ''}`;
+}
+
+// Mete un pendiente en la cola. Si ya había uno de lo mismo, lo REEMPLAZA y
+// conserva su `id` y el momento en que se capturó por primera vez — lo que se
+// sube es el estado final, pero "esto lleva pendiente desde las 10:32" sigue
+// siendo cierto y es lo que la pantalla enseña.
+//
+// Los intentos se reinician a propósito: la captura cambió, así que el motivo
+// por el que fallaba la anterior puede ya no aplicar.
+export function encolar(cola, pendiente, ahora = Date.now()) {
+  const lista = Array.isArray(cola) ? cola : [];
+  const clave = clavePendiente(pendiente);
+  if (!clave) return lista;
+
+  const previo = lista.find((p) => clavePendiente(p) === clave);
+  const nuevo = {
+    ...pendiente,
+    id: previo?.id ?? `${clave}#${ahora}`,
+    capturadoEn: previo?.capturadoEn ?? ahora,
+    actualizadoEn: ahora,
+    intentos: 0,
+    ultimoError: null,
+  };
+
+  return previo
+    ? lista.map((p) => (clavePendiente(p) === clave ? nuevo : p))
+    : [...lista, nuevo];
+}
+
+export function quitarDeCola(cola, id) {
+  return (Array.isArray(cola) ? cola : []).filter((p) => p.id !== id);
+}
+
+// Un intento que falló. NO se borra: se anota el error y se pospone.
+export function marcarFallo(cola, id, mensaje, ahora = Date.now()) {
+  return (Array.isArray(cola) ? cola : []).map((p) => (
+    p.id === id
+      ? { ...p, intentos: (p.intentos || 0) + 1, ultimoError: mensaje || 'No se pudo subir', ultimoIntento: ahora }
+      : p
+  ));
+}
+
+// Qué toca subir ahora: lo que nunca se ha intentado, o lo que ya cumplió su
+// espera. Lo que pasó de MAX_INTENTOS deja de reintentarse solo — sigue en la
+// cola y la pantalla lo dice, pero ya no se insiste sin que alguien lo pida.
+export function pendientesListos(cola, ahora = Date.now()) {
+  return (Array.isArray(cola) ? cola : []).filter((p) => {
+    const intentos = p.intentos || 0;
+    if (intentos >= MAX_INTENTOS) return false;
+    if (!p.ultimoIntento) return true;
+    // `intentos` ya cuenta el fallo recién anotado, así que esto pregunta
+    // "¿pasó la espera que toca después de N fallos?".
+    return ahora - p.ultimoIntento >= esperaDeIntento(intentos);
+  });
+}
+
+// ── Lo que la pantalla enseña ─────────────────────────────────────────────
+//
+// "Lo que convierte esto en una pérdida no es que el dato viva en el teléfono,
+// es que nadie se entere de que todavía vive ahí." Por eso el resumen distingue
+// lo que sigue intentándose de lo que ya se rindió: son dos avisos distintos y
+// piden dos cosas distintas de la persona.
+export function resumenDeCola(cola, ahora = Date.now()) {
+  const lista = Array.isArray(cola) ? cola : [];
+  const atorados = lista.filter((p) => (p.intentos || 0) >= MAX_INTENTOS);
+  return {
+    total: lista.length,
+    atorados: atorados.length,
+    reintentando: lista.length - atorados.length,
+    // El más viejo es el que importa para el aviso: dice desde cuándo hay algo
+    // que solo vive en este teléfono.
+    desde: lista.length ? Math.min(...lista.map((p) => p.capturadoEn || ahora)) : null,
+  };
+}
+
+// El texto del contador, en español y en singular/plural correcto. Va aquí y no
+// en el componente porque es lo único de este archivo que alguien va a querer
+// cambiar sin tocar la lógica.
+export function textoDeCola(cola) {
+  const { total, atorados } = resumenDeCola(cola);
+  if (total === 0) return null;
+  const cosa = total === 1 ? 'captura sin subir' : 'capturas sin subir';
+  if (atorados > 0) {
+    return `${total} ${cosa} — ${atorados} no ha${atorados === 1 ? '' : 'n'} podido subir`;
+  }
+  return `${total} ${cosa}`;
+}

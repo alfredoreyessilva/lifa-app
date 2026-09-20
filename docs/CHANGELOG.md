@@ -15,6 +15,90 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **La app ya abre y captura sin señal (2026-09-20)**: la capa que "Capturar sin
+  señal" pedía como requisito, no como mejora. Muchas canchas no tienen
+  internet, y una captura que exige conexión no se usa: se vuelve al papel en el
+  segundo partido. Su primer consumidor es el pase de lista; la captura por
+  jugada, cuando llegue, monta encima sin tocar nada de esto.
+
+  **Se prepara con señal y se captura sin ella.** Un botón —**Preparar
+  partido**— baja el partido, el roster vigente a esa fecha y **la pantalla
+  misma**. Es una descarga explícita y no un cache oportunista, y la diferencia
+  es quién se entera del problema y cuándo: el cache oportunista falla
+  exactamente cuando importa, porque el visor que nunca abrió esa pantalla con
+  señal llega a la cancha sin nada y ahí ya no hay forma de avisarle. Una
+  descarga que se pide se puede verificar en el estacionamiento.
+
+  **El service worker no cachea `/api/`, y es una decisión.** Una respuesta de
+  API servida desde el cache HTTP se ve idéntica a una recién traída. Los datos
+  van a IndexedDB, donde la pantalla sabe **de cuándo son** y lo dice — que es la
+  diferencia entre pasar lista contra un roster de hace tres semanas sin
+  enterarse, y saber que eso es lo que estás haciendo.
+
+  **La cola fusiona en vez de acumular.** Dos capturas del mismo pase de lista
+  no son dos cosas que subir: son la misma, y gana la última. Es consecuencia
+  directa de que el `PUT` reciba la lista completa — con un endpoint por jugador
+  habría que subir cuarenta llamadas en orden y aguantar que la número 19 falle.
+  **Nada se descarta nunca**: lo que falla se pospone con espera creciente, y lo
+  que se rinde después de ocho intentos sigue en la cola, visible, con un botón
+  de "Reintentar ahora". La regla 10 otra vez — la plataforma no tira un dato
+  por su cuenta.
+
+  **Lo que vive solo en el teléfono se dice en voz alta.** Mientras no suben,
+  las capturas viven en un solo lugar: si alguien borra los datos del navegador
+  o pierde el teléfono, se perdieron. Es el mismo riesgo que la hoja de papel
+  que esto sustituye, no uno nuevo — pero la pantalla lo dice con un contador
+  rojo y el navegador avisa al intentar salir. Lo que convierte esto en una
+  pérdida no es que el dato viva en el teléfono, es que nadie se entere de que
+  todavía vive ahí.
+
+  **Tres bugs que solo se vieron corriéndolo**, los tres con el modo avión
+  prendido y ninguno leyendo el código:
+
+  1. **`Vary` hacía que el cache no encontrara lo que él mismo guardó.** Vite
+     emite sus scripts con `crossorigin`, el navegador los pide con cabecera
+     `Origin` y el servidor contesta `Vary: Origin`; el service worker los había
+     guardado sin `Origin`, y `caches.match` respeta `Vary`. Resultado: la
+     navegación salía del cache, el JavaScript no, y la app abría **en blanco**.
+  2. **Los chunks de `lazy()` no están en el DOM.** La lista de lo que hay que
+     guardar salía de `script[src]`, que no ve lo cargado con `import()` — y
+     cada página de esta app es justo eso. El visor preparaba el partido,
+     llegaba a la cancha y la app se moría pidiendo un chunk que nadie guardó.
+     Ahora la lista sale de `performance.getEntriesByType('resource')`.
+  3. **Recargar sin señal devolvía la pantalla al estado preparado.** La captura
+     seguía a salvo en la cola, pero el visor la veía desaparecer y volvía a
+     marcar sobre una base vieja. Lo que está en la cola manda sobre lo que
+     trajo el servidor, hasta que suba.
+
+  **Y un bug viejo que solo ahora tenía consecuencias: quedarse sin señal
+  cerraba la sesión.** `AuthContext` borraba el token ante **cualquier** fallo de
+  `/auth/me`, incluido "no llegué al servidor" — así que el visor abría la app en
+  una cancha sin internet y la app lo sacaba, justo donde más falta le hacía
+  estar dentro. Ahora `api/client.js` marca el error (`err.offline`) para
+  distinguir "el servidor dijo que no" de "no llegué al servidor", y la sesión
+  solo se cierra con lo primero. La última respuesta de `/auth/me` se guarda para
+  abrir sin señal sabiendo quién eres; el token ya duraba 7 días.
+
+  **Verificado contra la compilación real** (`vite preview`, no el servidor de
+  desarrollo: en `dev` no existen los `/assets/` con hash, que es justo lo que el
+  service worker sirve cache-first). La receta completa, de punta a punta:
+  preparar con señal → modo avión → recargar (la app abre, 9 jugadores, **sesión
+  viva**) → pasar lista → recargar otra vez (lo capturado sigue ahí) → marcar uno
+  más → volver la señal → la cola se vacía sola y las 8 filas llegan a Postgres,
+  **sin una sola duplicada**. El aviso al salir con capturas pendientes también
+  se disparó, dos veces, sin que nadie lo pidiera.
+
+  **Lo que este montaje NO prueba**, dicho de frente: un teléfono de verdad.
+  Chromium con el modo offline de Playwright apaga la red, pero no mata la
+  pestaña, no se queda sin batería y no tiene al administrador de memoria de
+  Android cerrando la app a media captura. Eso es lo que `manifest.webmanifest`
+  existe para mitigar, y no está verificado en hardware.
+
+  De paso, `vite preview` quedó con su proxy a la API y el backend acepta el
+  puerto 4173 en local. Faltaba, y el síntoma no se parecía a la causa: los GET
+  pasaban —el navegador no manda `Origin` en una petición del mismo origen— y el
+  `PUT` del pase de lista devolvía 500.
+
 - **El pase de lista, encima de la misma lista (2026-09-20)**: la segunda mitad
   de "Roster público y pase de lista", y con ella el día del partido ya tiene
   sus dos primeras piezas corriendo. El visor estrena lo suyo: entraba al panel

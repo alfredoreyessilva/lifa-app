@@ -49,7 +49,8 @@ eso las tablas van partidas en tres.
 El décimo es la excepción y por eso está tan abajo: el roster público, el pase
 de lista y la captura de estadísticas se definieron el 2026-09-20 y de los tres
 faltan las estadísticas, que son con mucho la parte más grande. Es alcance
-nuevo, no algo que se haya quedado a medias.
+nuevo, no algo que se haya quedado a medias — y lo que le hacía falta de
+plataforma (capturar sin señal) ya está construido debajo.
 
 ### Dominios funcionales
 
@@ -62,7 +63,7 @@ nuevo, no algo que se haya quedado a medias.
 |Equipos independientes|95%|El modelo de roles, construido el 2026-09-20, ya deja invitar a un **segundo dueño** desde el principio, así que perder una cuenta deja de ser fatal. Lo que no existe es el rescate: un equipo cuyo único dueño ya perdió acceso sigue sin poderse reclamar|
 |Cuotas del club (equipo → jugador)|90%|Prorrateo de quien entra a media quincena; auditoría del padrón; el pie del estado de cuenta a 1.16:1 de contraste. La UI para rotar el link se cerró el 2026-09-19|
 |Cobranza (liga → equipo)|88%|Cobro en línea. La zona horaria se cerró el 2026-09-19 (eran cuatro lugares, no dos)|
-|Roster público, pase de lista y estadísticas|**35%**|Dos de las tres partes están **construidas y verificadas** (2026-09-20): el roster público —con los dos interruptores de la categoría y el veto del equipo sobre la foto— y el pase de lista encima de esa misma lista. Falta la captura **por jugada** y, debajo, hacerla funcionar **sin señal**: eso arrastra trabajo de plataforma que hoy no existe, porque el service worker solo hace push y no cachea nada. Las dos están decididas y escritas|
+|Roster público, pase de lista y estadísticas|**50%**|Tres piezas **construidas y verificadas** el 2026-09-20: el roster público (con los dos interruptores de la categoría y el veto del equipo sobre la foto), el pase de lista encima de esa misma lista, y **capturar sin señal** — service worker que cachea la app, cola en IndexedDB que reintenta sola y sube al volver la señal. Falta la captura **por jugada**, que es con mucho la parte más grande; está decidida y escrita, y ya no la bloquea nada de plataforma|
 |Roster de jugadores|85%|Credencial digital con QR. La zona horaria de altas y bajas se cerró el 2026-09-19 (eran tres lugares más)|
 |Notificaciones y push|85%|Bandeja propia para jugador/tutor — hoy imposible: `notifications` tiene `CHECK (recipient_type IN ('league','team'))` y los jugadores no tienen cuenta. Que el recordatorio de cobranza SALGA de la plataforma (correo al tutor) sigue sin construirse|
 |Tiendas y bot de WhatsApp|70% · **0% operativo**|Todo el código está; falta el número de WhatsApp Business, saldo de Anthropic y cubrir `bot_messages` en el Aviso de Privacidad|
@@ -74,7 +75,7 @@ nuevo, no algo que se haya quedado a medias.
 |-|-|-|
 |Páginas legales|**100%**|Cerrado el 2026-09-19: los cuatro datos llenos, `/terminos` publicado y el Aviso completo|
 |Seguridad|90%|El modelo de roles y fronteras quedó **construido** el 2026-09-20 (ver su sección): seis roles, guardas que se piden por permiso y la liga fuera del padrón del club. Quedan rotar `CLOUDINARY_API_SECRET`, las invitaciones que no caducan, `DELETE /manage/teams/:id` —que destruye contabilidad sin avisar— y la tarjeta pública del jugador, que todavía publica el historial de equipos contra la regla 7 (la **foto** ya se recortó el 2026-09-20, con el roster público)|
-|Pruebas automatizadas|45%|Las 211 del CI (130 backend + 81 frontend) cubren **solo funciones puras**. Todo `routes/` empieza consultando Postgres y sigue fuera del CI. Lo que sí lo toca son las **tres** suites e2e —las dos de cobranza y la de invitaciones y roles, que estrenó la cobertura de auth— y esas se corren a mano|
+|Pruebas automatizadas|48%|Las 228 del CI (130 backend + 98 frontend) cubren **solo funciones puras**. Todo `routes/` empieza consultando Postgres y sigue fuera del CI. Lo que sí lo toca son las **tres** suites e2e —las dos de cobranza y la de invitaciones y roles, que estrenó la cobertura de auth— y esas se corren a mano|
 |Concentración de archivos|sin urgencia|Cinco archivos concentran demasiado; solo `db.js` tiene techo real (9s de arranque). Ver "Pendientes conocidos"|
 
 ### Roadmap de negocio, por fase
@@ -84,7 +85,7 @@ nuevo, no algo que se haya quedado a medias.
 |0 — Cerrar lo que estaba a medias|70%|Solo esperar tráfico para volver a pedir revisión a Booking.com|
 |1 — Fundación de confiabilidad|80%|Subieron las legales a ✅. Quedan el plan de pago de Render/Neon y rotar el secreto de Cloudinary|
 |2 — Automatizar el cobro|**0%**|No hay ninguna pasarela instalada. Es el bloqueador de fondo y el punto de no retorno: en cuanto una liga cobra por la plataforma, no se va|
-|3 — Red de seguridad técnica|45%|211 pruebas y CI hechos, y tres suites e2e que sí prueban contra la base; falta que esas corran solas, monitoreo de uptime y que el CI bloquee el deploy|
+|3 — Red de seguridad técnica|48%|228 pruebas y CI hechos, y tres suites e2e que sí prueban contra la base; falta que esas corran solas, monitoreo de uptime y que el CI bloquee el deploy|
 |4 — Ciclo de vida del cliente|15%|Falta el onboarding por correo; `RESEND_API_KEY` ya está configurada, así que es construir los correos|
 |5 — Crecimiento|5%|Página de precios, analítica de conversión, SEO más allá del sitemap|
 
@@ -205,11 +206,15 @@ verificación.
   `match_attendance` con el permiso `asistencia` y sus tres endpoints. Ver el
   CHANGELOG.
 
-  Lo que sigue abierto de esa línea es lo grande: **"Estadísticas por jugada"**
-  y, debajo, **"Capturar sin señal"**. Las dos están decididas y escritas, sin
-  ninguna decisión abierta, pero sin una línea de código — y la segunda arrastra
-  trabajo de plataforma que hoy no existe: el service worker solo hace push y no
-  cachea nada.
+  Lo que sigue abierto de esa línea es lo grande: **"Estadísticas por jugada"**.
+  Está decidida y escrita, sin ninguna decisión abierta, pero sin una línea de
+  código.
+
+  **"Capturar sin señal" ya no la bloquea**: se construyó el 2026-09-20 y su
+  primer consumidor es el pase de lista. El service worker cachea la app y se
+  registra al arrancar, la cola vive en IndexedDB, reintenta sola y sube al
+  volver la señal. Lo que falta de esa sección es lo que cuelga de la jugada —
+  `client_play_id`, el orden por `sequence` y la sesión de captura.
 
   Lo que ya quedó resuelto y conviene no volver a pensar: la pantalla desde
   donde se captura **ya existe** (el mismo botón del roster, y lo que cambia es
@@ -587,6 +592,14 @@ lifa-app/
                                  (ver "Tabla de posiciones y modelo de competencia")
         (resto de components/), context/, api/
       utils/
+        offlineQueue.js       La REGLA de la cola sin señal: qué se fusiona,
+                              cuándo se reintenta, qué se enseña. Pura — la
+                              cubre el CI (ver "Capturar sin señal")
+        offlineDb.js          IndexedDB: el partido preparado y la cola
+        offlineOutbox.js      La cola viva: persiste, reintenta sola y sube al
+                              volver la señal, esté abierta o no la pantalla
+        serviceWorker.js      Registro al arrancar + la descarga explícita que
+                              dispara "Preparar partido"
         matchServices.js      Hotel (buildHotelSearchUrl) y Vuelos (iataForCity,
                                IATA_BY_CITY) — accesos comerciales por partido
         matchScope.js         Lado del navegador de la herencia de conferencia:
@@ -3087,26 +3100,49 @@ a volver a preguntar.
 
 ## Capturar sin señal
 
-**Decidido el 2026-09-20, sin construir.** Es requisito, no mejora. Muchas
+**Decidido y construido el 2026-09-20.** Es requisito, no mejora. Muchas
 canchas no tienen señal, y una captura que exige conexión por jugada
 sencillamente no se usa: se vuelve al papel en el segundo partido. Gobierna las
 dos pantallas del visor —el pase de lista y la captura por jugada— así que se
 diseña una vez y sirve para las dos.
 
-### Lo que hay hoy, y lo que no
+**La capa está construida y su primer consumidor es el pase de lista.** Lo que
+falta de esta sección es lo que cuelga de la captura por jugada, que todavía no
+existe: la llave de una jugada, el orden por `sequence` y la sesión de captura
+(los tres apartados marcados abajo). La verificación está en `docs/CHANGELOG.md`.
 
-- `public/sw.js` **existe, pero solo hace push**: no tiene un manejador
-  `fetch` y no cachea nada.
-- Se registra dentro de `SubscribeButton.jsx`, o sea **solo si alguien se
-  suscribió a las notificaciones**. Un visor que nunca tocó ese botón no tiene
-  service worker.
-- No hay `manifest.json`: la app no se instala en el teléfono.
+### Lo que había, y lo que se construyó
+
+Lo que había el 2026-09-20 por la mañana, y por qué no alcanzaba:
+
+- `public/sw.js` existía **pero solo hacía push**: sin manejador `fetch`, sin
+  cachear nada.
+- Se registraba dentro de `SubscribeButton.jsx`, o sea **solo si alguien se
+  suscribió a las notificaciones**. Un visor que nunca tocó ese botón no tenía
+  service worker, y por lo tanto no tenía nada sin señal.
+- No había `manifest.json`: la app no se instalaba en el teléfono.
 - El token dura **7 días** (`middleware/auth.js`), así que una jornada completa
-  sin señal no lo tumba. Eso sí está resuelto y no hay que tocarlo.
+  sin señal no lo tumba. Eso ya estaba resuelto.
 
-De las tres piezas que esto necesita —que la pantalla cargue sin señal, que los
-datos ya estén ahí, y que lo capturado se guarde y suba después— hoy **no hay
-ninguna**.
+Lo que ahora corre:
+
+| Pieza | Dónde |
+|---|---|
+| El service worker cachea la app y **se registra al arrancar** | `public/sw.js` · `utils/serviceWorker.js` |
+| La capa local en **IndexedDB**: el partido preparado y la cola | `utils/offlineDb.js` |
+| La **regla** de la cola: qué se fusiona, cuándo se reintenta | `utils/offlineQueue.js` (pura, la cubre el CI) |
+| La cola viva: reintenta sola, sobrevive a recargar y sube al volver la señal | `utils/offlineOutbox.js` |
+| `manifest.webmanifest`, para instalarla | `public/` |
+
+**El service worker nunca cachea `/api/`**, y eso es una decisión y no un olvido:
+una respuesta de API servida desde el cache HTTP se ve idéntica a una recién
+traída. Los datos van a IndexedDB, donde la pantalla sabe **de cuándo son** y lo
+dice — que es la diferencia entre pasar lista contra un roster de hace tres
+semanas sin enterarse, y saber que eso es lo que estás haciendo.
+
+**El `PUT` idempotente ya estaba**: nació así con el pase de lista, porque recibe
+la lista completa. Subir el mismo lote dos veces deja exactamente el mismo
+estado, así que la cola puede reintentar sin pensarlo.
 
 ### Se prepara con señal, se captura sin ella
 
@@ -3122,7 +3158,7 @@ pantalla misma.
 > la pantalla puede decir "listo, este partido ya se captura sin señal". La
 > diferencia entre las dos es quién se entera del problema y cuándo.
 
-### La llave de una jugada la pone el cliente
+### La llave de una jugada la pone el cliente — llega con las estadísticas
 
 `UNIQUE(match_id, sequence)`, como estaba escrito en "Estadísticas por jugada",
 **no sobrevive al modo sin señal**: `sequence` la asigna el dispositivo, y dos
@@ -3140,7 +3176,7 @@ club, que hace que generar el mismo ciclo dos veces no cobre dos veces. Aquí
 compra lo mismo: subir el mismo lote dos veces es gratis, que es justo lo que
 pasa cuando el internet del campo va y viene.
 
-### El orden sale de `sequence`, nunca de `created_at`
+### El orden sale de `sequence`, nunca de `created_at` — llega con las estadísticas
 
 El `created_at` de una jugada capturada sin señal es **el momento en que se
 subió**, no el momento en que pasó: un partido entero puede llegar con el mismo
@@ -3150,7 +3186,7 @@ Queda escrito porque ordenar por fecha es lo primero que alguien va a intentar,
 el resultado se ve razonable en un partido capturado en vivo, y el partido
 capturado sin señal sale revuelto sin que nada falle.
 
-### Un partido, un capturista a la vez
+### Un partido, un capturista a la vez — llega con las estadísticas
 
 Una **sesión de captura** —`match_capture_sessions`, la tabla que también
 carga el nivel— reclama el partido. Un segundo dispositivo ve "Fulano está
@@ -3183,36 +3219,82 @@ implícito:
 Lo que convierte esto en una pérdida no es que el dato viva en el teléfono, es
 que nadie se entere de que todavía vive ahí.
 
-### Lo que hay que construir, en orden
+### Lo que se construyó, en orden — y lo que queda
 
-1. **El service worker cachea la aplicación y se registra al arrancar**, no
-   dentro del botón de notificaciones. Hoy es lo primero que falta y no depende
-   de nada más.
-2. **La capa local en IndexedDB**: el partido preparado, los rosters y la cola
-   de lo capturado. No es dependencia nueva — es API del navegador.
-   `localStorage` no sirve aquí: es chico, es síncrono y ya carga el token.
-3. **La cola de envío**, que reintenta sola y sobrevive a recargar la página y
-   a volver a entrar.
-4. **Los dos endpoints idempotentes**: el lote de jugadas con
-   `client_play_id`, y el `PUT` de asistencia, que ya nace idempotente porque
-   recibe la lista completa.
-5. **`manifest.json`** para que se pueda instalar. No es requisito para que
-   funcione sin señal, pero una app instalada aguanta mucho mejor que una
-   pestaña que el teléfono puede matar a media captura.
+1. ✅ **El service worker cachea la aplicación y se registra al arrancar**, no
+   dentro del botón de notificaciones.
+2. ✅ **La capa local en IndexedDB**: el partido preparado, los rosters y la
+   cola de lo capturado. No fue dependencia nueva — es API del navegador.
+   `localStorage` no servía: es chico, es síncrono y ya carga el token.
+3. ✅ **La cola de envío**, que reintenta sola y sobrevive a recargar la página
+   y a volver a entrar.
+4. ➗ **Los dos endpoints idempotentes**: el `PUT` de asistencia ya nacía
+   idempotente porque recibe la lista completa. El lote de jugadas con
+   `client_play_id` llega con las estadísticas.
+5. ✅ **`manifest.webmanifest`** para que se pueda instalar.
+
+### Tres cosas que solo se vieron corriéndolo
+
+Las tres se encontraron con el modo avión prendido, ninguna leyendo el código, y
+las tres dejaban la pantalla inservible justo en la cancha. Quedan escritas
+porque la captura por jugada va a pasar por el mismo camino:
+
+1. **`Vary` hacía que el cache no encontrara lo que él mismo guardó.** Vite emite
+   sus scripts con `crossorigin`, el navegador los pide con cabecera `Origin` y
+   el servidor contesta `Vary: Origin`. El service worker los había guardado sin
+   `Origin` (desde `cache.add`), y `caches.match` respeta `Vary`: la navegación
+   salía del cache, el JavaScript no, y la app abría **en blanco**. Se busca con
+   `{ ignoreVary: true }`, que aquí no pierde nada — son archivos del mismo
+   origen y con hash en el nombre.
+2. **Los chunks de `lazy()` no están en el DOM.** La lista de lo que hay que
+   guardar se sacaba de `script[src]`, que ve el script principal pero **no** lo
+   que se cargó con `import()` — y cada página de esta app es justo eso
+   (`App.jsx` las carga con `lazy()`). El visor preparaba el partido, llegaba a
+   la cancha, y ahí la app arrancaba y se moría pidiendo un chunk que nadie
+   guardó. Ahora la lista sale de `performance.getEntriesByType('resource')`,
+   que sí lista todo lo que de verdad se descargó.
+3. **Recargar sin señal devolvía la pantalla al estado preparado.** La captura
+   seguía a salvo en la cola —no se perdía nada— pero el visor la veía
+   desaparecer y volvía a marcar sobre una base vieja. Lo que está en la cola
+   manda sobre lo que trajo el servidor, hasta que suba.
+
+### Y un bug viejo que solo ahora tenía consecuencias
+
+**Quedarse sin señal cerraba la sesión.** `AuthContext` borraba el token ante
+**cualquier** fallo de `/auth/me`, incluido "no llegué al servidor". El visor
+abría la app en una cancha sin internet y la app lo sacaba — justo donde más
+falta le hacía estar dentro.
+
+Ahora `api/client.js` marca el error (`err.offline`) para distinguir "el
+servidor dijo que no" de "no llegué al servidor", y la sesión solo se cierra con
+lo primero. La última respuesta de `/auth/me` se guarda para poder abrir sin
+señal sabiendo quién eres; el token dura 7 días, así que una jornada entera no
+lo tumba.
 
 ### Antes de darlo por hecho
 
 Esto no se puede verificar leyendo el código ni con una prueba unitaria, y es
 justo la clase de cosa que se rompe en la cancha y no en el escritorio:
 
-- Con el modo avión prendido, de punta a punta: preparar el partido con señal,
-  apagarla, pasar lista, capturar veinte jugadas, **recargar la página**,
-  capturar diez más, volver a encender la señal y comprobar que subieron las
-  treinta, en orden y una sola vez.
-- El mismo lote enviado dos veces, a propósito, comprobando que la segunda vez
-  no duplica nada.
-- Dos dispositivos sobre el mismo partido, comprobando que el segundo avisa en
-  vez de revolver.
+- ✅ **Con el modo avión prendido, de punta a punta**: preparar el partido con
+  señal, apagarla, pasar lista, **recargar la página**, marcar más, volver a
+  encender la señal y comprobar que subió todo, una sola vez. Corrido el
+  2026-09-20 contra la compilación real (`vite preview`, no el servidor de
+  desarrollo — es la única forma de probar el cache-first sobre `/assets/`,
+  porque en `dev` esos archivos no existen). Ahí salieron las tres cosas de
+  arriba.
+- ✅ **El mismo lote enviado dos veces**: el `PUT` del pase de lista se probó
+  reenviando la misma lista y deja el mismo estado, sin filas de más.
+- ⏳ **Dos dispositivos sobre el mismo partido**: es de la sesión de captura,
+  que llega con las estadísticas. Para el pase de lista no aplica — el `PUT`
+  manda la lista completa y gana el último, que es el comportamiento que se
+  quiere ahí.
+
+**Lo que este montaje NO prueba**, dicho de frente: un teléfono de verdad. Se
+probó con Chromium y el modo offline de Playwright, que apaga la red pero no
+mata la pestaña, no se queda sin batería y no tiene el administrador de memoria
+de Android decidiendo cerrar la app a media captura. Eso es exactamente lo que
+`manifest.webmanifest` existe para mitigar, y no está verificado en hardware.
 
 ## Equipos independientes (sin liga)
 

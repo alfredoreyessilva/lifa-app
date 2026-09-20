@@ -28,16 +28,30 @@ async function request(path, { method = 'GET', body, token, keepalive = false } 
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-    keepalive,
-  });
+  // "No llegué al servidor" y "el servidor dijo que no" son cosas distintas, y
+  // confundirlas cuesta caro: hasta el 2026-09-20 un `/auth/me` que fallaba por
+  // falta de señal **borraba la sesión**, así que el visor llegaba a la cancha
+  // sin internet y la app lo sacaba. El error se marca para que quien llama
+  // pueda distinguirlos (ver AuthContext).
+  let res;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      keepalive,
+    });
+  } catch {
+    const err = new Error('Sin conexión: no se pudo hablar con el servidor');
+    err.offline = true;
+    throw err;
+  }
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error || 'Algo salió mal');
+    const err = new Error(data.error || 'Algo salió mal');
+    err.status = res.status;
+    throw err;
   }
   return data;
 }

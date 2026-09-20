@@ -10,6 +10,17 @@ export default defineConfig({
       '/uploads': 'http://localhost:4000',
     },
   },
+  // `vite preview` sirve la compilación REAL, con los assets ya con hash. Es la
+  // única forma de probar en local lo que el service worker va a hacer en
+  // producción —cache-first sobre /assets/— porque en `dev` esos archivos no
+  // existen. Lleva el mismo proxy que `server` o el build no encuentra la API.
+  preview: {
+    port: 4173,
+    proxy: {
+      '/api': 'http://localhost:4000',
+      '/uploads': 'http://localhost:4000',
+    },
+  },
   build: {
     rollupOptions: {
       output: {

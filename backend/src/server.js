@@ -31,7 +31,16 @@ import playerBillingRoutes from './routes/playerBilling.js';
 //   ALLOWED_ORIGINS=https://tu-dominio.vercel.app,https://www.tu-dominio.mx
 // En desarrollo local siempre se permiten los puertos típicos de Vite, aunque
 // no estén en la variable de entorno, para no estorbar el flujo de `npm run dev`.
-const devOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+// 5173 es `npm run dev`; 4173 es `vite preview`, que sirve la compilación REAL y
+// es la única forma de probar en local lo que el service worker hará en
+// producción. Faltaba, y el síntoma no se parecía a la causa: los GET pasaban
+// (el navegador no manda `Origin` en una petición del mismo origen) y el PUT del
+// pase de lista devolvía 500. Son direcciones de localhost: no abren nada en
+// producción.
+const devOrigins = [
+  'http://localhost:5173', 'http://127.0.0.1:5173',
+  'http://localhost:4173', 'http://127.0.0.1:4173',
+];
 const configuredOrigins = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map((origin) => origin.trim())

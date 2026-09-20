@@ -18,6 +18,20 @@ export function AuthProvider({ children }) {
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // La última respuesta de /auth/me, guardada. No es una caché de rendimiento:
+  // es lo que deja que la app se abra SIN SEÑAL sabiendo quién eres. El token
+  // dura 7 días (middleware/auth.js), así que una jornada entera en una cancha
+  // sin internet no lo tumba — lo que sí tumbaba la sesión era esto de aquí.
+  const PERFIL = 'lifa_me';
+
+  function guardarPerfil(data) {
+    try { localStorage.setItem(PERFIL, JSON.stringify(data)); } catch { /* modo privado */ }
+  }
+
+  function perfilGuardado() {
+    try { return JSON.parse(localStorage.getItem(PERFIL) || 'null'); } catch { return null; }
+  }
+
   useEffect(() => {
     if (!token) { setLoading(false); return; }
     api.me(token)
@@ -26,8 +40,28 @@ export function AuthProvider({ children }) {
         setLeagues(data.leagues);
         setTeams(data.teams || []);
         setOrganizations(data.organizations || []);
+        guardarPerfil(data);
       })
-      .catch(() => { setToken(null); localStorage.removeItem('lifa_token'); })
+      .catch((e) => {
+        // **Sin conexión NO es sesión inválida.** Hasta el 2026-09-20 cualquier
+        // fallo aquí borraba el token, así que el visor que abría la app en una
+        // cancha sin señal quedaba fuera — justo donde más falta le hacía estar
+        // dentro. Ahora solo se cierra la sesión cuando el servidor CONTESTA
+        // que el token no sirve.
+        if (e.offline) {
+          const guardado = perfilGuardado();
+          if (guardado) {
+            setUser(guardado.user);
+            setLeagues(guardado.leagues || []);
+            setTeams(guardado.teams || []);
+            setOrganizations(guardado.organizations || []);
+          }
+          return;
+        }
+        setToken(null);
+        localStorage.removeItem('lifa_token');
+        try { localStorage.removeItem(PERFIL); } catch { /* modo privado */ }
+      })
       .finally(() => setLoading(false));
   }, [token]);
 
@@ -39,6 +73,7 @@ export function AuthProvider({ children }) {
 
   function logout() {
     localStorage.removeItem('lifa_token');
+    try { localStorage.removeItem(PERFIL); } catch { /* modo privado */ }
     setToken(null);
     setUser(null);
     setLeagues([]);

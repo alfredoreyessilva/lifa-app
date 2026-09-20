@@ -22,7 +22,8 @@ backend/    Node 22 + Express, ESM. Postgres en Neon.
 frontend/   React 18 + Vite. Rutas en español, API en inglés.
   src/api/client.js     Única puerta al backend. Ningún componente hace fetch por su cuenta.
 frontend/api/           2 funciones serverless de Vercel (sitemap, social-preview)
-frontend/public/sw.js   Service worker. HOY SOLO HACE PUSH: no cachea nada
+frontend/public/sw.js   Service worker: push + que la app abra SIN SEÑAL.
+                        Nunca cachea /api/ — los datos van a IndexedDB
 ```
 
 Dónde buscar antes de preguntar: **README** tiene una sección por dominio
@@ -39,7 +40,7 @@ cd frontend && npm install && npm run dev    # :5173
 npm test                                      # en cualquiera de los dos: node --test, <1s
 ```
 
-211 pruebas unitarias (130 backend + 81 frontend) corren en el CI en cada push.
+228 pruebas unitarias (130 backend + 98 frontend) corren en el CI en cada push.
 Las **tres** suites de punta a punta —las dos de cobranza y la de invitaciones
 y roles— **no**: necesitan Postgres vivo. Instrucciones en
 `backend/tests/README.md`.
