@@ -441,6 +441,120 @@ export const branchTeamOwnerRequired = asyncHandler(async (req, res, next) => {
   return res.status(403).json({ error: 'No tienes permiso sobre el roster de este equipo en esta rama' });
 });
 
+// ── El pase de lista ──────────────────────────────────────────────────────
+//
+// Se mira desde DOS lados que no son simétricos, y por eso no es una fábrica
+// como `guardaDeEquipo`:
+//
+//   · La LIGA marca. `asistencia` — dueño, administrador y **visor**, que es
+//     justo para lo que existe ese rol. El tesorero no.
+//   · El EQUIPO solo lee, y **solo lo suyo**. Cae en `ver`, la línea base,
+//     incluido el coach: es quien necesita saber a quién le falta antes de que
+//     sea tarde. Nunca la del rival.
+//
+// `puedeMarcar` viaja en `req` en vez de resolverse otra vez en el handler: es
+// la misma pregunta que ya contestó la guarda, y contestarla dos veces es como
+// las dos respuestas terminan distintas.
+async function resolverPartido(req, res) {
+  const matchId = Number(req.params.matchId);
+  const match = await db.prepare('SELECT * FROM matches WHERE id = ?').get(matchId);
+  if (!match) { res.status(404).json({ error: 'Partido no encontrado' }); return null; }
+  const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(match.category_id);
+  const league = category ? await db.prepare('SELECT * FROM leagues WHERE id = ?').get(category.league_id) : null;
+  if (!league) { res.status(404).json({ error: 'Partido no encontrado' }); return null; }
+  return { match, category, league };
+}
+
+async function ligaPuedeAsistencia(req, league) {
+  if (req.user.role === 'admin') return true;
+  if (league.owner_user_id === req.user.id) return true;
+  return isOrgMember(req.user.id, league.organization_id, rolesConPermiso('league', 'asistencia'));
+}
+
+// Qué equipos de este partido puede VER quien pregunta. La liga los ve los dos;
+// quien está en uno de los equipos ve el suyo. Devuelve ids, no booleanos, para
+// que el handler no tenga que volver a decidir de qué lado está cada quien.
+async function equiposQuePuedeVer(req, match) {
+  const ids = [match.home_team_id, match.away_team_id].filter(Boolean);
+  const visibles = [];
+  for (const teamId of ids) {
+    const team = await db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId);
+    if (!team) continue;
+    const esDelEquipo = team.owner_user_id === req.user.id
+      || await isOrgMember(req.user.id, team.organization_id, rolesConPermiso('team', 'ver'));
+    if (esDelEquipo) visibles.push(teamId);
+  }
+  return visibles;
+}
+
+// Leer el pase de lista de un partido.
+export const matchAttendanceViewRequired = asyncHandler(async (req, res, next) => {
+  const ctx = await resolverPartido(req, res);
+  if (!ctx) return;
+
+  const deLaLiga = await ligaPuedeAsistencia(req, ctx.league);
+  const suyos = deLaLiga ? [] : await equiposQuePuedeVer(req, ctx.match);
+  if (!deLaLiga && suyos.length === 0) {
+    return res.status(403).json({ error: 'No tienes permiso para ver el pase de lista de este partido' });
+  }
+
+  req.league = ctx.league;
+  req.category = ctx.category;
+  req.match = ctx.match;
+  req.puedeMarcar = deLaLiga;
+  // La liga ve los dos lados; un equipo, solo el suyo.
+  req.equiposVisibles = deLaLiga
+    ? [ctx.match.home_team_id, ctx.match.away_team_id].filter(Boolean)
+    : suyos;
+  return next();
+});
+
+// Marcarlo. Aquí el equipo no entra por ningún lado: pasar lista es un acto de
+// la liga en su partido, y un equipo que se marca presente a sí mismo no es un
+// registro de lo que pasó.
+export const matchAttendanceRequired = asyncHandler(async (req, res, next) => {
+  const ctx = await resolverPartido(req, res);
+  if (!ctx) return;
+
+  if (!await ligaPuedeAsistencia(req, ctx.league)) {
+    return res.status(403).json({ error: 'Solo la liga pasa lista en sus partidos' });
+  }
+
+  req.league = ctx.league;
+  req.category = ctx.category;
+  req.match = ctx.match;
+  return next();
+});
+
+// El acumulado de un equipo en una rama. Mismos dos lados que la lectura de
+// arriba, pero la pregunta entra por (rama, equipo) y no por partido.
+export const branchTeamAttendanceRequired = asyncHandler(async (req, res, next) => {
+  const branchId = Number(req.params.branchId);
+  const teamId = Number(req.params.teamId);
+
+  const branch = await db.prepare('SELECT * FROM branches WHERE id = ?').get(branchId);
+  if (!branch) return res.status(404).json({ error: 'Rama no encontrada' });
+  const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(branch.category_id);
+  const league = await db.prepare('SELECT * FROM leagues WHERE id = ?').get(category.league_id);
+  const team = await db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId);
+  if (!team) return res.status(404).json({ error: 'Equipo no encontrado' });
+
+  const deLaLiga = await ligaPuedeAsistencia(req, league);
+  const delEquipo = team.owner_user_id === req.user.id
+    || await isOrgMember(req.user.id, team.organization_id, rolesConPermiso('team', 'ver'));
+
+  if (!deLaLiga && !delEquipo) {
+    return res.status(403).json({ error: 'No tienes permiso para ver la asistencia de este equipo' });
+  }
+
+  req.league = league;
+  req.category = category;
+  req.branch = branch;
+  req.team = team;
+  req.puedeMarcar = deLaLiga;
+  return next();
+});
+
 // El interruptor de la foto del roster público, y es la única guarda del
 // proyecto que deja fuera a la liga A PROPÓSITO.
 //

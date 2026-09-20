@@ -17,6 +17,10 @@ import ConfirmDialog from './ConfirmDialog.jsx';
 export default function BranchRosterModal({ branchId, team, token, teamSide = false, onClose }) {
   const [roster, setRoster] = useState(null);
   const [visibility, setVisibility] = useState(null);
+  // El acumulado de asistencia, por jugador. Es lectura y va aparte del roster
+  // porque no siempre se puede: un rol que administra el roster pero no alcanza
+  // la asistencia simplemente no lo ve, y eso no es un error que pintar.
+  const [asistencia, setAsistencia] = useState(null);
   const [photosBusy, setPhotosBusy] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ first_name: '', last_name: '', position: '', jersey_number: '', curp: '' });
@@ -40,6 +44,9 @@ export default function BranchRosterModal({ branchId, team, token, teamSide = fa
       const data = await api.getBranchTeamRoster(branchId, team.id, token);
       setRoster(data.roster);
       setVisibility(data.visibility);
+      api.getBranchTeamAttendance(branchId, team.id, token)
+        .then(setAsistencia)
+        .catch(() => setAsistencia(null));
     } catch (e) {
       setError(e.message);
     }
@@ -145,6 +152,15 @@ export default function BranchRosterModal({ branchId, team, token, teamSide = fa
     await api.removePlayerFromBranchRoster(branchId, team.id, removing.id, { hard }, token);
     setRemoving(null);
     await load();
+  }
+
+  // El acumulado no existe hasta que alguien pasa lista, y un equipo sin
+  // partidos todavía no le debe nada a nadie: en los dos casos no se pinta
+  // nada, en vez de una fila de ceros que se lee como "faltó a todos".
+  function cuentaDe(playerId) {
+    if (!asistencia || asistencia.matches === 0) return null;
+    const fila = asistencia.players.find((p) => p.id === playerId);
+    return fila && fila.convocables > 0 ? fila : null;
   }
 
   return (
@@ -267,6 +283,16 @@ export default function BranchRosterModal({ branchId, team, token, teamSide = fa
                     {p.curp ? ` · ${p.curp}` : ''}
                     {p.season ? ` · Temporada ${p.season}` : ''}
                   </div>
+                  {/* Las tres cifras, separadas y sin porcentaje: la plataforma
+                      entrega el conteo y el criterio de elegibilidad es de la
+                      liga (regla 10 de CLAUDE.md). */}
+                  {cuentaDe(p.id) && (
+                    <div className="info roster-attendance">
+                      {cuentaDe(p.id).presentes} presentes · {cuentaDe(p.id).ausentes} ausentes
+                      {' '}· {cuentaDe(p.id).sin_marcar} sin pasar lista
+                      {' '}<span style={{ opacity: 0.6 }}>de {cuentaDe(p.id).convocables}</span>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="row-actions">

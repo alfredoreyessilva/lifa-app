@@ -22,3 +22,23 @@
 // Se usa el nombre de la zona y no un desfase fijo: México abolió el horario
 // de verano en 2022, pero el nombre sobrevive a que lo reinstauren.
 export const HOY_MX = `((NOW() AT TIME ZONE 'America/Mexico_City')::date)`;
+
+// El día en que se jugó un partido, también en México.
+//
+// `matches.match_date` es TEXT con un ISO completo en UTC
+// ('2026-09-04T00:00:00.000Z'), y la diferencia no es cosmética: ese partido
+// se juega el **3 de septiembre a las 6 pm** hora del centro. Cortar por la
+// fecha en UTC lo mandaría al día siguiente, que es exactamente el desfase que
+// ya se pagó en los dos libros de cobranza y en las altas del roster.
+//
+// Lo usa el pase de lista, para saber quién estaba en el roster ESE día. Toma
+// un alias de tabla porque siempre se aplica sobre una fila de `matches`.
+//
+// Se usa América/México y no la zona del propio partido (`matches.timezone`)
+// a propósito: una baja se fecha por día, no por hora, y el resto de las altas
+// y bajas del roster ya se cortan en hora de México. Dos zonas distintas para
+// los dos lados de la misma comparación sería la manera de reintroducir el
+// desfase por la puerta de atrás.
+export function fechaDelPartidoMx(alias = 'm') {
+  return `((${alias}.match_date::timestamptz AT TIME ZONE 'America/Mexico_City')::date)`;
+}

@@ -263,7 +263,7 @@ export default function MatchPage() {
           <div className="match-card-actions" style={{ marginTop: 16 }}>
             {match.home_team_id && (
               <Link
-                to={`/ramas/${match.branch_id}/equipos/${match.home_team_id}/roster`}
+                to={`/partidos/${match.id}/equipos/${match.home_team_id}/roster`}
                 className="btn btn-outline btn-sm"
               >
                 Roster — {match.home_team}
@@ -271,7 +271,7 @@ export default function MatchPage() {
             )}
             {match.away_team_id && (
               <Link
-                to={`/ramas/${match.branch_id}/equipos/${match.away_team_id}/roster`}
+                to={`/partidos/${match.id}/equipos/${match.away_team_id}/roster`}
                 className="btn btn-outline btn-sm"
               >
                 Roster — {match.away_team}

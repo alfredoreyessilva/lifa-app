@@ -65,6 +65,18 @@ const ETIQUETAS_POR_TIPO = {
 //
 // Si algún día `ver` arrastrara esos dos, un coach vería el padrón completo —
 // que es exactamente lo que este modelo existe para impedir.
+//
+// `asistencia` es el caso contrario y por eso vale la pena decirlo aquí:
+// **solo existe del lado de la liga**, porque pasar lista es un acto de la
+// liga en su partido. Un equipo no marca la asistencia de nadie, ni la suya.
+// Leer la de los suyos sí, y eso cae en `ver` —incluido el coach, que es justo
+// quien necesita saber a quién le falta antes de que sea tarde—: la asistencia
+// es del dominio torneo, como el roster, no de los dos dominios sensibles.
+//
+// Y no hace falta un "actuar como visor": el emprendedor que registró la liga
+// a veces pasa lista él mismo, y su rol de dueño ya trae el permiso. Un rol no
+// es un disfraz que uno se pone; es lo que uno puede. Es también por qué el
+// permiso se llama `asistencia` y no "ser visor".
 export const PERMISOS = [
   'ver',               // leer el panel: perfil, calendario y roster
   'perfil',            // editar el perfil de la organización
@@ -74,6 +86,7 @@ export const PERMISOS = [
   'cobranza_liga',     // el libro liga ↔ equipo, de los dos lados
   'cuotas_club',       // el padrón del club y su libro
   'roster',            // el roster de torneo
+  'asistencia',        // pasar lista en un partido
   'miembros',          // invitar y quitar gente que no sea dueño
   'duenos',            // invitar y quitar dueños
   'entregar_equipos',  // entregarle a un equipo su perfil (una sola vez, no se deshace)
@@ -85,10 +98,10 @@ export const PERMISOS = [
 // solo a todos los que heredaban.
 const PERMISOS_POR_ROL = {
   league: {
-    owner:     ['ver', 'perfil', 'estructura', 'partidos', 'marcadores', 'cobranza_liga', 'roster', 'miembros', 'duenos', 'entregar_equipos'],
-    admin:     ['ver', 'perfil', 'estructura', 'partidos', 'marcadores', 'cobranza_liga', 'roster', 'miembros', 'entregar_equipos'],
+    owner:     ['ver', 'perfil', 'estructura', 'partidos', 'marcadores', 'cobranza_liga', 'roster', 'asistencia', 'miembros', 'duenos', 'entregar_equipos'],
+    admin:     ['ver', 'perfil', 'estructura', 'partidos', 'marcadores', 'cobranza_liga', 'roster', 'asistencia', 'miembros', 'entregar_equipos'],
     treasurer: ['ver', 'cobranza_liga'],
-    editor:    ['ver', 'marcadores'],
+    editor:    ['ver', 'marcadores', 'asistencia'],
   },
   team: {
     owner:         ['ver', 'perfil', 'roster', 'cuotas_club', 'cobranza_liga', 'miembros', 'duenos'],

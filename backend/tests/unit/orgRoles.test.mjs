@@ -112,9 +112,10 @@ test('la liga nunca tiene acceso a las cuotas del club, con ningún rol', () => 
   assert.deepEqual(rolesConPermiso('league', 'cuotas_club'), []);
 });
 
-test('el visor solo mueve el marcador', () => {
+test('el visor mueve el marcador y pasa lista, y nada más', () => {
   assert.ok(puede('league', 'editor', 'ver'));
   assert.ok(puede('league', 'editor', 'marcadores'));
+  assert.ok(puede('league', 'editor', 'asistencia'), 'el visor es quien pasa lista en la cancha');
   for (const prohibido of ['partidos', 'estructura', 'roster', 'cobranza_liga', 'perfil', 'miembros', 'duenos']) {
     assert.ok(!puede('league', 'editor', prohibido), `el visor no debería poder "${prohibido}"`);
   }
@@ -122,9 +123,24 @@ test('el visor solo mueve el marcador', () => {
 
 test('el tesorero de liga solo lleva la cobranza', () => {
   assert.ok(puede('league', 'treasurer', 'cobranza_liga'));
-  for (const prohibido of ['estructura', 'partidos', 'marcadores', 'roster', 'perfil']) {
+  for (const prohibido of ['estructura', 'partidos', 'marcadores', 'roster', 'asistencia', 'perfil']) {
     assert.ok(!puede('league', 'treasurer', prohibido), `el tesorero no debería poder "${prohibido}"`);
   }
+});
+
+test('pasar lista es de la liga: ningún rol de equipo lo escribe', () => {
+  // El equipo LEE la asistencia de los suyos, y eso cae en `ver`. Marcarla es
+  // un acto de la liga en su partido. Si algún día un rol de equipo apareciera
+  // aquí, un equipo podría marcarse presente a sí mismo.
+  assert.deepEqual(rolesConPermiso('team', 'asistencia'), []);
+  assert.ok(puede('team', 'coach', 'ver'), 'el coach necesita leer a quién le falta');
+});
+
+test('quien registró la liga pasa lista sin cambiarse de rol', () => {
+  // No hay "actuar como visor": el dueño ya trae el permiso. Ver el comentario
+  // de `asistencia` en el catálogo.
+  assert.ok(puede('league', 'owner', 'asistencia'));
+  assert.ok(puede('league', 'admin', 'asistencia'));
 });
 
 test('solo el dueño reparte el puesto de dueño', () => {

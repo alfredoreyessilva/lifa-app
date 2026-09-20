@@ -3982,3 +3982,110 @@ a.match-card-new {
   font-size: 13px;
   cursor: pointer;
 }
+
+/* ── Pase de lista ───────────────────────────────────────────────────────
+   Va arriba de la lista y en la tarjeta negra, como el roster: lo que esta
+   pantalla viene a hacer cuando quien mira puede marcar. Las tres cifras se
+   pintan SEPARADAS y sin porcentaje — juntarlas en uno obligaría a decidir si
+   "sin pasar lista" cuenta como falta, y esa decisión es de la liga. */
+.attendance-bar {
+  background: var(--card-open);
+  border: 1px solid var(--card-open-line);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 14px;
+}
+
+.attendance-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  font-family: var(--font-eyebrow);
+  font-size: 14px;
+}
+.attendance-count { color: var(--ink-dim); }
+/* Presente en amarillo (lo afirmativo del proyecto) y ausente en rojo, el
+   mismo rojo de "en vivo": es el único dato de esta pantalla que puede tener
+   consecuencias para alguien. */
+.attendance-count.is-present { color: var(--flag); }
+.attendance-count.is-absent  { color: var(--live); }
+
+.attendance-note {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+
+.attendance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.attendance-signature {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--ink-dim);
+  opacity: 0.85;
+}
+
+/* Los dos botones de cada renglón. Picarle al que ya está prendido desmarca:
+   es la única forma de volver a "sin pasar lista", que es un estado real. */
+.attendance-pick {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.attendance-btn {
+  font-family: var(--font-eyebrow);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 7px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--card-open-line);
+  background: transparent;
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.attendance-btn:hover { border-color: var(--line-strong); color: var(--ink); }
+.attendance-btn.is-present.is-on {
+  background: var(--flag);
+  border-color: var(--flag);
+  color: #1a1a1a;
+}
+.attendance-btn.is-absent.is-on {
+  background: var(--live);
+  border-color: var(--live);
+  color: #ffffff;
+}
+
+/* Lo mismo, para quien solo lee (el equipo y su coach). */
+.attendance-tag {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: var(--font-eyebrow);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  opacity: 0.7;
+}
+.attendance-tag.is-present { color: var(--flag); opacity: 1; }
+.attendance-tag.is-absent  { color: var(--live); opacity: 1; }
+
+@media (max-width: 480px) {
+  /* En celular el renglón se parte en dos: nombre arriba, los dos botones
+     abajo a la derecha. Apretados en una sola línea no se les atina. */
+  .public-roster-row { flex-wrap: wrap; }
+  .attendance-pick, .attendance-tag { margin-left: 0; width: 100%; justify-content: flex-end; text-align: right; }
+  .attendance-btn { flex: 1; max-width: 120px; }
+}
+
+/* El acumulado de asistencia dentro del roster: es contexto, no el dato
+   principal de la fila, así que va debajo y más apagado. */
+.roster-attendance { font-size: 12px; opacity: 0.85; }

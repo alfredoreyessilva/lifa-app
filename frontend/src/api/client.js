@@ -251,8 +251,28 @@ export const api = {
   // El roster recortado, sin cuenta: nombre, número y posición (y la foto solo
   // si las dos partes la habilitaron). Es el otro endpoint, no este con el
   // token quitado — el de arriba trae CURP y fecha de nacimiento.
-  getPublicBranchTeamRoster: (branchId, teamId) =>
-    request(`/leagues/branches/${branchId}/teams/${teamId}/roster`),
+  //
+  // Cuelga del PARTIDO y no de la rama: es la misma lista que abre el pase de
+  // lista, y la asistencia es a un partido. Devuelve quién estaba en el roster
+  // ESE día, no hoy.
+  getPublicMatchTeamRoster: (matchId, teamId) =>
+    request(`/leagues/matches/${matchId}/teams/${teamId}/roster`),
+
+  // ── Pase de lista ──
+  // Leerlo lo puede la liga (los dos equipos) y el equipo (solo el suyo);
+  // marcarlo, solo quien tiene `asistencia` en la liga.
+  getMatchAttendance: (matchId, token) =>
+    request(`/players/matches/${matchId}/attendance`, { token }),
+  // La lista va COMPLETA: quien no viene en ella queda "sin pasar lista", que
+  // es como se desmarca a alguien. Por eso `entries` vacío es válido.
+  saveMatchAttendance: (matchId, { teamId, entries }, token) =>
+    request(`/players/matches/${matchId}/attendance`, {
+      method: 'PUT', body: { team_id: teamId, entries }, token,
+    }),
+  // El acumulado, que no se guarda: se suma. Tres cifras por separado y sin
+  // porcentaje — el criterio de elegibilidad es de la liga, no nuestro.
+  getBranchTeamAttendance: (branchId, teamId, token) =>
+    request(`/players/branches/${branchId}/teams/${teamId}/attendance`, { token }),
 
   // Roster por plantilla de Excel: descarga la plantilla ya personalizada
   // (membrete de liga + equipo + torneo/categoría/rama) y sube la plantilla

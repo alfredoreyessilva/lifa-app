@@ -92,10 +92,12 @@ export default function App() {
             <Route path="/categorias/:categoryId/calendario" element={<CalendarPage />} />
             <Route path="/partidos/:matchId" element={<MatchPage />} />
             <Route path="/jugador/:playerId" element={<PlayerCardPage />} />
-            {/* El roster público cuelga de la rama + el equipo, que es donde
-                vive de verdad un roster. Se llega desde el partido; si la
-                categoría no lo publica, el endpoint contesta 404. */}
-            <Route path="/ramas/:branchId/equipos/:teamId/roster" element={<PublicRosterPage />} />
+            {/* El roster cuelga del PARTIDO, aunque el roster viva a nivel
+                rama: es lo que hace que el mismo botón sirva para las dos
+                cosas — quien llega de fuera ve la lista, y quien tiene
+                `asistencia` ve la misma lista con el pase de lista al lado.
+                Si la categoría no publica su roster, el endpoint contesta 404. */}
+            <Route path="/partidos/:matchId/equipos/:teamId/roster" element={<PublicRosterPage />} />
             <Route path="/panel/organizacion/:id" element={<OrganizationDetailPage />} />
             <Route path="/iniciar-sesion" element={<Login />} />
             <Route path="/crear-cuenta" element={<Register />} />

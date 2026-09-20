@@ -4,7 +4,10 @@ import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
-import { teamViewRequired, matchScoreRequired, branchTeamOwnerRequired, branchTeamPhotoRequired } from '../middleware/ownership.js';
+import {
+  teamViewRequired, matchScoreRequired, branchTeamOwnerRequired, branchTeamPhotoRequired,
+  matchAttendanceViewRequired, matchAttendanceRequired, branchTeamAttendanceRequired,
+} from '../middleware/ownership.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isNonEmptyString } from '../utils/validation.js';
 import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL } from '../utils/scoring.js';
@@ -13,8 +16,9 @@ import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL } from '../utils/scoring.js'
 // vivo: con Neon en UTC, una baja registrada después de las 18:00 hora de
 // México quedaba fechada al día siguiente. No es dinero, pero sí es la
 // trayectoria del jugador — y el día que se corta mal es el mismo.
-import { HOY_MX } from '../utils/sqlDates.js';
+import { HOY_MX, fechaDelPartidoMx } from '../utils/sqlDates.js';
 import { visibilidadDeRoster, fotoSePublicaSql } from '../utils/rosterVisibility.js';
+import { rosterDelPartidoSql, normalizarPaseDeLista, resumenDeAsistencia } from '../utils/attendance.js';
 
 const router = express.Router();
 
@@ -611,6 +615,222 @@ router.put('/matches/:id/stats/:playerId', authRequired, matchScoreRequired, asy
   `).get(playerId, match.id, team_id, ...values);
 
   res.json({ stat });
+}));
+
+/* ===================== PASE DE LISTA ===================== */
+
+// Un partido sin rama no tiene roster al cual pasarle lista, y uno sin equipos
+// vinculados no sabe de qué equipo habla. Los dos son estados reales de la base
+// —`branch_id`, `home_team_id` y `away_team_id` son nullable— y los dos se
+// contestan con una frase que dice qué hacer, no con una lista vacía que se lea
+// como "no hay jugadores".
+function faltaParaPasarLista(match) {
+  if (!match.branch_id) {
+    return 'Este partido no está dentro de una rama, así que todavía no tiene roster. Muévelo a una rama desde el panel de la liga.';
+  }
+  if (!match.home_team_id && !match.away_team_id) {
+    return 'Este partido todavía no está conectado con sus equipos. Sincronízalo primero desde el panel de la liga.';
+  }
+  return null;
+}
+
+// Arma la lista de un equipo en un partido, con la marca de cada quien y el
+// conteo ya resuelto. Es la misma consulta de la pantalla pública, con las dos
+// columnas que ahí no salen.
+async function listaDeEquipo(match, teamId) {
+  const team = await db.prepare('SELECT id, name, logo_url FROM teams WHERE id = ?').get(teamId);
+  if (!team) return null;
+
+  const roster = await db.prepare(rosterDelPartidoSql({ conAsistencia: true }))
+    .all(match.id, teamId, match.branch_id);
+
+  return {
+    team_id: team.id,
+    name: team.name,
+    logo_url: team.logo_url,
+    side: match.home_team_id === team.id ? 'home' : 'away',
+    roster,
+    // `convocables` es la lista de ESTE partido, que ya trae a quien estaba ese
+    // día. Las tres cifras van separadas: "sin marcar" no es "faltó".
+    summary: resumenDeAsistencia({
+      convocables: roster.length,
+      presentes: roster.filter((p) => p.status === 'present').length,
+      ausentes: roster.filter((p) => p.status === 'absent').length,
+    }),
+  };
+}
+
+// Leerlo. La liga ve los dos equipos; un equipo ve **solo el suyo**, nunca el
+// del rival — la guarda ya resolvió cuáles son (req.equiposVisibles).
+router.get('/matches/:matchId/attendance', authRequired, matchAttendanceViewRequired, asyncHandler(async (req, res) => {
+  const match = req.match;
+  const falta = faltaParaPasarLista(match);
+  if (falta) return res.status(400).json({ error: falta });
+
+  const branch = await db.prepare('SELECT id, name FROM branches WHERE id = ?').get(match.branch_id);
+  const teams = [];
+  for (const teamId of req.equiposVisibles) {
+    const lista = await listaDeEquipo(match, teamId);
+    if (lista) teams.push(lista);
+  }
+
+  res.json({
+    match: {
+      id: match.id, match_date: match.match_date, week_label: match.week_label,
+      home_team: match.home_team, away_team: match.away_team,
+      home_team_id: match.home_team_id, away_team_id: match.away_team_id,
+      branch_id: match.branch_id, branch_name: branch?.name || null,
+      category_name: req.category?.name || null,
+      league_id: req.league.id,
+    },
+    // Qué lado del partido todavía no está conectado con su equipo. Se dice
+    // aunque el otro sí lo esté: media pantalla que funciona es mejor que una
+    // que se niega entera, y la liga tiene que saber qué le falta.
+    unlinked: ['home', 'away'].filter((lado) => !match[lado + '_team_id']),
+    can_mark: req.puedeMarcar === true,
+    teams,
+  });
+}));
+
+// Marcarlo. Recibe la lista COMPLETA de un equipo, no un jugador a la vez.
+//
+// Un pase de lista se hace de un jalón y con la cancha enfrente; mandar
+// cuarenta llamadas sueltas deja la mitad capturada cuando se cae el internet
+// del campo, que es justo donde esto se va a usar. Recibir la lista entera lo
+// vuelve además idempotente de nacimiento, que es lo que pide la cola de envío
+// de "Capturar sin señal".
+//
+// Que la lista sea COMPLETA es también cómo se desmarca a alguien: quien no
+// viene en ella vuelve a "sin pasar lista", que es la ausencia de fila. Por eso
+// una lista vacía es válida y borra lo que hubiera.
+router.put('/matches/:matchId/attendance', authRequired, matchAttendanceRequired, asyncHandler(async (req, res) => {
+  const match = req.match;
+  const falta = faltaParaPasarLista(match);
+  if (falta) return res.status(400).json({ error: falta });
+
+  const teamId = Number(req.body.team_id);
+  if (!teamId) return res.status(400).json({ error: 'Falta el equipo (team_id)' });
+  if (teamId !== match.home_team_id && teamId !== match.away_team_id) {
+    return res.status(400).json({ error: 'Ese equipo no es local ni visitante en este partido' });
+  }
+
+  const lista = normalizarPaseDeLista(req.body.entries);
+  if (lista.error) return res.status(400).json({ error: lista.error });
+
+  // Una sola sentencia, por la regla de que una transacción no se reparte entre
+  // varias llamadas: `db.prepare` toma una conexión del pool por consulta y del
+  // otro lado hay un pooler en modo transacción. Borrar y guardar en dos viajes
+  // dejaría la lista a medias si el segundo falla.
+  //
+  // Los dos CTE que escriben tocan la misma tabla pero NUNCA la misma fila: el
+  // DELETE se queda con quien no viene en la lista, el INSERT con quien sí.
+  //
+  // El `WHERE EXISTS` de `entrada` es lo que hace que la cola sin señal no
+  // tumbe un envío viejo: un jugador que ya no está en el roster se ignora en
+  // silencio en vez de reventar la petición entera con un error de llave
+  // foránea. Impide además marcar a alguien del otro equipo.
+  const resultado = await db.prepare(`
+    WITH entrada AS (
+      SELECT e.player_id, e.status
+      FROM UNNEST(?::int[], ?::text[]) AS e(player_id, status)
+      WHERE EXISTS (
+        SELECT 1 FROM player_team_memberships ptm
+        WHERE ptm.player_id = e.player_id AND ptm.team_id = ? AND ptm.branch_id = ?
+      )
+    ),
+    borradas AS (
+      DELETE FROM match_attendance
+       WHERE match_id = ? AND team_id = ?
+         AND player_id NOT IN (SELECT player_id FROM entrada)
+      RETURNING 1
+    ),
+    guardadas AS (
+      INSERT INTO match_attendance (match_id, player_id, team_id, status, marked_by_user_id, marked_at)
+      SELECT ?, e.player_id, ?, e.status, ?, CURRENT_TIMESTAMP FROM entrada e
+      ON CONFLICT (match_id, player_id) DO UPDATE SET
+        status            = EXCLUDED.status,
+        team_id           = EXCLUDED.team_id,
+        marked_by_user_id = EXCLUDED.marked_by_user_id,
+        marked_at         = EXCLUDED.marked_at
+      RETURNING 1
+    )
+    SELECT (SELECT COUNT(*)::int FROM guardadas) AS guardadas,
+           (SELECT COUNT(*)::int FROM borradas)  AS desmarcadas
+  `).get(
+    lista.playerIds, lista.statuses, teamId, match.branch_id,
+    match.id, teamId,
+    match.id, teamId, req.user.id,
+  );
+
+  // Se devuelve la lista ya releída y no lo que mandó el cliente: si algo se
+  // ignoró (un jugador que ya no está en el roster), la pantalla tiene que ver
+  // el estado real y no el que creía tener.
+  const equipo = await listaDeEquipo(match, teamId);
+
+  res.json({
+    guardadas: resultado.guardadas,
+    desmarcadas: resultado.desmarcadas,
+    ignoradas: lista.playerIds.length - resultado.guardadas,
+    ...equipo,
+  });
+}));
+
+// El acumulado de un equipo en una rama. Lo ven la liga y el equipo.
+//
+// NO se guarda, se suma (regla 4): no hay ningún `games_attended` en ninguna
+// tabla, así que un pase de lista corregido corrige el acumulado solo.
+//
+// Y se entregan las TRES cifras por separado, sin porcentaje y sin veredicto
+// (regla 10): la plataforma registra la actividad, y quién es elegible para
+// playoffs lo decide la liga, con un criterio que cambia de liga en liga y de
+// temporada en temporada.
+router.get('/branches/:branchId/teams/:teamId/attendance', authRequired, branchTeamAttendanceRequired, asyncHandler(async (req, res) => {
+  // `convocables` se cuenta por jugador y no como "los partidos del equipo":
+  // quien llegó a media temporada arrastraría faltas de partidos que se jugaron
+  // antes de que existiera en el roster.
+  const filas = await db.prepare(`
+    WITH partidos AS (
+      SELECT m.id, ${fechaDelPartidoMx('m')} AS fecha
+      FROM matches m
+      WHERE m.branch_id = ? AND m.is_draft = FALSE
+        AND (m.home_team_id = ? OR m.away_team_id = ?)
+    ),
+    plantel AS (
+      SELECT DISTINCT ON (ptm.player_id)
+             ptm.player_id, ptm.jersey_number, ptm.end_date,
+             COALESCE(ptm.position, p.position) AS position,
+             p.first_name, p.last_name
+      FROM player_team_memberships ptm
+      JOIN players p ON p.id = ptm.player_id
+      WHERE ptm.team_id = ? AND ptm.branch_id = ?
+      ORDER BY ptm.player_id, (ptm.end_date IS NULL) DESC, ptm.start_date DESC
+    )
+    SELECT pl.player_id AS id, pl.first_name, pl.last_name,
+           pl.jersey_number, pl.position,
+           COUNT(pa.id) FILTER (WHERE pl.end_date IS NULL OR pl.end_date >= pa.fecha) AS convocables,
+           COUNT(a.id)  FILTER (WHERE a.status = 'present') AS presentes,
+           COUNT(a.id)  FILTER (WHERE a.status = 'absent')  AS ausentes
+    FROM plantel pl
+    LEFT JOIN partidos pa ON TRUE
+    LEFT JOIN match_attendance a ON a.match_id = pa.id AND a.player_id = pl.player_id
+    GROUP BY pl.player_id, pl.first_name, pl.last_name, pl.jersey_number, pl.position
+    ORDER BY pl.jersey_number NULLS LAST, pl.last_name
+  `).all(req.branch.id, req.team.id, req.team.id, req.team.id, req.branch.id);
+
+  const totalPartidos = await db.prepare(`
+    SELECT COUNT(*)::int AS n FROM matches
+    WHERE branch_id = ? AND is_draft = FALSE AND (home_team_id = ? OR away_team_id = ?)
+  `).get(req.branch.id, req.team.id, req.team.id);
+
+  res.json({
+    branch: { id: req.branch.id, name: req.branch.name },
+    team: { id: req.team.id, name: req.team.name },
+    matches: totalPartidos.n,
+    players: filas.map(({ convocables, presentes, ausentes, ...jugador }) => ({
+      ...jugador,
+      ...resumenDeAsistencia({ convocables, presentes, ausentes }),
+    })),
+  });
 }));
 
 // Tarjeta del jugador: identidad + trayectoria + estadísticas acumuladas +

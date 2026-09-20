@@ -48,8 +48,8 @@ eso las tablas van partidas en tres.
 
 El décimo es la excepción y por eso está tan abajo: el roster público, el pase
 de lista y la captura de estadísticas se definieron el 2026-09-20 y de los tres
-solo el primero está construido. Es alcance nuevo, no algo que se haya quedado
-a medias.
+faltan las estadísticas, que son con mucho la parte más grande. Es alcance
+nuevo, no algo que se haya quedado a medias.
 
 ### Dominios funcionales
 
@@ -62,7 +62,7 @@ a medias.
 |Equipos independientes|95%|El modelo de roles, construido el 2026-09-20, ya deja invitar a un **segundo dueño** desde el principio, así que perder una cuenta deja de ser fatal. Lo que no existe es el rescate: un equipo cuyo único dueño ya perdió acceso sigue sin poderse reclamar|
 |Cuotas del club (equipo → jugador)|90%|Prorrateo de quien entra a media quincena; auditoría del padrón; el pie del estado de cuenta a 1.16:1 de contraste. La UI para rotar el link se cerró el 2026-09-19|
 |Cobranza (liga → equipo)|88%|Cobro en línea. La zona horaria se cerró el 2026-09-19 (eran cuatro lugares, no dos)|
-|Roster público, pase de lista y estadísticas|**15%**|El **roster público está construido y verificado** (2026-09-20): los dos interruptores de la categoría, el veto del equipo sobre la foto, el endpoint recortado y la pantalla que se abre desde el partido. Falta el pase de lista (`match_attendance` y el permiso `asistencia`) y, detrás, la captura por jugada sin señal — que arrastra trabajo de plataforma que hoy no existe: el service worker solo hace push y no cachea nada. El modelo de las tres partes está decidido y escrito|
+|Roster público, pase de lista y estadísticas|**35%**|Dos de las tres partes están **construidas y verificadas** (2026-09-20): el roster público —con los dos interruptores de la categoría y el veto del equipo sobre la foto— y el pase de lista encima de esa misma lista. Falta la captura **por jugada** y, debajo, hacerla funcionar **sin señal**: eso arrastra trabajo de plataforma que hoy no existe, porque el service worker solo hace push y no cachea nada. Las dos están decididas y escritas|
 |Roster de jugadores|85%|Credencial digital con QR. La zona horaria de altas y bajas se cerró el 2026-09-19 (eran tres lugares más)|
 |Notificaciones y push|85%|Bandeja propia para jugador/tutor — hoy imposible: `notifications` tiene `CHECK (recipient_type IN ('league','team'))` y los jugadores no tienen cuenta. Que el recordatorio de cobranza SALGA de la plataforma (correo al tutor) sigue sin construirse|
 |Tiendas y bot de WhatsApp|70% · **0% operativo**|Todo el código está; falta el número de WhatsApp Business, saldo de Anthropic y cubrir `bot_messages` en el Aviso de Privacidad|
@@ -74,7 +74,7 @@ a medias.
 |-|-|-|
 |Páginas legales|**100%**|Cerrado el 2026-09-19: los cuatro datos llenos, `/terminos` publicado y el Aviso completo|
 |Seguridad|90%|El modelo de roles y fronteras quedó **construido** el 2026-09-20 (ver su sección): seis roles, guardas que se piden por permiso y la liga fuera del padrón del club. Quedan rotar `CLOUDINARY_API_SECRET`, las invitaciones que no caducan, `DELETE /manage/teams/:id` —que destruye contabilidad sin avisar— y la tarjeta pública del jugador, que todavía publica el historial de equipos contra la regla 7 (la **foto** ya se recortó el 2026-09-20, con el roster público)|
-|Pruebas automatizadas|45%|Las 190 del CI (109 backend + 81 frontend) cubren **solo funciones puras**. Todo `routes/` empieza consultando Postgres y sigue fuera del CI. Lo que sí lo toca son las **tres** suites e2e —las dos de cobranza y la de invitaciones y roles, que estrenó la cobertura de auth— y esas se corren a mano|
+|Pruebas automatizadas|45%|Las 211 del CI (130 backend + 81 frontend) cubren **solo funciones puras**. Todo `routes/` empieza consultando Postgres y sigue fuera del CI. Lo que sí lo toca son las **tres** suites e2e —las dos de cobranza y la de invitaciones y roles, que estrenó la cobertura de auth— y esas se corren a mano|
 |Concentración de archivos|sin urgencia|Cinco archivos concentran demasiado; solo `db.js` tiene techo real (9s de arranque). Ver "Pendientes conocidos"|
 
 ### Roadmap de negocio, por fase
@@ -84,7 +84,7 @@ a medias.
 |0 — Cerrar lo que estaba a medias|70%|Solo esperar tráfico para volver a pedir revisión a Booking.com|
 |1 — Fundación de confiabilidad|80%|Subieron las legales a ✅. Quedan el plan de pago de Render/Neon y rotar el secreto de Cloudinary|
 |2 — Automatizar el cobro|**0%**|No hay ninguna pasarela instalada. Es el bloqueador de fondo y el punto de no retorno: en cuanto una liga cobra por la plataforma, no se va|
-|3 — Red de seguridad técnica|45%|190 pruebas y CI hechos, y tres suites e2e que sí prueban contra la base; falta que esas corran solas, monitoreo de uptime y que el CI bloquee el deploy|
+|3 — Red de seguridad técnica|45%|211 pruebas y CI hechos, y tres suites e2e que sí prueban contra la base; falta que esas corran solas, monitoreo de uptime y que el CI bloquee el deploy|
 |4 — Ciclo de vida del cliente|15%|Falta el onboarding por correo; `RESEND_API_KEY` ya está configurada, así que es construir los correos|
 |5 — Crecimiento|5%|Página de precios, analítica de conversión, SEO más allá del sitemap|
 
@@ -198,24 +198,35 @@ verificación.
   nombrado: "dar de baja" debería terminar una participación, no destruir un
   equipo.
 
-- **Falta el pase de lista (2026-09-20).** El **roster público ya está
-  construido y verificado** —los dos interruptores de la categoría, el veto del
-  equipo, el endpoint recortado y la pantalla, que se abre desde el partido—, y
-  con él se cerró la mitad del pendiente de la tarjeta del jugador. Ver el
+- **El día del partido: falta la captura de estadísticas (2026-09-20).** El
+  **roster público y el pase de lista ya están construidos y verificados** — los
+  dos interruptores de la categoría, el veto del equipo sobre la foto, la
+  pantalla que se abre desde el partido y, encima de esa misma lista,
+  `match_attendance` con el permiso `asistencia` y sus tres endpoints. Ver el
   CHANGELOG.
 
-  Lo que sigue abierto es la otra mitad de esa sección: `match_attendance`, el
-  permiso `asistencia` en `utils/orgRoles.js` y sus tres endpoints. El modelo
-  entero está escrito —los dos estados más el tercero que es la ausencia de
-  fila, quién marca y quién ve, el acumulado que se suma y no se guarda— en
-  "Roster público y pase de lista"; no queda ninguna decisión abierta, solo
-  código.
+  Lo que sigue abierto de esa línea es lo grande: **"Estadísticas por jugada"**
+  y, debajo, **"Capturar sin señal"**. Las dos están decididas y escritas, sin
+  ninguna decisión abierta, pero sin una línea de código — y la segunda arrastra
+  trabajo de plataforma que hoy no existe: el service worker solo hace push y no
+  cachea nada.
 
-  Dos cosas que ya tiene resueltas de antemano y conviene no volver a pensar:
-  la pantalla desde donde se abre **ya existe** (es el mismo botón del roster,
-  y lo que cambia es si se puede marcar), y el `PUT` recibe **la lista completa
-  de un equipo**, lo que lo vuelve idempotente de nacimiento — que es lo que
-  pide la cola de "Capturar sin señal".
+  Lo que ya quedó resuelto y conviene no volver a pensar: la pantalla desde
+  donde se captura **ya existe** (el mismo botón del roster, y lo que cambia es
+  qué se puede hacer encima), y el `PUT` del pase de lista ya demostró el patrón
+  que pide la cola sin señal — recibe **la lista completa**, es idempotente de
+  nacimiento y tolera que el roster haya cambiado entre la captura y el envío.
+
+- **El pase de lista no tiene suite e2e (2026-09-20).** Sus rutas se probaron a
+  mano contra la rama de Neon —los cinco casos del `PUT` (marcar, reintentar,
+  corregir, jugador ajeno, lista vacía) y las cuatro fronteras de permiso— y el
+  resultado está en el CHANGELOG, pero nada de eso corre solo. Las 34 pruebas
+  nuevas del CI cubren las reglas puras, no las rutas.
+
+  Es el candidato natural a **cuarta suite e2e**, y el árbol de datos que pide
+  —liga, torneo, categoría, rama, equipos inscritos, roster con una baja a media
+  temporada y partidos con equipos vinculados— es el mismo que va a necesitar la
+  captura por jugada. Montarlo dos veces sería pagar el mismo andamio dos veces.
 
   La otra mitad del trabajo del visor —capturar lo que pasa en el campo—
   también quedó definida el mismo día, en "Estadísticas por jugada": se captura
@@ -468,7 +479,8 @@ lifa-app/
         notifications.js     Suscripción push + endpoint /trigger del cron
                               (dos cadencias en un endpoint — ver "Cadencia del cron")
         players.js           Roster por equipo+rama: alta manual, plantilla de Excel (logos vía
-                              exceljs), foto/CURP por jugador, stats de partido y tarjeta pública
+                              exceljs), foto/CURP por jugador, stats de partido, PASE DE LISTA
+                              (leer, marcar y el acumulado) y tarjeta pública
         billing.js            Cobranza liga → equipos (ver sección "Cobranza")
         playerBilling.js     Cuotas equipo → jugadores + estado de cuenta público del papá
                               (sin sesión, token en la URL) — ver "Cuotas del club"
@@ -509,7 +521,12 @@ lifa-app/
                               de la categoría y el veto del equipo sobre la
                               foto. Puro, sin `db`, y con su versión de SQL
                               para las consultas que lo aplican sobre muchas
-                              filas — ver "Roster público y pase de lista")
+                              filas — ver "Roster público y pase de lista"),
+                              attendance.js (el pase de lista: los dos estados,
+                              quién aparece en la lista de un partido y cómo se
+                              cuenta el acumulado. También puro; su consulta es
+                              la MISMA para el público y para el pase de lista,
+                              y lo único que cambia son las columnas que salen)
       seed.js                Datos de ejemplo para desarrollo local
     scripts/                 Scripts de diagnóstico y limpieza de un solo uso.
                               Los de SOLO LECTURA usan `pg` directo y sin
@@ -531,10 +548,12 @@ lifa-app/
     tests/
       unit/                  Pruebas puras, corren en el CI sin base de datos:
                               validation, timezones, standings, orgRoles,
-                              prodGuard y rosterVisibility. Las tres últimas son
-                              las que cuidan algo que se rompe en silencio: el
-                              reglamento de desempates, quién puede qué, y si la
-                              cara de un menor sale en una página abierta.
+                              prodGuard, rosterVisibility y attendance. Las
+                              cuatro últimas cuidan algo que se rompe en
+                              silencio: el reglamento de desempates, quién puede
+                              qué, si la cara de un menor sale en una página
+                              abierta, y que "sin pasar lista" no se convierta
+                              en "faltó".
       (resto)                Recorridos de punta a punta de cobranza (NO corren en
                               el CI: necesitan un backend vivo apuntado a una rama
                               de Neon). Ver backend/tests/README.md
@@ -551,10 +570,11 @@ lifa-app/
                                  secciones (ver "Cuotas del club")
         PlayerStatementPage.jsx  /cuenta/:token — estado de cuenta del jugador,
                                  público y sin sesión
-        PublicRosterPage.jsx     /ramas/:branchId/equipos/:teamId/roster — el
-                                 roster recortado, público y sin sesión. Se
-                                 llega desde el partido; si la categoría no lo
-                                 publica, el endpoint contesta 404
+        PublicRosterPage.jsx     /partidos/:matchId/equipos/:teamId/roster — el
+                                 roster recortado, público y sin sesión, y
+                                 encima de la MISMA lista el pase de lista para
+                                 quien tenga el permiso `asistencia`. No son dos
+                                 pantallas: lo que cambia es si se puede marcar
       components/
         FlightSearchWidget.jsx   Botón "✈️ Vuelo" en MatchPage — despliega el
                                  widget de búsqueda de Aviasales (ver "Monetización")
@@ -2458,18 +2478,12 @@ en el alta manual, botón de foto por jugador. `api/client.js`:
 
 ## Roster público y pase de lista
 
-**Decidido y a medio construir (2026-09-20).** Es lo que le da pantalla propia
-al visor, que era el pendiente que dejó abierto el modelo de roles.
-
-- **El roster público está construido y verificado**: los dos interruptores de
-  la categoría, el veto del equipo, el endpoint recortado y la pantalla. Es la
-  primera superficie pública donde se ve quién juega — hasta ese día las
-  públicas eran liga, torneo, calendario, partido y la tarjeta del jugador.
-- **El pase de lista no**: `match_attendance`, el permiso `asistencia` y sus
-  tres endpoints siguen siendo modelo escrito, sin una línea de código.
-
-Lo construido va marcado ✅ abajo, sección por sección, y su verificación está
-en `docs/CHANGELOG.md`.
+**Decidido y construido el 2026-09-20.** Es lo que le da pantalla propia al
+visor, que era el pendiente que dejó abierto el modelo de roles. Las dos
+mitades corren: el **roster público** —primera superficie pública donde se ve
+quién juega, porque hasta ese día las públicas eran liga, torneo, calendario,
+partido y la tarjeta del jugador— y el **pase de lista** encima de esa misma
+lista. Su verificación está en `docs/CHANGELOG.md`.
 
 Esta sección es la primera mitad. La segunda —el mismo patrón aplicado a la
 captura de lo que pasa en el campo— está en "Estadísticas por jugada".
@@ -2486,7 +2500,7 @@ Que el roster se abra **desde el partido** es lo que hace que el mismo botón
 sirva para las dos cosas. La asistencia es a un partido; un roster suelto, sin
 partido en contexto, no tiene a qué marcarle nada.
 
-### Qué se publica, y quién lo decide ✅
+### Qué se publica, y quién lo decide
 
 Lo que manda es la regla 7 de `CLAUDE.md`, y esta pantalla es justo la que esa
 regla describe: **nombre, número y posición**. `curp` y `birth_date` no salen
@@ -2527,7 +2541,7 @@ la liga tenga que perseguir a veinte equipos para publicar un programa de mano.
 > el equipo, y sigue siendo cierto: lo que se agrega encima es un techo de la
 > liga, que solo puede quitar permiso, nunca darlo.
 
-### La nota que va en esa pantalla ✅
+### La nota que va en esa pantalla
 
 La pregunta se acompaña de una recomendación nuestra, no de una prohibición.
 La liga decide; nosotros decimos lo que sabemos:
@@ -2549,7 +2563,7 @@ prisas.
 que encienda. Son faltas de gente que en buena parte es menor de edad, y
 publicarlas es exactamente lo que la regla 7 existe para no hacer.
 
-### El pase de lista — falta construirlo
+### El pase de lista
 
 Dos estados y nada más: **presente** y **ausente**. Y un tercero que no se
 guarda porque es la ausencia de fila: **sin pasar lista**.
@@ -2617,7 +2631,34 @@ agregarle historial — queda escrito para no descubrirlo en ese momento.
 la fecha del partido**, no el de hoy. Un jugador dado de baja en octubre sí
 estaba en el partido de septiembre, y su fila de asistencia se queda donde
 está. La fecha se compara en hora de México, como el resto de las altas y bajas
-del roster.
+del roster — y no es cosmético: `matches.match_date` guarda un ISO en UTC, así
+que un partido de las 6 pm se cuenta al día siguiente si se corta en UTC (ver
+`fechaDelPartidoMx` en `utils/sqlDates.js`).
+
+> **Solo se filtra por `end_date`, y la asimetría es deliberada** (decidido al
+> construirlo, 2026-09-20). Las dos fechas de `player_team_memberships` no
+> significan lo mismo:
+>
+> - `end_date` es un **acto**: alguien entró a la pantalla y dio de baja a esa
+>   persona ese día. Es un hecho sobre la temporada, y se respeta.
+> - `start_date` es **cuándo se capturó la fila**. Nace con `DEFAULT` la fecha
+>   de hoy y ninguna pantalla la pregunta nunca. Filtrar por ella sería tratar
+>   "el día que lo tecleamos" como "el día que llegó al equipo".
+>
+> Y no es teórico: aquí el roster se captura tarde, con el torneo empezado. Con
+> el filtro de arriba, una liga que sube su roster en noviembre vería la lista
+> **vacía** en todos los partidos anteriores y no podría pasar lista en ninguno
+> — justo la lectura ("no hay jugadores") que esta sección existe para no
+> producir. Dejar de más a alguien que llegó después cuesta un renglón marcado
+> "sin pasar lista", que no es "faltó". Los dos errores no cuestan lo mismo.
+>
+> El día que `start_date` sea un dato que alguien declare, y no el reloj del
+> servidor, el filtro se aprieta sin migrar nada (regla 4).
+
+**Y aparece siempre quien ya tenga fila de asistencia en ese partido**, pase lo
+que pase con su membresía. Sin eso, dar de baja a alguien borraría de la
+pantalla una marca que sigue existiendo en la base: el dato quedaría vivo e
+invisible, que es la peor de las dos opciones.
 
 **Un partido sin equipos vinculados no se puede pasar lista.**
 `matches.home_team_id` y `away_team_id` son nullable: un partido creado por
@@ -2653,17 +2694,19 @@ rival.
 
 ### Endpoints
 
-| | Método | Ruta | Quién |
-|---|---|---|---|
-| ✅ | `GET` | `/api/leagues/branches/:branchId/teams/:teamId/roster` | **Público** — recortado por la regla 7 |
-| ✅ | `PUT` | `/api/players/branches/:branchId/teams/:teamId/photos` | **Solo el equipo.** Su veto sobre la foto |
-| | `GET` | `/api/matches/:matchId/attendance` | Permiso `asistencia` de la liga, o `ver` del equipo (solo su lado) |
-| | `PUT` | `/api/matches/:matchId/attendance` | Permiso `asistencia` |
-| | `GET` | `/api/branches/:branchId/teams/:teamId/attendance` | El acumulado. Liga y equipo |
+| Método | Ruta | Quién |
+|---|---|---|
+| `GET` | `/api/leagues/matches/:matchId/teams/:teamId/roster` | **Público** — recortado por la regla 7 |
+| `PUT` | `/api/players/branches/:branchId/teams/:teamId/photos` | **Solo el equipo.** Su veto sobre la foto |
+| `GET` | `/api/players/matches/:matchId/attendance` | Permiso `asistencia` de la liga, o `ver` del equipo (solo su lado) |
+| `PUT` | `/api/players/matches/:matchId/attendance` | Permiso `asistencia` |
+| `GET` | `/api/players/branches/:branchId/teams/:teamId/attendance` | El acumulado. Liga y equipo |
 
-Los tres que faltan llevan la ruta como la dejó el plan, sin router decidido:
-la asistencia puede colgar de `players.js` —donde ya vive el roster por rama—
-o de un router propio, y eso se elige al construirla.
+**Los dos primeros cuelgan del PARTIDO y no de la rama**, aunque un roster viva
+a nivel rama: es lo que hace que el mismo botón sirva para las dos cosas, y es
+lo que permite contestar la pregunta correcta —quién estaba en el roster **ese
+día**—. El pase de lista vive en `players.js`, junto al roster por rama y a
+`/matches/:id/stats`, que ya estaba ahí.
 
 **El público no vive bajo un prefijo `/public`**, como decía el plan: esta app
 no tiene tal prefijo. Su superficie pública son los endpoints de
@@ -2716,24 +2759,33 @@ Las dos cosas que este proyecto ya aprendió a la mala aplican enteras aquí:
 - La pantalla, abierta en el navegador con los tres papeles —público, visor y
   coach— antes de decir que quedó.
 
-**Del roster público, lo segundo ya se hizo y lo primero no.** Se verificó en
-el navegador contra la rama de Neon, con un roster real de ONEFA sembrado con
-sus casos feos —una baja a media temporada, un jugador sin número, y los dos
-equipos del mismo partido en distinto estado, uno publicando fotos y el otro
-con el veto puesto—, y la consulta de la tarjeta se corrió contra los datos
-reales dentro de una transacción con `ROLLBACK`. El detalle está en el
-CHANGELOG.
+**Lo segundo se hizo entero; lo primero, no.** Las dos mitades se verificaron
+en el navegador contra la rama de Neon, con un roster real de ONEFA sembrado
+con sus casos feos —una baja a media temporada, un jugador sin número, y los
+dos equipos del mismo partido en distinto estado, uno publicando fotos y el
+otro con el veto puesto— y con los tres papeles: público sin sesión, visor y
+coach. El detalle está en el CHANGELOG.
 
-Lo que **no** tiene es suite e2e propia: las diez pruebas nuevas cubren la
-regla pura (`utils/rosterVisibility.js`) y no las rutas, como todo `routes/`.
-Cuando llegue el pase de lista, la suite se escribe para los dos de un golpe —
-comparten la pantalla y la mitad del árbol de datos, y montarlo dos veces sería
-pagar el mismo andamio dos veces.
+Lo que **no** hay es suite e2e propia. Las 34 pruebas nuevas cubren las dos
+reglas puras (`utils/rosterVisibility.js` y `utils/attendance.js`) y no las
+rutas, como todo `routes/`. Las rutas se probaron a mano contra la rama de Neon
+—los cinco casos del `PUT`, las cuatro fronteras de permiso— y eso está
+anotado, pero no corre solo. Es el candidato natural a cuarta suite e2e.
 
 **La rama `desarrollo-local` de Neon se quedó con esos datos a propósito**: la
 categoría COLEGIAL UNIVERSITARIO publica su roster con foto, el equipo 21 la
-deja pasar y el 17 la veta. Es el punto de partida del pase de lista, que se
-abre desde esa misma pantalla.
+deja pasar, el 17 la veta, y hay dos pases de lista capturados en los partidos
+603 y 619. Es el punto de partida de "Estadísticas por jugada", que se captura
+desde la misma pantalla.
+
+Para volver a abrir el pase de lista desde el navegador hace falta un usuario
+con el permiso, y en esa rama se hace con una línea —el rol `editor` de una liga
+es el visor:
+
+```sql
+INSERT INTO organization_members (organization_id, user_id, role)
+SELECT organization_id, <tu_user_id>, 'editor' FROM leagues WHERE slug = 'onefa';
+```
 
 ## Estadísticas por jugada
 

@@ -9,6 +9,7 @@ import { MEXICO_STATES } from '../utils/mexicoStates.js';
 import { MATCH_SCOPE_JOINS, MATCH_SCOPE_COLUMNS } from '../utils/matchScope.js';
 import { buildBranchStandings } from '../utils/branchStandings.js';
 import { interruptoresDeCategoria, rosterEsPublico, fotoSePublica } from '../utils/rosterVisibility.js';
+import { rosterDelPartidoSql } from '../utils/attendance.js';
 
 const router = express.Router();
 
@@ -1122,50 +1123,70 @@ router.get('/branches/:branchId/standings', asyncHandler(async (req, res) => {
 // tarjeta del jugador: desde afuera no se debe poder distinguir "existe pero no
 // te lo muestro" de "no existe". Un 403 confirmaría que esa categoría, ese
 // equipo y esa rama existen.
-router.get('/branches/:branchId/teams/:teamId/roster', asyncHandler(async (req, res) => {
+// Cuelga del PARTIDO y no de la rama, aunque el roster viva a nivel rama: es lo
+// que hace que el mismo botón sirva para las dos cosas. Quien llega de fuera ve
+// a los participantes; quien tiene el permiso `asistencia` ve la misma lista
+// con el pase de lista al lado, y la asistencia es a un partido — un roster
+// suelto, sin partido en contexto, no tiene a qué marcarle nada.
+//
+// Es también lo que permite contestar la pregunta correcta: quién estaba en el
+// roster **ese día**, no hoy.
+router.get('/matches/:matchId/teams/:teamId/roster', asyncHandler(async (req, res) => {
+  const teamId = Number(req.params.teamId);
+
   // La inscripción (branch_teams) es el punto de partida: sin ella, este equipo
   // no participa en esta rama y no hay roster que enseñar. De ahí cuelgan los
   // dos interruptores, el de la categoría y el del propio equipo.
   const ctx = await db.prepare(`
-    SELECT b.id   AS branch_id,   b.name AS branch_name,
+    SELECT m.id AS match_id, m.match_date, m.week_label,
+           m.home_team, m.away_team, m.home_team_id, m.away_team_id,
+           b.id   AS branch_id,   b.name AS branch_name,
            c.id   AS category_id, c.name AS category_name, c.season, c.year,
            c.roster_public, c.roster_photos, bt.show_photos,
            t.id   AS team_id, t.name AS team_name, t.logo_url AS team_logo_url,
            tr.id  AS tournament_id, tr.name AS tournament_name,
-           l.name AS league_name, l.slug AS league_slug
-    FROM branch_teams bt
-    JOIN branches b       ON b.id = bt.branch_id
+           l.id   AS league_id, l.name AS league_name, l.slug AS league_slug
+    FROM matches m
+    JOIN branches b       ON b.id = m.branch_id
     JOIN categories c     ON c.id = b.category_id
-    JOIN teams t          ON t.id = bt.team_id
     JOIN leagues l        ON l.id = c.league_id
+    JOIN branch_teams bt  ON bt.branch_id = b.id AND bt.team_id = ?
+    JOIN teams t          ON t.id = bt.team_id
     LEFT JOIN tournaments tr ON tr.id = c.tournament_id
-    WHERE bt.branch_id = ? AND bt.team_id = ? AND l.is_public = TRUE
-  `).get(req.params.branchId, req.params.teamId);
+    WHERE m.id = ? AND m.is_draft = FALSE AND l.is_public = TRUE
+      AND (m.home_team_id = ? OR m.away_team_id = ?)
+  `).get(teamId, req.params.matchId, teamId, teamId);
 
+  // Un solo 404 para todo lo que puede faltar —el partido, la rama, el vínculo
+  // con los equipos, la inscripción, o que la categoría sea privada— por la
+  // misma razón que la tarjeta del jugador: desde afuera no se debe poder
+  // distinguir "existe pero no te lo muestro" de "no existe".
   if (!ctx || !rosterEsPublico(ctx)) return res.status(404).json({ error: 'Roster no encontrado' });
 
   const conFoto = fotoSePublica(ctx, ctx);
 
-  // Quiénes están HOY en el roster (`end_date IS NULL`). El pase de lista, que
-  // se abre desde esta misma pantalla, va a necesitar la otra pregunta —quién
-  // estaba vigente A LA FECHA DEL PARTIDO— y esa llega con él.
-  const roster = await db.prepare(`
-    SELECT p.id, p.first_name, p.last_name,
-           ptm.jersey_number,
-           COALESCE(ptm.position, p.position) AS position
-           ${conFoto ? ', p.photo_url' : ''}
-    FROM player_team_memberships ptm
-    JOIN players p ON p.id = ptm.player_id
-    WHERE ptm.team_id = ? AND ptm.branch_id = ? AND ptm.end_date IS NULL
-    ORDER BY ptm.jersey_number NULLS LAST, p.last_name
-  `).all(ctx.team_id, ctx.branch_id);
+  // La misma consulta que usa el pase de lista, sin las columnas que no son
+  // públicas (ver utils/attendance.js). La asistencia NO sale aquí ni aunque la
+  // categoría encienda todo lo demás.
+  const roster = await db.prepare(rosterDelPartidoSql({ conFoto }))
+    .all(ctx.match_id, ctx.team_id, ctx.branch_id);
 
   res.json({
-    league:     { name: ctx.league_name, slug: ctx.league_slug },
+    // El id va además del slug para que la pantalla pueda preguntarle a su
+    // sesión "¿tengo `asistencia` en esta liga?" sin una llamada de más. Es
+    // para ESCONDER el pase de lista, no para protegerlo: quien decide es la
+    // guarda del backend (ver frontend/src/utils/permisos.js).
+    league:     { id: ctx.league_id, name: ctx.league_name, slug: ctx.league_slug },
     tournament: ctx.tournament_id ? { id: ctx.tournament_id, name: ctx.tournament_name } : null,
     category:   { id: ctx.category_id, name: ctx.category_name, season: ctx.season, year: ctx.year },
     branch:     { id: ctx.branch_id, name: ctx.branch_name },
     team:       { id: ctx.team_id, name: ctx.team_name, logo_url: ctx.team_logo_url },
+    match:      {
+      id: ctx.match_id, match_date: ctx.match_date, week_label: ctx.week_label,
+      home_team: ctx.home_team, away_team: ctx.away_team,
+      rival: ctx.home_team_id === ctx.team_id ? ctx.away_team : ctx.home_team,
+      local: ctx.home_team_id === ctx.team_id,
+    },
     photos:     conFoto,
     roster,
   });

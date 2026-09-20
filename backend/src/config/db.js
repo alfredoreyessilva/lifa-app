@@ -2,6 +2,7 @@ import pg from 'pg';
 import { HOY_MX } from '../utils/sqlDates.js';
 import { decidirCandadoProduccion, hoyEnMexico } from '../utils/prodGuard.js';
 import { TODOS_LOS_ROLES } from '../utils/orgRoles.js';
+import { ESTADOS_ASISTENCIA } from '../utils/attendance.js';
 
 const { Pool } = pg;
 
@@ -2011,6 +2012,60 @@ export async function initSchema() {
     // el consentimiento de las familias es de ESE roster, no del equipo para
     // siempre ni de la categoría entera.
     await run(`ALTER TABLE branch_teams ADD COLUMN IF NOT EXISTS show_photos BOOLEAN`);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // El pase de lista (README, "Roster público y pase de lista", 2026-09-20).
+    //
+    // DOS estados y nada más — `present` y `absent`— y un tercero que NO se
+    // guarda porque es la ausencia de fila: **sin pasar lista**. Si el visor no
+    // llegó, nadie faltó. Guardar solo dos estados obligaría a inventar uno de
+    // los dos para los partidos que nadie capturó, y la liga acabaría
+    // castigando a quien no debía. Por eso la fila no existe hasta que alguien
+    // pasa lista, y el acumulado reporta las tres cifras por separado.
+    //
+    // Nada de 'justificado' ni de 'no uniformado': un justificado no es un
+    // hecho que el visor observe en la cancha, es una decisión que alguien
+    // toma, y esa decisión es de la liga (regla 10).
+    //
+    // Tabla propia y NO una columna de `player_match_stats`, que ya está
+    // indexada por el mismo par (jugador, partido):
+    //
+    //   · Ahí la ausencia de fila significa "nadie capturó estadísticas".
+    //     Meter la asistencia obligaría a crear filas de puros ceros para decir
+    //     "vino", y entonces "0 yardas" dejaría de distinguirse de "no jugó".
+    //   · Son dos actos distintos, capturados por gente distinta y en momentos
+    //     distintos: el pase de lista es antes del partido y siempre ocurre;
+    //     las estadísticas son después y casi nunca.
+    //   · La asistencia necesita saber QUIÉN la marcó y CUÁNDO, porque de ella
+    //     cuelga una decisión. `player_match_stats` no guarda ninguna.
+    //
+    // Corregir es SOBRESCRIBIR, no un libro append-only: UNIQUE(match_id,
+    // player_id) con ON CONFLICT DO UPDATE, y `marked_by_user_id`/`marked_at`
+    // se quedan con quien lo dejó así. No es dinero y no lleva la maquinaria de
+    // la regla 5. Si algún día una liga disputa una asistencia esto no alcanza
+    // y habrá que agregarle historial — queda escrito para no descubrirlo en
+    // ese momento.
+    //
+    // El acumulado NO se guarda, se suma (regla 4): no hay ningún
+    // `games_attended` en ninguna tabla. Un pase de lista corregido corrige el
+    // acumulado solo.
+    await run(`
+      CREATE TABLE IF NOT EXISTS match_attendance (
+        id                SERIAL PRIMARY KEY,
+        match_id          INTEGER NOT NULL REFERENCES matches(id)  ON DELETE CASCADE,
+        player_id         INTEGER NOT NULL REFERENCES players(id)  ON DELETE CASCADE,
+        team_id           INTEGER NOT NULL REFERENCES teams(id)    ON DELETE CASCADE,
+        status            TEXT NOT NULL CHECK (status IN (${ESTADOS_ASISTENCIA.map((e) => `'${e}'`).join(', ')})),
+        marked_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        marked_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(match_id, player_id)
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_match_attendance_match ON match_attendance(match_id)`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_match_attendance_player ON match_attendance(player_id)`);
+    // El acumulado se pide siempre por (equipo, rama), y para eso el filtro
+    // útil es por equipo: los partidos salen de `matches` y se cruzan aquí.
+    await run(`CREATE INDEX IF NOT EXISTS idx_match_attendance_team ON match_attendance(team_id)`);
 
     await client.query('COMMIT');
   } catch (err) {

@@ -13,9 +13,9 @@ el README; lo histórico, en `docs/CHANGELOG.md`.
 
 ```
 backend/    Node 22 + Express, ESM. Postgres en Neon.
-  src/config/db.js      El esquema COMPLETO (38 tablas) + migraciones al arrancar
+  src/config/db.js      El esquema COMPLETO (41 tablas) + migraciones al arrancar
   src/routes/           Aquí vive todo el SQL — 18 archivos
-  src/middleware/       auth (JWT) · ownership (19 guardas, por permiso) · rateLimit
+  src/middleware/       auth (JWT) · ownership (23 guardas, por permiso) · rateLimit
   src/utils/            Funciones PURAS — lo único que se puede probar sin Postgres
     orgRoles.js         Qué puede cada rol, por tipo de organización. Fuente única
   scripts/              Diagnóstico y limpieza de un solo uso
@@ -39,7 +39,7 @@ cd frontend && npm install && npm run dev    # :5173
 npm test                                      # en cualquiera de los dos: node --test, <1s
 ```
 
-190 pruebas unitarias (109 backend + 81 frontend) corren en el CI en cada push.
+211 pruebas unitarias (130 backend + 81 frontend) corren en el CI en cada push.
 Las **tres** suites de punta a punta —las dos de cobranza y la de invitaciones
 y roles— **no**: necesitan Postgres vivo. Instrucciones en
 `backend/tests/README.md`.

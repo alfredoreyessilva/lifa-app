@@ -15,6 +15,92 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El pase de lista, encima de la misma lista (2026-09-20)**: la segunda mitad
+  de "Roster público y pase de lista", y con ella el día del partido ya tiene
+  sus dos primeras piezas corriendo. El visor estrena lo suyo: entraba al panel
+  de la liga con casi todo apagado y ahora tiene una pantalla que es **su**
+  trabajo.
+
+  **No son dos pantallas ni dos botones.** Quien llega de fuera ve el roster;
+  quien tiene el permiso `asistencia` ve la misma lista con el pase de lista al
+  lado. Por eso la pantalla se mudó de la rama al **partido**
+  (`/partidos/:matchId/equipos/:teamId/roster`): la asistencia es a un partido,
+  y un roster suelto no tiene a qué marcarle nada. Del lado del backend eso es
+  una sola consulta —`rosterDelPartidoSql`— que sirve a las dos superficies y
+  solo cambia las columnas que deja salir. Dos consultas parecidas acabarían
+  enseñando dos listas distintas el día que una se toque y la otra no.
+
+  **Dos estados, y un tercero que no se guarda.** `present` y `absent` son los
+  únicos valores de `match_attendance`; **sin pasar lista** es la ausencia de
+  fila. Si el visor no llegó, nadie faltó — guardar solo dos estados obligaría a
+  inventar uno para los partidos que nadie capturó, y la liga acabaría
+  castigando a quien no debía. El acumulado reporta las tres cifras por
+  separado, sin porcentaje y sin veredicto: la plataforma registra la actividad
+  y el criterio de elegibilidad es de la liga (regla 10).
+
+  **El `PUT` recibe la lista COMPLETA de un equipo**, no un jugador a la vez. Un
+  pase de lista se hace de un jalón y con la cancha enfrente; cuarenta llamadas
+  sueltas dejan la mitad capturada cuando se cae el internet del campo. Recibir
+  la lista entera lo vuelve idempotente de nacimiento —lo que pide la cola de
+  "Capturar sin señal"— y es además **cómo se desmarca a alguien**: quien no
+  viene en la lista vuelve a "sin pasar lista". Va en **una sola sentencia** con
+  CTEs, por la regla de que una transacción no se reparte entre varias llamadas:
+  el `DELETE` se queda con quien no viene y el `INSERT … ON CONFLICT` con quien
+  sí, y nunca tocan la misma fila.
+
+  **Tolera que el roster haya cambiado entre la captura y el envío**, que es el
+  caso real de una cola offline: un jugador que ya no está en el roster se
+  ignora en silencio en vez de reventar la petición entera con un error de llave
+  foránea. Eso mismo impide marcar a alguien del equipo rival.
+
+  **Un hallazgo que cambió el modelo: `start_date` y `end_date` no significan lo
+  mismo.** El plan decía "el roster vigente a la fecha del partido", que leído
+  literal es filtrar por las dos fechas. Pero `end_date` es un **acto** —alguien
+  dio de baja a esa persona ese día— y `start_date` es **cuándo se tecleó la
+  fila**: nace con un `DEFAULT` y ninguna pantalla la pregunta nunca. Filtrar
+  por ella sería tratar "el día que lo capturamos" como "el día que llegó al
+  equipo", y aquí el roster se captura tarde: una liga que lo sube en noviembre
+  vería la lista **vacía** en todos los partidos anteriores y no podría pasar
+  lista en ninguno. Se filtra solo por `end_date`, y aparece siempre quien ya
+  tenga fila de asistencia en ese partido — sin eso, dar de baja a alguien
+  borraría de la pantalla una marca que sigue viva en la base.
+
+  **`asistencia` es un permiso de liga y solo de liga.** Dueño, administrador y
+  **visor** lo traen; el tesorero no. El equipo **lee lo suyo** —incluido el
+  coach, que es quien necesita saber a quién le falta antes de que sea tarde— y
+  eso cae en `ver`, la línea base, porque la asistencia es del dominio torneo
+  como el roster. Nunca la del rival. Y no hace falta un "actuar como visor": el
+  emprendedor que registró la liga ya trae el permiso en su rol de dueño.
+
+  **La asistencia no es pública**, ni marcada ni sumada, encienda la categoría
+  lo que encienda: son faltas de gente que en buena parte es menor de edad. La
+  consulta compartida lo garantiza por construcción — las columnas de asistencia
+  solo salen si se piden, y el default es el de la pantalla pública.
+
+  **Verificado contra la rama de Neon y en el navegador**, con los tres papeles
+  y sobre un roster real de ONEFA con sus casos feos:
+
+  - El corte por fecha funciona: el jugador dado de baja el 10 de septiembre
+    aparece en el partido del día 3 y desaparece del día 11 en adelante. Y la
+    fecha se corta en hora de México — el partido guardado como
+    `2026-09-04T00:00:00Z` **es del día 3**, no del 4.
+  - Los cinco casos del `PUT`: marcar, reintentar el mismo envío (idempotente,
+    cero escrituras de más), corregir, mandar un jugador del otro equipo (se
+    ignora, `ignoradas: 1`) y mandar la lista vacía (borra lo que había).
+  - Las cuatro fronteras: el coach ve **solo su equipo** y sin botones; marcar
+    le da 403; el acumulado del rival, 403; un partido de otra liga, 403.
+  - El acumulado cuenta bien a quien llegó o se fue a media temporada: el dado
+    de baja sale con **1 convocable**, no con 9, así que no arrastra ocho faltas
+    de partidos que no le tocaban.
+  - En celular el renglón se parte en dos y los dos botones se van a una línea
+    propia — que es donde esto se va a usar de verdad, con el partido enfrente.
+
+  **Un tropiezo que vale anotar**: a media sesión resultó que había un backend
+  viejo corriendo con `node --watch`, reiniciándose en cada edición y peleando
+  por el 4000 con el que sí estaba sirviendo. Es exactamente la regla 2 de
+  `CLAUDE.md`, y se nota como peticiones que dejan de responder sin causa
+  aparente. Se mató y se levantó uno solo antes de dar nada por bueno.
+
 - **El roster ya se publica, y la foto tiene dos llaves (2026-09-20)**: es la
   primera mitad de "Roster público y pase de lista", decidida ese mismo día, y
   con ella el proyecto estrena **la primera superficie pública donde se ve
