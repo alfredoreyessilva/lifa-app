@@ -4,6 +4,7 @@ import { api } from '../api/client.js';
 import Loading from './Loading.jsx';
 import MonthlyFlowChart from './MonthlyFlowChart.jsx';
 import { money, moneyShort, fmtDate, balanceClass } from '../utils/money.js';
+import { puede } from '../utils/permisos.js';
 
 // La primera pantalla del panel: qué pasó, qué falta, y los tres botones que
 // el tesorero va a apretar hoy.
@@ -19,15 +20,44 @@ export default function TeamOverviewSection({ team, token }) {
   const base = `/panel/equipo/${team.id}`;
   const isIndependent = !team.league_id;
 
-  useEffect(() => {
-    setData(null);
-    api.getPlayerBillingOverview(team.id, token).then(setData).catch((e) => setError(e.message));
-  }, [team.id, token]);
+  // Este resumen está armado con los dos libros, así que solo tiene sentido
+  // para quien los puede ver. Un coach o un editor de roster no: a ellos NO se
+  // les pide el padrón —pedirlo sería un 403 pintado como error rojo por algo
+  // que no es un error— y se les pinta el resumen corto de más abajo.
+  const veElPadron = puede(team, 'cuotas_club');
+  const veLaCuentaConLaLiga = puede(team, 'cobranza_liga');
 
   useEffect(() => {
-    if (isIndependent) { setStatement(null); return; }
+    if (!veElPadron) return;
+    setData(null);
+    api.getPlayerBillingOverview(team.id, token).then(setData).catch((e) => setError(e.message));
+  }, [team.id, token, veElPadron]);
+
+  useEffect(() => {
+    if (isIndependent || !veLaCuentaConLaLiga) { setStatement(null); return; }
     api.getTeamStatement(team.id, token).then(setStatement).catch(() => setStatement(null));
-  }, [team.id, token, isIndependent]);
+  }, [team.id, token, isIndependent, veLaCuentaConLaLiga]);
+
+  // El resumen de quien no lleva dinero. No es un panel vacío a propósito: el
+  // coach existe para mirar el equipo, así que lo que ve es el equipo.
+  if (!veElPadron) {
+    return (
+      <div>
+        <div className="stat-strip">
+          <div className="stat-tile">
+            <div className="stat-tile-label">Tu rol aquí</div>
+            <div className="stat-tile-value is-accent" style={{ fontSize: 22 }}>{team.my_role_label || '—'}</div>
+            <div className="stat-tile-sub">{team.league_name || 'Equipo independiente'}</div>
+          </div>
+        </div>
+        <p style={{ color: 'var(--ws-ink-dim)', fontSize: 13 }}>
+          {puede(team, 'roster')
+            ? <>Administras el <strong>roster de torneo</strong> de este equipo: quién puede jugar en cada rama. Lo encuentras en la pestaña <Link to={`${base}/jugadores`}>Padrón</Link>.</>
+            : <>Tienes acceso de consulta al equipo. El padrón del club y su contabilidad los lleva el tesorero, y no se muestran aquí.</>}
+        </p>
+      </div>
+    );
+  }
 
   if (error) return <div className="form-error">{error}</div>;
   if (!data) return <Loading />;

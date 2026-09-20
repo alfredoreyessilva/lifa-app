@@ -68,11 +68,11 @@ export default function InviteClaim() {
       <div className="container">
         <div className="dashboard-panel">
           <div className="empty-state">
-            <h3>¡Listo! Ya administras {name}</h3>
+            <h3>¡Listo! Ya entraste a {name}</h3>
             <p>
               {isOrgAdmin
-                ? 'Tienes el mismo acceso que el resto de los administradores — desde tu panel puedes editar todo igual que ellos.'
-                : 'Desde tu panel puedes editar el logo, contacto, redes y links de transmisión de tu equipo.'}
+                ? `Entraste como ${invite.role_label || 'administrador'}. Lo que puedes hacer depende de ese rol — desde tu panel vas a ver solo lo tuyo.`
+                : 'El equipo es tuyo. Desde tu panel puedes editar su perfil, su roster, su padrón y sus cuotas, y repartir el acceso a quien trabaje contigo.'}
             </p>
             <div style={{ marginTop: 16 }}>
               <Link to="/panel" className="btn btn-flag">Ir a mi panel</Link>
@@ -92,12 +92,31 @@ export default function InviteClaim() {
             <img src={logoUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
         )}
-        <h3 style={{ marginBottom: 4 }}>{isOrgAdmin ? 'Vas a administrar' : 'Vas a administrar el equipo'}</h3>
+        <h3 style={{ marginBottom: 4 }}>{isOrgAdmin ? 'Te invitaron a' : 'Te entregan el equipo'}</h3>
         <p style={{ fontSize: 22, fontFamily: 'var(--font-display)', margin: '4px 0' }}>{name}</p>
         {invite.league_name && <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>{invite.league_name}</p>}
-        {isOrgAdmin && (
-          <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>
-            Vas a tener el mismo acceso que sus demás administradores, no reemplazas a nadie.
+        {/* Con qué rol entra, ANTES de pedirle que se registre. Quien recibe un
+            link tiene derecho a saber a qué lo están invitando antes de crear
+            una cuenta, y es lo único que esta página pública existe para
+            contestar. La etiqueta viene resuelta del backend. */}
+        {invite.role_label && (
+          <p style={{ margin: '10px 0 0' }}>
+            <span style={{
+              display: 'inline-block', padding: '4px 10px', borderRadius: 999,
+              border: '1px solid var(--line)', fontSize: 13, fontWeight: 600,
+            }}>
+              como {invite.role_label}
+            </span>
+          </p>
+        )}
+        {isOrgAdmin ? (
+          <p style={{ color: 'var(--ink-dim)', fontSize: 13, marginTop: 10 }}>
+            No reemplazas a nadie: te sumas con ese rol, y es el rol el que decide qué puedes ver y hacer.
+          </p>
+        ) : (
+          <p style={{ color: 'var(--ink-dim)', fontSize: 13, marginTop: 10 }}>
+            Al aceptarlo, el equipo pasa a administrarse solo: la liga deja de ver su padrón y sus
+            cuotas, y tú decides quién más entra. Su participación en el torneo no cambia.
           </p>
         )}
 

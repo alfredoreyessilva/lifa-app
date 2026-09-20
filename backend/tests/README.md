@@ -6,7 +6,7 @@ otras no pueden**.
 | Carpeta | Qué son | ¿Corren en el CI? |
 |---|---|---|
 | `unit/` | Pruebas de funciones puras, sin base de datos ni red | **Sí**, en cada push |
-| `billing-*.e2e.mjs` | Recorridos de punta a punta contra un backend vivo | No — necesitan Postgres |
+| `*.e2e.mjs` | Recorridos de punta a punta contra un backend vivo | No — necesitan Postgres |
 
 ## Las que corren solas — `unit/`
 
@@ -44,6 +44,12 @@ leyendo el código — que el saldo cuadre después de cancelar, rechazar y reti
 |---|---|
 | `billing-player.e2e.mjs` | equipo → jugador: padrón sin liga, cuotas, estado de cuenta público, conciliación |
 | `billing-league.e2e.mjs` | liga → equipo: cargos, reporte del equipo, confirmar/rechazar/retirar |
+| `invites-roles.e2e.mjs` | invitación con rol, la entrega de un equipo y la revocación: quién queda de alta en `organization_members`, y a quién le toca 409, 403 o 200 |
+
+Las dos de cobranza **no** cubren nada de roles ni de fronteras: las dos usan
+un equipo independiente cuyo dueño es el propio actor, así que nunca hay una
+liga entregando un equipo ni intentando entrar donde no le toca. Eso es lo que
+cubre la tercera, y por eso existe.
 
 ### Cómo correrlos
 
@@ -57,7 +63,13 @@ $env:PORT = 4100
 node src/server.js          # en una terminal
 node tests/billing-player.e2e.mjs   # en otra, con las mismas variables
 node tests/billing-league.e2e.mjs
+node tests/invites-roles.e2e.mjs
 ```
+
+`DATABASE_URL` hay que ponerla **en las dos** terminales: los scripts abren su
+propio pool para mirar la base por debajo y **no** leen el `.env` (no importan
+`dotenv`). Sin ella intentan un Postgres local y fallan con `ECONNREFUSED` en
+el 5432, que se lee como si la base estuviera caída y no lo está.
 
 Cada script crea su propio usuario, equipo y jugadores, así que se pueden correr
 varias veces sin arrastrar estado. Salen con código 0 si todo pasa.

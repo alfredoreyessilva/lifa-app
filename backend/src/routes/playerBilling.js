@@ -7,6 +7,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { isNonEmptyString, isValidUrl, isValidEmail } from '../utils/validation.js';
 import { isOrgMember } from '../utils/orgMembers.js';
 import { teamClubRequired } from '../middleware/ownership.js';
+import { rolesConPermiso } from '../utils/orgRoles.js';
 import { publicStatementLimiter, reportPaymentLimiter } from '../middleware/rateLimit.js';
 import { ensureCloudinaryConfigured, uploadBufferToCloudinary } from '../utils/cloudinary.js';
 import { HOY_MX } from '../utils/sqlDates.js';
@@ -170,13 +171,18 @@ async function assertEntryAccess(req, res, entryId) {
   // (README, "Roles y fronteras de información"). Antes sí entraba, por dos
   // caminos — membresía en la organización de la liga y owner_user_id de la
   // liga—, y los dos se fueron.
-  const isTeamMember = await isOrgMember(req.user.id, team.organization_id);
+  // Mismos roles que `teamClubRequired`, y por la misma razón: el padrón y su
+  // libro son del dueño, el administrador y el tesorero del equipo. Ni el
+  // editor de roster ni el coach, aunque sean del mismo equipo.
+  //
+  // `owner_user_id` ya NO entra como respaldo — se retiró en el paso 4, igual
+  // que en la guarda. Aquí un segundo camino sería una segunda puerta al
+  // padrón, que es exactamente lo que este dominio existe para no tener.
+  const isTeamMember = await isOrgMember(
+    req.user.id, team.organization_id, rolesConPermiso('team', 'cuotas_club')
+  );
 
-  if (
-    req.user.role === 'admin' ||
-    isTeamMember ||
-    team.owner_user_id === req.user.id
-  ) {
+  if (req.user.role === 'admin' || isTeamMember) {
     return { entry, team };
   }
   res.status(403).json({ error: 'El padrón y las cuotas de este equipo solo los administra el equipo' });

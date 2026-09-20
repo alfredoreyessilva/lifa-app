@@ -76,7 +76,7 @@ export const PERMISOS = [
   'roster',            // el roster de torneo
   'miembros',          // invitar y quitar gente que no sea dueño
   'duenos',            // invitar y quitar dueños
-  'entregar_equipos',  // generar y revocar la invitación de representante de un equipo
+  'entregar_equipos',  // entregarle a un equipo su perfil (una sola vez, no se deshace)
 ];
 
 // Qué permisos trae cada rol, por tipo de organización. Se escribe completo y
@@ -138,4 +138,42 @@ export function puede(tipo, rol, permiso) {
 // la lista a mano en cada endpoint y que se desincronice.
 export function rolesConPermiso(tipo, permiso) {
   return rolesDeTipo(tipo).filter((rol) => puede(tipo, rol, permiso));
+}
+
+// Los permisos que trae un rol, ya resueltos. Es lo que viaja al frontend en
+// `/auth/me` para que pueda esconder lo que este rol no puede hacer.
+//
+// Se manda la lista resuelta y NO la tabla de permisos: el frontend pregunta
+// "¿puedo 'cuotas_club'?" y no "¿qué es un tesorero?". Así la tabla vive en un
+// solo lado (regla 6) y agregar un rol no obliga a tocar el frontend.
+//
+// Ojo con lo que esto es y lo que no: es para **esconder**, no para proteger.
+// Quien decide de verdad es la guarda del backend. Una lista que llegue de más
+// enseña un botón que va a dar 403; una que llegue de menos esconde algo que sí
+// se podía. Ninguna de las dos abre nada.
+export function permisosDeRol(tipo, rol) {
+  return PERMISOS.filter((permiso) => puede(tipo, rol, permiso));
+}
+
+// ── La invitación que no dice rol ─────────────────────────────────────────
+//
+// `invites.role` existe desde el paso 4 y nace NULL; lo generado antes se
+// queda NULL para siempre (regla 8: el esquema se agrega, no se edita). Esta
+// es la regla que lee esas filas, y dice exactamente lo que el código hacía
+// antes de que la columna existiera: una invitación de organización entregaba
+// 'admin' y una de equipo entregaba el equipo completo.
+//
+// Vive aquí y no en `routes/invites.js` por la misma razón que el catálogo:
+// un link repartido por WhatsApp hace tres días no se puede volver a probar a
+// mano, así que la regla que decide cuánto vale tiene que poder probarse sin
+// Postgres — y eso es lo único que el CI alcanza a correr.
+const ROL_POR_DEFECTO = {
+  team: 'owner',
+  org_admin: 'admin',
+};
+
+// Falla cerrado como las demás: un tipo de invitación que no existe no
+// devuelve un rol, devuelve null.
+export function rolDeInvitacion(invite) {
+  return invite?.role ?? ROL_POR_DEFECTO[invite?.type] ?? null;
 }

@@ -7,6 +7,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { authLimiter } from '../middleware/rateLimit.js';
 import { isValidEmail } from '../utils/validation.js';
 import { sendVerificationEmail } from '../utils/email.js';
+import { permisosDeRol, etiquetaDeRol } from '../utils/orgRoles.js';
 
 const router = express.Router();
 
@@ -244,14 +245,13 @@ router.get('/me', authRequired, asyncHandler(async (req, res) => {
   // administrador (ver POST /invites/organizations/:id/admins) también las
   // ve en "Mi panel", no solo el dueño original.
   const leagues = await db.prepare(`
-    SELECT id, name, slug, logo_url, status
+    SELECT l.id, l.name, l.slug, l.logo_url, l.status, l.organization_id,
+           COALESCE(om.role, CASE WHEN l.owner_user_id = ? THEN 'owner' END) AS my_role
     FROM leagues l
-    WHERE l.owner_user_id = ?
-       OR EXISTS (
-         SELECT 1 FROM organization_members om
-         WHERE om.organization_id = l.organization_id AND om.user_id = ? AND om.status = 'active'
-       )
-  `).all(user.id, user.id);
+    LEFT JOIN organization_members om
+           ON om.organization_id = l.organization_id AND om.user_id = ? AND om.status = 'active'
+    WHERE l.owner_user_id = ? OR om.id IS NOT NULL
+  `).all(user.id, user.id, user.id);
   // LEFT JOIN a propósito: un equipo independiente (registrado sin liga,
   // ver POST /manage/teams) tiene league_id NULL — con INNER JOIN
   // simplemente desaparecía de "Mi panel" para su propio dueño.
@@ -259,16 +259,15 @@ router.get('/me', authRequired, asyncHandler(async (req, res) => {
   // de identidad común), no existen como columna propia de "teams".
   const teams = await db.prepare(`
     SELECT t.*, l.name AS league_name, l.slug AS league_slug,
-           o.country_id AS country_id, o.description AS description, o.is_verified AS is_verified
+           o.country_id AS country_id, o.description AS description, o.is_verified AS is_verified,
+           COALESCE(om.role, CASE WHEN t.owner_user_id = ? THEN 'owner' END) AS my_role
     FROM teams t
     LEFT JOIN leagues l        ON l.id = t.league_id
     LEFT JOIN organizations o  ON o.id = t.organization_id
-    WHERE t.owner_user_id = ?
-       OR EXISTS (
-         SELECT 1 FROM organization_members om
-         WHERE om.organization_id = t.organization_id AND om.user_id = ? AND om.status = 'active'
-       )
-  `).all(user.id, user.id);
+    LEFT JOIN organization_members om
+           ON om.organization_id = t.organization_id AND om.user_id = ? AND om.status = 'active'
+    WHERE t.owner_user_id = ? OR om.id IS NOT NULL
+  `).all(user.id, user.id, user.id);
   // Campo nuevo, aditivo: todas las organizaciones donde el usuario es
   // miembro activo (owner/admin/editor), vía organization_members. "leagues"
   // y "teams" arriba ya incluyen esto también (ver EXISTS de arriba), así
@@ -283,7 +282,35 @@ router.get('/me', authRequired, asyncHandler(async (req, res) => {
     WHERE om.user_id = ? AND om.status = 'active'
     ORDER BY o.type, o.name
   `).all(user.id);
-  res.json({ user, leagues, teams, organizations });
+  // Con qué rol entra esta persona a cada cosa, y qué puede hacer con él —
+  // resuelto aquí, no deducido en el frontend.
+  //
+  // Es lo que deja esconder lo que un rol no puede hacer. Y es solo para
+  // esconder: quien decide de verdad es la guarda del backend. Un permiso de
+  // más enseña un botón que va a dar 403; uno de menos esconde algo que sí se
+  // podía. Ninguno de los dos abre nada.
+  //
+  // `my_role` sale de organization_members o, si no hay fila, de
+  // `owner_user_id` — misma convención que `organizationAdminRequired`: esa
+  // columna significa dueño. Un rol desconocido devuelve lista vacía
+  // (`permisosDeRol` falla cerrado), así que en el peor caso se esconde de más.
+  const conPermisos = (filas, tipo) => filas.map((fila) => ({
+    ...fila,
+    my_permissions: permisosDeRol(tipo, fila.my_role),
+    my_role_label: etiquetaDeRol(fila.my_role, tipo),
+  }));
+
+  res.json({
+    user,
+    leagues: conPermisos(leagues, 'league'),
+    teams: conPermisos(teams, 'team'),
+    organizations: organizations.map((o) => ({
+      ...o,
+      my_role: o.member_role,
+      my_permissions: permisosDeRol(o.type, o.member_role),
+      my_role_label: etiquetaDeRol(o.member_role, o.type),
+    })),
+  });
 }));
 
 export default router;

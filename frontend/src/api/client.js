@@ -498,10 +498,18 @@ export const api = {
   claimInvite: (inviteToken, token) =>
     request(`/invites/${inviteToken}/claim`, { method: 'POST', token }),
 
-  // Invitaciones de administrador (varios administradores para una misma
-  // organización — liga o equipo — con el mismo acceso)
-  createOrgAdminInvite: (organizationId, token) =>
-    request(`/invites/organizations/${organizationId}/admins`, { method: 'POST', token }),
+  // Invitaciones con rol. `role` decide con qué acceso entra quien reclame el
+  // link, y se valida contra el TIPO de organización en el backend. Sin él, el
+  // backend entrega 'admin' — que es lo que esta ruta hacía antes de que los
+  // roles existieran.
+  createOrgAdminInvite: (organizationId, role, token) =>
+    request(`/invites/organizations/${organizationId}/admins`, { method: 'POST', body: { role }, token }),
+  // Los roles que se pueden repartir en ESTA organización, ya con su etiqueta
+  // y ya sabiendo cuáles puede repartir quien pregunta (`grantable`). No se
+  // arma en el frontend a propósito: los roles válidos y sus nombres dependen
+  // del tipo de organización, y esa tabla vive en el backend (regla 6).
+  getOrganizationRoles: (organizationId, token) =>
+    request(`/organizations/${organizationId}/roles`, { token }),
   getOrganizationMembers: (organizationId, token) =>
     request(`/organizations/${organizationId}/members`, { token }),
   // Sirve para quitar a alguien más y para retirarse uno mismo: es el mismo

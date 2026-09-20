@@ -15,6 +15,155 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Cada rol ya se nota en pantalla (2026-09-20)**: es el paso 5, el último de
+  "Roles y fronteras de información", y con él el modelo completo corre de
+  punta a punta. Se invita eligiendo rol, la lista de accesos dice con qué
+  entró cada quien, y el panel esconde lo que ese rol no puede hacer.
+
+  **El frontend no tiene la tabla de permisos, y ese es el punto.** `/auth/me`
+  manda por cada liga y equipo `my_role`, `my_role_label` y `my_permissions`
+  ya resueltos, y el frontend solo pregunta `puede(entidad, 'cuotas_club')`
+  desde `utils/permisos.js`. La tabla vive en un solo lado (regla 6): un rol
+  nuevo en el catálogo no obliga a tocar el frontend, y dos listas que podrían
+  separarse simplemente no existen. Las etiquetas viajan resueltas por lo
+  mismo — `treasurer` se lee "Tesorero de liga" en una liga y "Tesorero" en un
+  equipo, y `editor` nunca se lee "editor" a secas.
+
+  **Esconder no es proteger**, y está escrito en `utils/permisos.js` para que
+  no se confunda después: quien decide es la guarda del backend, que vuelve a
+  preguntar en cada petición. Un permiso de más enseña un botón que dará 403;
+  uno de menos esconde algo que sí se podía. Ninguno de los dos abre nada, y
+  `puede()` falla cerrado.
+
+  **Se esconden acciones, no información.** Un coach conserva su pestaña de
+  Perfil —la ve, no la edita— y su Resumen dice qué es lo suyo en vez de
+  quedarse vacío: ese rol existe para mirar el equipo, así que esconderle el
+  equipo lo dejaba sin nada. El editor de roster entra a la misma pestaña que
+  el tesorero y ve **solo** los rosters de torneo; ni siquiera se le pide el
+  padrón del club al backend, porque pedirlo sería pintar un 403 en rojo por
+  algo que no es un error.
+
+  **Dos defectos que este paso destapó**, los dos porque el selector hace
+  posible por primera vez que haya más de un dueño:
+
+  1. `POST /organizations/:id/transfer-owner` degradaba a **todos** los dueños
+     para promover a uno — con dos dueños, ceder el puesto los tumbaba a los
+     dos. Ahora solo se mueve quien cede, y ceder lo decide quien tiene el
+     permiso `duenos`, no "el owner que la consulta devuelva primero".
+  2. El botón "Quitar rep." de la liga pasó a contestar 409 siempre, desde que
+     entregar es de una sola vía. Se reemplazó por lo que sí se puede:
+     **entregar** mientras nadie lo haya reclamado, y **cancelar esa entrega**.
+     Un equipo ya entregado se lee "👤 se administra solo" y no ofrece ninguna
+     acción sobre su acceso.
+
+  **Verificado en el navegador**, con los seis roles repartidos contra la rama
+  de Neon: el coach ve Resumen y Perfil (sin botón de editar) y cero errores en
+  consola; el editor de roster ve sus rosters de torneo y no el padrón; el
+  tesorero del club ve los dos libros pero no "Administradores"; el visor de
+  liga solo conserva "Ver mi página"; y a un administrador de liga el rol
+  "Dueño" le aparece deshabilitado con su porqué. También se revisó el link de
+  invitación **sin sesión** —dice "Te invitaron a … como Tesorero de liga"
+  antes de pedir cuenta— y que el 409 de una entrega repetida se lea como
+  explicación y no como error rojo.
+
+  **Lo que no se construyó, a propósito**: el visor sigue entrando al panel de
+  la liga con casi todo apagado. Su trabajo real el día del partido —pasar
+  lista, capturar anotaciones, la hoja de visoría que firman los coaches y el
+  árbitro— no está diseñado, y hacerle una pantalla antes de eso es hacer algo
+  que habría que arrancar. Queda anotado en "Pendientes abiertos".
+
+- **Administrarse solo y participar en una liga dejaron de ser la misma cosa
+  (2026-09-20)**: es la corrección de fondo del modelo de roles, y la que hizo
+  que las demás piezas cuadraran. Una liga se registra, **crea sus equipos para
+  poder subir el calendario**, y después le entrega ese perfil a cada equipo.
+  Al entregarlo **se sale de la administración de ese equipo**. Lo que no
+  cambia es que el equipo sigue jugando su torneo: eso vive en `branch_teams` y
+  no lo toca nadie al entregar.
+
+  **"Revocado" era un mal nombre y una función equivocada, y ya no existe.** Era
+  un solo botón contestando dos preguntas distintas —*¿el equipo se administra
+  solo?* y *¿el equipo participa en esta liga?*— y por eso el ciclo de vida se
+  contradecía a sí mismo: pedía que la liga no pudiera invitar a un equipo
+  entregado *y* que pudiera volver a entregar uno revocado. Las dos no podían
+  ser ciertas, y en esa grieta vivía la puerta trasera del modelo: revocar al
+  representante, generar una invitación nueva, reclamarla uno mismo, y el padrón
+  del club —CURP y fecha de nacimiento de menores, y el `share_token` que **es**
+  la credencial del estado de cuenta de cada familia— quedaba del lado de la
+  liga. No se arregló la contradicción: se quitó el concepto que la producía.
+
+  Ahora la entrega es **de una sola vía**. `POST /invites/teams/:teamId` responde
+  409 en cuanto el equipo tiene a alguien adentro, y lo que era "quitar
+  representante" quedó reducido a cancelar un link que **todavía nadie reclamó**
+  —una necesidad real, y que no le quita el acceso a nadie porque nadie lo
+  tiene—. La pregunta "¿ya se administra solo?" se hace en un solo lugar
+  (`orgTieneMiembros()`), porque dos redacciones de la misma pregunta abren
+  justo el estado por el que se colaba esto.
+
+  Lo que **queda abierto** y es cambio de modelo de datos: `teams.league_id`
+  todavía significa dos cosas —"esta liga lo administra" y "sale en la lista de
+  esta liga"—, así que una liga que ya entregó un equipo sigue editando su
+  perfil y su roster. Lo que perdió es el padrón, las cuotas y el poder de
+  repartir su acceso. El README tiene la sección con lo que falta y con lo que
+  hay que decidir antes de escribirlo; el terreno está limpio (**0 equipos en
+  más de una liga, 0 contradicciones** entre `league_id` y las inscripciones).
+
+- **Los seis roles por fin hacen cosas distintas (2026-09-20)**: es el paso 3, y
+  resultó más ancho que lo planeado. El plan decía "`allowedRoles` en
+  `billing.js` y `playerBilling.js`", pero al construir el paso 4 primero salió
+  que el agujero no estaba ahí: **`isOrgMember()` tenía `'editor'` en su lista
+  por defecto**, así que un visor —que solo debe tocar marcadores— pasaba
+  *todas* las guardas de `ownership.js`, los dos libros incluidos. Era inofensivo
+  mientras no existiera forma de crear un `editor`, y dejó de serlo el día que la
+  invitación empezó a llevar rol.
+
+  El default bajó a `['owner', 'admin']` —el suelo— y las guardas se volvieron
+  **fábricas por permiso**: una ruta ya no dice "aquí entran owner y admin", dice
+  qué dominio toca (`guardaDeLiga('cobranza_liga')`, `guardaDePartido('marcadores')`,
+  `guardaDeEquipo('estructura', 'ver')`) y el catálogo contesta quiénes son esos.
+  Un partido pasó a guardarse con **dos** permisos distintos —`marcadores` para
+  editarlo, `partidos` para borrarlo—, que es la única forma de que el visor
+  exista sin poder desaparecer un resultado que no le gustó.
+
+  **No movió el acceso de nadie**: al 2026-09-20 no había una sola fila con rol
+  distinto de `owner` o `admin`, y esos dos tienen todos los permisos salvo
+  `duenos`. Lo que cambió es a quién MÁS deja entrar cada ruta.
+
+- **La invitación ya dice a qué invita, y entregar un equipo por fin lo entrega
+  (2026-09-20)**: es el paso 4. Antes una invitación no llevaba rol —todo
+  invitado entraba como `admin`, que puede absolutamente todo— y reclamar un
+  equipo solo llenaba `teams.owner_user_id` sin dar de alta a nadie en la
+  organización del equipo, que quedaba existiendo y vacía. Ahora `invites.role`
+  viaja con el link, el claim lo escribe, y reclamar un equipo da de alta al
+  representante como `owner` de su organización. Con eso se retiró el respaldo
+  por `owner_user_id` de `teamClubRequired`, que es hoy la única guarda de
+  `ownership.js` sin respaldo — a propósito: ahí un segundo camino no sería una
+  red de seguridad, sería una segunda puerta al padrón.
+
+  El rol se valida contra el **tipo** de organización y no contra el `CHECK`,
+  que es la validación que el esquema no puede hacer: el `CHECK` acepta la unión
+  de los seis porque el tipo vive en otra tabla, así que "un coach en una liga" o
+  "un visor en un equipo" solo se pueden rechazar al invitar. Y nombrar a otro
+  **dueño** exige el permiso `duenos`: un administrador que pudiera hacerlo se
+  ascendería solo, y después podría quitar a quien lo invitó.
+
+  `invites.role` nace NULL y lo ya generado se queda NULL, así que **no hay
+  ventana de incompatibilidad al desplegar** ni backfill que correr: una
+  invitación vieja entrega lo que entregaba. Esa regla vive en
+  `utils/orgRoles.js` y no en la ruta, por lo mismo que el catálogo: un link
+  repartido por WhatsApp hace tres días no se puede volver a probar a mano, y
+  solo lo puro entra al CI. De paso, **"una invitación vigente a la vez" se
+  volvió un error** en cuanto hubo roles —generar el link del tesorero mataba en
+  silencio el del coach que se había mandado diez minutos antes— y ahora es una
+  vigente **por rol**.
+
+  **Verificado** (los tres cambios de arriba van juntos y se probaron juntos):
+  5 pruebas unitarias nuevas (91 → 96); 22 comprobaciones de SQL contra la base
+  real dentro de una transacción con `ROLLBACK`; las dos suites de cobranza en
+  40/0 y 21/0, idénticas a las del paso 2; y una suite e2e nueva
+  —`tests/invites-roles.e2e.mjs`, **54 comprobaciones**— porque ninguna de las
+  dos de cobranza toca esto: las dos usan un equipo independiente cuyo dueño es
+  el propio actor, así que nunca hay una liga entregando nada.
+
 - **El link del estado de cuenta ya se puede copiar y revocar desde la app
   (2026-09-19)**: el endpoint (`POST /teams/:id/members/:memberId/rotate-token`)
   y el método del cliente (`api.rotateMemberShareToken`) existían desde hacía

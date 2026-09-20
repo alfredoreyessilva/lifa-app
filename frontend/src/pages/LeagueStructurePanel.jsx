@@ -18,6 +18,7 @@ import MatchStatsModal from '../components/MatchStatsModal.jsx';
 import CompetitionModelModal from '../components/CompetitionModelModal.jsx';
 import { getTimezoneLabel } from '../utils/timezones.js';
 import { scopeName, matchScopeLabel } from '../utils/matchScope.js';
+import { puede } from '../utils/permisos.js';
 
 // Panel unificado de una liga: TODO en una sola página, sin salir a ninguna
 // otra pantalla. Acordeón Torneo → Categoría → Rama → (Conferencia) → Grupo
@@ -116,11 +117,21 @@ export default function LeagueStructurePanel() {
               </span>
             )}
           </div>
+          {/* Cada acción pide su permiso. Un tesorero de liga entra aquí y solo
+              ve "Cobranza"; un visor, ninguna de las cuatro — su trabajo es el
+              marcador de un partido, no la estructura. Esconder no es
+              proteger: el backend vuelve a decidir en cada petición. */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <Link to={`/ligas/${league?.slug || ''}`} className="btn btn-outline btn-sm">Ver mi página</Link>
-            <Link to={`/panel/liga/${id}/cobranza`} className="btn btn-outline btn-sm">💵 Cobranza</Link>
-            <button className="btn btn-outline btn-sm" onClick={() => setModal({ type: 'edit-league' })}>Editar liga</button>
-            <button className="btn btn-flag btn-sm" onClick={() => setModal({ type: 'add-tournament' })}>+ Torneo</button>
+            {puede(sidebarLeague, 'cobranza_liga') && (
+              <Link to={`/panel/liga/${id}/cobranza`} className="btn btn-outline btn-sm">💵 Cobranza</Link>
+            )}
+            {puede(sidebarLeague, 'perfil') && (
+              <button className="btn btn-outline btn-sm" onClick={() => setModal({ type: 'edit-league' })}>Editar liga</button>
+            )}
+            {puede(sidebarLeague, 'estructura') && (
+              <button className="btn btn-flag btn-sm" onClick={() => setModal({ type: 'add-tournament' })}>+ Torneo</button>
+            )}
           </div>
         </div>
 
@@ -166,8 +177,10 @@ export default function LeagueStructurePanel() {
           </div>
         )}
 
-        {league?.organization_id && (
-          <OrgAdminsPanel organizationId={league.organization_id} organizationName={sidebarLeague.name} token={token} />
+        {/* La lista de quién tiene acceso la abre quien puede repartirlo.
+            Un tesorero o un visor no reparten acceso, así que ni la ven. */}
+        {league?.organization_id && puede(sidebarLeague, "miembros") && (
+          <OrgAdminsPanel organizationId={league.organization_id} organizationName={sidebarLeague.name} organizationType="league" entidad={sidebarLeague} token={token} />
         )}
 
         <div className="tree-toolbar">
@@ -199,13 +212,38 @@ export default function LeagueStructurePanel() {
                 <div key={`tm${tm.id}`} className="tree-row" style={{ paddingLeft: 28 }}>
                   {tm.logo_url && <img src={tm.logo_url} alt="" style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }} />}
                   <span className="tree-name">{tm.name}</span>
-                  <span className="tree-badge">{tm.owner_user_id ? '👤 con representante' : 'sin representante'}</span>
+                  <span className="tree-badge">{tm.owner_user_id ? '👤 se administra solo' : 'sin entregar'}</span>
                   <span className="tree-spacer" />
+                  {/* Entregar es de una sola vía. A un equipo que ya se
+                      administra solo NO se le ofrece "quitar representante":
+                      el backend contesta 409 y ofrecerlo sería prometer algo
+                      que no se puede. Lo que sí se puede es cancelar una
+                      entrega que nadie ha reclamado todavía.
+
+                      Ojo con lo que esto NO es: sacar a un equipo de la liga.
+                      Eso es su participación, vive en otro lado y no está
+                      construido — ver README. */}
                   <span className="tree-actions">
                     <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'edit-team', team: tm })}>Editar</button>
-                    {tm.owner_user_id
-                      ? <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'remove-team-owner', team: tm })}>Quitar rep.</button>
-                      : <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'invite-team', team: tm })}>Invitar rep.</button>}
+                    {tm.owner_user_id ? (
+                      <span
+                        style={{ color: 'var(--ink-dim)', fontSize: 12 }}
+                        title="Su acceso lo reparten sus dueños desde su propio panel. Su participación en tus torneos no cambia."
+                      >
+                        entregado
+                      </span>
+                    ) : puede(sidebarLeague, 'entregar_equipos') ? (
+                      <>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'invite-team', team: tm })}>Entregar perfil</button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          title="Invalida el link de entrega que hayas mandado, si nadie lo ha usado todavía"
+                          onClick={() => setModal({ type: 'remove-team-owner', team: tm })}
+                        >
+                          Cancelar entrega
+                        </button>
+                      </>
+                    ) : null}
                     <IconBtn danger title="Eliminar equipo" onClick={() => setModal({ type: 'delete-team', team: tm })}>🗑</IconBtn>
                   </span>
                 </div>
@@ -679,9 +717,9 @@ function TreeModal({ modal, token, leagueId, league, leagueTimezone, teams, venu
   }
   if (type === 'remove-team-owner') {
     return (
-      <ConfirmModal title="Quitar representante"
-        body={`La persona que administra ${modal.team.name} deja de tener acceso. El equipo y sus datos se quedan igual.`}
-        confirmLabel="Quitar representante" onClose={onClose}
+      <ConfirmModal title="Cancelar la entrega"
+        body={`El link de entrega de ${modal.team.name} deja de funcionar. Si ya alguien lo reclamó no se puede deshacer: ese equipo ya se administra solo.`}
+        confirmLabel="Cancelar entrega" onClose={onClose}
         onConfirm={async () => { await api.removeTeamOwner(modal.team.id, token); onDone(); }} />
     );
   }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import TeamForm from './TeamForm.jsx';
 import { initials } from '../utils/matchDisplay.js';
+import { puede } from '../utils/permisos.js';
 
 // El perfil público del equipo: lo que ve cualquiera en CFBAMX. Es el
 // contenido que antes ERA todo el panel del equipo (Dashboard.jsx); ahora es
@@ -12,6 +13,11 @@ export default function TeamProfileSection({ team, token, onChange }) {
   const [error, setError] = useState('');
   const [countries, setCountries] = useState([]);
   const isIndependent = !team.league_id;
+  // El perfil lo VE cualquiera que pueda ver el panel —un coach incluido, que
+  // para eso existe ese rol— y lo EDITA quien tiene 'perfil'. Por eso esta
+  // pestaña no se esconde: lo que desaparece es el botón de editar. Esconderle
+  // el equipo entero a un coach le dejaría un panel vacío.
+  const puedeEditar = puede(team, 'perfil');
 
   useEffect(() => {
     if (!isIndependent) return;
@@ -22,7 +28,7 @@ export default function TeamProfileSection({ team, token, onChange }) {
     <div>
       {error && <div className="form-error">{error}</div>}
 
-      {isIndependent && (
+      {isIndependent && puedeEditar && (
         <div
           className="form-error"
           style={{
@@ -55,8 +61,8 @@ export default function TeamProfileSection({ team, token, onChange }) {
         </div>
       )}
 
-      {mode === 'view' ? (
-        <TeamProfileView team={team} onEdit={() => setMode('edit')} />
+      {mode === 'view' || !puedeEditar ? (
+        <TeamProfileView team={team} onEdit={puedeEditar ? () => setMode('edit') : null} />
       ) : (
         <TeamForm
           key={team.id}
@@ -96,8 +102,9 @@ function TeamProfileView({ team, onEdit }) {
   return (
     <div>
       <p style={{ color: 'var(--ws-ink-dim)', fontSize: 13, marginBottom: 16 }}>
-        Así se ve el perfil de tu equipo en CFBAMX. Entra a editar para cambiar el logo,
-        el color del club, contacto, redes o los links de transmisión y boletos.
+        {onEdit
+          ? 'Así se ve el perfil de tu equipo en CFBAMX. Entra a editar para cambiar el logo, el color del club, contacto, redes o los links de transmisión y boletos.'
+          : 'Así se ve el perfil de tu equipo en CFBAMX. Tu rol lo consulta, no lo edita.'}
       </p>
 
       <div className="team-editor-preview">
@@ -148,7 +155,9 @@ function TeamProfileView({ team, onEdit }) {
           </div>
 
           <div style={{ textAlign: 'center', marginTop: 20 }}>
-            <button className="btn btn-accent" onClick={onEdit}>Editar perfil del equipo</button>
+            {/* Sin `onEdit` esta vista es de solo lectura — es como entra un
+                coach, que ve el equipo y no lo cambia. */}
+            {onEdit && <button className="btn btn-accent" onClick={onEdit}>Editar perfil del equipo</button>}
           </div>
         </div>
       </div>

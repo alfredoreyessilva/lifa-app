@@ -7,6 +7,7 @@ import BranchRosterModal from './BranchRosterModal.jsx';
 import ClubMemberForm from './ClubMemberForm.jsx';
 import ImportRosterModal from './ImportRosterModal.jsx';
 import { money } from '../utils/money.js';
+import { puede } from '../utils/permisos.js';
 
 // Jugadores del club. Son DOS padrones distintos y la pantalla lo dice con
 // todas sus letras, porque confundirlos fue el error de la primera versión:
@@ -28,9 +29,17 @@ export default function TeamRosterSection({ team, token }) {
   const [confirm, setConfirm] = useState(null);
   const [openBranch, setOpenBranch] = useState(null);
 
+  // Quién está mirando. El padrón del club (CURP, nacimiento, tutor,
+  // share_token) es de `cuotas_club`; el roster de torneo es de `roster`. Un
+  // editor de roster entra a esta misma pantalla y ve SOLO su mitad — no se le
+  // pide el padrón al backend siquiera, porque pedirlo sería un 403 pintado
+  // como error rojo por algo que no es un error.
+  const veElPadron = puede(team, 'cuotas_club');
+
   useEffect(() => { loadMembers(); loadBranches(); }, [team.id, token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function loadMembers() {
+    if (!veElPadron) return Promise.resolve();
     setError('');
     return api.getPlayerBillingOverview(team.id, token)
       .then(setData)
@@ -51,6 +60,29 @@ export default function TeamRosterSection({ team, token }) {
     setModal(null);
     setConfirm(null);
     await loadMembers();
+  }
+
+  // El editor de roster no espera al padrón: se le pinta su mitad y ya.
+  if (!veElPadron) {
+    return (
+      <div>
+        <p style={{ color: 'var(--ws-ink-dim)', fontSize: 13, marginTop: 0 }}>
+          Tu rol administra el <strong>roster de torneo</strong>: quién puede jugar en cada rama.
+          El padrón del club y sus cuotas los lleva el tesorero.
+        </p>
+        {branches === null
+          ? <Loading />
+          : <TournamentRosters team={team} branches={branches} onOpen={setOpenBranch} />}
+        {openBranch && (
+          <BranchRosterModal
+            branchId={openBranch.branch_id}
+            team={team}
+            token={token}
+            onClose={() => { setOpenBranch(null); loadBranches(); }}
+          />
+        )}
+      </div>
+    );
   }
 
   if (error && !data) return <div className="form-error">{error}</div>;

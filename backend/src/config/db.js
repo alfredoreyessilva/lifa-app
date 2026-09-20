@@ -1949,6 +1949,34 @@ export async function initSchema() {
         CHECK (role IN (${TODOS_LOS_ROLES.map((r) => `'${r}'`).join(', ')}))
     `);
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Paso 4 del modelo de roles (README, "Roles y fronteras de información"):
+    // la invitación dice con qué rol entra quien la reclame.
+    //
+    // Hasta aquí no lo decía. `routes/invites.js` escribía 'admin' a secas en
+    // las de organización, y las de equipo no daban de alta a nadie — solo
+    // llenaban `teams.owner_user_id`. El rol se elige al GENERAR el link y no
+    // al reclamarlo, porque quien invita es quien sabe a qué viene la persona;
+    // quien lo reclama solo prueba que el link llegó a sus manos.
+    //
+    // Nace NULL y lo ya escrito se queda NULL (regla 8: el esquema se agrega,
+    // no se edita). El claim lee una invitación sin rol con el default que
+    // tenía antes —'admin' las de organización, 'owner' las de equipo—, así
+    // que un link repartido ayer vale exactamente lo mismo después de
+    // desplegar esto. Por eso no lleva backfill: no hay nada que reparar.
+    //
+    // Mismo criterio que el CHECK de arriba: la lista sale de utils/orgRoles.js
+    // y no se escribe a mano (regla 6). Qué roles valen para CADA TIPO de
+    // organización sigue sin caber en un CHECK —el tipo vive en otra tabla— y
+    // se valida al invitar, en routes/invites.js.
+    await run(`ALTER TABLE invites ADD COLUMN IF NOT EXISTS role TEXT`);
+    await run(`ALTER TABLE invites DROP CONSTRAINT IF EXISTS invites_role_check`);
+    await run(`
+      ALTER TABLE invites
+        ADD CONSTRAINT invites_role_check
+        CHECK (role IS NULL OR role IN (${TODOS_LOS_ROLES.map((r) => `'${r}'`).join(', ')}))
+    `);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se

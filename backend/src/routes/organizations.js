@@ -5,6 +5,7 @@ import { isValidUrl, isNonEmptyString } from '../utils/validation.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isOrgMember } from '../utils/orgMembers.js';
 import { organizationAdminRequired } from '../middleware/ownership.js';
+import { rolesDeTipo, etiquetaDeRol, puede } from '../utils/orgRoles.js';
 
 const router = express.Router();
 
@@ -155,6 +156,29 @@ router.put('/:id', authRequired, asyncHandler(async (req, res) => {
 }));
 
 /* ===================== ADMINISTRADORES DE LA ORGANIZACIÓN ===================== */
+// Los roles que se pueden repartir en ESTA organización — lo que el selector
+// de "invitar" necesita saber y no puede deducir solo.
+//
+// Sale del catálogo y viaja por la API en vez de vivir repetido en el
+// frontend, por la regla 6: los roles válidos dependen del tipo de
+// organización y sus etiquetas también (un `treasurer` se lee "Tesorero de
+// liga" en una liga y "Tesorero" en un equipo). Dos listas separadas se
+// separan, y la que se desactualizaría es la que no toca la base.
+//
+// `grantable` es por quien pregunta, no por la organización: un administrador
+// ve el rol de dueño en la lista —tiene que poder leer que existe— pero no lo
+// puede repartir. Es la misma regla que aplica POST /invites/organizations/:id/admins,
+// y se manda ya resuelta para que el selector no tenga que volver a deducirla.
+router.get('/:id/roles', authRequired, organizationAdminRequired, asyncHandler(async (req, res) => {
+  const puedeNombrarDuenos = puede(req.organization.type, req.orgRole, 'duenos');
+  const roles = rolesDeTipo(req.organization.type).map((value) => ({
+    value,
+    label: etiquetaDeRol(value, req.organization.type),
+    grantable: value === 'owner' ? puedeNombrarDuenos : true,
+  }));
+  res.json({ roles });
+}));
+
 // Quiénes tienen acceso hoy al panel de esta liga/equipo/organización, vía
 // organization_members. Mismo permiso que para invitar a uno nuevo: cualquier
 // administrador actual puede ver la lista, no hace falta ser el owner.
@@ -166,7 +190,14 @@ router.get('/:id/members', authRequired, organizationAdminRequired, asyncHandler
     WHERE om.organization_id = ? AND om.status = 'active'
     ORDER BY om.created_at ASC
   `).all(req.organization.id);
-  res.json({ members });
+
+  // La etiqueta la arma el backend por la misma razón que en las
+  // invitaciones: `editor` no se lee nunca "editor" a secas y `treasurer`
+  // cambia de nombre según el tipo. `role` crudo se sigue mandando porque es
+  // lo que identifica la fila; la etiqueta es para pintarla.
+  res.json({
+    members: members.map((m) => ({ ...m, role_label: etiquetaDeRol(m.role, req.organization.type) })),
+  });
 }));
 
 // Quita a alguien como administrador — o te retiras tú, que es el mismo
@@ -238,18 +269,21 @@ router.post('/:id/transfer-owner', authRequired, organizationAdminRequired, asyn
     return res.status(400).json({ error: 'Falta decir a quién se le cede el puesto' });
   }
 
-  const principalActual = await db.prepare(
-    `SELECT user_id FROM organization_members WHERE organization_id = ? AND role = 'owner' AND status = 'active'`
-  ).get(req.organization.id);
-
-  // A diferencia de invitar (que cualquier administrador puede hacer), ceder
-  // el puesto solo lo decide quien lo tiene — si no, un invitado podría
-  // nombrarse principal a sí mismo y después quitar a quien lo invitó.
-  if (req.user.role !== 'admin' && principalActual?.user_id !== req.user.id) {
-    return res.status(403).json({ error: 'Solo el administrador principal puede nombrar a otro' });
+  // Quién puede ceder: un DUEÑO, y lo que cede es lo suyo.
+  //
+  // Antes esto preguntaba "¿eres el owner?" buscando la única fila con ese
+  // rol. Desde el paso 4 puede haber varios dueños a la vez, así que esa
+  // consulta devolvía uno al azar y solo ese podía ceder — los demás dueños
+  // se quedaban fuera de una decisión que sí les toca. Ahora se pregunta por
+  // el permiso, que es lo que `utils/orgRoles.js` sabe contestar, y quien cede
+  // es quien llama. Un administrador sigue sin poder: nombrarse principal a sí
+  // mismo y después quitar a quien lo invitó es exactamente la escalera que
+  // este candado existe para cortar.
+  if (req.user.role !== 'admin' && !puede(req.organization.type, req.orgRole, 'duenos')) {
+    return res.status(403).json({ error: 'Solo un dueño puede ceder el puesto principal' });
   }
-  if (principalActual?.user_id === nuevoUserId) {
-    return res.status(400).json({ error: 'Esa persona ya es la administradora principal' });
+  if (nuevoUserId === req.user.id) {
+    return res.status(400).json({ error: 'Ya tienes tú el puesto' });
   }
 
   const destino = await db.prepare(
@@ -262,10 +296,14 @@ router.post('/:id/transfer-owner', authRequired, organizationAdminRequired, asyn
   // Las dos ramas `UPDATE ... leagues` / `UPDATE ... teams` no se estorban:
   // una organización es de una liga o de un equipo, nunca de las dos, así que
   // la que no aplique afecta cero filas.
+  // `user_id = ?` y NO `role = 'owner'`: desde el paso 4 puede haber VARIOS
+  // dueños a la vez, y degradarlos a todos para promover a uno los tumbaba a
+  // los dos de un golpe. Solo se mueve quien de verdad cede — el que hoy tiene
+  // el puesto—, y los demás dueños se quedan como estaban.
   await db.prepare(`
     WITH ceder AS (
       UPDATE organization_members SET role = 'admin'
-       WHERE organization_id = ? AND role = 'owner' AND status = 'active'
+       WHERE organization_id = ? AND user_id = ? AND status = 'active'
       RETURNING user_id
     ), recibir AS (
       UPDATE organization_members SET role = 'owner'
@@ -277,7 +315,7 @@ router.post('/:id/transfer-owner', authRequired, organizationAdminRequired, asyn
     )
     UPDATE teams SET owner_user_id = ? WHERE organization_id = ?
   `).run(
-    req.organization.id,
+    req.organization.id, req.user.id,
     req.organization.id, nuevoUserId,
     nuevoUserId, req.organization.id,
     nuevoUserId, req.organization.id

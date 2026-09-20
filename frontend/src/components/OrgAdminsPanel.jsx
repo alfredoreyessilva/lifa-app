@@ -1,21 +1,31 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { puede } from '../utils/permisos.js';
 import Modal from './Modal.jsx';
 import InviteAdminModal from './InviteAdminModal.jsx';
 
-// Lista de quién administra hoy esta liga/equipo (organization_members) más
-// el botón para invitar a alguien más con el mismo acceso — la versión
-// "varios administradores" de InviteTeamModal (que solo permite UNO y se lo
-// quita a quien lo tenía). Vive en el panel de trabajo de la liga y en el
-// del equipo por igual: ambos ya tienen su propia organización
-// (leagues.organization_id / teams.organization_id).
-export default function OrgAdminsPanel({ organizationId, organizationName, token }) {
+// Quién tiene acceso hoy a esta liga/equipo y con QUÉ ROL, más el botón para
+// invitar a alguien más. Vive igual en el panel de la liga y en el del equipo:
+// los dos tienen su propia organización (leagues.organization_id /
+// teams.organization_id) y cada uno su propio catálogo de roles.
+//
+// `entidad` es la liga o el equipo tal como los devuelve /auth/me, y se usa
+// solo para saber qué puede hacer QUIEN MIRA (`my_permissions`). Esconder no
+// es proteger: el backend vuelve a decidir en cada petición — ver
+// `utils/permisos.js`.
+export default function OrgAdminsPanel({ organizationId, organizationName, organizationType, entidad, token }) {
   const { user } = useAuth();
   const [members, setMembers] = useState(null);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
   const [modal, setModal] = useState(null);
+
+  // Los dos permisos que gobiernan esta pantalla. `miembros` es repartir
+  // acceso; `duenos` es repartir el puesto de dueño, y es lo único que un
+  // administrador no puede hacer.
+  const puedeInvitar = puede(entidad, 'miembros');
+  const puedeTocarDuenos = puede(entidad, 'duenos');
 
   function load() {
     setError('');
@@ -52,44 +62,44 @@ export default function OrgAdminsPanel({ organizationId, organizationName, token
   }
 
   const count = members?.length;
-  // Quién es el principal hoy, y si ese soy yo. De esto dependen las dos
-  // acciones nuevas: solo el principal puede ceder el puesto, y nadie puede
-  // quitarlo (ni él mismo) mientras lo tenga.
-  const principal = members?.find((m) => m.role === 'owner');
-  const soyPrincipal = principal?.user_id === user?.id;
+  const soyDueno = members?.some((m) => m.user_id === user?.id && m.role === 'owner');
 
   return (
     <div className="category-block">
       <div className="category-block-head" onClick={() => setExpanded((prev) => !prev)} style={{ cursor: 'pointer' }}>
         <h4>
           <span style={{ display: 'inline-block', transition: 'transform 0.15s ease', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', marginRight: 8 }}>▸</span>
-          Administradores
+          Quién tiene acceso
           <span style={{ color: 'var(--ink-dim)', fontSize: 12, fontWeight: 400, marginLeft: 8 }}>
-            {count === undefined ? '' : `${count} administrador${count === 1 ? '' : 'es'}`}
+            {count === undefined ? '' : `${count} persona${count === 1 ? '' : 's'}`}
           </span>
         </h4>
-        <div onClick={(e) => e.stopPropagation()}>
-          <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'invite' })}>
-            + Invitar administrador
-          </button>
-        </div>
+        {/* Sin el permiso de repartir acceso, el botón no existe — no se pinta
+            deshabilitado. Un botón muerto no explica nada y promete algo que
+            el backend va a negar con un 403. */}
+        {puedeInvitar && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <button className="btn btn-ghost btn-sm" onClick={() => setModal({ type: 'invite' })}>
+              + Invitar
+            </button>
+          </div>
+        )}
       </div>
 
       {expanded && (
         <>
           {error && <div className="form-error">{error}</div>}
           <p style={{ color: 'var(--ink-dim)', fontSize: 12, margin: '0 0 8px' }}>
-            Todas las personas listadas aquí tienen el mismo acceso a este panel,
-            incluida la cobranza. Al administrador principal no se le puede quitar
-            el acceso: primero tiene que cederle el puesto a alguien más.
+            Cada persona entra con un rol y el rol decide qué puede hacer — no todas ven lo mismo.
+            {organizationType === 'team' && ' El padrón y las cuotas del club solo los ven el dueño, el administrador y el tesorero.'}
           </p>
           {members === null ? (
             <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>Cargando…</p>
           ) : members.length === 0 ? (
-            <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>Sin administradores todavía.</p>
+            <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>Nadie todavía.</p>
           ) : (
             members.map((m) => {
-              const esPrincipal = m.role === 'owner';
+              const esDueno = m.role === 'owner';
               const soyYo = m.user_id === user?.id;
               const solo = members.length <= 1;
               return (
@@ -97,25 +107,25 @@ export default function OrgAdminsPanel({ organizationId, organizationName, token
                   <div>
                     <div className="who">
                       {m.name}{soyYo ? ' (tú)' : ''}
-                      {esPrincipal && (
-                        <span
-                          style={{
-                            marginLeft: 8, fontSize: 11, fontWeight: 600,
-                            color: 'var(--ink-dim)', textTransform: 'none',
-                          }}
-                          title="Tiene el puesto principal: es quien puede cedérselo a alguien más. El acceso al panel es el mismo para todos."
-                        >
-                          · admin principal
-                        </span>
-                      )}
+                      {/* La etiqueta del rol viene resuelta del backend: cambia
+                          según el tipo de organización, y `editor` nunca se lee
+                          "editor" a secas sino "Editor de partidos (Visor)". */}
+                      <span
+                        style={{
+                          marginLeft: 8, fontSize: 11, fontWeight: 600,
+                          color: 'var(--ink-dim)', textTransform: 'none',
+                        }}
+                      >
+                        · {m.role_label || m.role}
+                      </span>
                     </div>
                     <div className="info">{m.email}</div>
                   </div>
                   <div className="row-actions">
-                    {/* Ceder el puesto: solo lo ofrece quien lo tiene, y solo
-                        sobre los demás. Es el paso previo obligado para poder
-                        retirarse siendo principal. */}
-                    {soyPrincipal && !esPrincipal && (
+                    {/* Ceder el puesto principal: solo lo ofrece quien es dueño,
+                        y solo sobre quien todavía no lo es. Es el paso previo
+                        obligado para poder retirarse siendo dueño. */}
+                    {puedeTocarDuenos && soyDueno && !esDueno && (
                       <button
                         className="btn btn-ghost btn-sm"
                         onClick={() => setModal({ type: 'transfer', member: m })}
@@ -123,21 +133,18 @@ export default function OrgAdminsPanel({ organizationId, organizationName, token
                         Hacer principal
                       </button>
                     )}
-                    {/* Al principal no se le ofrece "Quitar" en vez de
-                        ofrecerlo deshabilitado: el botón muerto no explica nada
-                        y antes prometía algo que el backend no cumplía. */}
-                    {!esPrincipal && (
+                    {!esDueno && (puedeInvitar || soyYo) && (
                       <button
                         className="btn btn-ghost btn-sm"
                         style={{ color: 'var(--flag)' }}
                         disabled={solo}
-                        title={solo ? 'Invita a alguien más antes de quitar a este administrador' : undefined}
+                        title={solo ? 'Invita a alguien más antes de quitar este acceso' : undefined}
                         onClick={() => setModal({ type: soyYo ? 'retire' : 'remove', member: m })}
                       >
                         {soyYo ? 'Retirarme' : 'Quitar'}
                       </button>
                     )}
-                    {esPrincipal && soyYo && (
+                    {esDueno && soyYo && (
                       <span style={{ color: 'var(--ink-dim)', fontSize: 12 }}>
                         {solo
                           ? 'Invita a alguien y cédele el puesto para poder retirarte'
@@ -156,6 +163,7 @@ export default function OrgAdminsPanel({ organizationId, organizationName, token
         <InviteAdminModal
           organizationId={organizationId}
           organizationName={organizationName}
+          organizationType={organizationType}
           token={token}
           onClose={() => setModal(null)}
           onDone={() => { load(); setExpanded(true); setModal(null); }}
@@ -163,23 +171,23 @@ export default function OrgAdminsPanel({ organizationId, organizationName, token
       )}
 
       {modal?.type === 'remove' && (
-        <Modal title="Quitar administrador" onClose={() => setModal(null)}>
+        <Modal title="Quitar acceso" onClose={() => setModal(null)}>
           <p>
-            ¿Seguro que quieres quitarle el acceso a <strong>{modal.member.name}</strong> sobre {organizationName}?
-            Puedes volver a invitarla más adelante si hace falta.
+            ¿Seguro que quieres quitarle el acceso a <strong>{modal.member.name}</strong> ({modal.member.role_label || modal.member.role})
+            sobre {organizationName}? Puedes volver a invitarla más adelante, con el rol que quieras.
           </p>
           <div className="modal-actions">
             <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
-            <button className="btn btn-danger" onClick={() => removeMember(modal.member)}>Quitar administrador</button>
+            <button className="btn btn-danger" onClick={() => removeMember(modal.member)}>Quitar acceso</button>
           </div>
         </Modal>
       )}
 
       {modal?.type === 'retire' && (
-        <Modal title="Retirarme como administrador" onClose={() => setModal(null)}>
+        <Modal title="Retirarme" onClose={() => setModal(null)}>
           <p>
-            Vas a dejar de administrar <strong>{organizationName}</strong>. Pierdes el acceso a
-            este panel y a su cobranza — incluidos los movimientos de dinero.
+            Vas a dejar de tener acceso a <strong>{organizationName}</strong>. Pierdes este panel y
+            todo lo que tu rol alcanzaba.
           </p>
           <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>
             Quien siga administrando puede volver a invitarte cuando haga falta.

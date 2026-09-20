@@ -26,6 +26,7 @@ import {
   etiquetaDeRol,
   puede,
   rolesConPermiso,
+  rolDeInvitacion,
 } from '../../src/utils/orgRoles.js';
 
 const TIPOS = ['league', 'team', 'media', 'store', 'clinic', 'brand'];
@@ -197,4 +198,42 @@ test('un rol desconocido no se pinta crudo: devuelve null', () => {
 
 test('ROLES y TODOS_LOS_ROLES no se contradicen', () => {
   assert.deepEqual(TODOS_LOS_ROLES, Object.keys(ROLES));
+});
+
+// ── 6. La invitación que no dice rol ──────────────────────────────────────
+//
+// `invites.role` nació en el paso 4 y las invitaciones anteriores se quedan
+// en NULL para siempre. Un link repartido por WhatsApp hace tres días no se
+// puede volver a probar a mano, así que lo que vale ese NULL se fija aquí.
+
+test('una invitación sin rol vale lo que valía antes de que la columna existiera', () => {
+  // El caso que importa: desplegar el paso 4 no puede cambiar en silencio con
+  // qué acceso entra alguien que ya tiene el link en la mano.
+  assert.equal(rolDeInvitacion({ type: 'org_admin', role: null }), 'admin');
+  assert.equal(rolDeInvitacion({ type: 'team', role: null }), 'owner');
+});
+
+test('el rol escrito en la invitación le gana al default', () => {
+  assert.equal(rolDeInvitacion({ type: 'org_admin', role: 'treasurer' }), 'treasurer');
+  assert.equal(rolDeInvitacion({ type: 'org_admin', role: 'coach' }), 'coach');
+});
+
+test('una invitación de equipo entrega el equipo, no un acceso más', () => {
+  // Reclamar la entrega es lo más fuerte que hay: da de alta como dueño de la
+  // organización del equipo. Si esto dejara de ser 'owner', un equipo
+  // entregado se quedaría sin nadie que pudiera repartir su propio acceso.
+  assert.equal(rolDeInvitacion({ type: 'team' }), 'owner');
+  assert.ok(esRolValido('team', rolDeInvitacion({ type: 'team' })));
+});
+
+test('el default de cada tipo de invitación es un rol que la base acepta', () => {
+  for (const type of ['team', 'org_admin']) {
+    assert.ok(TODOS_LOS_ROLES.includes(rolDeInvitacion({ type })), `el default de "${type}" no está en el CHECK`);
+  }
+});
+
+test('un tipo de invitación que no existe no da ningún rol', () => {
+  assert.equal(rolDeInvitacion({ type: 'federacion' }), null);
+  assert.equal(rolDeInvitacion({}), null);
+  assert.equal(rolDeInvitacion(null), null);
 });

@@ -4,8 +4,9 @@ import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isOrgMember } from '../utils/orgMembers.js';
+import { rolesConPermiso } from '../utils/orgRoles.js';
 import { isNonEmptyString, isValidUrl } from '../utils/validation.js';
-import { leagueOwnerRequired, teamOwnerRequired } from '../middleware/ownership.js';
+import { leagueBillingRequired, teamBillingRequired } from '../middleware/ownership.js';
 import { HOY_MX } from '../utils/sqlDates.js';
 
 const router = express.Router();
@@ -123,7 +124,13 @@ async function assertLedgerLeagueAccess(req, res, entryId) {
     res.status(404).json({ error: 'Liga no encontrada' });
     return null;
   }
-  const isMember = await isOrgMember(req.user.id, league.organization_id);
+  // Mismos roles que las rutas con `leagueBillingRequired`: confirmar, rechazar
+  // y cancelar un movimiento es cobranza, y el tesorero de liga está para eso.
+  // Va por `rolesConPermiso` y no por una lista escrita aquí — una lista suelta
+  // dentro de un handler es justo lo que se desincroniza del catálogo.
+  const isMember = await isOrgMember(
+    req.user.id, league.organization_id, rolesConPermiso('league', 'cobranza_liga')
+  );
   if (req.user.role !== 'admin' && !isMember && league.owner_user_id !== req.user.id) {
     res.status(403).json({ error: 'No tienes permiso sobre esta cobranza' });
     return null;
@@ -179,7 +186,7 @@ function sortWeekLabels(labels) {
 
 // ─── Panorama de la liga ────────────────────────────────────────────────────
 
-router.get('/leagues/:leagueId/overview', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+router.get('/leagues/:leagueId/overview', authRequired, leagueBillingRequired, asyncHandler(async (req, res) => {
   const leagueId = req.league.id;
 
   const teams = await db.prepare(
@@ -269,7 +276,7 @@ router.get('/leagues/:leagueId/overview', authRequired, leagueOwnerRequired, asy
 // Cuántos partidos tiene cada equipo de la liga en un filtro dado (torneo y/o
 // jornada). Alimenta el botón "calcular por # de partidos" del alta de cargos:
 // cargo del equipo = cuota por partido × este conteo.
-router.get('/leagues/:leagueId/match-counts', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+router.get('/leagues/:leagueId/match-counts', authRequired, leagueBillingRequired, asyncHandler(async (req, res) => {
   const leagueId = req.league.id;
   const tournamentId = req.query.tournament_id ? Number(req.query.tournament_id) : null;
   const weekLabel = isNonEmptyString(req.query.week_label)
@@ -302,7 +309,7 @@ router.get('/leagues/:leagueId/match-counts', authRequired, leagueOwnerRequired,
 }));
 
 // Libro de un equipo, visto por la liga.
-router.get('/leagues/:leagueId/teams/:teamId/entries', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+router.get('/leagues/:leagueId/teams/:teamId/entries', authRequired, leagueBillingRequired, asyncHandler(async (req, res) => {
   const team = await teamInLeague(Number(req.params.teamId), req.league.id);
   if (!team) return res.status(404).json({ error: 'Ese equipo no pertenece a esta liga' });
 
@@ -321,7 +328,7 @@ router.get('/leagues/:leagueId/teams/:teamId/entries', authRequired, leagueOwner
 
 // ─── Crear cargos ───────────────────────────────────────────────────────────
 
-router.post('/leagues/:leagueId/charges', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+router.post('/leagues/:leagueId/charges', authRequired, leagueBillingRequired, asyncHandler(async (req, res) => {
   const metaErr = validateChargeMeta(req.body);
   if (metaErr) return res.status(400).json({ error: metaErr });
 
@@ -365,7 +372,7 @@ router.post('/leagues/:leagueId/charges', authRequired, leagueOwnerRequired, asy
 }));
 
 // Repetir un lote anterior con nueva fecha de vencimiento.
-router.post('/leagues/:leagueId/charges/repeat', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+router.post('/leagues/:leagueId/charges/repeat', authRequired, leagueBillingRequired, asyncHandler(async (req, res) => {
   const { source_batch_id, due_date, week_label } = req.body;
   if (!isNonEmptyString(source_batch_id)) return res.status(400).json({ error: 'Falta el lote de origen' });
   if (!due_date || Number.isNaN(new Date(due_date).getTime())) return res.status(400).json({ error: 'La fecha de vencimiento no es válida' });
@@ -417,7 +424,7 @@ router.post('/leagues/:leagueId/charges/repeat', authRequired, leagueOwnerRequir
 
 // ─── Registrar un pago recibido (solo la liga en la V1) ─────────────────────
 
-router.post('/leagues/:leagueId/teams/:teamId/payments', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+router.post('/leagues/:leagueId/teams/:teamId/payments', authRequired, leagueBillingRequired, asyncHandler(async (req, res) => {
   const team = await teamInLeague(Number(req.params.teamId), req.league.id);
   if (!team) return res.status(404).json({ error: 'Ese equipo no pertenece a esta liga' });
 
@@ -551,7 +558,7 @@ router.post('/entries/:id/void', authRequired, asyncHandler(async (req, res) => 
 //
 // El comprobante se sube con POST /api/upload de siempre — aquí sí hay sesión
 // (a diferencia del papá, que no tiene cuenta y necesitó un endpoint aparte).
-router.post('/teams/:id/report-payment', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.post('/teams/:id/report-payment', authRequired, teamBillingRequired, asyncHandler(async (req, res) => {
   if (!req.team.league_id) {
     return res.status(400).json({ error: 'Tu equipo no pertenece a ninguna liga, así que no hay a quién reportarle un pago' });
   }
@@ -619,7 +626,7 @@ router.post('/teams/:id/report-payment', authRequired, teamOwnerRequired, asyncH
 //
 // Solo se puede retirar lo que reportó el EQUIPO (created_by_side='team'): un
 // pago que capturó la liga no es del equipo para quitarlo.
-router.post('/teams/:id/withdraw-payment', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.post('/teams/:id/withdraw-payment', authRequired, teamBillingRequired, asyncHandler(async (req, res) => {
   const pending = await db.prepare(`
     SELECT id FROM team_ledger_entries
     WHERE team_id = ? AND kind = 'payment' AND status = 'pending' AND created_by_side = 'team'
@@ -669,7 +676,7 @@ router.post('/entries/:id/confirm', authRequired, asyncHandler(async (req, res) 
 
 // ─── Ajustes de la liga ─────────────────────────────────────────────────────
 
-router.patch('/leagues/:leagueId/settings', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+router.patch('/leagues/:leagueId/settings', authRequired, leagueBillingRequired, asyncHandler(async (req, res) => {
   const enabled = Boolean(req.body?.billing_reminders_enabled);
   await db.prepare('UPDATE leagues SET billing_reminders_enabled = ? WHERE id = ?').run(enabled, req.league.id);
   res.json({ billing_reminders_enabled: enabled });
@@ -677,7 +684,7 @@ router.patch('/leagues/:leagueId/settings', authRequired, leagueOwnerRequired, a
 
 // ─── Estado de cuenta del equipo (solo lectura) ─────────────────────────────
 
-router.get('/teams/:id/statement', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.get('/teams/:id/statement', authRequired, teamBillingRequired, asyncHandler(async (req, res) => {
   // Un equipo independiente (sin liga) no tiene ninguna relación de cobranza
   // — ese libro es siempre liga -> equipo. No hay estado de cuenta que armar.
   if (!req.team.league_id) {

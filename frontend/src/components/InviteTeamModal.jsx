@@ -2,11 +2,18 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import Modal from './Modal.jsx';
 
-// Genera un link de invitación de un solo uso para que alguien reclame el
-// puesto de representante de un equipo. Antes vivía solo dentro de
-// Dashboard.jsx (pantalla vieja de gestión de liga); se sacó a su propio
-// archivo para poder usarlo también desde el roster de liga nuevo
-// (LeagueRoster.jsx), sin duplicar esta lógica dos veces.
+// Genera un link de un solo uso para ENTREGARLE un equipo a su representante.
+// Antes vivía solo dentro de Dashboard.jsx (pantalla vieja de gestión de
+// liga); se sacó a su propio archivo para poder usarlo también desde el roster
+// de liga nuevo (LeagueRoster.jsx), sin duplicar esta lógica dos veces.
+//
+// Entregar es de una sola vía: en cuanto alguien reclama el link, la liga se
+// sale de la administración de ese equipo y no puede volver a entrar. El
+// backend contesta 409 si se intenta otra vez, y aquí eso se explica en vez de
+// enseñarse como un error rojo — no es una falla, es el modelo funcionando.
+//
+// Lo que NO cambia al entregar es la participación del equipo en los torneos
+// de la liga: eso vive aparte y se administra aparte.
 export default function InviteTeamModal({ team, token, onClose, onDone }) {
   const [link, setLink] = useState(null);
   const [error, setError] = useState('');
@@ -32,16 +39,42 @@ export default function InviteTeamModal({ team, token, onClose, onDone }) {
     }
   }
 
+  // Un 409 aquí significa "este equipo ya se administra solo", que no es un
+  // error de quien hizo clic: es la única respuesta posible. Se muestra como
+  // explicación y no como falla.
+  const yaEntregado = error && /ya se administra solo/i.test(error);
+
   return (
-    <Modal title={`Invitar representante — ${team.name}`} onClose={onClose}>
+    <Modal title={`Entregar el perfil — ${team.name}`} onClose={onClose}>
       {loading && <p>Generando link…</p>}
-      {error && <div className="form-error">{error}</div>}
+
+      {yaEntregado ? (
+        <>
+          <p style={{ fontSize: 14 }}>
+            <strong>{team.name}</strong> ya se administra solo. Su acceso lo reparten sus propios
+            dueños desde su panel, no la liga.
+          </p>
+          <p style={{ fontSize: 13, color: 'var(--ink-dim)' }}>
+            Entregar un equipo es de una sola vía, a propósito: si la liga pudiera retomarlo,
+            podría llegar al padrón del club por la puerta de atrás. Su participación en tus
+            torneos no cambia con esto — sigue en tu calendario y en tus ramas igual que siempre.
+          </p>
+        </>
+      ) : error ? (
+        <div className="form-error">{error}</div>
+      ) : null}
 
       {link && (
         <>
           <p style={{ fontSize: 13, color: 'var(--ink-dim)' }}>
             Copia este link y mándaselo por tu cuenta (WhatsApp, correo, etc.) a la persona que va a administrar el equipo.
-            Al abrirlo, va a crear su cuenta o iniciar sesión, y quedará asignada de inmediato — el link deja de funcionar en cuanto se usa una vez.
+            Al abrirlo va a crear su cuenta o iniciar sesión, y quedará como <strong>dueño</strong> del
+            equipo de inmediato — el link deja de funcionar en cuanto se usa una vez.
+          </p>
+          <p style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
+            En cuanto lo reclame, <strong>sales de la administración de este equipo</strong>: dejas de ver
+            su padrón y sus cuotas, y ya no puedes repartir su acceso. Lo que no cambia es su
+            participación en tus torneos. Mientras nadie lo reclame, puedes cancelar la entrega.
           </p>
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <input readOnly value={link} onFocus={(e) => e.target.select()} style={{ flex: 1 }} />

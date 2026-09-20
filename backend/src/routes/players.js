@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
-import { teamOwnerRequired, matchOwnerRequired, branchTeamOwnerRequired } from '../middleware/ownership.js';
+import { teamViewRequired, matchScoreRequired, branchTeamOwnerRequired } from '../middleware/ownership.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isNonEmptyString } from '../utils/validation.js';
 import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL } from '../utils/scoring.js';
@@ -101,7 +101,7 @@ async function fetchImageForXlsx(url) {
 // permiso por API (branchTeamOwnerRequired) pero ninguna pantalla desde donde
 // entrar. Esto es lo que le da al club la lista de "tus planteles" en su
 // propio panel, sin pasar por la liga.
-router.get('/teams/:id/branches', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.get('/teams/:id/branches', authRequired, teamViewRequired, asyncHandler(async (req, res) => {
   const branches = await db.prepare(`
     SELECT b.id AS branch_id, b.name AS branch_name,
            c.id AS category_id, c.name AS category_name, c.season, c.year,
@@ -532,7 +532,7 @@ const STAT_FIELDS = [
 
 // Todas las estadísticas capturadas de un partido, para mostrar la tabla
 // completa (ambos equipos) de una sola vez.
-router.get('/matches/:id/stats', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
+router.get('/matches/:id/stats', authRequired, matchScoreRequired, asyncHandler(async (req, res) => {
   const stats = await db.prepare(`
     SELECT s.*, p.first_name, p.last_name
     FROM player_match_stats s
@@ -549,7 +549,7 @@ router.get('/matches/:id/stats', authRequired, matchOwnerRequired, asyncHandler(
 // conectado con sus equipos, se pide sincronizar primero (botón "Conectar
 // equipos con sus partidos" en el panel de la liga) en vez de dejar
 // capturar estadísticas de un equipo sin confirmar que de verdad jugó ahí.
-router.put('/matches/:id/stats/:playerId', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
+router.put('/matches/:id/stats/:playerId', authRequired, matchScoreRequired, asyncHandler(async (req, res) => {
   const match = req.match;
   const playerId = Number(req.params.playerId);
   const { team_id } = req.body;

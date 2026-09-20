@@ -3,7 +3,7 @@ import multer from 'multer';
 import * as XLSX from 'xlsx';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
-import { categoryOwnerRequired, matchOwnerRequired, leagueOwnerRequired, teamOwnerRequired, venueOwnerRequired, groupOwnerRequired, branchOwnerRequired, conferenceOwnerRequired, tournamentOwnerRequired, phaseOwnerRequired, titleOwnerRequired } from '../middleware/ownership.js';
+import { categoryOwnerRequired, matchOwnerRequired, matchScoreRequired, leagueOwnerRequired, teamOwnerRequired, venueOwnerRequired, groupOwnerRequired, branchOwnerRequired, conferenceOwnerRequired, tournamentOwnerRequired, phaseOwnerRequired, titleOwnerRequired } from '../middleware/ownership.js';
 import { isValidEmail, isValidUrl, isValidGoogleMapsUrl, isNonEmptyString } from '../utils/validation.js';
 import {
   isValidTimezone,
@@ -1302,7 +1302,7 @@ router.post(
   })
 );
 
-router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
+router.put('/matches/:id', authRequired, matchScoreRequired, asyncHandler(async (req, res) => {
   // match_date_local: igual que en creación, el string crudo del input
   // <datetime-local> (o ausente, si esta edición no toca la fecha/hora).
   const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, conference_id, conference_override_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, branch_id, category_id, is_draft, phase_id } = req.body;
@@ -1445,7 +1445,7 @@ router.put('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(async 
 // siempre (scheduled/live/finished); "Iniciado" es solo el texto que ve el
 // organizador para el valor "live" — no se agrega ningún valor nuevo.
 
-router.patch('/matches/:id/status', authRequired, matchOwnerRequired, asyncHandler(async (req, res) => {
+router.patch('/matches/:id/status', authRequired, matchScoreRequired, asyncHandler(async (req, res) => {
   const { status } = req.body;
   const VALID_STATUSES = ['scheduled', 'live', 'finished'];
   if (!VALID_STATUSES.includes(status)) {

@@ -55,6 +55,8 @@ export default function TeamPanel({ section = 'resumen' }) {
               <OrgAdminsPanel
                 organizationId={team.organization_id}
                 organizationName={team.name}
+                organizationType="team"
+                entidad={team}
                 token={token}
               />
             ) : (

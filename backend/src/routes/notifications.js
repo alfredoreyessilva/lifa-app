@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import db from '../config/db.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { authRequired } from '../middleware/auth.js';
-import { leagueOwnerRequired, teamOwnerRequired } from '../middleware/ownership.js';
+import { leagueOwnerRequired, teamViewRequired } from '../middleware/ownership.js';
 import { runBillingReminders, runPlayerBillingReminders } from '../utils/billingReminders.js';
 import { runMonthlyChargeGeneration } from '../utils/monthlyCharges.js';
 import { runOncePerDay, registrarLlamada, podarBitacora } from '../utils/cronSchedule.js';
@@ -574,7 +574,7 @@ router.get('/league/:id', authRequired, leagueOwnerRequired, asyncHandler(async 
   res.json({ notifications: items });
 }));
 
-router.get('/team/:id', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.get('/team/:id', authRequired, teamViewRequired, asyncHandler(async (req, res) => {
   const items = await db.prepare(`
     SELECT id, type, title, body, data, read_at, created_at
     FROM notifications
@@ -595,7 +595,7 @@ router.post('/league/:id/:notifId/read', authRequired, leagueOwnerRequired, asyn
   res.json({ ok: true });
 }));
 
-router.post('/team/:id/:notifId/read', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+router.post('/team/:id/:notifId/read', authRequired, teamViewRequired, asyncHandler(async (req, res) => {
   await db.prepare(`
     UPDATE notifications SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
     WHERE id = ? AND recipient_type = 'team' AND recipient_id = ?
