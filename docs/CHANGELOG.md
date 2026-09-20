@@ -15,6 +15,36 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El link del estado de cuenta ya se puede copiar y revocar desde la app
+  (2026-09-19)**: el endpoint (`POST /teams/:id/members/:memberId/rotate-token`)
+  y el método del cliente (`api.rotateMemberShareToken`) existían desde hacía
+  tiempo, pero **ningún componente los llamaba**: un `share_token` filtrado —se
+  pegó en el grupo equivocado, la familia lo reenvió— solo se podía revocar
+  entrando a la base. Junto con eso, "Copiar link" únicamente aparecía en la
+  fila de quien **no** tenía teléfono, porque ahí ocupaba el lugar de
+  "Recordar": un club que sí capturó los teléfonos no tenía forma de copiarlo
+  nunca.
+
+  Los dos viven ahora en la **ficha** del miembro, no en la fila. La fila no
+  era el lugar: `.col-actions` va en `white-space: nowrap`, así que cada botón
+  que se le agrega la ensancha —y el scroll horizontal de esa tabla ya es un
+  pendiente abierto—. Copiar es ocasional y regenerar es raro y destructivo;
+  ninguno de los dos amerita estar permanentemente en pantalla.
+
+  Regenerar pide confirmación con el mismo `ConfirmDialog` que cancelar un
+  movimiento, y el aviso dice lo que de verdad importa: **quien tenga el link
+  viejo, incluida la familia, pierde el acceso**, así que después hay que
+  mandarle el nuevo. No lleva casilla de "entiendo": el `checkboxLabel` de ese
+  diálogo **no** es un acuse —es un selector de variante y no bloquea el
+  confirmar—, así que usarlo aquí habría sido una casilla que no hace nada.
+
+  **Verificado**: compila y las 81 pruebas del frontend siguen pasando. **No**
+  se hizo clic en el botón real, por lo mismo que la entrada de arriba: llegar
+  a esa pantalla pide sesión y un padrón con datos personales de menores, que
+  no se cargan para una prueba (regla 7). Lo que falta para poder verificarla
+  de verdad es un equipo **sintético** en la rama `desarrollo-local`, con
+  nombres y teléfonos inventados.
+
 - **El botón "Recordar" ya abre WhatsApp de verdad (2026-09-19)**: en
   `TeamFinancesSection.jsx` había dos `await` antes del `window.open`, y los
   navegadores solo dejan abrir una pestaña si la llamada cuelga **síncronamente**

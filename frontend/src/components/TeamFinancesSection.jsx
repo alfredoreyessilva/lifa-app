@@ -468,7 +468,57 @@ export default function TeamFinancesSection({ team, token }) {
               await afterWrite(modal.member.member_id);
             }}
           />
+
+          {/* El link del estado de cuenta vive aquí, en la ficha, y no en la
+              fila: copiarlo es ocasional y regenerarlo es raro y destructivo,
+              así que ninguno de los dos merece un botón permanente en una
+              columna que ya va en `white-space: nowrap`.
+
+              Antes "Copiar link" solo aparecía en la fila de quien NO tenía
+              teléfono —porque ahí ocupaba el lugar de "Recordar"—, así que un
+              club que sí capturó los teléfonos no tenía forma de copiarlo
+              nunca. Desde aquí lo alcanzan los dos. */}
+          <div className="form-divider"><span>Link del estado de cuenta</span></div>
+          <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--ws-ink-dim)' }}>
+            Con este link la familia consulta su saldo y reporta pagos, sin
+            cuenta ni contraseña. El link <strong>es</strong> la credencial:
+            quien lo tenga, entra.
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-ghost btn-sm"
+              onClick={() => copyLink(modal.member)}>
+              Copiar link
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm"
+              title="Genera uno nuevo y apaga el anterior"
+              onClick={() => { setConfirm({ kind: 'rotate', member: modal.member }); setModal(null); }}>
+              Regenerar link
+            </button>
+          </div>
         </Modal>
+      )}
+
+      {/* Regenerar el link es la única forma de revocar uno que se filtró —
+          se pegó en el grupo equivocado, o la familia lo reenvió—. No hay
+          "deshacer": el token viejo deja de servir en cuanto se reemplaza, y
+          eso incluye el que la familia ya tenga guardado, así que el aviso
+          dice qué hacer después, no solo qué se rompe. */}
+      {confirm?.kind === 'rotate' && (
+        <ConfirmDialog
+          title="Regenerar el link del estado de cuenta"
+          message={`Se genera un link nuevo para ${confirm.member.display_name} y el anterior deja de funcionar de inmediato.`}
+          warning="Quien tenga el link viejo —incluida la familia— pierde el acceso. Después de regenerarlo hay que mandarle el nuevo, o se van a quedar sin poder ver su saldo ni reportar pagos."
+          confirmLabel="Regenerar link"
+          cancelLabel="Mejor no"
+          danger
+          onClose={() => setConfirm(null)}
+          onConfirm={async () => {
+            await api.rotateMemberShareToken(team.id, confirm.member.member_id, token);
+            await afterWrite(confirm.member.member_id);
+            setNotice(`Link de ${confirm.member.display_name} regenerado. El anterior ya no funciona — mándale el nuevo.`);
+            setTimeout(() => setNotice(''), 6000);
+          }}
+        />
       )}
 
       {confirm?.kind === 'reject' && (

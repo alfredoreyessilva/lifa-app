@@ -55,7 +55,7 @@ van partidas en tres.
 |Predicciones y quinielas|95%|Nada abierto; lo demás se dejó fuera a propósito|
 |Transmisiones|95%|Nada abierto|
 |Equipos independientes|90%|Traspaso de dueño: hoy un equipo sin acceso a su cuenta no se puede reclamar|
-|Cuotas del club (equipo → jugador)|88%|Prorrateo de quien entra a media quincena; auditoría del padrón; UI para rotar el link; el pie del estado de cuenta a 1.16:1 de contraste|
+|Cuotas del club (equipo → jugador)|90%|Prorrateo de quien entra a media quincena; auditoría del padrón; el pie del estado de cuenta a 1.16:1 de contraste. La UI para rotar el link se cerró el 2026-09-19|
 |Cobranza (liga → equipo)|88%|Cobro en línea. La zona horaria se cerró el 2026-09-19 (eran cuatro lugares, no dos)|
 |Roster de jugadores|85%|Credencial digital con QR. La zona horaria de altas y bajas se cerró el 2026-09-19 (eran tres lugares más)|
 |Notificaciones y push|85%|Bandeja propia para jugador/tutor — hoy imposible: `notifications` tiene `CHECK (recipient_type IN ('league','team'))` y los jugadores no tienen cuenta. Que el recordatorio de cobranza SALGA de la plataforma (correo al tutor) sigue sin construirse|
@@ -211,12 +211,6 @@ verificación.
   convenga; ninguna es urgente. La razón social ya se eligió: opera José Alfredo
   Reyes Silva como persona física, y CFBAMX es el nombre comercial (ver
   `frontend/src/config/legal.js`).
-- **Falta UI para rotar el link del estado de cuenta.** El endpoint
-  (`POST /teams/:id/members/:memberId/rotate-token`) y el método del cliente
-  (`api.rotateMemberShareToken`) existen, pero **ningún componente los llama**:
-  hoy no hay forma de revocar un `share_token` filtrado sin entrar a la base.
-  Junto con eso, "Copiar link" solo aparece cuando el miembro NO tiene
-  teléfono, así que un club que sí capturó los teléfonos nunca puede copiarlo.
 - **No hay auditoría del padrón.** Se sabe cuál es la cuota de alguien, no
   quién se la cambió ni cuándo. El patrón a imitar ya existe: el trío
   `created_by_user_id` / `voided_by_user_id` / `reverses_entry_id` del libro.
