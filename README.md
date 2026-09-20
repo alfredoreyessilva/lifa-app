@@ -67,8 +67,8 @@ van partidas en tres.
 |Parte|%|Lo que falta|
 |-|-|-|
 |Páginas legales|**100%**|Cerrado el 2026-09-19: los cuatro datos llenos, `/terminos` publicado y el Aviso completo|
-|Seguridad|75%|Los roles de organización no se distinguen y ya hay dinero de por medio; rotar `CLOUDINARY_API_SECRET`; invitaciones que no caducan; nada impide escribir en producción desde local|
-|Pruebas automatizadas|40%|Las 135 cubren **solo funciones puras**. Todo `routes/` empieza consultando Postgres y no está cubierto en el CI — auth incluido. Las dos e2e de cobranza se corren a mano|
+|Seguridad|80%|Los roles de organización no se distinguen y ya hay dinero de por medio; rotar `CLOUDINARY_API_SECRET`; invitaciones que no caducan. Escribir en producción desde local ya tiene candado (2026-09-19)|
+|Pruebas automatizadas|40%|Las 148 cubren **solo funciones puras**. Todo `routes/` empieza consultando Postgres y no está cubierto en el CI — auth incluido. Las dos e2e de cobranza se corren a mano|
 |Concentración de archivos|sin urgencia|Cinco archivos concentran demasiado; solo `db.js` tiene techo real (9s de arranque). Ver "Pendientes conocidos"|
 
 ### Roadmap de negocio, por fase
@@ -78,7 +78,7 @@ van partidas en tres.
 |0 — Cerrar lo que estaba a medias|70%|Solo esperar tráfico para volver a pedir revisión a Booking.com|
 |1 — Fundación de confiabilidad|80%|Subieron las legales a ✅. Quedan el plan de pago de Render/Neon y rotar el secreto de Cloudinary|
 |2 — Automatizar el cobro|**0%**|No hay ninguna pasarela instalada. Es el bloqueador de fondo y el punto de no retorno: en cuanto una liga cobra por la plataforma, no se va|
-|3 — Red de seguridad técnica|40%|135 pruebas y CI hechos; falta probar lo que toca la base, monitoreo de uptime y que el CI bloquee el deploy|
+|3 — Red de seguridad técnica|40%|148 pruebas y CI hechos; falta probar lo que toca la base, monitoreo de uptime y que el CI bloquee el deploy|
 |4 — Ciclo de vida del cliente|15%|Falta el onboarding por correo; `RESEND_API_KEY` ya está configurada, así que es construir los correos|
 |5 — Crecimiento|5%|Página de precios, analítica de conversión, SEO más allá del sitemap|
 
@@ -245,14 +245,6 @@ verificación.
   > administrador", y al partir el histórico se fue a `docs/CHANGELOG.md`, donde
   > se lee como nota de algo pasado y no como limitación vigente. Por eso está
   > aquí ahora.
-- **La advertencia de no apuntar a producción es solo texto, no un mecanismo.**
-  La `DATABASE_URL` local apunta hoy a la base real, así que cualquier prueba
-  desde `localhost:5173` escribe filas de verdad — está advertido en "Cómo
-  correrlo en local" y es la regla 1 de `CLAUDE.md`, pero nada lo impide.
-  Conviene que sea código: que el servidor **se niegue a arrancar** en modo
-  desarrollo contra el host de producción salvo que se le pase una variable
-  explícita. Son unas diez líneas en `config/db.js` y eliminan la categoría
-  entera de accidente, incluido el de levantar un segundo backend por error.
 - **Renombrar `/api/player-billing`** — es lo único que quedó de la fase B (ya
   hecha; ver "Cuotas del club"). El prefijo y el archivo `routes/playerBilling.js`
   siguen diciendo "player" donde quieren decir "miembro del club". Se dejó fuera
@@ -576,8 +568,49 @@ npm run seed     # opcional: crea datos de ejemplo (ligas, categorías, partidos
 npm run dev      # http://localhost:4000
 ```
 
-> **Cuidado si tu `DATABASE_URL` apunta a la base de producción** (hoy es el
-> caso). Dos avisos que costaron un susto:
+#### Tu `DATABASE_URL` en local apunta a una rama, no a producción
+
+Desde el 2026-09-19 el local trabaja contra la rama de Neon
+**`desarrollo-local`**, no contra la base real. Es lo que exige la regla 1 de
+`CLAUDE.md`, y desde esa fecha hay un candado que lo hace cumplir: si
+`DATABASE_URL` apunta al host de `PROD_DATABASE_HOST`, **`npm run dev` se niega
+a arrancar** (ver "Seguridad" para lo que el candado no cubre).
+
+Una rama de Neon es una copia instantánea y copy-on-write: trae los datos
+reales del momento en que se creó, pero lo que escribas ahí **no sube a
+producción** y lo que pase en producción después **no baja a la rama**. Cuando
+quieras datos frescos, se borra y se crea otra — son segundos y no cuesta nada.
+
+```powershell
+# Recrearla (el CLI no está instalado; se usa por npx)
+npx -y neonctl@latest branches delete desarrollo-local `
+  --project-id empty-feather-77325991 --org-id org-twilight-lab-25712139
+
+npx -y neonctl@latest branches create --name desarrollo-local `
+  --project-id empty-feather-77325991 --org-id org-twilight-lab-25712139
+```
+
+Del JSON que devuelve, la cadena que va en `DATABASE_URL` se arma con el
+**`pooler_host`** (no el `host` pelón: así el local se comporta como producción,
+que también va por el pooler en modo transacción) y terminada en
+`?sslmode=verify-full`:
+
+```
+postgresql://<role>:<password>@<pooler_host>/<database>?sslmode=verify-full
+```
+
+`--org-id` no es opcional aunque solo haya una organización: sin él el CLI abre
+un prompt interactivo que cuelga en una terminal no interactiva.
+
+**Para ver producción de verdad** —leer, no escribir— está la salida de
+emergencia del candado, que caduca sola el mismo día:
+
+```powershell
+$env:ALLOW_PROD_DB="2026-09-19"; npm run dev
+```
+
+> **Por qué existe todo lo de arriba.** Los dos sustos que lo provocaron, de
+> vuelta en la época en que la `DATABASE_URL` local apuntaba a la base real:
 >
 > 1. **Levantar un segundo backend interrumpe el servicio.** Si ya hay uno
 >    corriendo en el 4000 y arrancas otro, el segundo falla por `EADDRINUSE`
@@ -585,12 +618,10 @@ npm run dev      # http://localhost:4000
 >    eso tumba las consultas del que sí está sirviendo. Se ve como una tanda
 >    de **500 en todos los endpoints** durante unos segundos, sin ninguna
 >    causa aparente. Se cura solo al recargar; el error no es de la app.
-> 2. **Todo lo que pruebes en local escribe en producción.** Registrar una
+> 2. **Todo lo que se probaba en local escribía en producción.** Registrar una
 >    liga, invitar administradores o dar de alta jugadores desde
->    `localhost:5173` crea filas reales. Para cualquier prueba que escriba,
->    usa una rama de Neon (Branches → New branch, copia instantánea) y apunta
->    `DATABASE_URL` ahí — es lo mismo que exige `backend/tests/README.md` para
->    las suites de punta a punta.
+>    `localhost:5173` creaba filas reales, y la única defensa era acordarse. Por
+>    eso ahora la defensa es el candado y la rama, no la memoria.
 
 ### 2. Frontend
 
@@ -2113,6 +2144,12 @@ bot.
 - **`xlsx` (SheetJS) instalado desde `cdn.sheetjs.com`, no desde el registro de npm — en backend y frontend**: la versión publicada en npm tiene una vulnerabilidad alta (prototype pollution / ReDoS) sin parche ahí; SheetJS solo publica la versión corregida en su propio CDN. Se usa exactamente igual (mismo nombre, misma API) — solo cambia de dónde se instala.
 - El backend corre detrás del proxy de Render, por eso `server.js` tiene `app.set('trust proxy', 1)` — necesario para que el rate limiting identifique bien la IP de cada visitante.
 - **Candado (advisory lock) en las migraciones de `db.js`**: si algún día corren varias instancias del servidor a la vez, la segunda espera a que la primera termine de migrar el esquema, en vez de correr las mismas instrucciones al mismo tiempo.
+- **`npm run dev` no arranca contra producción (2026-09-19)**: la regla 1 de `CLAUDE.md` dejó de ser un párrafo y es un candado en `config/db.js`. Tres cosas que vale la pena saber antes de tocarlo:
+  - **Se dispara por evidencia positiva de arranque local** (`npm_lifecycle_event === 'dev'` o `NODE_ENV=development` a mano), nunca por *ausencia* de `NODE_ENV`. Render corre `npm start` y no hay `render.yaml` en el repo que garantice que define `NODE_ENV`; un candado que se disparara "cuando no dice production" tumbaría la API real el día que Render cambiara ese default.
+  - **El host de producción no está en el código** porque el repositorio es público: sale de `PROD_DATABASE_HOST`, que vive en el `.env`. Sin esa variable no hay candado, y el backend lo avisa fuerte en cada arranque en vez de callarse.
+  - **La salida de emergencia es `ALLOW_PROD_DB` con la fecha de hoy**, no un `1`: `$env:ALLOW_PROD_DB="2026-09-19"; npm run dev`. Un `1` olvidado en el `.env` dejaría el candado muerto para siempre; una fecha caduca sola.
+
+  **Lo que no cubre, a propósito**: `npm start` en local y los scripts de `backend/scripts/`, que usan `pg` directo por la regla 3 y simulan por default. Cubre el accidente real, que es `npm run dev` — y de paso el de la regla 2, porque un segundo backend contra producción ahora muere antes de correr `initSchema()`.
 
 ### Vulnerabilidades de `npm audit` — evaluadas y aceptadas conscientemente
 

@@ -1,7 +1,85 @@
 import pg from 'pg';
 import { HOY_MX } from '../utils/sqlDates.js';
+import { decidirCandadoProduccion, hoyEnMexico } from '../utils/prodGuard.js';
 
 const { Pool } = pg;
+
+// ── Candado contra escribir en producción desde local ──
+//
+// La regla 1 de CLAUDE.md —"nunca probar contra producción"— era hasta hoy
+// solo texto. La DATABASE_URL local apunta a la base real, así que cualquier
+// clic en localhost:5173 escribe filas de verdad y nada lo impide. Esto la
+// convierte en mecanismo.
+//
+// Solo actúa con EVIDENCIA POSITIVA de que el arranque es local:
+// `npm_lifecycle_event === 'dev'` (o sea, `npm run dev`) o NODE_ENV=development
+// puesta a mano. Nunca por AUSENCIA de NODE_ENV, y la diferencia importa:
+// Render corre `npm start` y en el repositorio no hay render.yaml que
+// garantice que define NODE_ENV. Un candado que se dispara "cuando no dice
+// production" tumbaría el servicio real el día que Render cambie ese default.
+// El costo de equivocarse no es simétrico: de un lado se pierde una sesión
+// local, del otro se cae la API.
+//
+// La señal es de npm y NO de node a propósito. La lectura obvia sería
+// `process.execArgv.includes('--watch')`, y está MAL: el modo watch de Node
+// relanza el programa en un proceso HIJO, y el hijo ve `execArgv` vacío.
+// Se probó, no se supuso. (El hijo sí hereda `WATCH_REPORT_DEPENDENCIES=1`,
+// pero eso es interno de Node y no hay promesa de que siga existiendo.)
+// `npm_lifecycle_event` en cambio es npm quien la pone, vale 'dev' o 'start'
+// según el script, y sobrevive al hijo de watch.
+//
+// El host de producción NO está escrito aquí: el repositorio es PÚBLICO. Sale
+// de PROD_DATABASE_HOST, que vive en el .env, que sí está en .gitignore. Sin
+// esa variable el candado no puede hacer nada — y entonces lo dice en voz
+// alta en lugar de callarse, que es la otra forma de fallar.
+//
+// La salida de emergencia es ALLOW_PROD_DB con la FECHA DE HOY en México
+// (ALLOW_PROD_DB=2026-09-19), no un "1". Un "1" olvidado en el .env deja el
+// candado muerto para siempre y nadie se entera; una fecha deja de servir
+// mañana sola. Misma idea que el resto del proyecto: que la garantía sea un
+// dato, no la memoria de alguien.
+//
+// Lo que NO cubre, dicho de frente: `npm start` en local y los scripts de
+// backend/scripts/ (que usan `pg` directo por la regla 3 y simulan por
+// default). Cubre el accidente real, que es `npm run dev`.
+
+// La decisión vive en utils/prodGuard.js, que es puro y sí lo prueba el CI.
+// Aquí queda solo el efecto: avisar o negarse a arrancar.
+function revisarQueNoSeaProduccion(databaseUrl) {
+  const hoyMx = hoyEnMexico();
+  const decision = decidirCandadoProduccion({
+    databaseUrl,
+    npmLifecycleEvent: process.env.npm_lifecycle_event,
+    nodeEnv: process.env.NODE_ENV,
+    prodHost: process.env.PROD_DATABASE_HOST,
+    allowProdDb: process.env.ALLOW_PROD_DB,
+    hoyMx,
+  });
+
+  if (decision.accion === 'pasar') return;
+
+  if (decision.accion === 'avisar') {
+    console.warn(decision.autorizado
+      ? `[db] PRODUCCIÓN (${decision.host}) desde un arranque local, autorizado con ALLOW_PROD_DB=${hoyMx}. ` +
+        'Todo lo que escribas es real.'
+      : `[db] Arranque local sin PROD_DATABASE_HOST: no hay candado. Conectando a ${decision.host || '(host ilegible)'}. ` +
+        'Si esa es la base real, todo lo que hagas desde localhost se escribe de verdad. ' +
+        'Define PROD_DATABASE_HOST en backend/.env para que esto deje de ser un aviso y sea un candado.');
+    return;
+  }
+
+  throw new Error(
+    `Este arranque es local y DATABASE_URL apunta a PRODUCCIÓN (${decision.host}).\n` +
+    '\n' +
+    'Para cualquier prueba que escriba, crea una rama en Neon (Branches → New\n' +
+    'branch, copia instantánea) y apunta DATABASE_URL ahí. Es la regla 1 de\n' +
+    'CLAUDE.md y lo que exige backend/tests/README.md para las suites e2e.\n' +
+    '\n' +
+    'Si de verdad tienes que tocar producción desde local, pásalo en la línea de\n' +
+    'comandos para esta corrida (no lo escribas en el .env, ahí se olvida\n' +
+    `encendido):  $env:ALLOW_PROD_DB="${hoyMx}"; npm run dev`
+  );
+}
 
 let pool;
 function getPool() {
@@ -11,6 +89,12 @@ function getPool() {
         'Falta la variable de entorno DATABASE_URL. Define la cadena de conexión de Postgres (Neon) antes de iniciar el servidor.'
       );
     }
+    // Se revisa aquí y no al importar el módulo: en ESM los imports se
+    // evalúan ANTES del cuerpo de server.js, o sea antes de dotenv.config(),
+    // y ahí process.env todavía no tiene lo del .env. getPool() corre cuando
+    // initSchema() pide la primera conexión, que ya es después.
+    revisarQueNoSeaProduccion(process.env.DATABASE_URL);
+
     // Tamaño y tiempos del pool explícitos, no los de fábrica de `pg`:
     //  - `max`: Render (plan gratuito) corre una sola instancia, así que 10
     //    conexiones alcanzan de sobra y quedan muy por debajo del límite de

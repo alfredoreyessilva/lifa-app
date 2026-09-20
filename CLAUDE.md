@@ -36,7 +36,7 @@ cd frontend && npm install && npm run dev    # :5173
 npm test                                      # en cualquiera de los dos: node --test, <1s
 ```
 
-135 pruebas unitarias (54 backend + 81 frontend) corren en el CI en cada push.
+148 pruebas unitarias (67 backend + 81 frontend) corren en el CI en cada push.
 Las dos suites de punta a punta de cobranza **no**: necesitan Postgres vivo.
 Instrucciones en `backend/tests/README.md`.
 

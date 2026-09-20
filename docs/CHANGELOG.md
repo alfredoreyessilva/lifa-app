@@ -42,6 +42,61 @@ entradas traen el post-mortem del bug que las provocó.
   `CURRENT_DATE` daba `2026-09-20` y tanto el alta como la baja siguieron dando
   `2026-09-19`. Se comprobó además que ninguna otra fila se movió.
 
+- **No poder escribir en producción desde local dejó de ser un párrafo y pasó a
+  ser un candado (2026-09-19)**: la regla 1 de `CLAUDE.md` decía "nunca probar
+  contra producción", pero nada lo impedía — la `DATABASE_URL` local apunta a la
+  base real, así que cualquier clic en `localhost:5173` escribía filas de
+  verdad. Ahora `npm run dev` **se niega a arrancar** en ese caso, con un
+  mensaje que dice cómo crear la rama de Neon.
+
+  Tres decisiones que no son obvias:
+
+  1. **Solo actúa con evidencia POSITIVA de arranque local** —
+     `npm_lifecycle_event === 'dev'` o `NODE_ENV=development` puesta a mano—,
+     nunca por *ausencia* de `NODE_ENV`. Render corre `npm start` y en el
+     repositorio no hay `render.yaml` que garantice que define `NODE_ENV`: un
+     candado que se disparara "cuando no dice production" tumbaría la API de
+     verdad el día que Render cambiara ese default. El costo de equivocarse no
+     es simétrico.
+  2. **La señal es de npm, no de node.** La lectura obvia era
+     `process.execArgv.includes('--watch')`, y está **mal**: el modo watch de
+     Node relanza el programa en un proceso hijo, y el hijo ve `execArgv`
+     **vacío**. Se probó antes de escribirlo, no se supuso.
+  3. **El host de producción no va en el código**, porque el repositorio es
+     público: sale de `PROD_DATABASE_HOST`, que vive en el `.env` (que sí está
+     en `.gitignore`). Sin esa variable el candado no puede actuar, y entonces
+     lo **avisa en voz alta** en cada arranque en vez de callarse.
+
+  La salida de emergencia es `ALLOW_PROD_DB` con la **fecha de hoy**
+  (`$env:ALLOW_PROD_DB="2026-09-19"; npm run dev`), no un `1`. Un `1` olvidado
+  en el `.env` deja el candado muerto para siempre sin que nadie se entere; una
+  fecha deja de servir sola al día siguiente. Mismo criterio que el resto del
+  proyecto: que la garantía sea un dato, no la memoria de alguien.
+
+  De paso cierra el otro accidente de la regla 2 —levantar un segundo backend
+  en el 4000 contra producción, que tumba las consultas del que sí está
+  sirviendo—: el segundo ahora muere antes de correr `initSchema()`.
+
+  **Lo que NO cubre, dicho de frente**: `npm start` en local y los scripts de
+  `backend/scripts/` (que usan `pg` directo por la regla 3 y simulan por
+  default). Cubre el accidente real, que es `npm run dev`.
+
+  **Verificado** en los ocho escenarios, cada uno en su propio proceso porque el
+  pool se memoiza: Render con `npm start` y sin `NODE_ENV` (no bloquea, que es
+  el caso que no se podía romper), `npm run dev` contra producción (bloquea),
+  con permiso de hoy (pasa), con permiso de ayer (bloquea), contra una rama de
+  Neon (pasa) y sin `PROD_DATABASE_HOST` (avisa y pasa). Y de punta a punta: un
+  `npm run dev` real se negó a arrancar sin abrir el pool. Los escenarios usan
+  un host de producción **inventado**, para que un candado roto no tocara la
+  base real ni en la prueba.
+
+  **Y lo cubre el CI**, que es lo que hace que siga siendo cierto dentro de seis
+  meses: la *decisión* se extrajo a `utils/prodGuard.js` como función pura —que
+  es lo único que este proyecto puede probar sin Postgres— y `db.js` se quedó
+  solo con el efecto. Son 13 pruebas nuevas (67 en el backend, 148 en total), y
+  la que más importa es la que fija que **Render no se bloquea**: si alguien
+  "mejora" el candado para disparar por ausencia de `NODE_ENV`, se pone roja en
+  el CI en vez de caerse la API.
 
 - **El cron dejó de ser una caja negra: vive en el repo y se ve en el panel
   (2026-09-19)**: era el pendiente más viejo de esta lista — `POST
