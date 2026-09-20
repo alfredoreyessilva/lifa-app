@@ -8,6 +8,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { MEXICO_STATES } from '../utils/mexicoStates.js';
 import { MATCH_SCOPE_JOINS, MATCH_SCOPE_COLUMNS } from '../utils/matchScope.js';
 import { buildBranchStandings } from '../utils/branchStandings.js';
+import { interruptoresDeCategoria, rosterEsPublico, fotoSePublica } from '../utils/rosterVisibility.js';
 
 const router = express.Router();
 
@@ -76,6 +77,12 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
       c.year    AS year,
       c.auto_status_enabled      AS auto_status_enabled,
       c.auto_status_window_hours AS auto_status_window_hours,
+      -- Si la categoría publica su roster, esta pantalla ofrece el botón de
+      -- cada equipo; si no, no hay nada que abrir y el botón no existe. Viaja
+      -- con el partido y no en una llamada aparte: es un booleano, y pedirlo
+      -- por separado obligaría a cargar la pantalla dos veces para decidir si
+      -- se pinta un botón.
+      c.roster_public AS roster_public,
       l.id      AS league_id,
       l.name    AS league_name,
       l.slug    AS league_slug,
@@ -545,9 +552,15 @@ router.post('/:leagueId/categories', authRequired, leagueOwnerRequired, asyncHan
   const { name, sort_order, season, year, auto_status_enabled, auto_status_window_hours } = req.body;
   if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre de la categoría es obligatorio' });
 
+  // Si la pantalla no preguntó, nacen apagadas — que es el default del esquema
+  // y la respuesta que no lastima a nadie (README, "Roster público y pase de
+  // lista"). Quien decide es la liga, al crear la categoría: es cuando la
+  // pregunta significa algo, porque una categoría ES un corte de edad.
+  const roster = interruptoresDeCategoria(req.body) || { roster_public: false, roster_photos: false };
+
   const result = await db.prepare(`
-    INSERT INTO categories (league_id, name, sort_order, season, year, auto_status_enabled, auto_status_window_hours)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO categories (league_id, name, sort_order, season, year, auto_status_enabled, auto_status_window_hours, roster_public, roster_photos)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.league.id,
     name.trim().toUpperCase(),
@@ -555,7 +568,9 @@ router.post('/:leagueId/categories', authRequired, leagueOwnerRequired, asyncHan
     season ? season.trim().toUpperCase() : null,
     year ? parseInt(year) : null,
     auto_status_enabled ? true : false,
-    auto_status_enabled ? parseInt(auto_status_window_hours) : null
+    auto_status_enabled ? parseInt(auto_status_window_hours) : null,
+    roster.roster_public,
+    roster.roster_photos
   );
 
   res.status(201).json(await db.prepare('SELECT * FROM categories WHERE id = ?').get(result.lastInsertRowid));
@@ -770,16 +785,22 @@ router.post('/tournaments/:tournamentId/categories', authRequired, tournamentOwn
   const { name, sort_order, auto_status_enabled, auto_status_window_hours } = req.body;
   if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre de la categoría es obligatorio' });
 
+  // Ver la nota del otro alta de categoría: las dos nacen apagadas si la
+  // pantalla no preguntó.
+  const roster = interruptoresDeCategoria(req.body) || { roster_public: false, roster_photos: false };
+
   const result = await db.prepare(`
-    INSERT INTO categories (league_id, tournament_id, name, sort_order, auto_status_enabled, auto_status_window_hours)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO categories (league_id, tournament_id, name, sort_order, auto_status_enabled, auto_status_window_hours, roster_public, roster_photos)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.tournament.league_id,
     req.tournament.id,
     name.trim().toUpperCase(),
     sort_order || 0,
     auto_status_enabled ? true : false,
-    auto_status_enabled ? parseInt(auto_status_window_hours) : null
+    auto_status_enabled ? parseInt(auto_status_window_hours) : null,
+    roster.roster_public,
+    roster.roster_photos
   );
 
   res.status(201).json(await db.prepare('SELECT * FROM categories WHERE id = ?').get(result.lastInsertRowid));
@@ -1083,5 +1104,71 @@ router.get('/branches/:branchId/standings', asyncHandler(async (req, res) => {
   res.json({ ...standings, branch: { ...standings.branch, ...branch } });
 }));
 
+
+// ── El roster de un equipo, en público ───────────────────────────────────
+//
+// La pantalla que la regla 7 de CLAUDE.md describe: NOMBRE, NÚMERO Y POSICIÓN,
+// que es lo que trae un programa de mano impreso. `curp` y `birth_date` no
+// salen nunca y por eso el SELECT nombra sus columnas una por una, igual que
+// `GET /players/:id/card`. La foto solo si las dos partes están de acuerdo
+// (ver utils/rosterVisibility.js).
+//
+// Vive aquí, en el router de ligas, y no bajo un prefijo `/public` como decía
+// el plan: esta app no tiene tal prefijo — su superficie pública son estos
+// endpoints sin `authRequired`, y el vecino natural de este es
+// `/branches/:branchId/standings`, que ya filtra por `l.is_public` igual.
+//
+// Responde 404 —y no 403— a un roster privado, por la misma razón que la
+// tarjeta del jugador: desde afuera no se debe poder distinguir "existe pero no
+// te lo muestro" de "no existe". Un 403 confirmaría que esa categoría, ese
+// equipo y esa rama existen.
+router.get('/branches/:branchId/teams/:teamId/roster', asyncHandler(async (req, res) => {
+  // La inscripción (branch_teams) es el punto de partida: sin ella, este equipo
+  // no participa en esta rama y no hay roster que enseñar. De ahí cuelgan los
+  // dos interruptores, el de la categoría y el del propio equipo.
+  const ctx = await db.prepare(`
+    SELECT b.id   AS branch_id,   b.name AS branch_name,
+           c.id   AS category_id, c.name AS category_name, c.season, c.year,
+           c.roster_public, c.roster_photos, bt.show_photos,
+           t.id   AS team_id, t.name AS team_name, t.logo_url AS team_logo_url,
+           tr.id  AS tournament_id, tr.name AS tournament_name,
+           l.name AS league_name, l.slug AS league_slug
+    FROM branch_teams bt
+    JOIN branches b       ON b.id = bt.branch_id
+    JOIN categories c     ON c.id = b.category_id
+    JOIN teams t          ON t.id = bt.team_id
+    JOIN leagues l        ON l.id = c.league_id
+    LEFT JOIN tournaments tr ON tr.id = c.tournament_id
+    WHERE bt.branch_id = ? AND bt.team_id = ? AND l.is_public = TRUE
+  `).get(req.params.branchId, req.params.teamId);
+
+  if (!ctx || !rosterEsPublico(ctx)) return res.status(404).json({ error: 'Roster no encontrado' });
+
+  const conFoto = fotoSePublica(ctx, ctx);
+
+  // Quiénes están HOY en el roster (`end_date IS NULL`). El pase de lista, que
+  // se abre desde esta misma pantalla, va a necesitar la otra pregunta —quién
+  // estaba vigente A LA FECHA DEL PARTIDO— y esa llega con él.
+  const roster = await db.prepare(`
+    SELECT p.id, p.first_name, p.last_name,
+           ptm.jersey_number,
+           COALESCE(ptm.position, p.position) AS position
+           ${conFoto ? ', p.photo_url' : ''}
+    FROM player_team_memberships ptm
+    JOIN players p ON p.id = ptm.player_id
+    WHERE ptm.team_id = ? AND ptm.branch_id = ? AND ptm.end_date IS NULL
+    ORDER BY ptm.jersey_number NULLS LAST, p.last_name
+  `).all(ctx.team_id, ctx.branch_id);
+
+  res.json({
+    league:     { name: ctx.league_name, slug: ctx.league_slug },
+    tournament: ctx.tournament_id ? { id: ctx.tournament_id, name: ctx.tournament_name } : null,
+    category:   { id: ctx.category_id, name: ctx.category_name, season: ctx.season, year: ctx.year },
+    branch:     { id: ctx.branch_id, name: ctx.branch_name },
+    team:       { id: ctx.team_id, name: ctx.team_name, logo_url: ctx.team_logo_url },
+    photos:     conFoto,
+    roster,
+  });
+}));
 
 export default router;

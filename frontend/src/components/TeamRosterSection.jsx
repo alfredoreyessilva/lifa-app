@@ -78,6 +78,7 @@ export default function TeamRosterSection({ team, token }) {
             branchId={openBranch.branch_id}
             team={team}
             token={token}
+            teamSide
             onClose={() => { setOpenBranch(null); loadBranches(); }}
           />
         )}
@@ -259,6 +260,7 @@ export default function TeamRosterSection({ team, token }) {
           branchId={openBranch.branch_id}
           team={team}
           token={token}
+          teamSide
           onClose={() => { setOpenBranch(null); loadBranches(); }}
         />
       )}

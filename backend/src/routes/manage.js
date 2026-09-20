@@ -17,6 +17,7 @@ import { notifyMatchFollowers } from '../utils/pushNotifier.js';
 import { PHASE_TYPES, PHASE_TYPE_KEYS } from '../utils/matchPhase.js';
 import { TIEBREAKER_CATALOG, TIEBREAKER_PRESETS } from '../utils/standings.js';
 import { buildBranchStandings } from '../utils/branchStandings.js';
+import { interruptoresDeCategoria } from '../utils/rosterVisibility.js';
 
 const router = express.Router();
 
@@ -218,6 +219,12 @@ router.put('/categories/:categoryId', authRequired, categoryOwnerRequired, async
   const touchingAutoStatus = auto_status_enabled !== undefined;
   const hoursSql = touchingAutoStatus ? '?' : 'auto_status_window_hours';
 
+  // Los dos interruptores del roster público viajan juntos por el mismo motivo
+  // que el de arriba: editar el nombre de la categoría no puede apagarle la
+  // foto a nadie, ni encenderla. Si la edición no los menciona, no se tocan.
+  const roster = interruptoresDeCategoria(req.body);
+  const rosterSql = roster ? ',\n      roster_public = ?,\n      roster_photos = ?' : '';
+
   const params = [
     toNull(name ? name.trim().toUpperCase() : name),
     toNull(sort_order),
@@ -228,6 +235,9 @@ router.put('/categories/:categoryId', authRequired, categoryOwnerRequired, async
   if (touchingAutoStatus) {
     params.push(auto_status_enabled ? parseInt(auto_status_window_hours) : null);
   }
+  if (roster) {
+    params.push(roster.roster_public, roster.roster_photos);
+  }
   params.push(req.category.id);
 
   await db.prepare(`
@@ -237,7 +247,7 @@ router.put('/categories/:categoryId', authRequired, categoryOwnerRequired, async
       season     = COALESCE(?, season),
       year       = COALESCE(?, year),
       auto_status_enabled      = COALESCE(?, auto_status_enabled),
-      auto_status_window_hours = ${hoursSql}
+      auto_status_window_hours = ${hoursSql}${rosterSql}
     WHERE id = ?
   `).run(...params);
 

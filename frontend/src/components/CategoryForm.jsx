@@ -6,6 +6,11 @@ export default function CategoryForm({ initial, onSubmit, onCancel, submitLabel 
   const [name,   setName]   = useState(initial?.name   || '');
   const [autoStatusEnabled, setAutoStatusEnabled] = useState(initial?.auto_status_enabled || false);
   const [autoStatusHours,   setAutoStatusHours]   = useState(initial?.auto_status_window_hours || '');
+  // Los dos interruptores del roster público. Nacen APAGADOS y ese default es
+  // la decisión de verdad: es la única respuesta que no lastima a nadie si la
+  // pregunta se contesta a las prisas.
+  const [rosterPublic, setRosterPublic] = useState(initial?.roster_public || false);
+  const [rosterPhotos, setRosterPhotos] = useState(initial?.roster_photos || false);
   const [error,  setError]  = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -31,6 +36,8 @@ export default function CategoryForm({ initial, onSubmit, onCancel, submitLabel 
         name: name.trim(),
         auto_status_enabled: autoStatusEnabled,
         auto_status_window_hours: autoStatusEnabled ? Number(autoStatusHours) : null,
+        roster_public: rosterPublic,
+        roster_photos: rosterPublic && rosterPhotos,
       });
     } catch (e) {
       setError(e.message);
@@ -86,6 +93,72 @@ export default function CategoryForm({ initial, onSubmit, onCancel, submitLabel 
             </div>
           </div>
         )}
+      </div>
+
+      {/* ── El roster de esta categoría, ¿se publica? ──
+          Se pregunta AQUÍ, al crear la categoría, y no en un ajuste escondido:
+          una categoría ES un corte de edad y de nivel, así que quien la está
+          creando sabe en este momento si está armando la Infantil o la Mayor.
+          Preguntarlo por equipo obligaría a acertarle veinte veces a la misma
+          decisión. Ver README, "Roster público y pase de lista". */}
+      <div className="field" style={{ background: 'rgba(255,255,255,0.06)', padding: '12px 16px', borderRadius: 10 }}>
+        <label>¿El roster de esta categoría se publica?</label>
+        <div className="pill-group">
+          <button
+            type="button"
+            className={`pill-btn${!rosterPublic ? ' pill-btn--active' : ''}`}
+            onClick={() => { setRosterPublic(false); setRosterPhotos(false); }}
+          >
+            Privado
+          </button>
+          <button
+            type="button"
+            className={`pill-btn${rosterPublic ? ' pill-btn--active' : ''}`}
+            onClick={() => setRosterPublic(true)}
+          >
+            Público
+          </button>
+        </div>
+        <p style={{ fontSize: 13, opacity: 0.75, marginTop: 6 }}>
+          En público se ve <strong>nombre, número y posición</strong> — lo mismo que trae un
+          programa de mano. La CURP y la fecha de nacimiento no salen nunca, y la asistencia
+          tampoco: eso lo siguen viendo solo la liga y el equipo.
+        </p>
+
+        {rosterPublic && (
+          <div style={{ marginTop: 12 }}>
+            <label>¿Y la foto de los jugadores?</label>
+            <div className="pill-group">
+              <button
+                type="button"
+                className={`pill-btn${!rosterPhotos ? ' pill-btn--active' : ''}`}
+                onClick={() => setRosterPhotos(false)}
+              >
+                Sin foto
+              </button>
+              <button
+                type="button"
+                className={`pill-btn${rosterPhotos ? ' pill-btn--active' : ''}`}
+                onClick={() => setRosterPhotos(true)}
+              >
+                Con foto
+              </button>
+            </div>
+            <p style={{ fontSize: 13, opacity: 0.75, marginTop: 6 }}>
+              Esto es el <strong>techo</strong>: cada equipo puede apagar la foto de su propio
+              roster aunque tú la permitas, pero ninguno puede encenderla si tú la dejas apagada.
+            </p>
+          </div>
+        )}
+
+        <p style={{ fontSize: 13, marginTop: 12, marginBottom: 0, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.12)' }}>
+          <strong>Recomendación de CFBAMX.</strong> Si esta categoría es de menores de edad, te
+          sugerimos dejar el roster privado. Publicar el nombre, el número y la cara de un menor
+          en una página abierta no le aporta nada a la competencia y sí lo expone fuera de la
+          cancha. Lo que el proceso de competencia sí necesita —quién está inscrito, quién
+          asistió, quién es elegible— la liga y el equipo ya lo ven sin que nada de eso sea
+          público. Tú decides: es tu torneo y tus familias.
+        </p>
       </div>
 
       <div className="modal-actions">

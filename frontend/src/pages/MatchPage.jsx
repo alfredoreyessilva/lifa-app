@@ -249,6 +249,37 @@ export default function MatchPage() {
           </div>
         )}
 
+        {/* ── Roster de cada equipo ──
+            Se abre desde el PARTIDO y no desde un link suelto: es el mismo
+            botón que va a abrir el pase de lista para quien tenga permiso, y
+            la asistencia es a un partido (README, "Roster público y pase de
+            lista"). Aparece solo si la categoría publica su roster.
+
+            Un partido creado por nombre y nunca sincronizado no sabe de qué
+            equipo habla (home_team_id / away_team_id son nullable), así que
+            ahí no hay roster que abrir y el botón no se pinta. Conectarlos es
+            trabajo de la liga, no del visitante. */}
+        {match.roster_public && match.branch_id && (match.home_team_id || match.away_team_id) && (
+          <div className="match-card-actions" style={{ marginTop: 16 }}>
+            {match.home_team_id && (
+              <Link
+                to={`/ramas/${match.branch_id}/equipos/${match.home_team_id}/roster`}
+                className="btn btn-outline btn-sm"
+              >
+                Roster — {match.home_team}
+              </Link>
+            )}
+            {match.away_team_id && (
+              <Link
+                to={`/ramas/${match.branch_id}/equipos/${match.away_team_id}/roster`}
+                className="btn btn-outline btn-sm"
+              >
+                Roster — {match.away_team}
+              </Link>
+            )}
+          </div>
+        )}
+
         <div className="match-card-actions" style={{ marginTop: 16 }}>
           {isLeagueOwner && (
             <button type="button" className="btn btn-flag btn-sm" onClick={openEdit}>

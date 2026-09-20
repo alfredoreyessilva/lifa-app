@@ -1977,6 +1977,41 @@ export async function initSchema() {
         CHECK (role IS NULL OR role IN (${TODOS_LOS_ROLES.map((r) => `'${r}'`).join(', ')}))
     `);
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Roster público: la liga decide al crear la categoría (README, "Roster
+    // público y pase de lista", 2026-09-20).
+    //
+    // Las dos nacen APAGADAS, y ese default es la decisión de verdad: es lo que
+    // va a quedar en la mayoría de las categorías, y es la única respuesta que
+    // no lastima a nadie si la pregunta se contesta a las prisas. Publicar el
+    // nombre, el número y la cara de un menor en una página abierta no le
+    // aporta nada a la competencia.
+    //
+    //   roster_public   si el roster de esa categoría sale en público
+    //   roster_photos   si además puede salir la foto
+    //
+    // NOT NULL con default: una categoría que ya existía queda en FALSE, que es
+    // exactamente lo que hoy hace el sistema (no publica ningún roster), así que
+    // esto no cambia nada de lo ya escrito.
+    await run(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS roster_public BOOLEAN NOT NULL DEFAULT FALSE`);
+    await run(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS roster_photos BOOLEAN NOT NULL DEFAULT FALSE`);
+
+    // El veto del equipo sobre las caras de sus jugadores. La categoría fija el
+    // techo; esto solo puede BAJARLO — no existe la operación contraria, y por
+    // eso la foto se publica únicamente si las dos están de acuerdo:
+    //
+    //     categories.roster_photos AND COALESCE(branch_teams.show_photos, TRUE)
+    //
+    // Nullable a propósito: NULL significa "sigue a la categoría", así que un
+    // equipo que nunca tocó nada no bloquea a su liga, y un FALSE explícito es
+    // una decisión que alguien tomó. Son tres estados y no dos, y por eso no
+    // lleva NOT NULL DEFAULT.
+    //
+    // Va en `branch_teams` porque es exactamente una fila por rama + equipo:
+    // el consentimiento de las familias es de ESE roster, no del equipo para
+    // siempre ni de la categoría entera.
+    await run(`ALTER TABLE branch_teams ADD COLUMN IF NOT EXISTS show_photos BOOLEAN`);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se

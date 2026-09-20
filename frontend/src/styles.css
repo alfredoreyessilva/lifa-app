@@ -3844,3 +3844,141 @@ a.match-card-new {
    aquí, y no lo estás editando" mejor que esconderla o que dejarla igual que
    una editable. */
 .competition-criteria.is-inherited { opacity: 0.55; }
+
+/* ── Roster público ──────────────────────────────────────────────────────
+   La pantalla que se abre desde el partido. Toma prestados el copete y el
+   nombre de la tarjeta del jugador (.player-hero-eyebrow, .player-hero-name)
+   porque son hermanas: las dos son "lo público de una persona en una
+   temporada". El número manda en la fila —es como se busca a alguien en un
+   programa de mano, antes que por el nombre— y por eso va primero, grande y
+   en amarillo.
+
+   La lista va en la tarjeta NEGRA (--card-open) y no directo sobre la cancha,
+   por la regla que ya está escrita arriba en este archivo: esto es una
+   pantalla, no un elemento de una lista. Sobre el verde, el renglón que separa
+   a un jugador del siguiente casi no se ve, y el texto chico del pie se queda
+   en 3.4:1 de contraste, debajo del 4.5:1 que pide AA. */
+.public-roster-page {
+  max-width: 640px;
+}
+
+.public-roster-head {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 24px 0;
+  margin-bottom: 16px;
+}
+
+.public-roster-card {
+  background: var(--card-open);
+  border: 1px solid var(--card-open-line);
+  border-radius: 10px;
+  padding: 8px 18px 16px;
+}
+
+.public-roster-logo {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--surface);
+  border: 3px solid var(--flag);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 26px;
+  color: var(--flag);
+}
+.public-roster-logo img { width: 100%; height: 100%; object-fit: contain; }
+
+.public-roster-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--card-open-line);
+}
+.public-roster-row:last-child { border-bottom: none; }
+
+.public-roster-num {
+  font-family: var(--font-display);
+  font-size: 24px;
+  line-height: 1;
+  color: var(--flag);
+  min-width: 46px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Solo se pinta si la categoría Y el equipo habilitaron la foto. Cuando no,
+   la fila no deja el hueco: no hay nada que ocultar, simplemente no existe. */
+.public-roster-photo {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--card-open-section);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+.public-roster-photo img { width: 100%; height: 100%; object-fit: cover; }
+
+.public-roster-who { min-width: 0; }
+.public-roster-name {
+  font-family: var(--font-eyebrow);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+.public-roster-pos {
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.public-roster-note {
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--card-open-line);
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+/* En celular el número se encoge y la foto se va: con 46px de número más 40
+   de foto, al nombre largo no le queda ancho y parte en tres renglones. */
+@media (max-width: 420px) {
+  .public-roster-num { min-width: 34px; font-size: 20px; }
+  .public-roster-card { padding: 8px 14px 14px; }
+  .public-roster-head { gap: 14px; }
+  .public-roster-logo { width: 64px; height: 64px; font-size: 20px; }
+}
+
+/* ── Estado de publicación de un roster (modal del roster por rama) ──────
+   Es contexto, no un formulario: va arriba, en una caja apagada, y solo el
+   panel del equipo pinta dentro la casilla que apaga la foto. */
+.roster-visibility {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+.roster-visibility-line {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+.roster-visibility-line:last-child { margin-bottom: 0; }
+.roster-visibility-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 13px;
+  cursor: pointer;
+}

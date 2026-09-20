@@ -239,6 +239,21 @@ export const api = {
       { method: 'DELETE', token },
     ),
 
+  // El veto del EQUIPO sobre las caras de sus jugadores en este roster. Tres
+  // valores: null sigue a la categoría, false no publica, true publica si la
+  // categoría lo permite (nunca por su cuenta). La liga no llama a esto — su
+  // interruptor es el de la categoría, y ese es el techo.
+  setBranchTeamPhotos: (branchId, teamId, showPhotos, token) =>
+    request(`/players/branches/${branchId}/teams/${teamId}/photos`, {
+      method: 'PUT', body: { show_photos: showPhotos }, token,
+    }),
+
+  // El roster recortado, sin cuenta: nombre, número y posición (y la foto solo
+  // si las dos partes la habilitaron). Es el otro endpoint, no este con el
+  // token quitado — el de arriba trae CURP y fecha de nacimiento.
+  getPublicBranchTeamRoster: (branchId, teamId) =>
+    request(`/leagues/branches/${branchId}/teams/${teamId}/roster`),
+
   // Roster por plantilla de Excel: descarga la plantilla ya personalizada
   // (membrete de liga + equipo + torneo/categoría/rama) y sube la plantilla
   // llena. La subida solo agrega los jugadores que no estén ya en la rama.

@@ -8,8 +8,16 @@ import ConfirmDialog from './ConfirmDialog.jsx';
 // rama). Dos formas de armarlo: por plantilla de Excel (se descarga con el
 // membrete de la liga y se vuelve a subir llena) o capturando jugador por
 // jugador abajo.
-export default function BranchRosterModal({ branchId, team, token, onClose }) {
+//
+// `teamSide` lo pasa el panel del EQUIPO y no el de la liga: es lo que decide
+// si el interruptor de la foto se puede tocar. La liga ve el estado, porque es
+// suya la decisión de arriba (la de la categoría), pero el veto sobre las caras
+// de sus jugadores es del equipo y solo del equipo — quien lo intente desde el
+// otro lado se topa con un 403, esto solo esconde el botón.
+export default function BranchRosterModal({ branchId, team, token, teamSide = false, onClose }) {
   const [roster, setRoster] = useState(null);
+  const [visibility, setVisibility] = useState(null);
+  const [photosBusy, setPhotosBusy] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ first_name: '', last_name: '', position: '', jersey_number: '', curp: '' });
   const [saving, setSaving] = useState(false);
@@ -31,6 +39,7 @@ export default function BranchRosterModal({ branchId, team, token, onClose }) {
     try {
       const data = await api.getBranchTeamRoster(branchId, team.id, token);
       setRoster(data.roster);
+      setVisibility(data.visibility);
     } catch (e) {
       setError(e.message);
     }
@@ -114,6 +123,22 @@ export default function BranchRosterModal({ branchId, team, token, onClose }) {
     }
   }
 
+  // El equipo solo puede APAGAR. Por eso la casilla manda `false` (no publico
+  // fotos) o `null` (sigo a la categoría) y nunca `true`: encender no es una
+  // operación que este lado tenga, y `null` ya significa "lo que diga la liga".
+  async function handlePhotos(veto) {
+    setPhotosBusy(true);
+    setError('');
+    try {
+      const { visibility: next } = await api.setBranchTeamPhotos(branchId, team.id, veto ? false : null, token);
+      setVisibility(next);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setPhotosBusy(false);
+    }
+  }
+
   // `hard` viene de la casilla del diálogo: apagada da de baja (queda el paso
   // por el equipo en el historial del jugador), prendida borra sin rastro.
   async function handleRemove(hard) {
@@ -125,6 +150,49 @@ export default function BranchRosterModal({ branchId, team, token, onClose }) {
   return (
     <Modal title={`Roster — ${team.name}`} onClose={onClose}>
       {error && <div className="form-error">{error}</div>}
+
+      {/* ── En qué estado está la publicación de este roster ──
+          Va arriba de todo porque cambia el significado de lo que sigue: subir
+          una foto no es lo mismo si esa foto va a salir en una página abierta.
+          Quien administra el roster tiene que saberlo ANTES de subirla, no
+          después. */}
+      {visibility && (
+        <div className="roster-visibility">
+          {!visibility.roster_public ? (
+            <p className="roster-visibility-line">
+              <strong>Roster privado.</strong> La liga no publica el roster de esta categoría:
+              nada de lo que captures aquí sale en público.
+            </p>
+          ) : (
+            <>
+              <p className="roster-visibility-line">
+                <strong>Roster público.</strong> De esta rama se publica el <strong>nombre, el
+                número y la posición</strong> de cada jugador. La CURP y la fecha de nacimiento
+                no salen nunca, y la asistencia tampoco.
+              </p>
+              <p className="roster-visibility-line">
+                {!visibility.roster_photos
+                  ? 'La categoría no permite fotos, así que ninguna sale en público.'
+                  : visibility.photos_visible
+                    ? 'La foto de tus jugadores sí sale en público.'
+                    : 'Apagaste la foto para este roster: no sale, aunque la categoría la permita.'}
+              </p>
+              {teamSide && (
+                <label className="roster-visibility-toggle">
+                  <input
+                    type="checkbox"
+                    checked={visibility.show_photos === false}
+                    disabled={photosBusy}
+                    onChange={(e) => handlePhotos(e.target.checked)}
+                  />
+                  No publicar la foto de mis jugadores en este roster
+                  {photosBusy ? ' — guardando…' : ''}
+                </label>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* ── Subir por plantilla de Excel ── */}
       <div className="import-actions" style={{ marginBottom: 20 }}>

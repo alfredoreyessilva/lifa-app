@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
-import { teamViewRequired, matchScoreRequired, branchTeamOwnerRequired } from '../middleware/ownership.js';
+import { teamViewRequired, matchScoreRequired, branchTeamOwnerRequired, branchTeamPhotoRequired } from '../middleware/ownership.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isNonEmptyString } from '../utils/validation.js';
 import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL } from '../utils/scoring.js';
@@ -14,6 +14,7 @@ import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL } from '../utils/scoring.js'
 // México quedaba fechada al día siguiente. No es dinero, pero sí es la
 // trayectoria del jugador — y el día que se corta mal es el mismo.
 import { HOY_MX } from '../utils/sqlDates.js';
+import { visibilidadDeRoster, fotoSePublicaSql } from '../utils/rosterVisibility.js';
 
 const router = express.Router();
 
@@ -135,7 +136,37 @@ router.get('/branches/:branchId/teams/:teamId/roster', authRequired, branchTeamO
     WHERE ptm.team_id = ? AND ptm.branch_id = ? AND ptm.end_date IS NULL
     ORDER BY ptm.jersey_number NULLS LAST, p.last_name
   `).all(req.team.id, req.branch.id);
-  res.json({ roster });
+
+  // En qué estado está la publicación de ESTE roster: los dos interruptores de
+  // la categoría, el veto del equipo y la conclusión ya resuelta. Viaja con el
+  // roster y no en un endpoint aparte porque es la misma pantalla la que lo
+  // pinta, y pedirlo dos veces era pedirle dos cosas al mismo botón.
+  const inscripcion = await db.prepare(
+    'SELECT show_photos FROM branch_teams WHERE branch_id = ? AND team_id = ?'
+  ).get(req.branch.id, req.team.id);
+
+  res.json({ roster, visibility: visibilidadDeRoster(req.category, inscripcion) });
+}));
+
+// El veto del equipo sobre las caras de sus jugadores. Tres estados, no dos:
+//
+//   null   sigue a la categoría (como nace)
+//   false  este equipo NO publica fotos, aunque su categoría las permita
+//   true   este equipo las publica SI su categoría las permite — nunca por su
+//          cuenta: encender aquí no enciende nada si el techo está abajo
+//
+// Por eso el cuerpo acepta `null` explícito y no solo un booleano: volver a
+// "sigue a la categoría" tiene que ser posible, y no es lo mismo que apagar.
+router.put('/branches/:branchId/teams/:teamId/photos', authRequired, branchTeamPhotoRequired, asyncHandler(async (req, res) => {
+  const { show_photos } = req.body;
+  if (show_photos !== null && typeof show_photos !== 'boolean') {
+    return res.status(400).json({ error: 'show_photos tiene que ser true, false o null' });
+  }
+
+  await db.prepare('UPDATE branch_teams SET show_photos = ? WHERE branch_id = ? AND team_id = ?')
+    .run(show_photos, req.branch.id, req.team.id);
+
+  res.json({ visibility: visibilidadDeRoster(req.category, { show_photos }) });
 }));
 
 // Agrega un jugador nuevo y lo da de alta en el roster de este equipo, en
@@ -618,8 +649,36 @@ router.get('/:id/card', asyncHandler(async (req, res) => {
   // debe poder distinguir "existe pero no te lo muestro" de "no existe".
   if (trajectory.length === 0) return res.status(404).json({ error: 'Jugador no encontrado' });
 
-  // `user_id` se queda fuera de la respuesta.
-  const { user_id: claimedByUserId, ...player } = row;
+  // ── ¿Sale la foto? ──
+  //
+  // La cara es el dato más expuesto de los cuatro por mucho —el nombre y el
+  // número identifican a alguien dentro de una cancha, una cara lo identifica
+  // en la calle— y no se queda en esta página: el frontend la mete en una
+  // imagen para compartir en redes (utils/playerShareCard.js). Así que la
+  // decisión de publicarla se aplica AQUÍ, en la respuesta, y no al pintarla:
+  // lo que el backend no manda no se puede compartir.
+  //
+  // BOOL_AND y no BOOL_OR: se pide el permiso de TODOS los rosters en los que
+  // este jugador está hoy. Si juega en dos ramas y una de ellas dijo que no,
+  // gana el que dijo que no — un veto que se puede saltar entrando por otra
+  // rama no es un veto.
+  //
+  // Sin filas (un jugador que ya no está en ningún roster activo, o cuyas
+  // membresías vienen de antes de que existiera `branch_id`) BOOL_AND devuelve
+  // NULL, que no es `true`: falla cerrado, como el resto de esta regla.
+  const permisoFoto = await db.prepare(`
+    SELECT BOOL_AND(${fotoSePublicaSql('c', 'bt')}) AS publica
+    FROM player_team_memberships ptm
+    JOIN branches b      ON b.id = ptm.branch_id
+    JOIN categories c    ON c.id = b.category_id
+    JOIN branch_teams bt ON bt.branch_id = ptm.branch_id AND bt.team_id = ptm.team_id
+    WHERE ptm.player_id = ? AND ptm.end_date IS NULL
+  `).get(playerId);
+
+  // `user_id` se queda fuera de la respuesta, y la foto solo entra si la
+  // dejaron entrar.
+  const { user_id: claimedByUserId, photo_url: fotoCruda, ...player } = row;
+  if (permisoFoto?.publica === true) player.photo_url = fotoCruda;
 
   const statsRow = await db.prepare(`
     SELECT

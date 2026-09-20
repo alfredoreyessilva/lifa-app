@@ -441,6 +441,44 @@ export const branchTeamOwnerRequired = asyncHandler(async (req, res, next) => {
   return res.status(403).json({ error: 'No tienes permiso sobre el roster de este equipo en esta rama' });
 });
 
+// El interruptor de la foto del roster público, y es la única guarda del
+// proyecto que deja fuera a la liga A PROPÓSITO.
+//
+// La categoría ya fija el techo (`categories.roster_photos`, que sí administra
+// la liga). Esto es lo otro: el VETO del equipo sobre las caras de sus
+// jugadores, que solo puede bajar ese techo. Si la liga pudiera tocarlo,
+// tendría las dos llaves y el veto no existiría — que es justo lo que la regla
+// 7 de CLAUDE.md conserva para el equipo, porque el consentimiento de las
+// familias lo tiene el club, no la liga.
+//
+// Del lado del equipo es `roster`, el mismo permiso que arma el roster: quien
+// da de alta a un jugador y le sube la foto es quien decide si esa foto sale.
+export const branchTeamPhotoRequired = asyncHandler(async (req, res, next) => {
+  const branchId = Number(req.params.branchId);
+  const teamId = Number(req.params.teamId);
+
+  const branch = await db.prepare('SELECT * FROM branches WHERE id = ?').get(branchId);
+  if (!branch) return res.status(404).json({ error: 'Rama no encontrada' });
+  const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(branch.category_id);
+  const team = await db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId);
+  if (!team) return res.status(404).json({ error: 'Equipo no encontrado' });
+
+  const enrolled = await db.prepare('SELECT * FROM branch_teams WHERE branch_id = ? AND team_id = ?').get(branchId, teamId);
+  if (!enrolled) return res.status(400).json({ error: 'Este equipo no está inscrito en esta rama todavía' });
+
+  const isTeamMember = await isOrgMember(
+    req.user.id, team.organization_id, rolesConPermiso('team', 'roster')
+  );
+  if (req.user.role === 'admin' || isTeamMember || team.owner_user_id === req.user.id) {
+    req.category = category;
+    req.branch = branch;
+    req.team = team;
+    req.branchTeam = enrolled;
+    return next();
+  }
+  return res.status(403).json({ error: 'Solo el equipo decide si la foto de sus jugadores sale en público' });
+});
+
 // Fase de una rama. Mismo encadenamiento que conferenceOwnerRequired: la
 // fase cuelga de la rama, la rama de la categoría y la categoría de la liga,
 // que es donde vive el permiso.

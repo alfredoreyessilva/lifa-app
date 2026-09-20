@@ -22,6 +22,7 @@ const TournamentPage = lazy(() => import('./pages/TournamentPage.jsx'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage.jsx'));
 const MatchPage = lazy(() => import('./pages/MatchPage.jsx'));
 const PlayerCardPage = lazy(() => import('./pages/PlayerCardPage.jsx'));
+const PublicRosterPage = lazy(() => import('./pages/PublicRosterPage.jsx'));
 const RegisterOrganizationPage = lazy(() => import('./pages/RegisterOrganizationPage.jsx'));
 const OrganizationDetailPage = lazy(() => import('./pages/OrganizationDetailPage.jsx'));
 const ProductsPanel = lazy(() => import('./pages/ProductsPanel.jsx'));
@@ -91,6 +92,10 @@ export default function App() {
             <Route path="/categorias/:categoryId/calendario" element={<CalendarPage />} />
             <Route path="/partidos/:matchId" element={<MatchPage />} />
             <Route path="/jugador/:playerId" element={<PlayerCardPage />} />
+            {/* El roster público cuelga de la rama + el equipo, que es donde
+                vive de verdad un roster. Se llega desde el partido; si la
+                categoría no lo publica, el endpoint contesta 404. */}
+            <Route path="/ramas/:branchId/equipos/:teamId/roster" element={<PublicRosterPage />} />
             <Route path="/panel/organizacion/:id" element={<OrganizationDetailPage />} />
             <Route path="/iniciar-sesion" element={<Login />} />
             <Route path="/crear-cuenta" element={<Register />} />

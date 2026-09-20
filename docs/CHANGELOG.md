@@ -15,6 +15,89 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El roster ya se publica, y la foto tiene dos llaves (2026-09-20)**: es la
+  primera mitad de "Roster público y pase de lista", decidida ese mismo día, y
+  con ella el proyecto estrena **la primera superficie pública donde se ve
+  quién juega**. Hasta aquí las públicas eran liga, torneo, calendario, partido
+  y la tarjeta del jugador: ninguna decía quién está en un roster.
+
+  **La decisión se toma al crear la categoría**, que es cuando significa algo:
+  una categoría *es* un corte de edad y de nivel, así que quien la está creando
+  sabe en ese momento si está armando la Infantil o la Mayor. Dos columnas
+  nuevas, las dos **apagadas por default** — `categories.roster_public` y
+  `categories.roster_photos` —, y la pregunta viene con la recomendación de
+  CFBAMX escrita en la pantalla: si la categoría es de menores, déjala privada.
+  Va como recomendación y no como candado por la regla 10: la liga conoce su
+  torneo y sus familias. Lo que sí hacemos es que el default sea el que no
+  lastima a nadie si la pregunta se contesta a las prisas.
+
+  **La foto necesita que las dos partes estén de acuerdo**, y la asimetría es
+  el punto: `branch_teams.show_photos` deja que un equipo **apague** la suya
+  aunque la categoría la permita, y **nunca** encenderla si la categoría la
+  dejó apagada. Nace NULL —"sigue a la categoría"— para que un equipo que no
+  tocó nada no bloquee a su liga. Así la liga puede publicar un programa de
+  mano sin perseguir a veinte equipos, y el equipo conserva el veto sobre las
+  caras de sus jugadores. `PUT /players/branches/:b/teams/:t/photos` es la
+  **única guarda del proyecto que deja fuera a la liga a propósito**: si la
+  liga pudiera tocar ese interruptor tendría las dos llaves y el veto no
+  existiría.
+
+  **Esto cierra la mitad del pendiente de la tarjeta del jugador.** La foto
+  dejó de salir siempre: `GET /players/:id/card` la entrega solo si todos los
+  rosters activos de esa persona la autorizan (`BOOL_AND`, no `BOOL_OR` — un
+  veto que se puede saltar entrando por otra rama no es un veto). Se aplica en
+  la **respuesta** y no al pintarla, que es lo que también la saca de la imagen
+  que `playerShareCard.js` arma para redes: lo que el backend no manda no se
+  puede compartir. Sin filas, `BOOL_AND` devuelve NULL, que no es `true`: falla
+  cerrado. La trayectoria sigue saliendo y sigue pendiente — es otro cambio.
+
+  **Lo que el plan decía y cómo quedó**, dos desvíos que vale anotar:
+
+  1. El endpoint público iba a ser `/public/branches/…`. Quedó en
+     `GET /leagues/branches/:branchId/teams/:teamId/roster`: esta app no tiene
+     prefijo `/public` — su superficie pública son los endpoints de
+     `routes/leagues.js` sin `authRequired`, y el vecino natural de este es
+     `/branches/:branchId/standings`, que ya filtra por `l.is_public` igual.
+  2. El roster público muestra quién está **hoy** (`end_date IS NULL`). La otra
+     pregunta —quién estaba vigente **a la fecha del partido**— la necesita el
+     pase de lista y llega con él.
+
+  Responde **404 y no 403** a un roster privado, por la misma razón que la
+  tarjeta del jugador: desde afuera no se debe poder distinguir "existe pero no
+  te lo muestro" de "no existe". Un 403 confirmaría que esa categoría, ese
+  equipo y esa rama existen.
+
+  **La regla vive en un archivo puro**, `utils/rosterVisibility.js`, por la
+  misma razón que el catálogo de roles: es la regla que decide si la cara de un
+  menor sale en una página abierta, así que tiene que poder probarse sin
+  Postgres — y eso es lo único que el CI alcanza. 10 pruebas nuevas (109 en el
+  backend), y fijan las tres formas de romperla en silencio: que el default
+  deje de estar apagado, que el equipo pueda subir el techo, y que NULL se
+  confunda con FALSE.
+
+  **Verificado contra la rama de Neon y en el navegador**, con un roster real
+  de ONEFA sembrado a propósito con sus casos feos: nueve jugadores, uno **dado
+  de baja a media temporada** (no sale), uno **sin número** (sale al final, con
+  "—"), y los dos equipos del mismo partido en distinto estado — uno publicando
+  fotos, el otro con el veto puesto.
+
+  - El roster público del que veta **no trae la columna `photo_url` siquiera**,
+    no es que llegue y no se pinte.
+  - La tarjeta de un jugador del equipo que veta muestra iniciales; la del otro,
+    su foto.
+  - Prender el veto desde la pantalla del equipo apaga la foto en las **dos**
+    superficies públicas al instante; apagarlo devuelve a NULL —"sigue a la
+    categoría"— y no a `true`.
+  - Editar el nombre de una categoría **no** le apaga el roster: los dos
+    interruptores viajan juntos, mismo criterio que `auto_status_enabled` y sus
+    horas en ese mismo handler.
+  - La guarda contestó 403 al equipo ajeno, 400 a un valor que no es booleano
+    ni null, y 401 sin sesión.
+  - La consulta de la tarjeta se corrió contra los datos reales **dentro de una
+    transacción con `ROLLBACK`** y `lock_timeout`, metiéndole al jugador una
+    segunda membresía en el roster que veta: la foto se apagó, y después del
+    ROLLBACK no se movió ni una fila.
+
 - **Cada rol ya se nota en pantalla (2026-09-20)**: es el paso 5, el último de
   "Roles y fronteras de información", y con él el modelo completo corre de
   punta a punta. Se invita eligiendo rol, la lista de accesos dice con qué
