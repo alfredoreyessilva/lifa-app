@@ -8,6 +8,12 @@ import { teamOwnerRequired, matchOwnerRequired, branchTeamOwnerRequired } from '
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isNonEmptyString } from '../utils/validation.js';
 import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL } from '../utils/scoring.js';
+// Las fechas del roster son las de México, no las de UTC. Es el mismo desfase
+// que ya se había cerrado en los dos libros de cobranza y que aquí seguía
+// vivo: con Neon en UTC, una baja registrada después de las 18:00 hora de
+// México quedaba fechada al día siguiente. No es dinero, pero sí es la
+// trayectoria del jugador — y el día que se corta mal es el mismo.
+import { HOY_MX } from '../utils/sqlDates.js';
 
 const router = express.Router();
 
@@ -174,7 +180,7 @@ router.post('/branches/:branchId/teams/:teamId/roster/:playerId/move', authRequi
 
   await db.prepare(`
     UPDATE player_team_memberships
-    SET end_date = CURRENT_DATE, status = 'ended'
+    SET end_date = ${HOY_MX}, status = 'ended'
     WHERE player_id = ? AND end_date IS NULL
   `).run(playerId);
 
@@ -454,7 +460,7 @@ router.patch('/branches/:branchId/teams/:teamId/roster/:playerId', authRequired,
 // Quita a un jugador del roster de ESTA rama. Dos casos distintos, porque
 // confundirlos ensucia el historial del jugador:
 //
-//   Por default (baja): cierra la membresía (`end_date = CURRENT_DATE`,
+//   Por default (baja): cierra la membresía (`end_date = HOY_MX`,
 //     `status = 'ended'`), igual que hace "mover". El jugador desaparece del
 //     roster —todas las consultas filtran `end_date IS NULL`— pero el paso por
 //     este equipo queda asentado en su trayectoria (`GET /:id/card`). Esto es
@@ -495,7 +501,7 @@ router.delete('/branches/:branchId/teams/:teamId/roster/:playerId', authRequired
   if (!hard) {
     await db.prepare(`
       UPDATE player_team_memberships
-      SET end_date = CURRENT_DATE, status = 'ended'
+      SET end_date = ${HOY_MX}, status = 'ended'
       WHERE id = ?
     `).run(membership.id);
     return res.json({ removed: 'membership_closed', player_deleted: false });

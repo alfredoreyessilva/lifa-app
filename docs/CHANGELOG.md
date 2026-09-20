@@ -15,6 +15,34 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El roster también se fecha en México, no en UTC (2026-09-19)**: la cobranza
+  ya había cerrado este desfase; al roster le faltaban tres lugares. Los dos
+  `UPDATE` que cierran una membresía en `routes/players.js` (mover a un jugador
+  de equipo, y darlo de baja) usaban `CURRENT_DATE`, y la columna
+  `player_team_memberships.start_date` tenía `DEFAULT CURRENT_DATE`. Con Neon
+  corriendo en UTC, eso significa que **un alta o una baja capturada después de
+  las 18:00 hora de México quedaba fechada al día siguiente**. No es dinero,
+  pero es la trayectoria del jugador — y el día se cortaba mal igual.
+
+  Los tres pasan a `HOY_MX` (`utils/sqlDates.js`), la misma expresión que ya
+  usan los dos libros y el candado diario del cron. El `DEFAULT` se cambia con
+  un `ALTER` nuevo al final de `db.js`, sin tocar el `CREATE TABLE` (regla 8), y
+  las filas ya escritas se quedan como están: una fecha mal cortada del pasado
+  no se distingue de una buena, y aquí se resuelve al leer, no se migra.
+
+  `routes/admin.js` se queda con `CURRENT_DATE` a propósito: es una ventana de
+  analítica de 30 días donde seis horas no cambian nada.
+
+  **Verificado contra una rama de Neon** (copia de producción, creada y borrada
+  para esto), todo dentro de transacciones con `lock_timeout` que terminan en
+  `ROLLBACK`. Hoy la fecha UTC y la de México coinciden, así que una inserción
+  normal no distingue una expresión de la otra y no habría probado nada: la
+  prueba que sí prueba pone la **sesión de Postgres en UTC+14**, que reproduce
+  exactamente la condición del bug — el servidor cree que ya es otro día. Ahí
+  `CURRENT_DATE` daba `2026-09-20` y tanto el alta como la baja siguieron dando
+  `2026-09-19`. Se comprobó además que ninguna otra fila se movió.
+
+
 - **El cron dejó de ser una caja negra: vive en el repo y se ve en el panel
   (2026-09-19)**: era el pendiente más viejo de esta lista — `POST
   /api/notifications/trigger` lo llamaba un servicio externo cuya frecuencia no

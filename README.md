@@ -57,7 +57,7 @@ van partidas en tres.
 |Equipos independientes|90%|Traspaso de dueño: hoy un equipo sin acceso a su cuenta no se puede reclamar|
 |Cuotas del club (equipo → jugador)|88%|Prorrateo de quien entra a media quincena; auditoría del padrón; UI para rotar el link; el pie del estado de cuenta a 1.16:1 de contraste|
 |Cobranza (liga → equipo)|88%|Cobro en línea. La zona horaria se cerró el 2026-09-19 (eran cuatro lugares, no dos)|
-|Roster de jugadores|85%|Credencial digital con QR|
+|Roster de jugadores|85%|Credencial digital con QR. La zona horaria de altas y bajas se cerró el 2026-09-19 (eran tres lugares más)|
 |Notificaciones y push|85%|Bandeja propia para jugador/tutor — hoy imposible: `notifications` tiene `CHECK (recipient_type IN ('league','team'))` y los jugadores no tienen cuenta. Que el recordatorio de cobranza SALGA de la plataforma (correo al tutor) sigue sin construirse|
 |Tiendas y bot de WhatsApp|70% · **0% operativo**|Todo el código está; falta el número de WhatsApp Business, saldo de Anthropic y cubrir `bot_messages` en el Aviso de Privacidad|
 |Monetización (afiliados de viaje)|50%|Vuelo funciona; Hotel no genera comisión sin un `VITE_HOTEL_AFFILIATE_ID` de Booking.com|
@@ -94,17 +94,6 @@ sigue abierto, porque un cron MUERTO sigue siendo un cron muerto. Ver
 
 Solo lo que **falta**. Lo que ya se cerró está en `docs/CHANGELOG.md` con su
 verificación.
-
-- **El mismo desfase de zona horaria sigue vivo en el roster (2026-09-19).**
-  La cobranza ya usa `HOY_MX` de punta a punta, pero `routes/players.js` cierra
-  una membresía con `end_date = CURRENT_DATE` (líneas 177 y 498) y
-  `player_team_memberships.start_date` tiene `DEFAULT CURRENT_DATE`. Con Neon en
-  UTC, una baja registrada después de las 18:00 hora de México queda fechada al
-  día siguiente. No se arregló junto con la cobranza porque no es dinero y
-  porque el `DEFAULT` de la columna es un cambio de esquema con su propio
-  riesgo — pero es el mismo bug y hay que cerrarlo. (`routes/admin.js:39` usa
-  `CURRENT_DATE` para una ventana de analítica de 30 días: ahí seis horas no
-  cambian nada y puede quedarse.)
 
 - **`PUT /manage/teams/:id` no es atómico (2026-09-18).** Son tres escrituras
   sueltas: `UPDATE teams`, `UPDATE organizations` y `syncTeamLinksToMatches()`

@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { HOY_MX } from '../utils/sqlDates.js';
 
 const { Pool } = pg;
 
@@ -1817,6 +1818,26 @@ export async function initSchema() {
     await run(`ALTER TABLE cron_runs ADD COLUMN IF NOT EXISTS calls INTEGER NOT NULL DEFAULT 0`);
     await run(`ALTER TABLE cron_runs ADD COLUMN IF NOT EXISTS last_call_at TIMESTAMPTZ`);
 
+    // ── El alta de un jugador se fecha en México, no en UTC ──
+    //
+    // `start_date` nació con DEFAULT CURRENT_DATE, que se evalúa en la zona
+    // del servidor de Postgres — y Neon corre en UTC. Consecuencia: un alta
+    // capturada después de las 18:00 hora de México nacía fechada al día
+    // siguiente. Es el mismo desfase que se cerró en los dos libros de
+    // cobranza el 2026-09-19 (ver utils/sqlDates.js); al roster le faltaban
+    // estos tres lugares: los dos UPDATE de routes/players.js y este DEFAULT.
+    //
+    // La tabla de arriba NO se toca (regla 8: el esquema se agrega, no se
+    // edita). Este ALTER corre en cada arranque y es idempotente, así que
+    // deja igual a una base nueva y a la que ya existe.
+    //
+    // Las filas ya escritas se quedan como están: una fecha mal cortada del
+    // pasado no se sabe distinguir de una buena, y aquí se resuelve al leer,
+    // no se migra (regla 4).
+    await run(`
+      ALTER TABLE player_team_memberships
+        ALTER COLUMN start_date SET DEFAULT ${HOY_MX}
+    `);
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se
