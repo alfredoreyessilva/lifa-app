@@ -15,10 +15,76 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El visor ya captura jugada por jugada, en la cancha y sin señal
+  (2026-09-20)** — la pantalla que faltaba, montada sobre el backend de la
+  entrada de abajo. `/partidos/:matchId/estadisticas` es el tercer botón del
+  partido y se comporta como los otros dos: cualquiera ve el box score, y quien
+  tiene `estadisticas` ve encima el panel de captura.
+
+  **Se diseñó para un pulgar y con el partido enfrente**, que es la única
+  restricción que manda aquí: son ciento veinte capturas seguidas, y un toque
+  de más por jugada son dos minutos perdidos con la vista en el celular en vez
+  de en el campo. Se escoge **por número** y no por nombre —es lo que se ve en
+  la espalda del jugador—, el down derivado va grande y arriba para leerse de
+  reojo, el reloj y la posición se preguntan **una vez por serie**, y la
+  defensa vive detrás de un desplegable y solo en nivel completo. El botón de
+  guardar **dice qué falta** en vez de quedarse gris: sin señal no hay a quién
+  preguntarle, y un botón mudo en la cancha es una captura perdida.
+
+  **La cola aprendió a acumular.** Es la diferencia más importante y la más
+  fácil de romper: un pase de lista es el estado completo de un equipo y dos
+  capturas de lo mismo son la misma, pero dos capturas de jugadas son la jugada
+  7 y la jugada 8. Reemplazar ahí convertiría un partido entero en su última
+  jugada, en silencio. Ahora el lote se une por `client_play_id`, y corregir
+  algo que todavía no sube es nada más volver a capturarlo. Corregir o borrar
+  algo que **ya** subió va por su propio pendiente, porque el lote no pisa lo
+  que está del otro lado.
+
+  Que la segunda pantalla entrara poniendo **tres despachadores y nada más** es
+  la prueba de que la capa sin señal quedó en el lugar correcto: la
+  persistencia, el backoff, el contador y el aviso al salir ya funcionaban.
+
+  **La derivación del down vive ahora en los dos lados**, y es a propósito: la
+  pantalla tiene que poder decir "2º y 6" en una cancha sin internet, donde no
+  hay a quién preguntarle. En vez de fingir que se comparte un módulo entre los
+  dos paquetes, hay una prueba que **cruza** las dos copias y falla si se
+  separan — el mismo trato que ya tenían `matchScope.js` y las zonas horarias.
+  La acreditación de la NCAA **no** se copió: vive una sola vez, en el backend,
+  porque el box score se lee de allá.
+
+  **Verificado con el modo avión prendido** contra la compilación real (`vite
+  preview`, no el servidor de desarrollo): preparar con señal, apagarla,
+  capturar, **recargar**, capturar más, encenderla y comprobar que subió todo
+  una sola vez — 0 duplicadas y 0 participantes huérfanos en la base. El down
+  se derivó sin señal y recargar sin señal no devolvió la pantalla al estado
+  preparado, que era el bug número 3 del pase de lista y aquí no se repitió.
+
+  **Dos bugs que solo aparecieron capturando de verdad en el navegador:**
+
+  1. **`Number(null)` es 0, y aquí eso miente.** El down, la distancia y la
+     yarda son opcionales y llegan vacíos casi siempre; pasarlos por `Number()`
+     sin filtrar convertía "no se capturó" en **yarda 0** —la línea de gol— y
+     en "0 por ganar". La pantalla anunciaba **"1º y gol" con la jugada
+     capturada en media cancha**. Es la misma familia que el `yards_gained NOT
+     NULL` de la entrada de abajo: un hueco que se vuelve un número con cara de
+     verdadero. Un cero que alguien sí capturó se sigue respetando — la yarda 0
+     existe y "4º y 0" también.
+  2. **"Down desconocido — algo no se capturó" en una serie recién abierta.**
+     No saber el down todavía y haberlo perdido son cosas distintas: una serie
+     vacía no sabe nada porque nadie ha capturado nada. Gritarle una falsa
+     alarma en amarillo al visor que acaba de abrir la pantalla es justo el
+     momento en que menos sirve. Ahora dice "Empieza la serie", y el aviso se
+     guarda para cuando la cadena de verdad se rompe.
+
+  Lo que **no** está verificado, dicho de frente: un teléfono de verdad, y un
+  partido completo capturado por una persona. Ciento veinte jugadas seguidas,
+  sin poder pedir repetición, es donde se va a ver si la jugada mínima es de
+  verdad mínima — y eso no lo contesta una pantalla abierta en el escritorio.
+
 - **Las estadísticas por jugada ya se guardan y se leen (2026-09-20)** — el
-  backend completo; la pantalla todavía no. Es el primer pendiente del bloque
-  del día del partido, y ya no lo bloqueaba nada de plataforma: la capa sin
-  señal está debajo y el `PUT` del pase de lista dejó demostrado el patrón.
+  backend. Es el primer pendiente del bloque del día del partido, y ya no lo
+  bloqueaba nada de plataforma: la capa sin señal está debajo y el `PUT` del
+  pase de lista dejó demostrado el patrón.
 
   **La jugada es el átomo y el box score se deriva de ahí.** No es la opción
   barata y se eligió a propósito: es lo único que responde "quién anotó", que

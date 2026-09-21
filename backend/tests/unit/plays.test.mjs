@@ -166,6 +166,31 @@ test('el down y la distancia llegan en nulo salvo que alguien los corrija', () =
   assert.equal(normalizarJugada(jugada({ down: 5 })).down, null);
 });
 
+test('un campo opcional vacío se queda vacío, no se vuelve cero', () => {
+  // `Number(null)` es 0, y aquí eso MIENTE: la yarda es lo que falta para
+  // anotar, así que un 0 quiere decir "en la línea de gol" y la distancia 0
+  // quiere decir "nada por ganar". Un `yard_line` ausente convertido en 0
+  // hacía que la pantalla dijera "1º y gol" en media cancha — con la jugada
+  // capturada desde el centro del campo.
+  const vacia = normalizarJugada(jugada({ down: null, distance: null, yard_line: null, clock: null }));
+  assert.equal(vacia.yard_line, null);
+  assert.equal(vacia.distance, null);
+  assert.equal(vacia.down, null);
+  assert.equal(vacia.clock, null);
+
+  // Y sin la llave siquiera, que es como viaja de verdad casi siempre.
+  const sinLlaves = normalizarJugada(jugada());
+  assert.equal(sinLlaves.yard_line, null);
+  assert.equal(sinLlaves.distance, null);
+
+  // Pero un cero que alguien SÍ capturó se respeta: la yarda 0 existe —es la
+  // línea de gol— y "4º y 0" también.
+  const enLaGoal = normalizarJugada(jugada({ yard_line: 0, down: 4, distance: 0 }));
+  assert.equal(enLaGoal.yard_line, 0);
+  assert.equal(enLaGoal.distance, 0);
+  assert.equal(enLaGoal.down, 4);
+});
+
 test('una jugada que anotó tiene que decir qué equipo anotó', () => {
   // Por default, el que traía el balón.
   const td = normalizarJugada(jugada({ points: 6 }));

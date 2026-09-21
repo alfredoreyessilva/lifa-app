@@ -170,9 +170,17 @@ export function normalizarJugada(cruda) {
     return { error: 'Una jugada que anotó necesita decir qué equipo anotó' };
   }
 
-  const down = Number(cruda.down);
-  const distance = Number(cruda.distance);
-  const yardLine = Number(cruda.yard_line);
+  // **`Number(null)` es 0, y aquí eso miente.** Los tres campos de abajo son
+  // opcionales y llegan vacíos casi siempre: el down y la distancia porque se
+  // derivan, y la yarda porque solo se captura en la primera jugada de la
+  // serie. Pasarlos por `Number()` sin filtrar convierte "no se capturó" en
+  // "yarda 0" —la línea de gol— y en "0 por ganar", y entonces la pantalla
+  // dice "1º y gol" en media cancha. Salió capturando una jugada de verdad en
+  // el navegador, no leyendo el código.
+  const opcional = (v) => (v === null || v === undefined || v === '' ? NaN : Number(v));
+  const down = opcional(cruda.down);
+  const distance = opcional(cruda.distance);
+  const yardLine = opcional(cruda.yard_line);
 
   return {
     client_play_id: clientPlayId,

@@ -280,6 +280,25 @@ export default function MatchPage() {
           </div>
         )}
 
+        {/* ── Estadísticas ──
+            El tercer botón, y el mismo trato que el roster: cualquiera ve el
+            box score —es el resultado deportivo, que es justo lo que un torneo
+            publica— y quien tiene `estadisticas` ve además el panel de
+            captura.
+
+            Se pinta aunque el partido no se haya jugado, y a propósito: el
+            visor tiene que poder entrar ANTES para presionar "Preparar
+            partido" y llevárselo a una cancha sin señal. Lo que sí hace falta
+            son la rama y los dos equipos — sin eso no hay roster al que
+            colgarle una jugada, que es la misma condición del pase de lista. */}
+        {match.branch_id && match.home_team_id && match.away_team_id && (
+          <div className="match-card-actions" style={{ marginTop: 16 }}>
+            <Link to={`/partidos/${match.id}/estadisticas`} className="btn btn-outline btn-sm">
+              Estadísticas
+            </Link>
+          </div>
+        )}
+
         <div className="match-card-actions" style={{ marginTop: 16 }}>
           {isLeagueOwner && (
             <button type="button" className="btn btn-flag btn-sm" onClick={openEdit}>

@@ -4150,3 +4150,314 @@ a.match-card-new {
 @media (prefers-reduced-motion: reduce) {
   .offline-dot { animation: none; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Estadísticas por jugada — el panel del visor y el box score
+   ══════════════════════════════════════════════════════════════════════════
+   Se diseña para UN PULGAR y con el partido enfrente: objetivos grandes, poco
+   texto y nada que obligue a hacer zoom. Son ciento veinte capturas seguidas,
+   así que un toque de más por jugada son dos minutos perdidos por partido —
+   y la vista se va al celular en vez de al campo. */
+
+.match-stats-page { padding-bottom: 40px; }
+
+/* ── Elegir qué se va a capturar ── */
+.stats-claim {
+  background: var(--card-open);
+  border: 1px solid var(--card-open-line);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.stats-claim h3 { margin: 0 0 8px; font-family: var(--font-eyebrow); }
+.stats-claim-note {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+  line-height: 1.5;
+}
+.stats-level {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--card-open-section);
+  border: 1px solid var(--card-open-line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.stats-level:hover { border-color: var(--flag); }
+.stats-level strong { display: block; font-family: var(--font-eyebrow); font-size: 15px; }
+.stats-level span { display: block; font-size: 12px; color: var(--ink-dim); }
+.stats-level-produce { margin-top: 4px; }
+
+.stats-warning {
+  background: var(--card-open);
+  border: 1px solid var(--flag);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 14px;
+}
+.stats-warning p { margin: 0 0 10px; font-size: 13px; line-height: 1.5; }
+
+/* ── La serie en curso ── */
+.stats-capture {
+  background: var(--card-open);
+  border: 1px solid var(--card-open-line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+.stats-drive {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--card-open-line);
+}
+.stats-drive-label {
+  display: block;
+  font-family: var(--font-eyebrow);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+/* El down derivado es el dato que el visor mira entre jugada y jugada: va
+   grande porque se lee de reojo, sin dejar de ver el campo. */
+.stats-drive strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1.1;
+  color: var(--flag);
+}
+.stats-drive-team { font-size: 12.5px; color: var(--ink-dim); }
+.stats-drive-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.stats-drive-start {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--card-open-line);
+}
+.stats-drive-start label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+.stats-drive-start input,
+.stats-drive-start select {
+  width: 120px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--card-open-line);
+  background: var(--card-open-section);
+  color: var(--ink);
+  font-size: 15px;
+}
+.stats-drive-start small { font-size: 10.5px; opacity: 0.75; }
+
+/* ── Qué pasó en la jugada ── */
+.stats-types {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px;
+  padding-top: 14px;
+}
+.stats-type {
+  padding: 16px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--card-open-line);
+  background: var(--card-open-section);
+  color: var(--ink);
+  font-family: var(--font-eyebrow);
+  font-size: 14px;
+  cursor: pointer;
+}
+.stats-type:hover { border-color: var(--flag); color: var(--flag); }
+
+.stats-draft { padding-top: 14px; }
+.stats-draft-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.stats-draft-head strong { font-family: var(--font-eyebrow); font-size: 15px; }
+
+.stats-pick { margin-bottom: 14px; }
+.stats-pick-label {
+  font-family: var(--font-eyebrow);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 6px;
+}
+/* Se escoge por NÚMERO, no por nombre: es lo que el visor tiene a la vista en
+   la espalda del jugador, y una rejilla de números cabe entera en la pantalla
+   mientras que una lista de nombres obliga a buscar. El nombre va en el
+   atributo title, para quien quiera confirmarlo. */
+.stats-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 6px;
+}
+.stats-num {
+  padding: 12px 4px;
+  border-radius: 8px;
+  border: 1px solid var(--card-open-line);
+  background: var(--card-open-section);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 17px;
+  cursor: pointer;
+}
+.stats-num:hover { border-color: var(--line-strong); }
+.stats-num.is-on {
+  background: var(--flag);
+  border-color: var(--flag);
+  color: #1a1a1a;
+}
+
+.stats-defense {
+  margin-bottom: 14px;
+  border-top: 1px solid var(--card-open-line);
+  padding-top: 10px;
+}
+.stats-defense summary {
+  cursor: pointer;
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  color: var(--ink-dim);
+  margin-bottom: 10px;
+}
+
+.stats-yards, .stats-score { margin-bottom: 14px; }
+.stats-yards-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.stats-yard {
+  min-width: 52px;
+  padding: 12px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--card-open-line);
+  background: var(--card-open-section);
+  color: var(--ink);
+  font-family: var(--font-eyebrow);
+  font-size: 15px;
+  cursor: pointer;
+}
+.stats-yard.is-on { background: var(--flag); border-color: var(--flag); color: #1a1a1a; }
+.stats-yard-input {
+  width: 84px;
+  padding: 12px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--card-open-line);
+  background: var(--card-open-section);
+  color: var(--ink);
+  font-size: 15px;
+}
+.stats-yards small { display: block; margin-top: 6px; font-size: 11px; color: var(--ink-dim); }
+
+/* El botón dice QUÉ falta cuando está deshabilitado, en vez de quedarse gris
+   sin explicar: sin señal no hay a quién preguntarle. */
+.stats-save { width: 100%; padding: 14px; font-size: 15px; }
+.stats-save:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── La bitácora ── */
+.stats-log { margin-top: 18px; border-top: 1px solid var(--card-open-line); padding-top: 12px; }
+.stats-log h4 { margin: 0 0 10px; font-family: var(--font-eyebrow); font-size: 13px; color: var(--ink-dim); }
+.stats-log-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--card-open-line);
+}
+/* Una jugada que todavía no sube se marca. No es una advertencia —está a
+   salvo en la cola— pero el visor tiene derecho a ver cuáles viven nada más
+   en su teléfono. */
+.stats-log-row.is-pending { border-left: 3px solid var(--flag); padding-left: 8px; }
+.stats-log-down {
+  min-width: 68px;
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+.stats-log-what { flex: 1; font-size: 13.5px; }
+.stats-log-points { margin-left: 8px; color: var(--flag); font-family: var(--font-eyebrow); }
+.stats-log-who { margin-top: 3px; font-size: 12px; color: var(--ink-dim); }
+.stats-log-actions { display: flex; gap: 4px; }
+
+/* ── El box score ── */
+.box-score {
+  background: var(--card-open);
+  border: 1px solid var(--card-open-line);
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+.box-score h3 { margin: 0 0 6px; font-family: var(--font-eyebrow); }
+/* De dónde salieron estos números. Se dice SIEMPRE y no solo cuando es raro:
+   un box score derivado y uno tecleado a mano se ven idénticos, y de la
+   diferencia depende cuánto vale cada cifra. */
+.box-score-source {
+  margin: 0 0 14px;
+  font-size: 12px;
+  color: var(--ink-dim);
+  line-height: 1.5;
+}
+.box-score-mismatch {
+  background: var(--card-open-section);
+  border-left: 3px solid var(--live);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.box-score-team { margin-top: 18px; }
+.box-score-team h4 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  letter-spacing: 0.02em;
+}
+.box-score-block { margin-bottom: 14px; }
+.box-score-block-title {
+  font-family: var(--font-eyebrow);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 4px;
+}
+.box-score-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.box-score-table th {
+  text-align: right;
+  padding: 4px 6px;
+  font-family: var(--font-eyebrow);
+  font-size: 11px;
+  color: var(--ink-dim);
+  border-bottom: 1px solid var(--card-open-line);
+}
+.box-score-table th:first-child, .box-score-table td:first-child { text-align: left; }
+.box-score-table td {
+  text-align: right;
+  padding: 6px;
+  border-bottom: 1px solid var(--card-open-section);
+}
+
+@media (max-width: 560px) {
+  .stats-drive-start input, .stats-drive-start select { width: 100%; }
+  .stats-drive-start label { flex: 1 1 100%; }
+  .stats-log-actions { flex-direction: column; }
+}

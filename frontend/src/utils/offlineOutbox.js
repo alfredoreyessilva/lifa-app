@@ -9,7 +9,7 @@
 import { api } from '../api/client.js';
 import { leerCola, escribirCola } from './offlineDb.js';
 import {
-  encolar, quitarDeCola, marcarFallo, pendientesListos, resumenDeCola,
+  encolar, reemplazarPendiente, quitarDeCola, marcarFallo, pendientesListos, resumenDeCola,
 } from './offlineQueue.js';
 
 let cola = null;          // null = todavía no se lee de IndexedDB
@@ -50,9 +50,9 @@ export function colaActual() {
 
 // ── Quién sabe subir cada cosa ────────────────────────────────────────────
 //
-// Un despachador por tipo. Hoy solo hay uno; cuando entren las jugadas, entra
-// otro aquí y todo lo demás —la persistencia, el backoff, el contador— ya
-// funciona sin tocarse.
+// Un despachador por tipo. Empezó con uno y las jugadas entraron poniendo
+// tres más, sin tocar nada de lo demás: la persistencia, el backoff, el
+// contador y el aviso al salir ya funcionaban.
 //
 // El token se lee de localStorage y no del contexto de React a propósito: esto
 // corre fuera de un componente (en el evento `online`, en un temporizador) y
@@ -65,13 +65,49 @@ function tokenActual() {
   }
 }
 
+function conSesion() {
+  const token = tokenActual();
+  if (!token) throw new Error('La sesión se cerró: vuelve a entrar para subir esto');
+  return token;
+}
+
 const DESPACHADORES = {
   attendance: async (p) => {
-    const token = tokenActual();
-    if (!token) throw new Error('La sesión se cerró: vuelve a entrar para subir esto');
     // El `PUT` recibe la lista COMPLETA y es idempotente, así que reintentarlo
     // es gratis — subir dos veces lo mismo deja exactamente el mismo estado.
-    return api.saveMatchAttendance(p.matchId, { teamId: p.teamId, entries: p.entries }, token);
+    return api.saveMatchAttendance(p.matchId, { teamId: p.teamId, entries: p.entries }, conSesion());
+  },
+
+  // El lote de jugadas. Idempotente por `client_play_id`, que nació en este
+  // teléfono: el backend hace `ON CONFLICT DO NOTHING`, así que reenviarlo
+  // tampoco cuesta nada. Un lote que se quedó vacío —el visor borró todo lo
+  // que había capturado— no se manda: el endpoint lo rechazaría y la cola se
+  // quedaría reintentando un lote que ya no tiene nada adentro.
+  plays: async (p) => {
+    if (!p.plays?.length) return null;
+    return api.saveMatchPlays(
+      p.matchId,
+      { sessionId: p.sessionId, captureLevel: p.captureLevel, plays: p.plays },
+      conSesion(),
+    );
+  },
+
+  // Corregir y borrar son sobre jugadas que YA subieron. Van por separado y no
+  // dentro del lote a propósito: el lote no pisa lo que ya está —para que un
+  // teléfono que recupera la señal tres horas tarde no revierta una corrección
+  // de la liga— así que una corrección de verdad necesita su propia llamada.
+  'play-edit': async (p) => api.updateMatchPlay(p.matchId, p.clientPlayId, p.play, conSesion()),
+
+  // Un 404 aquí no es un fallo: la jugada ya no está, que es exactamente lo
+  // que se pedía. Insistir dejaría la captura atorada para siempre por haber
+  // conseguido lo que quería.
+  'play-delete': async (p) => {
+    try {
+      return await api.deleteMatchPlay(p.matchId, p.clientPlayId, conSesion());
+    } catch (e) {
+      if (e.status === 404) return null;
+      throw e;
+    }
   },
 };
 
@@ -83,6 +119,17 @@ const DESPACHADORES = {
 export async function agregarPendiente(pendiente) {
   await cargar();
   cola = encolar(cola, pendiente);
+  await persistir();
+  subirPendientes();
+  return cola;
+}
+
+// Reemplaza un pendiente sin fusionarlo. Es como se QUITA una jugada de un
+// lote que todavía no sube: con `agregarPendiente` el lote recortado se
+// volvería a unir con el anterior y la jugada regresaría, en silencio.
+export async function reemplazar(pendiente) {
+  await cargar();
+  cola = reemplazarPendiente(cola, pendiente);
   await persistir();
   subirPendientes();
   return cola;

@@ -42,13 +42,63 @@ export function clavePendiente(pendiente) {
   if (pendiente.kind === 'attendance') {
     return `attendance:${pendiente.matchId}:${pendiente.teamId}`;
   }
+  // Las jugadas de un partido son UN pendiente, y se acumulan dentro de él
+  // (ver `unirJugadas`). Una sola llave por partido para que el lote suba
+  // entero y de un golpe, que es lo que el endpoint espera.
+  if (pendiente.kind === 'plays') {
+    return `plays:${pendiente.matchId}`;
+  }
+  // Corregir y borrar van por jugada: son actos sobre una jugada que YA subió,
+  // y dos correcciones de la misma se fusionan —gana la última— mientras que
+  // dos correcciones de jugadas distintas no tienen nada que ver entre sí.
+  if (pendiente.kind === 'play-edit' || pendiente.kind === 'play-delete') {
+    return `${pendiente.kind}:${pendiente.matchId}:${pendiente.clientPlayId}`;
+  }
   // Un tipo que este código no conoce no se fusiona con nada: se encola tal
   // cual, con su propia llave. Falla del lado de no perder datos.
   return `${pendiente.kind}:${pendiente.id ?? ''}`;
 }
 
-// Mete un pendiente en la cola. Si ya había uno de lo mismo, lo REEMPLAZA y
-// conserva su `id` y el momento en que se capturó por primera vez — lo que se
+// ── Lo que se fusiona, y lo que se acumula ────────────────────────────────
+//
+// **Aquí es donde las jugadas NO se parecen al pase de lista, y es la
+// diferencia más importante de este archivo.**
+//
+// Un pase de lista es el estado COMPLETO de un equipo: dos capturas de lo
+// mismo son la misma y gana la última. Dos capturas de jugadas **no son la
+// misma cosa**: son la jugada 7 y la jugada 8. Reemplazar ahí perdería el
+// partido entero salvo la última jugada — y en silencio, que es lo peor.
+//
+// Así que el pendiente de jugadas se ACUMULA. Se unen por `client_play_id`,
+// que es la identidad real, y gana la última versión de cada una: así
+// corregir una jugada que todavía no sube es solo volver a capturarla, sin
+// tener que saber si ya subió o no.
+export function unirJugadas(previas, nuevas) {
+  const porLlave = new Map();
+  for (const jugada of [...(previas || []), ...(nuevas || [])]) {
+    if (jugada?.client_play_id) porLlave.set(jugada.client_play_id, jugada);
+  }
+  // Ordenadas por captura. El backend no lo necesita —él ordena por `sequence`
+  // al leer— pero que el lote viaje en orden hace legible cualquier diagnóstico
+  // de "¿qué se quedó sin subir?".
+  return [...porLlave.values()].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+}
+
+// Quitar una jugada que todavía no sube es quitarla del lote, no encolar un
+// borrado: nunca existió del otro lado. Se usa cuando el visor borra algo que
+// capturó hace diez segundos, que es el caso común.
+export function quitarJugadaDelLote(pendiente, clientPlayId) {
+  if (!pendiente?.plays) return pendiente;
+  return { ...pendiente, plays: pendiente.plays.filter((j) => j.client_play_id !== clientPlayId) };
+}
+
+const FUSIONES = {
+  plays: (previo, nuevo) => ({ ...nuevo, plays: unirJugadas(previo.plays, nuevo.plays) }),
+};
+
+// Mete un pendiente en la cola. Si ya había uno de lo mismo, lo REEMPLAZA
+// —salvo que su tipo tenga regla de fusión, como las jugadas, que se acumulan—
+// y conserva su `id` y el momento en que se capturó por primera vez: lo que se
 // sube es el estado final, pero "esto lleva pendiente desde las 10:32" sigue
 // siendo cierto y es lo que la pantalla enseña.
 //
@@ -60,8 +110,9 @@ export function encolar(cola, pendiente, ahora = Date.now()) {
   if (!clave) return lista;
 
   const previo = lista.find((p) => clavePendiente(p) === clave);
+  const fusionar = FUSIONES[pendiente.kind];
   const nuevo = {
-    ...pendiente,
+    ...(previo && fusionar ? fusionar(previo, pendiente) : pendiente),
     id: previo?.id ?? `${clave}#${ahora}`,
     capturadoEn: previo?.capturadoEn ?? ahora,
     actualizadoEn: ahora,
@@ -76,6 +127,37 @@ export function encolar(cola, pendiente, ahora = Date.now()) {
 
 export function quitarDeCola(cola, id) {
   return (Array.isArray(cola) ? cola : []).filter((p) => p.id !== id);
+}
+
+// Pone un pendiente **tal cual**, sin fusionarlo con el que había. Es lo que
+// hace falta para QUITAR algo de un lote que se acumula: con `encolar`, un
+// lote al que se le sacó una jugada se volvería a unir con el anterior y la
+// jugada regresaría — el borrado no se notaría y no fallaría nada.
+//
+// Y si el lote se queda vacío, el pendiente desaparece: un lote sin jugadas no
+// es algo que subir, y dejarlo en la cola pondría el contador en "0 sin subir"
+// con un renglón atorado reintentando la nada.
+export function reemplazarPendiente(cola, pendiente, ahora = Date.now()) {
+  const lista = Array.isArray(cola) ? cola : [];
+  const clave = clavePendiente(pendiente);
+  if (!clave) return lista;
+
+  const previo = lista.find((p) => clavePendiente(p) === clave);
+  if (pendiente.kind === 'plays' && !(pendiente.plays || []).length) {
+    return previo ? lista.filter((p) => clavePendiente(p) !== clave) : lista;
+  }
+
+  const nuevo = {
+    ...pendiente,
+    id: previo?.id ?? `${clave}#${ahora}`,
+    capturadoEn: previo?.capturadoEn ?? ahora,
+    actualizadoEn: ahora,
+    intentos: 0,
+    ultimoError: null,
+  };
+  return previo
+    ? lista.map((p) => (clavePendiente(p) === clave ? nuevo : p))
+    : [...lista, nuevo];
 }
 
 // Un intento que falló. NO se borra: se anota el error y se pospone.
@@ -118,6 +200,36 @@ export function resumenDeCola(cola, ahora = Date.now()) {
     // que solo vive en este teléfono.
     desde: lista.length ? Math.min(...lista.map((p) => p.capturadoEn || ahora)) : null,
   };
+}
+
+// ── El contador de la pantalla de captura ─────────────────────────────────
+//
+// "47 jugadas sin subir", no "1 captura sin subir". Un pendiente de jugadas
+// son ciento veinte cosas, y el número que le importa al visor es cuántas
+// JUGADAS viven todavía nada más en este teléfono — que es de lo único que
+// depende que se pierdan o no.
+//
+// Cuenta también las correcciones y los borrados, porque son capturas suyas
+// que tampoco han llegado: si la pantalla dijera "0 sin subir" con una
+// corrección atorada, estaría diciendo una mentira tranquilizadora.
+export function jugadasSinSubir(cola, matchId) {
+  const mias = (Array.isArray(cola) ? cola : []).filter((p) => (
+    Number(p.matchId) === Number(matchId)
+    && (p.kind === 'plays' || p.kind === 'play-edit' || p.kind === 'play-delete')
+  ));
+  const jugadas = mias.reduce((n, p) => n + (p.kind === 'plays' ? (p.plays?.length || 0) : 1), 0);
+  return {
+    jugadas,
+    atoradas: mias.filter((p) => (p.intentos || 0) >= MAX_INTENTOS).length,
+    desde: mias.length ? Math.min(...mias.map((p) => p.capturadoEn || Date.now())) : null,
+  };
+}
+
+export function textoDeJugadasSinSubir(cola, matchId) {
+  const { jugadas, atoradas } = jugadasSinSubir(cola, matchId);
+  if (jugadas === 0) return null;
+  const texto = `${jugadas} ${jugadas === 1 ? 'jugada sin subir' : 'jugadas sin subir'}`;
+  return atoradas > 0 ? `${texto} — no han podido subir` : texto;
 }
 
 // El texto del contador, en español y en singular/plural correcto. Va aquí y no

@@ -2822,18 +2822,17 @@ SELECT organization_id, <tu_user_id>, 'editor' FROM leagues WHERE slug = 'onefa'
 
 ## Estadísticas por jugada
 
-**Decidido el 2026-09-20. El backend está construido y verificado el
-2026-09-20; falta la pantalla.** Es el mismo patrón que el pase de lista y el
-tercer botón de la vista pública del partido: **Estadísticas** le muestra el
-box score a cualquiera, y a quien tiene el permiso `estadisticas` le abre el
-panel de captura. Lo que cambia es el modelo, y aquí sí había estándar que no
-valía la pena reinventar.
+**Decidido y construido el 2026-09-20.** Es el mismo patrón que el pase de
+lista y el tercer botón de la vista pública del partido: **Estadísticas** le
+muestra el box score a cualquiera, y a quien tiene el permiso `estadisticas` le
+abre el panel de captura. Lo que cambia es el modelo, y aquí sí había estándar
+que no valía la pena reinventar.
 
-Lo que ya corre: las tres tablas, el permiso, los seis endpoints, la
-derivación del down, el box score en cascada y la suite de punta a punta que
-lo comprueba contra Postgres (`backend/tests/plays.e2e.mjs`, 68 comprobaciones).
-Lo que falta es el panel del visor y la pantalla pública — y el despachador de
-la cola sin señal, que es lo que conecta lo uno con lo otro.
+Corre completo: las tres tablas, el permiso, los seis endpoints, la derivación
+del down, el box score en cascada, el panel del visor en
+`/partidos/:matchId/estadisticas` y su despachador en la cola sin señal.
+Verificado de punta a punta contra Postgres (`backend/tests/plays.e2e.mjs`, 68
+comprobaciones) y con el modo avión prendido contra la compilación real.
 
 ### Lo que ya existe afuera, y qué se toma de cada cosa
 
@@ -3156,6 +3155,65 @@ a volver a preguntar.
   sola columna y no hubo ventana de incompatibilidad al desplegar. El día que
   alguien pida la exportación a StatCrew, el mapeo ya existe.
 
+### La pantalla, y por qué se ve así
+
+`MatchStatsPage.jsx`, en `/partidos/:matchId/estadisticas`. Se diseñó para **un
+pulgar y con el partido enfrente**, que es la única restricción que de verdad
+manda aquí: son ciento veinte capturas seguidas, así que un toque de más por
+jugada son dos minutos perdidos y la vista en el celular en vez de en el campo.
+
+- **Se escoge por número, no por nombre.** Es lo que el visor tiene a la vista
+  en la espalda del jugador, y una rejilla de números cabe entera en la
+  pantalla mientras que una lista de nombres obliga a buscar. El nombre va en
+  el `title` para quien quiera confirmarlo.
+- **El down derivado va grande y arriba**, porque se lee de reojo entre jugada
+  y jugada sin dejar de ver el campo. No se captura: se muestra.
+- **El reloj, la posición y de quién es el balón se preguntan una vez por
+  serie**, en una franja que solo aparece cuando la serie está vacía. Es la
+  decisión que abarata todo lo demás.
+- **La defensa vive detrás de un `<details>` y solo en nivel `full`.** Es el
+  campo que exige una segunda persona buscando en el montón.
+- **El botón de guardar dice QUÉ falta** cuando está deshabilitado, en vez de
+  quedarse gris. Sin señal no hay a quién preguntarle, y un botón mudo en la
+  cancha es una captura perdida.
+- **Las jugadas que todavía no suben se marcan** en la bitácora. No es una
+  advertencia —están a salvo en la cola— pero el visor tiene derecho a ver
+  cuáles viven nada más en su teléfono.
+
+**La regla del down vive en los dos lados**, y es a propósito:
+`frontend/src/utils/plays.js` es una copia de la derivación del backend. No es
+descuido ni pereza — la pantalla tiene que poder decir "2º y 6" en una cancha
+sin internet, donde no hay a quién preguntarle, y no hay forma de compartir un
+módulo entre los dos paquetes. Es el mismo trato que ya tienen `matchScope.js`
+y las zonas horarias: en vez de fingir que se comparte, hay una prueba que las
+**cruza** (`frontend/tests/unit/plays.test.mjs`) y falla si se separan. Lo que
+NO se copió es la acreditación —que una captura es un acarreo, que se parte
+entre dos taqueadores—: eso vive una sola vez, en el backend, porque el box
+score se lee de allá.
+
+### La cola: aquí las capturas se ACUMULAN, al revés que el pase de lista
+
+Es la diferencia más importante de `offlineQueue.js` y la más fácil de romper.
+Un pase de lista es el estado **completo** de un equipo: dos capturas de lo
+mismo son la misma y gana la última. Dos capturas de jugadas **no son la misma
+cosa** — son la jugada 7 y la jugada 8. Fusionarlas reemplazando convertiría un
+partido entero en su última jugada, y **en silencio**.
+
+Así que el pendiente de jugadas se une por `client_play_id`. Eso además hace
+que corregir algo que todavía no sube sea nada más volver a capturarlo. Tres
+tipos conviven en la misma cola:
+
+| Tipo | Llave | Qué hace |
+|---|---|---|
+| `plays` | por partido | El lote. **Acumula** |
+| `play-edit` | por jugada | Corrige una que YA subió. Gana la última |
+| `play-delete` | por jugada | Borra una que YA subió |
+
+Corregir o borrar algo que **todavía está en el lote** no encola nada: se
+edita o se saca del lote, porque del otro lado nunca existió. Sacarla necesitó
+un `reemplazar()` aparte de `encolar()` — con la fusión, un lote recortado se
+volvería a unir con el anterior y la jugada regresaría sin que nada fallara.
+
 ### Endpoints — `routes/plays.js` (`/api/plays`)
 
 | Método | Ruta | Quién |
@@ -3204,20 +3262,62 @@ cubre y una prueba unitaria no podía:
   de la función pura: tres intentos de pase y no cuatro, la captura como
   acarreo de −8, y media captura para cada taqueador.
 
-**Y un bug que solo apareció corriéndolo.** El `PUT` que corrige una jugada
-borraba sus participantes y los volvía a insertar **en la misma sentencia**.
-Los CTE de Postgres comparten un snapshot, así que el `INSERT` veía las filas
-viejas todavía presentes, su `ON CONFLICT` no insertaba nada, y después el
-`DELETE` se las llevaba: la jugada quedaba **sin ningún participante**. No
-fallaba, no avisaba y el 200 se veía igual de bien. Ahora los dos CTE que
-escriben tocan la misma tabla pero nunca la misma fila —el `DELETE` se queda
-con quien ya no viene, el `INSERT` con quien sí—, que es exactamente el patrón
-que el `PUT` del pase de lista ya tenía escrito y que aquí no se había seguido.
+Y con el **modo avión prendido**, contra la compilación real (`vite preview`,
+no el servidor de desarrollo — es la única forma de probar el cache-first
+sobre `/assets/`):
 
-**Lo que NO está verificado**, dicho de frente: nada de la pantalla, porque
-todavía no existe. La captura real —ciento veinte jugadas tecleadas por una
-persona con el partido enfrente— es donde se va a ver si la jugada mínima es de
-verdad mínima, y eso no lo contesta ningún endpoint.
+- ✅ Preparar el partido con señal, apagarla, capturar dos jugadas, **recargar
+  la página**, capturar más, volver a encender y comprobar que subió todo **una
+  sola vez**. En la base: 0 duplicadas y 0 participantes huérfanos.
+- ✅ El down se derivó **sin señal**: 1º y 10 desde la 60, ganó 5 → 2º y 5,
+  ganó 3 → 3º y 2. Es la copia del frontend haciendo exactamente su trabajo.
+- ✅ Recargar sin señal **no devolvió la pantalla al estado preparado**: las dos
+  jugadas de la cola siguieron ahí y siguieron marcadas como pendientes. Era el
+  bug número 3 del pase de lista y aquí no se repitió, porque la unión con la
+  cola se puso desde el principio.
+- ✅ El aviso del navegador al salir con capturas pendientes se disparó.
+
+### Tres bugs, y dónde apareció cada uno
+
+**1. El `PUT` de corrección dejaba la jugada sin participantes** — lo encontró
+la suite de punta a punta. Borraba sus participantes y los volvía a insertar
+**en la misma sentencia**; los CTE de Postgres comparten un snapshot, así que
+el `INSERT` veía las filas viejas todavía presentes, su `ON CONFLICT` no
+insertaba nada, y después el `DELETE` se las llevaba. No fallaba, no avisaba y
+el 200 se veía igual de bien. Ahora los dos CTE que escriben tocan la misma
+tabla pero nunca la misma fila —el `DELETE` se queda con quien ya no viene, el
+`INSERT` con quien sí—, que es exactamente el patrón que el `PUT` del pase de
+lista ya tenía escrito y que aquí no se había seguido.
+
+**2. `Number(null)` es 0, y aquí eso miente** — lo encontró capturar una
+jugada de verdad en el navegador. El down, la distancia y la yarda son
+opcionales y llegan vacíos casi siempre. Pasarlos por `Number()` sin filtrar
+convertía "no se capturó" en **yarda 0** —la línea de gol— y en "0 por ganar",
+así que la pantalla anunciaba **"1º y gol" con la jugada capturada en media
+cancha**. Es la misma familia que el `yards_gained NOT NULL` de arriba: un
+hueco que se vuelve un número con cara de verdadero. Ahora un campo opcional
+vacío se queda vacío, y un cero que alguien **sí** capturó se respeta — la
+yarda 0 existe y "4º y 0" también.
+
+**3. "Down desconocido — algo no se capturó" en una serie recién abierta** —
+también del navegador. No saber el down todavía y haberlo perdido son cosas
+distintas: una serie vacía no sabe nada porque nadie ha capturado nada, y eso
+es normal. Gritarle una falsa alarma en amarillo al visor que acaba de abrir la
+pantalla es exactamente el momento en que menos sirve. Ahora la serie vacía
+dice "Empieza la serie" y el aviso se guarda para cuando la cadena de verdad se
+rompe, que es cuando sí pide que alguien corrija.
+
+**Lo que NO está verificado**, dicho de frente:
+
+- **Un teléfono de verdad.** Se probó con Chromium y el modo offline de
+  Playwright, que apaga la red pero no mata la pestaña, no se queda sin batería
+  y no tiene al administrador de memoria de Android decidiendo cerrar la app a
+  media captura. Es la misma limitación que ya tenía el pase de lista.
+- **Un partido completo capturado por una persona.** Ciento veinte jugadas
+  seguidas, con el partido enfrente y sin poder pedir repetición, es donde se
+  va a ver si la jugada mínima es de verdad mínima. Ningún endpoint ni ninguna
+  pantalla abierta en el escritorio contesta eso: lo contesta un visor en una
+  cancha, y todavía no ha pasado.
 
 ## Capturar sin señal
 
@@ -3227,12 +3327,16 @@ sencillamente no se usa: se vuelve al papel en el segundo partido. Gobierna las
 dos pantallas del visor —el pase de lista y la captura por jugada— así que se
 diseña una vez y sirve para las dos.
 
-**La capa está construida y su primer consumidor es el pase de lista.** Los
-tres apartados que colgaban de la captura por jugada —la llave de una jugada,
-el orden por `sequence` y la sesión de captura— ya están construidos también,
-del lado del backend, y la suite `plays.e2e.mjs` los comprueba contra Postgres.
-Lo único que falta es el consumidor: la pantalla de captura y su despachador en
-la cola. La verificación está en `docs/CHANGELOG.md`.
+**La capa está construida y tiene sus dos consumidores**: el pase de lista y la
+captura por jugada. Los tres apartados que colgaban de la segunda —la llave de
+una jugada, el orden por `sequence` y la sesión de captura— también están
+construidos y verificados. La verificación está en `docs/CHANGELOG.md`.
+
+Que la segunda pantalla entrara poniendo **tres despachadores y nada más** es
+la prueba de que la capa quedó en el lugar correcto: la persistencia, el
+backoff, el contador y el aviso al salir ya funcionaban. Lo único que sí hubo
+que cambiar fue la regla de fusión, porque las jugadas se **acumulan** donde el
+pase de lista se reemplaza — el porqué está en "Estadísticas por jugada".
 
 ### Lo que había, y lo que se construyó
 

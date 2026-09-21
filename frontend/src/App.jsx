@@ -23,6 +23,7 @@ const CalendarPage = lazy(() => import('./pages/CalendarPage.jsx'));
 const MatchPage = lazy(() => import('./pages/MatchPage.jsx'));
 const PlayerCardPage = lazy(() => import('./pages/PlayerCardPage.jsx'));
 const PublicRosterPage = lazy(() => import('./pages/PublicRosterPage.jsx'));
+const MatchStatsPage = lazy(() => import('./pages/MatchStatsPage.jsx'));
 const RegisterOrganizationPage = lazy(() => import('./pages/RegisterOrganizationPage.jsx'));
 const OrganizationDetailPage = lazy(() => import('./pages/OrganizationDetailPage.jsx'));
 const ProductsPanel = lazy(() => import('./pages/ProductsPanel.jsx'));
@@ -98,6 +99,11 @@ export default function App() {
                 `asistencia` ve la misma lista con el pase de lista al lado.
                 Si la categoría no publica su roster, el endpoint contesta 404. */}
             <Route path="/partidos/:matchId/equipos/:teamId/roster" element={<PublicRosterPage />} />
+            {/* El tercer botón del partido, y cuelga de él por lo mismo: una
+                jugada es de un partido. El box score es PÚBLICO —es el
+                resultado deportivo—, así que va fuera de ProtectedRoute; quien
+                tiene `estadisticas` ve además el panel de captura. */}
+            <Route path="/partidos/:matchId/estadisticas" element={<MatchStatsPage />} />
             <Route path="/panel/organizacion/:id" element={<OrganizationDetailPage />} />
             <Route path="/iniciar-sesion" element={<Login />} />
             <Route path="/crear-cuenta" element={<Register />} />
