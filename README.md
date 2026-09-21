@@ -214,34 +214,8 @@ verificación.
   sección del README trae la verificación y los tres bugs que salieron. Con eso
   el bloque del día del partido **no tiene código pendiente**.
 
-  Lo que le falta a este bloque no se escribe: se despliega y se prueba. Ver
-  los dos pendientes de abajo, en ese orden.
-
-- **Nada del bloque del día del partido está desplegado (2026-09-20).** Los
-  nueve commits viven en la rama local `dia-del-partido` y **no están en el
-  remoto**: `origin/main` sigue en `35b3616`. Quien llegue nuevo a esto no debe
-  dar por hecho que algo de aquí está en producción — no lo está, y la rama de
-  Neon `desarrollo-local` es el único lugar donde existen estas tablas.
-
-  Es el siguiente paso, y no por orden sino por dependencia: **la prueba del
-  teléfono no se puede hacer contra `localhost`**. Un celular en una cancha
-  necesita la URL de verdad, así que desplegar va antes que probar.
-
-  Lo que hay que tener en cuenta al hacerlo:
-
-  - **La migración es puramente aditiva** — tres tablas nuevas y sus índices,
-    ningún `ALTER` sobre nada existente. `initSchema()` las crea al arrancar
-    Render, y ya se corrió contra `desarrollo-local` (11s, sin incidentes).
-  - **Vercel termina antes que Render**, y eso deja una ventana de minutos en
-    la que el frontend nuevo le pide `/api/plays/*` a un backend que todavía no
-    los tiene. Aquí degrada suave —la pantalla dice "este partido no tiene
-    estadísticas" en vez de romperse— pero el botón **Estadísticas** va a estar
-    ahí sin servir un rato. Es la misma ventana que tiene anotada el renombre
-    de `/api/player-billing`.
-  - El permiso `estadisticas` es nuevo en `utils/orgRoles.js`, y `/auth/me`
-    manda la lista ya resuelta. Un frontend viejo contra un backend nuevo
-    simplemente no lo usa; al revés, `puede()` falla abierto a propósito
-    mientras el campo no viene (ver el comentario de `utils/permisos.js`).
+  Ya se desplegó el 2026-09-20 (ver el CHANGELOG). Lo que le falta a este
+  bloque no se escribe ni se despliega: se prueba. Ver el pendiente de abajo.
 
 - **Capturar sin señal no está probado en un teléfono (2026-09-20).** Ahora son
   **dos pantallas** las que dependen de esa capa —el pase de lista y la captura
@@ -252,8 +226,10 @@ verificación.
   para el que existe todo esto.
 
   Es verificación, no código, y pide un teléfono de verdad en una cancha de
-  verdad. Va **después** de desplegar, por lo dicho en ese pendiente. Tres
-  cosas que conviene mirar durante esa prueba:
+  verdad. **Ya no está bloqueada**: se desplegó el 2026-09-20, así que hay URL
+  pública contra la cual probar y la app se puede instalar desde el teléfono.
+  Es el único pendiente que le queda al bloque. Tres cosas que conviene mirar
+  durante esa prueba:
 
   1. **Si la jugada mínima es de verdad mínima.** Ciento veinte capturas
      seguidas, con el partido enfrente y sin poder pedir repetición, es lo

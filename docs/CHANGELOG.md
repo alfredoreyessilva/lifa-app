@@ -15,6 +15,40 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El bloque del día del partido ya está en producción (2026-09-20)** — los
+  nueve commits de `dia-del-partido` pasaron a `origin/main` en fast-forward,
+  `35b3616 → 868a31d`. Antes de empujar se confirmó contra el remoto que
+  `origin/main` seguía donde decía el README y que no había nada en main fuera
+  de la rama.
+
+  **La ventana Vercel-antes-que-Render por fin se midió**, que es lo que este
+  README venía describiendo sin números. Con reloj:
+
+  | Momento | Qué se vio |
+  |---|---|
+  | `22:50:42` | push a `origin/main` |
+  | `22:51:31` (+49s) | Vercel **ya servía** el build nuevo; Render seguía en `404` para `/api/plays/*` |
+  | `22:52:02` (+80s) | Render vivo: `/api/plays/matches/1/capture` pasa de `404` a `401` |
+
+  O sea: **el despliegue completo tardó 80 segundos** y la ventana duró entre
+  31 y 80 (no se sabe el minuto exacto en que Vercel terminó, solo que a los
+  49s ya estaba). "Una ventana de minutos" era pesimista, pero la ventana
+  **existe** y el orden fue el previsto. Durante ella `/api/health` respondió
+  `200` todo el tiempo: el backend viejo siguió sirviendo, que es justo el
+  "degrada suave" que estaba escrito.
+
+  **Verificado después**: `/api/plays/matches/:id/capture` responde `401`
+  —existe y pide sesión—, la ruta pública de box score contesta
+  `{"error":"Partido no encontrado"}` con `404` para un partido inexistente
+  —está montada y corriendo—, y en Vercel el icono nuevo sale `200 image/png`
+  con la etiqueta en el HTML y el manifest con sus dos iconos.
+
+  **Lo que NO se comprobó desde fuera**: que `initSchema()` haya creado las
+  tres tablas en la rama de producción de Neon. Que Render arrancara y
+  `/api/health` conteste es evidencia —`initSchema()` corre al arrancar— pero
+  no es prueba; eso se ve con una sesión con permiso `estadisticas`, o en el
+  panel de Neon.
+
 - **La app ya trae icono para instalarse en iPhone (2026-09-20)** — faltaba el
   `apple-touch-icon`, que es la única etiqueta que iOS mira: ignora los iconos
   del manifest, así que una app agregada a inicio salía con una miniatura de la
