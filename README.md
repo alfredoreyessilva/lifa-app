@@ -199,44 +199,79 @@ verificación.
   nombrado: "dar de baja" debería terminar una participación, no destruir un
   equipo.
 
-- **El día del partido: falta la captura de estadísticas (2026-09-20).** El
-  **roster público y el pase de lista ya están construidos y verificados** — los
+- **El día del partido: el código está completo, falta la cancha
+  (2026-09-20).** El **roster público y el pase de lista ya están construidos y
+  verificados** — los
   dos interruptores de la categoría, el veto del equipo sobre la foto, la
   pantalla que se abre desde el partido y, encima de esa misma lista,
   `match_attendance` con el permiso `asistencia` y sus tres endpoints. Ver el
   CHANGELOG.
 
-  Lo que sigue abierto de esa línea es lo grande: **"Estadísticas por jugada"**.
-  Está decidida y escrita, sin ninguna decisión abierta, pero sin una línea de
-  código.
+  **Y "Estadísticas por jugada" también quedó construida el 2026-09-20**, de
+  punta a punta: las tres tablas, el permiso `estadisticas`, los seis endpoints
+  de `routes/plays.js`, el panel del visor en
+  `/partidos/:matchId/estadisticas` y su despachador en la cola sin señal. Su
+  sección del README trae la verificación y los tres bugs que salieron. Con eso
+  el bloque del día del partido **no tiene código pendiente**.
 
-  **"Capturar sin señal" ya no la bloquea**: se construyó el 2026-09-20 y su
-  primer consumidor es el pase de lista. El service worker cachea la app y se
-  registra al arrancar, la cola vive en IndexedDB, reintenta sola y sube al
-  volver la señal. Lo que falta de esa sección es lo que cuelga de la jugada —
-  `client_play_id`, el orden por `sequence` y la sesión de captura.
+  Lo que le falta a este bloque no se escribe: se despliega y se prueba. Ver
+  los dos pendientes de abajo, en ese orden.
 
-  Lo que ya quedó resuelto y conviene no volver a pensar: la pantalla desde
-  donde se captura **ya existe** (el mismo botón del roster, y lo que cambia es
-  qué se puede hacer encima), y el `PUT` del pase de lista ya demostró el patrón
-  que pide la cola sin señal — recibe **la lista completa**, es idempotente de
-  nacimiento y tolera que el roster haya cambiado entre la captura y el envío.
+- **Nada del bloque del día del partido está desplegado (2026-09-20).** Los
+  seis commits viven en la rama local `dia-del-partido` y **no están en el
+  remoto**: `origin/main` sigue en `35b3616`. Quien llegue nuevo a esto no debe
+  dar por hecho que algo de aquí está en producción — no lo está, y la rama de
+  Neon `desarrollo-local` es el único lugar donde existen estas tablas.
 
-- **Capturar sin señal no está probado en un teléfono (2026-09-20).** La capa
-  está construida y la receta completa del README corrió de punta a punta contra
-  la compilación real, pero con **Chromium y el modo offline de Playwright**:
-  eso apaga la red, y no mata la pestaña, ni se queda sin batería, ni tiene al
-  administrador de memoria de Android cerrando la app a media captura. Que es
-  justo el escenario para el que existe todo esto.
+  Es el siguiente paso, y no por orden sino por dependencia: **la prueba del
+  teléfono no se puede hacer contra `localhost`**. Un celular en una cancha
+  necesita la URL de verdad, así que desplegar va antes que probar.
+
+  Lo que hay que tener en cuenta al hacerlo:
+
+  - **La migración es puramente aditiva** — tres tablas nuevas y sus índices,
+    ningún `ALTER` sobre nada existente. `initSchema()` las crea al arrancar
+    Render, y ya se corrió contra `desarrollo-local` (11s, sin incidentes).
+  - **Vercel termina antes que Render**, y eso deja una ventana de minutos en
+    la que el frontend nuevo le pide `/api/plays/*` a un backend que todavía no
+    los tiene. Aquí degrada suave —la pantalla dice "este partido no tiene
+    estadísticas" en vez de romperse— pero el botón **Estadísticas** va a estar
+    ahí sin servir un rato. Es la misma ventana que tiene anotada el renombre
+    de `/api/player-billing`.
+  - El permiso `estadisticas` es nuevo en `utils/orgRoles.js`, y `/auth/me`
+    manda la lista ya resuelta. Un frontend viejo contra un backend nuevo
+    simplemente no lo usa; al revés, `puede()` falla abierto a propósito
+    mientras el campo no viene (ver el comentario de `utils/permisos.js`).
+
+- **La app no se instala bien en iPhone (2026-09-20).** El
+  `manifest.webmanifest` declara un solo icono SVG y **no hay
+  `apple-touch-icon`** en `frontend/index.html` (verificado el 2026-09-20: cero
+  ocurrencias); iOS ignora los iconos del manifest y usa esa etiqueta. En
+  Android/Chrome la instalación sí funciona.
+
+  No es cosmético para el caso de la cancha: una app instalada aguanta mucho
+  mejor que una pestaña, y el escenario entero es el administrador de memoria
+  del teléfono decidiendo cerrar algo. Es el arreglo barato que conviene meter
+  **antes** de desplegar, porque después la prueba del teléfono ya depende de
+  él: un PNG de 180×180 en `public/` y una etiqueta en `index.html`.
+
+- **Capturar sin señal no está probado en un teléfono (2026-09-20).** Ahora son
+  **dos pantallas** las que dependen de esa capa —el pase de lista y la captura
+  por jugada—, y las dos corrieron de punta a punta contra la compilación real,
+  pero con **Chromium y el modo offline de Playwright**: eso apaga la red, y no
+  mata la pestaña, ni se queda sin batería, ni tiene al administrador de
+  memoria de Android cerrando la app a media captura. Que es justo el escenario
+  para el que existe todo esto.
 
   Es verificación, no código, y pide un teléfono de verdad en una cancha de
-  verdad. Dos cosas que conviene tener listas antes de esa prueba:
+  verdad. Va **después** de desplegar y de arreglar el icono, por lo dicho en
+  esos dos pendientes. Dos cosas que conviene mirar durante esa prueba:
 
-  1. **La app no se instala bien en iPhone.** El `manifest.webmanifest` declara
-     un solo icono SVG y **no hay `apple-touch-icon`**; iOS ignora los iconos del
-     manifest y usa esa etiqueta. En Android/Chrome la instalación sí funciona.
-     Una app instalada aguanta mucho mejor que una pestaña, así que esto no es
-     cosmético para el caso de la cancha.
+  1. **Si la jugada mínima es de verdad mínima.** Ciento veinte capturas
+     seguidas, con el partido enfrente y sin poder pedir repetición, es lo
+     único que contesta eso — y si resulta que no, la salida ya está escrita:
+     los tres niveles guardan las mismas filas, así que bajar de `full` a
+     `offense` no migra nada.
   2. **El riesgo que no se puede tapar sigue ahí** (ver "Capturar sin señal"):
      mientras no suben, las capturas viven solo en ese teléfono. La pantalla lo
      dice y el navegador avisa al salir, pero nada de eso se ha visto en manos
