@@ -77,10 +77,18 @@ entradas traen el post-mortem del bug que las provocó.
   copia a `dist/`; servido con `vite preview`, `/apple-touch-icon.png` responde
   `200 image/png` y `/manifest.webmanifest` responde `200
   application/manifest+json` con el JSON válido y las dos entradas de icono.
-  **Lo que NO se verificó**: cómo lo pinta un iPhone de verdad. No se abrió en
-  el navegador —la instancia de Playwright quedó bloqueada por permisos— y de
-  todas formas Chromium en Windows no contesta esa pregunta. Queda como tercer
-  punto de la prueba del teléfono en "Pendientes abiertos".
+  **Verificado después en un navegador real, contra producción** (se hizo al
+  final de la sesión, cuando se pudo destrabar Chrome): la etiqueta resuelve a
+  `/apple-touch-icon.png`, el recurso carga `200 image/png` con 3,052 bytes y
+  180×180 medidos por el navegador, el manifest sirve sus dos iconos, y —lo que
+  importaba— **el pixel de la esquina mide `rgba(47,122,53,255)`**: verde
+  opaco, alfa 255. El modo de falla que preocupaba, esquinas negras por
+  transparencia colada, queda **descartado por medición**.
+
+  **Lo que NO se verificó**: cómo recorta y pinta iOS ese PNG al agregarlo a
+  inicio. Ningún Chromium en Windows contesta esa pregunta. Queda como tercer
+  punto de la prueba del teléfono en "Pendientes abiertos", ya reducido a una
+  mirada de un segundo.
 
 - **El visor ya captura jugada por jugada, en la cancha y sin señal
   (2026-09-20)** — la pantalla que faltaba, montada sobre el backend de la

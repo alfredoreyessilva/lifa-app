@@ -241,10 +241,13 @@ verificación.
      dice y el navegador avisa al salir, pero nada de eso se ha visto en manos
      de alguien que no escribió el código.
   3. **Que el `apple-touch-icon` de verdad se instale.** Se agregó el
-     2026-09-20 y se verificó hasta donde se puede sin un iPhone —el PNG se
-     sirve, el manifest lo declara—, pero quien decide si el icono sale bien
-     es iOS, y eso solo se ve en "Agregar a inicio". Si sale un cuadro negro,
-     es que el PNG se coló con transparencia.
+     2026-09-20 y se verificó contra producción en un navegador real: la
+     etiqueta resuelve, el PNG carga 180×180 y **el pixel de la esquina mide
+     `rgba(47,122,53,255)`** — verde opaco, alfa 255. Con eso el modo de falla
+     que preocupaba (esquinas negras porque se coló transparencia) queda
+     **descartado por medición**, no por confianza. Lo único que no se puede
+     saber sin un iPhone es cómo lo recorta y lo pinta iOS al agregarlo a
+     inicio, que es mirada de un segundo durante la prueba.
 
 - **El pase de lista no tiene suite e2e (2026-09-20).** Sus rutas se probaron a
   mano contra la rama de Neon —los cinco casos del `PUT` (marcar, reintentar,
