@@ -648,16 +648,26 @@ export const api = {
     request(`/billing/entries/${entryId}/void`, { method: 'POST', body: { reason }, token }),
   updateBillingSettings: (leagueId, payload, token) =>
     request(`/billing/leagues/${leagueId}/settings`, { method: 'PATCH', body: payload, token }),
-  getTeamStatement: (teamId, token) =>
-    request(`/billing/teams/${teamId}/statement`, { token }),
+  // Las ligas con las que el equipo tiene cuenta, cada una con su saldo. Un
+  // equipo puede jugar en varias (README, "Un equipo puede deberle a varias
+  // ligas"), así que las tres de abajo llevan `leagueId` — opcional, porque
+  // con una sola liga el backend la resuelve solo.
+  getTeamBillingLeagues: (teamId, token) =>
+    request(`/billing/teams/${teamId}/leagues`, { token }),
+  getTeamStatement: (teamId, token, leagueId) =>
+    request(`/billing/teams/${teamId}/statement${leagueId ? `?league_id=${leagueId}` : ''}`, { token }),
   // El equipo le reporta a su liga un pago que ya hizo; nace pendiente y la
   // liga lo confirma. Espejo de lo que el papá hace con su club.
-  reportTeamPayment: (teamId, payload, token) =>
-    request(`/billing/teams/${teamId}/report-payment`, { method: 'POST', body: payload, token }),
+  reportTeamPayment: (teamId, payload, token, leagueId) =>
+    request(`/billing/teams/${teamId}/report-payment`, {
+      method: 'POST', body: leagueId ? { ...payload, league_id: leagueId } : payload, token,
+    }),
   confirmTeamPayment: (entryId, token) =>
     request(`/billing/entries/${entryId}/confirm`, { method: 'POST', token }),
-  withdrawTeamPayment: (teamId, token) =>
-    request(`/billing/teams/${teamId}/withdraw-payment`, { method: 'POST', token }),
+  withdrawTeamPayment: (teamId, token, leagueId) =>
+    request(`/billing/teams/${teamId}/withdraw-payment`, {
+      method: 'POST', body: leagueId ? { league_id: leagueId } : {}, token,
+    }),
 
   getTeamBranches: (teamId, token) => request(`/players/teams/${teamId}/branches`, { token }),
 

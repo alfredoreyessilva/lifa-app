@@ -1588,6 +1588,20 @@ router.post('/leagues/:leagueId/teams', authRequired, leagueOwnerRequired, async
     JSON.stringify(Array.isArray(away_ticket_links) ? away_ticket_links.filter((u) => u && u.trim()) : []),
   );
 
+  // Y lo da de alta en el roster de la liga (`league_teams`), que es la tabla
+  // que contesta "¿este equipo es de esta liga?" en el modelo nuevo — la que
+  // usa la cobranza, y la que permite que un equipo esté en varias ligas.
+  // `teams.league_id` de arriba es la columna del modelo viejo y sigue ahí
+  // porque medio `leagues.js` la lee todavía (ver "Pendientes abiertos").
+  //
+  // Sin esta línea, la fila de league_teams solo aparecía en el SIGUIENTE
+  // arranque del servidor, por el backfill de initSchema(): un equipo recién
+  // creado no era cobrable hasta el próximo deploy. No se notaba mientras la
+  // cobranza validaba con la columna vieja.
+  await db.prepare(
+    'INSERT INTO league_teams (league_id, team_id) VALUES (?, ?) ON CONFLICT (league_id, team_id) DO NOTHING'
+  ).run(req.league.id, result.lastInsertRowid);
+
   // Le crea su organización de identidad de una vez (antes solo se generaba
   // en el backfill del próximo arranque del servidor, ver initSchema en
   // db.js) — así el equipo ya es verificable desde /admin sin esperar un

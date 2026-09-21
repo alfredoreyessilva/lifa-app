@@ -204,24 +204,6 @@ verificación.
   del equipo. No es un candado por movimientos. Lo que falta es el código: la
   guarda en el endpoint y que el diálogo diga lo que de verdad se lleva.
 
-- **La cobranza liga↔equipo está clavada a UNA liga (2026-09-21).** El README
-  promete desde el 2026-09-20 que "un equipo puede participar en torneos de
-  varias ligas a la vez", y para el calendario y la tabla ya es cierto. Para el
-  dinero no: el lado del equipo tiene **un solo** estado de cuenta
-  (`GET /billing/teams/:id/statement`) y sus tres endpoints leen
-  `req.team.league_id`, la columna del modelo viejo. Del otro lado,
-  `teamBelongsToLeague()` valida con `WHERE id = ? AND league_id = ?` — y su
-  comentario ya se llama a sí mismo "modelo clásico".
-
-  El resultado es que **solo la liga de origen le puede cobrar a un equipo**. Si
-  juega en dos, la segunda no tiene cómo.
-
-  **El libro no se migra**: `team_ledger_entries` ya guarda
-  `(league_id, team_id)`, o sea que desde siempre supo distinguir ligas — lo que
-  no existe es la pantalla ni la ruta para leerlo por liga. Lo que falta es una
-  sección **"ligas en las que participa el equipo"**, con una cuenta por liga, y
-  mover esos cinco lugares de `teams.league_id` a `league_teams`.
-
 - **`teams.league_id` todavía contesta las dos preguntas (2026-09-21).** Es la
   columna del modelo viejo, y el README ya declara que las dos preguntas
   —"¿se administra solo?" y "¿participa en esta liga?"— se separaron. En el
@@ -241,9 +223,11 @@ verificación.
   liga (`DELETE /admin/leagues/:id`), así que no es urgente, pero ese botón hace
   mucho más de lo que su nombre dice.
 
-  Va **después** de la cobranza multi-liga, no antes: ese paso ya mueve la
-  cobranza de `teams.league_id` a `league_teams`, que es justo el terreno que
-  este necesita ganado. Hacerlo al revés es reescribir la cobranza dos veces.
+  **La cobranza ya salió de esa columna (2026-09-21)** y con ella se fue el uso
+  más delicado. Lo que queda es `leagues.js` —unos diez lugares, todos de
+  lectura: estadísticas, estructura y conciliación de partidos por nombre— más
+  el `CASCADE`, que es lo único con filo. Ya no bloquea nada; es limpieza con
+  una trampa al final.
 
 - **El día del partido: el código está completo, falta la cancha
   (2026-09-20).** El **roster público y el pase de lista ya están construidos y
@@ -926,15 +910,93 @@ del lote original.
 | `POST` | `/entries/:id/void` | liga — cancela un cargo/pago (2 escrituras); rechaza un pago reportado (1 escritura, sin ajuste) |
 | `POST` | `/entries/:id/confirm` | liga — confirma un pago que reportó el equipo |
 | `PATCH` | `/leagues/:leagueId/settings` | liga — prende/apaga los recordatorios automáticos |
-| `GET` | `/teams/:id/statement` | equipo (o la liga) — su estado de cuenta |
-| `POST` | `/teams/:id/report-payment` | equipo — reporta un pago con comprobante (nace `pending`) |
-| `POST` | `/teams/:id/withdraw-payment` | equipo — retira su propio reporte antes de que se lo confirmen |
+| `GET` | `/teams/:id/leagues` | equipo — las ligas con las que tiene cuenta, cada una con su saldo |
+| `GET` | `/teams/:id/statement` | equipo (o la liga) — su estado de cuenta con una liga (`?league_id=`) |
+| `POST` | `/teams/:id/report-payment` | equipo — reporta un pago con comprobante (nace `pending`); `league_id` en el cuerpo |
+| `POST` | `/teams/:id/withdraw-payment` | equipo — retira su propio reporte antes de que se lo confirmen; `league_id` en el cuerpo |
 
 Permisos: los endpoints de liga usan `leagueOwnerRequired`; los del equipo usan
 `teamOwnerRequired` (deja pasar al rep del equipo **y** a la liga). Un equipo nunca
 puede ver la cuenta de otro, y solo puede retirar lo que reportó él mismo
 (`created_by_side = 'team'`), no lo que capturó la liga. Nada de cobranza aparece
 en el sitio público.
+
+### Un equipo puede deberle a varias ligas
+
+**Construido el 2026-09-21.** El README venía prometiendo desde el 2026-09-20
+que "un equipo puede participar en torneos de varias ligas a la vez". Para el
+calendario y la tabla ya era cierto; para el dinero no, y esta sección es lo que
+lo hizo cierto.
+
+**Qué estaba clavado.** El libro nunca fue el problema:
+`team_ledger_entries` guarda `(league_id, team_id)` desde que existe, así que
+siempre supo distinguir ligas. Lo que estaba clavado era todo lo que lo rodeaba,
+y siempre por la misma columna, `teams.league_id`:
+
+- `teamInLeague()` validaba con `WHERE id = ? AND league_id = ?`.
+- El panorama de la liga y las dos rutas de cargos listaban equipos con
+  `WHERE league_id = ?`.
+- El equipo tenía **un solo** estado de cuenta, sin forma de decir de cuál liga.
+
+**Qué contesta ahora "¿a qué ligas le puede deber este equipo?".** La membresía,
+`league_teams` — la tabla que ya decía "este equipo es de la casa de esta liga"
+— **unida a las ligas que ya tienen movimientos suyos**:
+
+```sql
+WHERE l.id IN (SELECT league_id FROM league_teams        WHERE team_id = ?)
+   OR l.id IN (SELECT league_id FROM team_ledger_entries WHERE team_id = ?)
+```
+
+La segunda mitad no es un detalle: sin ella, **una liga podría hacer desaparecer
+una deuda sacando al equipo de su roster**. El saldo se sigue calculando sumando
+el libro (regla 5), así que el dinero no se iría a ningún lado — pero el equipo
+dejaría de verlo, que para el caso es igual de malo. Un equipo al que ya se le
+cobró sigue viendo esa cuenta aunque ya no juegue ahí, hasta que quede en cero.
+
+> **`league_teams` no se llenaba sola, y ese era el bloqueador real.**
+> `POST /manage/leagues/:leagueId/teams` escribía `teams.league_id` y nada más:
+> la fila de `league_teams` solo aparecía en el **siguiente arranque** del
+> servidor, por el backfill de `initSchema()`. Mientras la cobranza validaba con
+> la columna vieja eso no se notaba; al cambiar de tabla, un equipo recién
+> creado habría dejado de ser cobrable hasta el próximo deploy. Por eso ese
+> endpoint ahora inserta también en `league_teams`, y es el cambio que convierte
+> a esa tabla en la fuente de verdad en vez de una copia que se repara sola.
+
+**Cómo se pide la liga, sin romper nada al desplegar.** Ninguna URL cambió, a
+propósito: renombrar rutas tiene ventana de incompatibilidad (ver "Fase B") y
+aquí no hacía falta pagarla. Las tres rutas del equipo aceptan la liga como
+parámetro opcional —`?league_id=` al leer, `league_id` en el cuerpo al
+escribir— y cuando no viene:
+
+- **una sola liga** → se usa esa, que es lo que hacía antes y cubre a todos los
+  equipos que existen hoy;
+- **varias** → `400` pidiendo cuál, en vez de adivinar y cobrarle a la
+  equivocada;
+- **ninguna** → el estado de cuenta vacío de siempre.
+
+Así un cliente viejo durante los ~80 segundos del despliegue sigue funcionando
+igual, y el único caso que no cubre —un equipo con dos ligas y la pestaña sin
+recargar— todavía no existe.
+
+**Dos reglas que se volvieron por liga, no por equipo.** Las dos eran correctas
+mientras un equipo tenía una sola liga y las dos se vuelven bugs en cuanto tiene
+dos:
+
+1. **"Un pendiente a la vez"** ahora es uno **por liga**. Tener un pago en
+   revisión con la liga A no puede impedir reportarle a la B: la razón de esa
+   regla es no llenarle a **una** liga la bandeja de duplicados, y esa bandeja
+   es de cada quien.
+2. **Retirar un pago** filtra por liga. Antes `withdraw-payment` buscaba
+   *cualquier* pendiente del equipo (`WHERE team_id = ?`, sin liga), así que con
+   dos ligas habría retirado el de la otra — el equipo le retira a la A y el
+   pago que desaparece es el de la B. Era un bug latente, sin fuga hoy porque
+   nadie tiene dos ligas todavía.
+
+**En pantalla.** Con una sola liga, la sección se ve **exactamente igual que
+antes**: no se le agrega un selector a quien no tiene nada que elegir. Con
+varias, arriba aparece una fila de pestañas —una por liga, con su saldo— y todo
+lo de abajo (saldo, vencimiento, movimientos, reportar pago) es de la liga
+seleccionada.
 
 ### Conciliación — el equipo reporta, la liga confirma
 

@@ -41,9 +41,9 @@ npm test                                      # en cualquiera de los dos: node -
 ```
 
 285 pruebas unitarias (164 backend + 121 frontend) corren en el CI en cada push.
-Las **cuatro** suites de punta a punta —las dos de cobranza, la de invitaciones
-y roles, y la de estadísticas por jugada— **no**: necesitan Postgres vivo.
-Instrucciones en `backend/tests/README.md`.
+Las **cinco** suites de punta a punta —las dos de cobranza, la de invitaciones
+y roles, la de estadísticas por jugada y la de un equipo en varias ligas—
+**no**: necesitan Postgres vivo. Instrucciones en `backend/tests/README.md`.
 
 ---
 
@@ -159,7 +159,8 @@ de un partido terminado es `'finished'` y no `'final'`, porque el dato de prueba
 lo inventaba el mismo código que se estaba probando.
 
 - Cambio de cobranza → las dos suites e2e de cobranza contra una rama de Neon,
-  antes y después. Cambio de permisos, invitaciones o entrega de un equipo →
+  antes y después, **más `billing-multiliga.e2e.mjs`** si toca qué liga le cobra
+  a quién. Cambio de permisos, invitaciones o entrega de un equipo →
   `invites-roles.e2e.mjs`, la tercera.
 - Cambio de UI → abrirlo en el navegador. Si no se verificó, se dice que no se verificó.
 - Cambio de esquema o de consulta → correrlo contra los datos reales dentro de

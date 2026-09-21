@@ -103,11 +103,100 @@ async function notifyTeam(teamId, leagueId, type, title, body, extra = {}) {
   );
 }
 
-// Confirma que un equipo pertenece a la liga (modelo clásico teams.league_id,
-// el mismo que usa el panel de administración en manage.js).
+// Confirma que un equipo es de esta liga. Pregunta por `league_teams` —la
+// membresía— y NO por `teams.league_id`, que es la columna del modelo viejo y
+// solo admite una liga por equipo. Ver README, "Un equipo puede deberle a
+// varias ligas".
 async function teamInLeague(teamId, leagueId) {
-  const row = await db.prepare('SELECT id, name FROM teams WHERE id = ? AND league_id = ?').get(teamId, leagueId);
+  const row = await db.prepare(`
+    SELECT t.id, t.name
+    FROM league_teams lt
+    JOIN teams t ON t.id = lt.team_id
+    WHERE lt.team_id = ? AND lt.league_id = ?
+  `).get(teamId, leagueId);
   return row || null;
+}
+
+// Las ligas a las que este equipo le puede deber. Son DOS conjuntos unidos, y
+// el segundo es el que importa: las ligas donde ya tiene movimientos entran
+// aunque ya no sea miembro. Sin eso, una liga podría hacer desaparecer una
+// deuda sacando al equipo de su roster — el saldo seguiría en el libro (regla
+// 5), pero el equipo dejaría de verlo, que para el caso es igual de malo.
+async function leaguesOfTeam(teamId) {
+  return db.prepare(`
+    SELECT l.id, l.name, l.slug, l.whatsapp, l.website_url
+    FROM leagues l
+    WHERE l.id IN (SELECT league_id FROM league_teams        WHERE team_id = ?)
+       OR l.id IN (SELECT league_id FROM team_ledger_entries WHERE team_id = ?)
+    ORDER BY l.name ASC
+  `).all(teamId, teamId);
+}
+
+// ─── El lado del EQUIPO: qué liga, cuando puede haber varias ───────────────
+//
+// Las tres rutas del equipo (leer el estado de cuenta, reportar un pago y
+// retirarlo) necesitan saber DE CUÁL liga se habla. Antes no: había una sola,
+// `teams.league_id`, y se leía directo.
+//
+// La liga se pide como parámetro opcional —`?league_id=` al leer, `league_id`
+// en el cuerpo al escribir— y NO cambiando la URL: renombrar rutas tiene
+// ventana de incompatibilidad al desplegar (ver README, "Fase B") y aquí no
+// hacía falta pagarla. Cuando no viene, esta función decide:
+//
+//   · una sola liga  → esa. Es lo que hacía antes, y cubre a todos los equipos
+//                      que existen hoy, así que un cliente viejo durante el
+//                      despliegue sigue funcionando igual.
+//   · varias         → 400 pidiendo cuál. Adivinar aquí es cobrarle a la liga
+//                      equivocada, que es de los errores que no se deshacen
+//                      solos en un libro append-only.
+//   · ninguna        → null, y quien llama arma la respuesta vacía.
+//
+// Devuelve { league } si resolvió, { error } con el mensaje si no, o
+// { league: null } si el equipo no tiene ninguna liga.
+async function resolveTeamLeague(teamId, rawLeagueId) {
+  const leagues = await leaguesOfTeam(teamId);
+  if (leagues.length === 0) return { league: null, leagues };
+
+  if (rawLeagueId !== undefined && rawLeagueId !== null && rawLeagueId !== '') {
+    const wanted = Number(rawLeagueId);
+    const found = leagues.find((l) => l.id === wanted);
+    // 404 y no 403: desde el lado del equipo, una liga con la que no tiene
+    // ninguna relación simplemente no existe — no hay nada a lo que pedirle
+    // permiso.
+    if (!found) return { error: 'Tu equipo no tiene cuenta con esa liga', status: 404, leagues };
+    return { league: found, leagues };
+  }
+
+  if (leagues.length === 1) return { league: leagues[0], leagues };
+
+  return {
+    error: 'Tu equipo participa en varias ligas — hay que decir de cuál es la cuenta (league_id)',
+    status: 400,
+    leagues,
+  };
+}
+
+// Saldo, próximo vencimiento y vencido de un equipo con UNA liga. Lo usan el
+// estado de cuenta y la lista de ligas, y por eso vive aparte: que los dos
+// números salgan de la misma consulta es lo que evita que la pestaña diga un
+// saldo y el detalle otro.
+async function teamLeagueTotals(leagueId, teamId) {
+  const agg = await db.prepare(`
+    SELECT ${BALANCE_SUM_SQL} AS balance,
+           MIN(CASE WHEN kind = 'charge' AND status = 'open' THEN due_date END) AS next_due_date,
+           COALESCE(SUM(CASE WHEN kind = 'charge' AND status = 'open' AND due_date < ${HOY_MX} THEN amount ELSE 0 END), 0) AS overdue_charges,
+           COALESCE(SUM(CASE WHEN kind = 'payment' AND status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_payments
+    FROM team_ledger_entries
+    WHERE league_id = ? AND team_id = ?
+  `).get(leagueId, teamId);
+
+  const balance = Number(agg?.balance || 0);
+  return {
+    balance,
+    next_due_date: agg?.next_due_date || null,
+    overdue_amount: Math.min(Number(agg?.overdue_charges || 0), Math.max(-balance, 0)),
+    has_pending_payment: Number(agg?.pending_payments || 0) > 0,
+  };
 }
 
 // Acceso a un movimiento por su id: admin de plataforma, o miembro de la
@@ -189,9 +278,13 @@ function sortWeekLabels(labels) {
 router.get('/leagues/:leagueId/overview', authRequired, leagueBillingRequired, asyncHandler(async (req, res) => {
   const leagueId = req.league.id;
 
-  const teams = await db.prepare(
-    'SELECT id, name, logo_url, owner_user_id FROM teams WHERE league_id = ? ORDER BY sort_order ASC, name ASC'
-  ).all(leagueId);
+  const teams = await db.prepare(`
+    SELECT t.id, t.name, t.logo_url, t.owner_user_id
+    FROM league_teams lt
+    JOIN teams t ON t.id = lt.team_id
+    WHERE lt.league_id = ?
+    ORDER BY t.sort_order ASC, t.name ASC
+  `).all(leagueId);
 
   const agg = await db.prepare(`
     SELECT team_id,
@@ -289,11 +382,12 @@ router.get('/leagues/:leagueId/match-counts', authRequired, leagueBillingRequire
   if (tournamentId) { catFilter += ' AND c.tournament_id = ?'; args.push(tournamentId); }
   let weekFilter = '';
   if (weekLabel) { weekFilter = 'AND m.week_label = ?'; args.push(weekLabel); }
-  args.push(leagueId); // para el WHERE t.league_id = ? final
+  args.push(leagueId); // para el WHERE lt.league_id = ? final
 
   const rows = await db.prepare(`
     SELECT t.id AS team_id, COUNT(m.id) AS match_count
-    FROM teams t
+    FROM league_teams lt
+    JOIN teams t ON t.id = lt.team_id
     LEFT JOIN matches m ON (
       m.is_draft = FALSE
       AND (m.home_team_id = t.id OR m.away_team_id = t.id
@@ -301,7 +395,7 @@ router.get('/leagues/:leagueId/match-counts', authRequired, leagueBillingRequire
       AND m.category_id IN (SELECT c.id FROM categories c WHERE ${catFilter})
       ${weekFilter}
     )
-    WHERE t.league_id = ?
+    WHERE lt.league_id = ?
     GROUP BY t.id
   `).all(...args);
 
@@ -338,9 +432,10 @@ router.post('/leagues/:leagueId/charges', authRequired, leagueBillingRequired, a
   const { category, concept, due_date, week_label, note } = req.body;
   const teamIds = items.map((i) => i.team_id);
 
-  // Todos los equipos deben ser de esta liga.
+  // Todos los equipos deben ser de esta liga (por membresía, no por la
+  // columna vieja — ver teamInLeague arriba).
   const valid = await db.prepare(
-    `SELECT id FROM teams WHERE league_id = ? AND id IN (${teamIds.map(() => '?').join(',')})`
+    `SELECT team_id AS id FROM league_teams WHERE league_id = ? AND team_id IN (${teamIds.map(() => '?').join(',')})`
   ).all(req.league.id, ...teamIds);
   if (valid.length !== teamIds.length) {
     return res.status(400).json({ error: 'Uno o más equipos no pertenecen a esta liga' });
@@ -392,8 +487,10 @@ router.post('/leagues/:leagueId/charges/repeat', authRequired, leagueBillingRequ
     : [...amountByTeam.keys()];
 
   // Solo equipos que sigan en la liga y que estuvieran en el lote original.
+  // "Seguir en la liga" es la membresía: un equipo al que la liga sacó de su
+  // roster no vuelve a recibir cargos, aunque su cuenta anterior siga viva.
   const valid = await db.prepare(
-    `SELECT id FROM teams WHERE league_id = ? AND id IN (${requested.map(() => '?').join(',')})`
+    `SELECT team_id AS id FROM league_teams WHERE league_id = ? AND team_id IN (${requested.map(() => '?').join(',')})`
   ).all(req.league.id, ...requested);
   const teamIds = valid.map((r) => r.id).filter((id) => amountByTeam.has(id));
   if (teamIds.length === 0) return res.status(400).json({ error: 'Ningún equipo válido para repetir el cargo' });
@@ -559,7 +656,11 @@ router.post('/entries/:id/void', authRequired, asyncHandler(async (req, res) => 
 // El comprobante se sube con POST /api/upload de siempre — aquí sí hay sesión
 // (a diferencia del papá, que no tiene cuenta y necesitó un endpoint aparte).
 router.post('/teams/:id/report-payment', authRequired, teamBillingRequired, asyncHandler(async (req, res) => {
-  if (!req.team.league_id) {
+  // De cuál liga es este pago. Ver resolveTeamLeague: con una sola liga se
+  // resuelve sola, con varias hay que decirlo.
+  const { league, error: leagueError, status: leagueStatus } = await resolveTeamLeague(req.team.id, req.body.league_id);
+  if (leagueError) return res.status(leagueStatus).json({ error: leagueError });
+  if (!league) {
     return res.status(400).json({ error: 'Tu equipo no pertenece a ninguna liga, así que no hay a quién reportarle un pago' });
   }
 
@@ -573,12 +674,16 @@ router.post('/teams/:id/report-payment', authRequired, teamBillingRequired, asyn
   // Un pendiente a la vez por equipo: si le dan dos veces al botón, o reportan
   // de nuevo antes de que la liga revise, no se le llena la bandeja de
   // duplicados que luego tiene que rechazar uno por uno.
+  // Un pendiente a la vez POR LIGA, no por equipo: la razón de esta regla es
+  // no llenarle la bandeja de duplicados a quien tiene que revisar, y esa
+  // bandeja es de cada liga. Tener un pago en revisión con la A no puede
+  // impedir reportarle a la B.
   const alreadyPending = await db.prepare(`
     SELECT id FROM team_ledger_entries
     WHERE league_id = ? AND team_id = ? AND kind = 'payment' AND status = 'pending'
-  `).get(req.team.league_id, req.team.id);
+  `).get(league.id, req.team.id);
   if (alreadyPending) {
-    return res.status(409).json({ error: 'Ya tienes un pago esperando confirmación de tu liga. Espera a que lo revisen.' });
+    return res.status(409).json({ error: `Ya tienes un pago esperando confirmación de ${league.name}. Espera a que lo revisen.` });
   }
 
   await db.prepare(`
@@ -586,7 +691,7 @@ router.post('/teams/:id/report-payment', authRequired, teamBillingRequired, asyn
       (league_id, team_id, kind, concept, amount, payment_method, reference, proof_url, note, status, created_by_user_id, created_by_side)
     VALUES (?, ?, 'payment', ?, ?, ?, ?, ?, ?, 'pending', ?, 'team')
   `).run(
-    req.team.league_id, req.team.id,
+    league.id, req.team.id,
     'Pago reportado por el equipo',
     Number(amount),
     payment_method,
@@ -602,15 +707,15 @@ router.post('/teams/:id/report-payment', authRequired, teamBillingRequired, asyn
     INSERT INTO notifications (recipient_type, recipient_id, type, title, body, data)
     VALUES ('league', ?, ?, ?, ?, ?)
   `).run(
-    req.team.league_id,
+    league.id,
     'team_payment_reported',
     'Un pago espera tu confirmación 🧾',
     `${req.team.name} reportó un pago de ${formatMoney(amount)} (${payment_method}). `
       + `Revísalo en Cobranza para que se aplique a su estado de cuenta.`,
     JSON.stringify({
-      league_id: req.team.league_id,
+      league_id: league.id,
       team_id: req.team.id,
-      url: `/panel/liga/${req.team.league_id}/cobranza`,
+      url: `/panel/liga/${league.id}/cobranza`,
     })
   );
 
@@ -626,11 +731,21 @@ router.post('/teams/:id/report-payment', authRequired, teamBillingRequired, asyn
 //
 // Solo se puede retirar lo que reportó el EQUIPO (created_by_side='team'): un
 // pago que capturó la liga no es del equipo para quitarlo.
+//
+// Y se retira el pendiente DE UNA LIGA. Hasta el 2026-09-21 esta consulta no
+// filtraba por liga (`WHERE team_id = ?` a secas): con dos ligas, el equipo le
+// retiraba a la A y el pago que desaparecía podía ser el de la B. Era un bug
+// latente —nadie tenía dos ligas todavía— y se cerró junto con el resto de
+// multi-liga.
 router.post('/teams/:id/withdraw-payment', authRequired, teamBillingRequired, asyncHandler(async (req, res) => {
+  const { league, error: leagueError, status: leagueStatus } = await resolveTeamLeague(req.team.id, req.body?.league_id);
+  if (leagueError) return res.status(leagueStatus).json({ error: leagueError });
+  if (!league) return res.status(404).json({ error: 'No tienes ningún pago esperando confirmación' });
+
   const pending = await db.prepare(`
     SELECT id FROM team_ledger_entries
-    WHERE team_id = ? AND kind = 'payment' AND status = 'pending' AND created_by_side = 'team'
-  `).get(req.team.id);
+    WHERE league_id = ? AND team_id = ? AND kind = 'payment' AND status = 'pending' AND created_by_side = 'team'
+  `).get(league.id, req.team.id);
 
   if (!pending) return res.status(404).json({ error: 'No tienes ningún pago esperando confirmación' });
 
@@ -684,12 +799,44 @@ router.patch('/leagues/:leagueId/settings', authRequired, leagueBillingRequired,
 
 // ─── Estado de cuenta del equipo (solo lectura) ─────────────────────────────
 
+// Las ligas con las que este equipo tiene cuenta, cada una con su saldo. Es lo
+// que dibuja las pestañas cuando hay más de una — y con una sola, lo que el
+// frontend usa para no dibujar ninguna.
+//
+// Incluye ligas donde el equipo YA NO es miembro pero todavía tiene
+// movimientos: ver leaguesOfTeam. Una deuda no se esconde porque lo hayan
+// sacado del roster.
+router.get('/teams/:id/leagues', authRequired, teamBillingRequired, asyncHandler(async (req, res) => {
+  const leagues = await leaguesOfTeam(req.team.id);
+
+  const conSaldo = [];
+  for (const l of leagues) {
+    const totals = await teamLeagueTotals(l.id, req.team.id);
+    const esMiembro = await teamInLeague(req.team.id, l.id);
+    conSaldo.push({
+      id: l.id,
+      name: l.name,
+      slug: l.slug,
+      // Falso = ya no juega ahí, pero la cuenta sigue abierta. El frontend lo
+      // dice en la pestaña para que nadie crea que sigue inscrito.
+      is_member: !!esMiembro,
+      ...totals,
+    });
+  }
+
+  res.json({ team: { id: req.team.id, name: req.team.name }, leagues: conSaldo });
+}));
+
 router.get('/teams/:id/statement', authRequired, teamBillingRequired, asyncHandler(async (req, res) => {
-  // Un equipo independiente (sin liga) no tiene ninguna relación de cobranza
-  // — ese libro es siempre liga -> equipo. No hay estado de cuenta que armar.
-  if (!req.team.league_id) {
+  const { league, error: leagueError, status: leagueStatus } = await resolveTeamLeague(req.team.id, req.query.league_id);
+  if (leagueError) return res.status(leagueStatus).json({ error: leagueError });
+
+  // Un equipo sin ninguna liga no tiene relación de cobranza — ese libro es
+  // siempre liga -> equipo. No hay estado de cuenta que armar.
+  if (!league) {
     return res.json({
       team: { id: req.team.id, name: req.team.name },
+      league: null,
       league_name: null,
       league_contact: null,
       balance: 0,
@@ -702,7 +849,7 @@ router.get('/teams/:id/statement', authRequired, teamBillingRequired, asyncHandl
     });
   }
 
-  const leagueId = req.team.league_id;
+  const leagueId = league.id;
   const teamId = req.team.id;
 
   const entries = await db.prepare(`
@@ -714,30 +861,22 @@ router.get('/teams/:id/statement', authRequired, teamBillingRequired, asyncHandl
     ORDER BY created_at ASC, id ASC
   `).all(leagueId, teamId);
 
-  const agg = await db.prepare(`
-    SELECT ${BALANCE_SUM_SQL} AS balance,
-           MIN(CASE WHEN kind = 'charge' AND status = 'open' THEN due_date END) AS next_due_date,
-           COALESCE(SUM(CASE WHEN kind = 'charge' AND status = 'open' AND due_date < ${HOY_MX} THEN amount ELSE 0 END), 0) AS overdue_charges
-    FROM team_ledger_entries
-    WHERE league_id = ? AND team_id = ?
-  `).get(leagueId, teamId);
-
-  const balance = Number(agg?.balance || 0);
-  const hasPending = entries.some((e) => e.kind === 'payment' && e.status === 'pending');
+  const totals = await teamLeagueTotals(leagueId, teamId);
 
   res.json({
     team: { id: teamId, name: req.team.name },
-    has_pending_payment: hasPending,
-    payment_methods: PAYMENT_METHODS,
-    league_name: req.league.name,
+    // `league` es el campo nuevo; `league_name` se queda porque el frontend
+    // viejo lo lee y quitarlo sería la ventana de incompatibilidad que este
+    // cambio se propuso no pagar.
+    league: { id: league.id, name: league.name, slug: league.slug },
+    league_name: league.name,
     league_contact: {
-      whatsapp: req.league.whatsapp || null,
-      website: req.league.website_url || null,
+      whatsapp: league.whatsapp || null,
+      website: league.website_url || null,
     },
-    balance,
+    payment_methods: PAYMENT_METHODS,
     currency: 'MXN',
-    next_due_date: agg?.next_due_date || null,
-    overdue_amount: Math.min(Number(agg?.overdue_charges || 0), Math.max(-balance, 0)),
+    ...totals,
     entries,
   });
 }));

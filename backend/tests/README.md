@@ -37,7 +37,7 @@ mostrar no se separen.
 
 ## Las de punta a punta
 
-No son unitarias y no corren en el CI: son cuatro scripts que ejercitan contra
+No son unitarias y no corren en el CI: son cinco scripts que ejercitan contra
 un backend vivo lo único que de verdad no se puede revisar leyendo el código —
 que el saldo cuadre después de cancelar, rechazar y retirar, y que un lote
 reenviado no duplique nada.
@@ -48,6 +48,7 @@ reenviado no duplique nada.
 | `billing-league.e2e.mjs` | liga → equipo: cargos, reporte del equipo, confirmar/rechazar/retirar |
 | `invites-roles.e2e.mjs` | invitación con rol, la entrega de un equipo y la revocación: quién queda de alta en `organization_members`, y a quién le toca 409, 403 o 200. Desde el 2026-09-21 también el candado de **eliminar un equipo**: que uno sin entregar sí se borre aunque deba dinero, y que uno entregado no se borre aunque no deba nada |
 | `plays.e2e.mjs` | estadísticas por jugada: que reenviar el mismo lote sea gratis, que la cascada dé un solo box score, que dos capturistas no se pisen y que las reglas de la NCAA sobrevivan el viaje por la base |
+| `billing-multiliga.e2e.mjs` | un equipo en DOS ligas: que los dos libros no se mezclen, que no se adivine de cuál liga es un pago, y que sacarlo de un roster no le esconda la deuda |
 
 Las dos de cobranza **no** cubren nada de roles ni de fronteras: las dos usan
 un equipo independiente cuyo dueño es el propio actor, así que nunca hay una
@@ -74,6 +75,7 @@ node tests/billing-player.e2e.mjs   # en otra, con las mismas variables
 node tests/billing-league.e2e.mjs
 node tests/invites-roles.e2e.mjs
 node tests/plays.e2e.mjs
+node tests/billing-multiliga.e2e.mjs
 ```
 
 `DATABASE_URL` hay que ponerla **en las dos** terminales: los scripts abren su

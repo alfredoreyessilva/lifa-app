@@ -15,6 +15,59 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Un equipo ya le puede deber a varias ligas (2026-09-21)** — el README
+  prometía desde el 2026-09-20 que "un equipo puede participar en torneos de
+  varias ligas a la vez". Para el calendario y la tabla de posiciones ya era
+  cierto; para el dinero no, y esto es lo que lo hizo cierto. El modelo completo
+  está en el README, "Un equipo puede deberle a varias ligas".
+
+  **El libro nunca fue el problema**: `team_ledger_entries` guarda
+  `(league_id, team_id)` desde que existe. Lo clavado era todo lo que lo rodeaba
+  —seis consultas del lado de la liga y las tres rutas del equipo— y siempre por
+  la misma columna, `teams.league_id`, que solo admite una.
+
+  **El bloqueador real resultó ser otro, y no estaba anotado en ninguna parte.**
+  `POST /manage/leagues/:leagueId/teams` escribía `teams.league_id` y **no**
+  insertaba en `league_teams`: esa fila solo aparecía en el siguiente arranque
+  del servidor, por el backfill de `initSchema()`. Mientras la cobranza validaba
+  con la columna vieja no se notaba; al cambiar de tabla, un equipo recién
+  creado habría dejado de ser cobrable hasta el próximo deploy. Se arregló ahí,
+  y eso es lo que vuelve a `league_teams` la fuente de verdad en vez de una
+  copia que se repara sola.
+
+  **Ninguna URL cambió, a propósito.** Las tres rutas del equipo aceptan la liga
+  como parámetro opcional (`?league_id=` al leer, `league_id` en el cuerpo al
+  escribir); sin él, con una sola liga se resuelve igual que antes, y con varias
+  responde 400 pidiendo cuál en vez de adivinar. Así no se paga la ventana de
+  incompatibilidad que sí tendría renombrar rutas (ver "Fase B").
+
+  **Dos reglas pasaron de "por equipo" a "por liga"**, y la segunda era un bug
+  latente de verdad:
+
+  1. "Un pendiente a la vez" ahora es uno por liga — la bandeja de duplicados
+     que esa regla protege es de cada liga.
+  2. `withdraw-payment` buscaba *cualquier* pendiente del equipo
+     (`WHERE team_id = ?`, sin liga). Con dos ligas, el equipo le retiraba a la
+     A y el pago que desaparecía podía ser el de la B. No había fuga porque
+     nadie tenía dos ligas todavía.
+
+  **Una decisión que no es obvia**: la lista de ligas del equipo es la unión de
+  `league_teams` **y** las ligas donde ya tiene movimientos. Sin la segunda
+  mitad, una liga podría esconder una deuda sacando al equipo de su roster —el
+  saldo seguiría en el libro (regla 5), pero el equipo dejaría de verlo—. La
+  pestaña de esas cuentas dice "ya no estás en el roster, pero la cuenta sigue
+  abierta", y esa liga ya no le puede generar cargos nuevos.
+
+  **Verificado contra una rama de Neon y en el navegador.** Suite nueva,
+  `billing-multiliga.e2e.mjs`, con un equipo en dos ligas: 26 ok, 0 fallas —
+  incluidos los dos libros sin mezclarse, el 400 cuando no se dice la liga, el
+  409 por liga y no por equipo, el retiro que no toca a la otra, y la deuda que
+  sobrevive a que lo saquen del roster. Las otras cuatro suites siguen en 21,
+  40, 71 y 68, que es donde una regresión habría salido. En el navegador se
+  vieron los tres estados: dos ligas con pestañas y saldos que cambian al
+  cambiar de pestaña, **una sola liga sin ningún selector** (idéntico a antes),
+  y el aviso de la cuenta abierta con una liga que ya lo sacó.
+
 - **Un equipo solo se elimina mientras nadie más lo administre (2026-09-21)** —
   `DELETE /manage/teams/:id` era un `DELETE FROM teams` pelón, sin ninguna
   pregunta previa, y el esquema encadena a los **dos** libros de dinero:
