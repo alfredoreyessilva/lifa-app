@@ -112,10 +112,11 @@ test('la liga nunca tiene acceso a las cuotas del club, con ningún rol', () => 
   assert.deepEqual(rolesConPermiso('league', 'cuotas_club'), []);
 });
 
-test('el visor mueve el marcador y pasa lista, y nada más', () => {
+test('el visor mueve el marcador, pasa lista y captura jugadas, y nada más', () => {
   assert.ok(puede('league', 'editor', 'ver'));
   assert.ok(puede('league', 'editor', 'marcadores'));
   assert.ok(puede('league', 'editor', 'asistencia'), 'el visor es quien pasa lista en la cancha');
+  assert.ok(puede('league', 'editor', 'estadisticas'), 'y es quien se queda a capturar las jugadas');
   for (const prohibido of ['partidos', 'estructura', 'roster', 'cobranza_liga', 'perfil', 'miembros', 'duenos']) {
     assert.ok(!puede('league', 'editor', prohibido), `el visor no debería poder "${prohibido}"`);
   }
@@ -123,9 +124,22 @@ test('el visor mueve el marcador y pasa lista, y nada más', () => {
 
 test('el tesorero de liga solo lleva la cobranza', () => {
   assert.ok(puede('league', 'treasurer', 'cobranza_liga'));
-  for (const prohibido of ['estructura', 'partidos', 'marcadores', 'roster', 'asistencia', 'perfil']) {
+  for (const prohibido of ['estructura', 'partidos', 'marcadores', 'roster', 'asistencia', 'estadisticas', 'perfil']) {
     assert.ok(!puede('league', 'treasurer', prohibido), `el tesorero no debería poder "${prohibido}"`);
   }
+});
+
+test('capturar jugadas se reparte igual que pasar lista', () => {
+  // Son las dos pantallas del visor en la cancha, y quien pasa lista es quien
+  // se queda a capturar. Que se separen sería la sorpresa, no que coincidan —
+  // y siguen siendo dos permisos porque una liga va a querer poder dar
+  // cuarenta marcas sin dar ciento veinte jugadas.
+  assert.deepEqual(
+    rolesConPermiso('league', 'estadisticas'),
+    rolesConPermiso('league', 'asistencia'),
+  );
+  // Y como la asistencia: capturar es un acto de la liga en su partido.
+  assert.deepEqual(rolesConPermiso('team', 'estadisticas'), []);
 });
 
 test('pasar lista es de la liga: ningún rol de equipo lo escribe', () => {

@@ -15,6 +15,98 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Las estadísticas por jugada ya se guardan y se leen (2026-09-20)** — el
+  backend completo; la pantalla todavía no. Es el primer pendiente del bloque
+  del día del partido, y ya no lo bloqueaba nada de plataforma: la capa sin
+  señal está debajo y el `PUT` del pase de lista dejó demostrado el patrón.
+
+  **La jugada es el átomo y el box score se deriva de ahí.** No es la opción
+  barata y se eligió a propósito: es lo único que responde "quién anotó", que
+  es lo que la hoja de visoría necesita y lo que las 16 columnas de
+  `player_match_stats` nunca van a poder contestar. Yardas, intentos,
+  porcentajes y líderes no se guardan: se suman (regla 4).
+
+  **Tres tablas.** `match_capture_sessions` reclama el partido y declara el
+  nivel; `match_plays` es la jugada; `play_participants` es quién la hizo y con
+  qué papel. Los tres niveles de captura —`scoring`, `offense`, `full`—
+  escriben **las mismas filas**: una liga que arranca capturando solo
+  anotaciones y en dos temporadas llega a captura completa no migra nada, sus
+  jugadas viejas se quedan como están y las nuevas traen más participantes. Eso
+  es lo que compra tener los participantes en tabla aparte.
+
+  **El nivel no es una preferencia, es un dato del que depende cómo se lee ese
+  partido.** Un partido capturado en `scoring` tiene jugadas —las ocho que
+  anotaron— y derivar un box score de ahí diría que el equipo entero corrió 80
+  yardas en todo el partido: un número falso con cara de verdadero, que es la
+  peor clase. Por eso la cascada pregunta por el nivel y no solo por "¿hay
+  jugadas?", y por eso `source` y `capture_level` viajan siempre en la
+  respuesta.
+
+  **Un partido tiene un box score, no dos.** Si hay una sesión buena con nivel
+  que derive, sale de las jugadas; si no, sale de `player_match_stats`, que
+  pasa a ser la captura por totales. Nunca se mezclan, nunca se suman entre sí
+  y nadie copia lo derivado dentro de la otra tabla. Las dos ramas salen con
+  los **mismos nombres** —los de SportsML— así que la pantalla las lee igual:
+  la tabla de equivalencias de veinte líneas que se había dejado escrita "para
+  el día que haga falta" es lo que hace eso posible, y no tocó una sola
+  columna.
+
+  **El down no se captura, se deriva.** Dentro de una serie, sabiendo dónde
+  empezó y cuántas yardas ganó cada jugada, se sabe en qué down va. La pantalla
+  mostrará el derivado y dejará corregirlo: el visor no captura el down, lo
+  desmiente cuando se desvía. Cuando la cadena se rompe —una penalización o un
+  cambio de posesión que nadie anotó— la jugada sale con el down en blanco y
+  marcada, en vez de inventar un quinto down.
+
+  **Las reglas de acreditación son las de la NCAA y están escritas.** ONEFA
+  juega con reglas NCAA, así que no hay que inventarlas: una captura **no** es
+  intento de pase —se le carga al pasador como acarreo con la pérdida, al revés
+  que en la NFL— y se parte entre quienes la hicieron, media para cada uno; una
+  conversión de dos puntos no entra en los totales individuales. Las tres
+  tienen prueba propia, con el porqué escrito encima, porque son exactamente lo
+  que alguien va a "arreglar" más adelante creyendo que encontró un bug.
+
+  **Reenviar el mismo lote es gratis**, que es la promesa entera del modo sin
+  señal: la identidad de una jugada es el `client_play_id` que nace en el
+  celular, y el envío hace `ON CONFLICT DO NOTHING`. No `DO UPDATE`, y la
+  diferencia importa: una jugada que la liga ya corrigió no puede volver a
+  quedar como estaba porque el teléfono del visor recuperó la señal tres horas
+  tarde. Corregir tiene su propio endpoint.
+
+  **Nunca se descarta lo capturado.** Un segundo capturista recibe 409 y tiene
+  que decir explícitamente que toma el control; hacerlo cierra la sesión
+  anterior pero no borra sus jugadas. Y un lote que llega sin sesión —alguien
+  capturó sin haber reclamado el partido— no se rechaza: se le abre una propia,
+  que nace no autoritativa si ya había otra. Cuál de las dos es la buena lo
+  decide una persona, no la plataforma (regla 10).
+
+  Permiso nuevo, `estadisticas`, con el mismo reparto que `asistencia`: dueño,
+  administrador y visor de la liga. Se mantiene aparte y no dentro de
+  `asistencia` porque son dos trabajos de tamaños muy distintos —cuarenta
+  marcas contra ciento veinte jugadas— y una liga va a querer poder dar el
+  primero sin el segundo. El box score **sí es público**, a diferencia de la
+  asistencia: es el resultado deportivo, que es justo lo que un torneo publica.
+
+  **Verificado el 2026-09-20** contra una rama de Neon: 33 pruebas unitarias
+  nuevas para la aritmética de la NCAA y 68 comprobaciones de punta a punta
+  (`backend/tests/plays.e2e.mjs`) para lo que ninguna prueba unitaria alcanza
+  —la idempotencia vive en un `ON CONFLICT` de Postgres, no en JavaScript.
+
+  **Y un bug que solo apareció corriéndolo.** El `PUT` que corrige una jugada
+  borraba sus participantes y los volvía a insertar en la **misma sentencia**.
+  Los CTE de Postgres comparten un snapshot, así que el `INSERT` veía las filas
+  viejas todavía presentes, su `ON CONFLICT` no insertaba nada, y después el
+  `DELETE` se las llevaba: la jugada quedaba sin ningún participante. No
+  fallaba, no avisaba, y el 200 se veía igual de bien. Se arregló con el patrón
+  que el `PUT` del pase de lista ya tenía escrito y que aquí no se había
+  seguido: los dos CTE que escriben tocan la misma tabla pero nunca la misma
+  fila.
+
+  Un cambio sobre lo que el README tenía escrito: `yards_gained` quedó
+  `NOT NULL` en vez de nulable, por lo que la propia sección dice tres párrafos
+  más abajo —*cero es un valor, no un hueco*—. Un NULL ahí se suma como cero al
+  derivar, y entonces "no se capturó" y "no avanzó" dejan de distinguirse.
+
 - **La app ya abre y captura sin señal (2026-09-20)**: la capa que "Capturar sin
   señal" pedía como requisito, no como mejora. Muchas canchas no tienen
   internet, y una captura que exige conexión no se usa: se vuelve al papel en el

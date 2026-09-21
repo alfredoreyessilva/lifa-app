@@ -23,6 +23,7 @@ entorno, así que el CI las corre en cada push (ver `.github/workflows/ci.yml`).
 |---|---|
 | `unit/timezones.test.mjs` | Conversión hora local ↔ UTC: el desfase de cada zona, que Tijuana sí tenga horario de verano y el resto de México no, la medianoche, y el viaje redondo en las 36 zonas |
 | `unit/validation.test.mjs` | Los validadores de correo, URL y links de Google Maps — incluido que `javascript:` no pase |
+| `unit/plays.test.mjs` | La aritmética de acreditación de la **NCAA**: que una captura no sea intento de pase, que se parta entre los taqueadores, que los dos puntos no entren en los totales individuales, y que un partido en `scoring` no derive box score |
 
 Por qué estas y no otras: son las funciones que **se pueden** probar sin
 levantar nada. Todo lo demás en `src/` toca Postgres en la primera línea, y
@@ -34,22 +35,30 @@ de ellas cruza a propósito con el backend: verifica que la lista de zonas
 horarias que el backend acepta y la lista de etiquetas que el frontend sabe
 mostrar no se separen.
 
-## Las de punta a punta — cobranza
+## Las de punta a punta
 
-No son unitarias y no corren en el CI: son dos scripts que ejercitan los dos
-libros contra un backend vivo, para lo único que de verdad no se puede revisar
-leyendo el código — que el saldo cuadre después de cancelar, rechazar y retirar.
+No son unitarias y no corren en el CI: son cuatro scripts que ejercitan contra
+un backend vivo lo único que de verdad no se puede revisar leyendo el código —
+que el saldo cuadre después de cancelar, rechazar y retirar, y que un lote
+reenviado no duplique nada.
 
 | Script | Qué cubre |
 |---|---|
 | `billing-player.e2e.mjs` | equipo → jugador: padrón sin liga, cuotas, estado de cuenta público, conciliación |
 | `billing-league.e2e.mjs` | liga → equipo: cargos, reporte del equipo, confirmar/rechazar/retirar |
 | `invites-roles.e2e.mjs` | invitación con rol, la entrega de un equipo y la revocación: quién queda de alta en `organization_members`, y a quién le toca 409, 403 o 200 |
+| `plays.e2e.mjs` | estadísticas por jugada: que reenviar el mismo lote sea gratis, que la cascada dé un solo box score, que dos capturistas no se pisen y que las reglas de la NCAA sobrevivan el viaje por la base |
 
 Las dos de cobranza **no** cubren nada de roles ni de fronteras: las dos usan
 un equipo independiente cuyo dueño es el propio actor, así que nunca hay una
 liga entregando un equipo ni intentando entrar donde no le toca. Eso es lo que
 cubre la tercera, y por eso existe.
+
+La cuarta cubre lo que ninguna prueba unitaria alcanza a tocar: la idempotencia
+del lote vive en un `ON CONFLICT` de Postgres, no en JavaScript. Ya se pagó por
+tenerla — encontró que el `PUT` que corrige una jugada la dejaba **sin ningún
+participante**, porque el `DELETE` y el `INSERT` compartían snapshot dentro de
+la misma sentencia y ninguno de los dos fallaba.
 
 ### Cómo correrlos
 
@@ -64,6 +73,7 @@ node src/server.js          # en una terminal
 node tests/billing-player.e2e.mjs   # en otra, con las mismas variables
 node tests/billing-league.e2e.mjs
 node tests/invites-roles.e2e.mjs
+node tests/plays.e2e.mjs
 ```
 
 `DATABASE_URL` hay que ponerla **en las dos** terminales: los scripts abren su

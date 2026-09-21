@@ -465,10 +465,16 @@ async function resolverPartido(req, res) {
   return { match, category, league };
 }
 
-async function ligaPuedeAsistencia(req, league) {
+// Las dos pantallas del visor en la cancha preguntan lo mismo con permisos
+// distintos, así que la pregunta se escribe una vez.
+async function ligaPuedePermiso(req, league, permiso) {
   if (req.user.role === 'admin') return true;
   if (league.owner_user_id === req.user.id) return true;
-  return isOrgMember(req.user.id, league.organization_id, rolesConPermiso('league', 'asistencia'));
+  return isOrgMember(req.user.id, league.organization_id, rolesConPermiso('league', permiso));
+}
+
+async function ligaPuedeAsistencia(req, league) {
+  return ligaPuedePermiso(req, league, 'asistencia');
 }
 
 // Qué equipos de este partido puede VER quien pregunta. La liga los ve los dos;
@@ -518,6 +524,29 @@ export const matchAttendanceRequired = asyncHandler(async (req, res, next) => {
 
   if (!await ligaPuedeAsistencia(req, ctx.league)) {
     return res.status(403).json({ error: 'Solo la liga pasa lista en sus partidos' });
+  }
+
+  req.league = ctx.league;
+  req.category = ctx.category;
+  req.match = ctx.match;
+  return next();
+});
+
+// Capturar las jugadas de un partido. Es la otra pantalla del visor en la
+// cancha y se resuelve igual que el pase de lista: capturar es un acto de la
+// liga en su partido, y el equipo no entra por ningún lado.
+//
+// **No hay guarda para LEER**, y esa es la diferencia con la asistencia: el box
+// score es público, porque es el resultado deportivo y eso es justo lo que un
+// torneo publica. La asistencia no lo es nunca — son faltas de gente que en
+// buena parte es menor de edad. Lo único que esta guarda protege es la captura
+// y el panel que la enseña.
+export const matchStatsRequired = asyncHandler(async (req, res, next) => {
+  const ctx = await resolverPartido(req, res);
+  if (!ctx) return;
+
+  if (!await ligaPuedePermiso(req, ctx.league, 'estadisticas')) {
+    return res.status(403).json({ error: 'Solo la liga captura las estadísticas de sus partidos' });
   }
 
   req.league = ctx.league;

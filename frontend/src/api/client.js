@@ -288,6 +288,53 @@ export const api = {
   getBranchTeamAttendance: (branchId, teamId, token) =>
     request(`/players/branches/${branchId}/teams/${teamId}/attendance`, { token }),
 
+  // ── Estadísticas por jugada ──
+  //
+  // El box score es PÚBLICO y sin token: es el resultado deportivo, que es
+  // justo lo que un torneo publica (a diferencia de la asistencia, que no sale
+  // nunca). Trae siempre `source` y `capture_level`, porque de eso depende cómo
+  // se lee — un partido capturado en `scoring` tiene jugadas y aun así su box
+  // score viene de los totales.
+  getMatchBoxScore: (matchId) =>
+    request(`/plays/matches/${matchId}/box-score`),
+
+  // El panel del visor: los dos rosters, todas las sesiones y sus jugadas. Es
+  // lo que baja "Preparar partido" y lo que se guarda en IndexedDB.
+  getMatchCapture: (matchId, token) =>
+    request(`/plays/matches/${matchId}/capture`, { token }),
+
+  // Reclamar el partido, CON SEÑAL: es justo lo que no se puede hacer desde la
+  // cancha. Un 409 no es un no — es "Fulano ya está capturando, ¿tomas el
+  // control?", y se reenvía con `takeOver`.
+  claimMatchCapture: (matchId, { captureLevel, takeOver = false }, token) =>
+    request(`/plays/matches/${matchId}/sessions`, {
+      method: 'POST', body: { capture_level: captureLevel, take_over: takeOver }, token,
+    }),
+
+  // Cuál de dos capturas del mismo partido es la buena lo decide una persona.
+  setAuthoritativeSession: (matchId, sessionId, token) =>
+    request(`/plays/matches/${matchId}/sessions/${sessionId}/authoritative`, { method: 'PUT', token }),
+
+  // El lote. Es idempotente por `client_play_id`, así que reenviarlo es gratis
+  // — que es justo lo que hace la cola cuando el internet del campo va y viene.
+  saveMatchPlays: (matchId, { sessionId, captureLevel, plays }, token) =>
+    request(`/plays/matches/${matchId}/plays`, {
+      method: 'POST', body: { session_id: sessionId, capture_level: captureLevel, plays }, token,
+    }),
+
+  // Corregir es corregir LA JUGADA, no el total: el box score se recalcula solo
+  // porque no se guarda en ningún lado. Va la jugada entera, participantes
+  // incluidos, por la misma razón que el pase de lista va completo.
+  updateMatchPlay: (matchId, clientPlayId, play, token) =>
+    request(`/plays/matches/${matchId}/plays/${encodeURIComponent(clientPlayId)}`, {
+      method: 'PUT', body: play, token,
+    }),
+
+  deleteMatchPlay: (matchId, clientPlayId, token) =>
+    request(`/plays/matches/${matchId}/plays/${encodeURIComponent(clientPlayId)}`, {
+      method: 'DELETE', token,
+    }),
+
   // Roster por plantilla de Excel: descarga la plantilla ya personalizada
   // (membrete de liga + equipo + torneo/categoría/rama) y sube la plantilla
   // llena. La subida solo agrega los jugadores que no estén ya en la rama.

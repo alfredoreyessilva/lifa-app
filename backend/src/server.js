@@ -19,6 +19,7 @@ import predictionRoutes    from './routes/predictions.js';
 import boardRoutes         from './routes/board.js';
 import poolRoutes          from './routes/pools.js';
 import playerRoutes        from './routes/players.js';
+import playRoutes          from './routes/plays.js';
 import organizationRoutes  from './routes/organizations.js';
 import broadcastRoutes     from './routes/broadcasts.js';
 import productRoutes       from './routes/products.js';
@@ -93,6 +94,9 @@ app.use('/api/predictions',   predictionRoutes);
 app.use('/api/board',         boardRoutes);
 app.use('/api/pools',         poolRoutes);
 app.use('/api/players',       playerRoutes);
+// Las estadísticas por jugada cuelgan del partido, igual que el roster público
+// y el pase de lista: `/api/plays/matches/:matchId/…`.
+app.use('/api/plays',         playRoutes);
 app.use('/api/organizations', organizationRoutes);
 app.use('/api/broadcasts',    broadcastRoutes);
 app.use('/api/products',      productRoutes);

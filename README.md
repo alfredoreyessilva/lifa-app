@@ -2822,11 +2822,18 @@ SELECT organization_id, <tu_user_id>, 'editor' FROM leagues WHERE slug = 'onefa'
 
 ## Estadísticas por jugada
 
-**Decidido el 2026-09-20, sin construir.** Es el mismo patrón que el pase de
-lista y el tercer botón de la vista pública del partido: **Estadísticas** le
-muestra el box score a cualquiera, y a quien tiene el permiso `estadisticas` le
-abre el panel de captura. Lo que cambia es el modelo, y aquí sí había estándar
-que no valía la pena reinventar.
+**Decidido el 2026-09-20. El backend está construido y verificado el
+2026-09-20; falta la pantalla.** Es el mismo patrón que el pase de lista y el
+tercer botón de la vista pública del partido: **Estadísticas** le muestra el
+box score a cualquiera, y a quien tiene el permiso `estadisticas` le abre el
+panel de captura. Lo que cambia es el modelo, y aquí sí había estándar que no
+valía la pena reinventar.
+
+Lo que ya corre: las tres tablas, el permiso, los seis endpoints, la
+derivación del down, el box score en cascada y la suite de punta a punta que
+lo comprueba contra Postgres (`backend/tests/plays.e2e.mjs`, 68 comprobaciones).
+Lo que falta es el panel del visor y la pantalla pública — y el despachador de
+la cola sin señal, que es lo que conecta lo uno con lo otro.
 
 ### Lo que ya existe afuera, y qué se toma de cada cosa
 
@@ -2903,7 +2910,7 @@ CREATE TABLE IF NOT EXISTS match_plays (
   play_type         TEXT NOT NULL,           -- rush · pass · kickoff · punt ·
                                              -- field_goal · extra_point ·
                                              -- two_point · penalty · kneel · spike
-  yards_gained      INTEGER,
+  yards_gained      INTEGER NOT NULL,        -- cero es un valor, no un hueco
   points            INTEGER NOT NULL DEFAULT 0,
   scoring_team_id   INTEGER REFERENCES teams(id) ON DELETE SET NULL,
   notes             TEXT,
@@ -2928,6 +2935,16 @@ CREATE TABLE IF NOT EXISTS play_participants (
 captura sin señal y `sequence` la asigna el dispositivo: dos dispositivos
 empiezan los dos en 1. El porqué completo, y todo lo demás que el modo sin
 señal impone, está en "Capturar sin señal".
+
+**`yards_gained` quedó `NOT NULL`, y el borrador de arriba lo tenía nulable.**
+Se cambió al construirlo, por lo que dice la jugada mínima tres párrafos más
+abajo: *cero es un valor, no un hueco*. Un NULL ahí se suma como cero al
+derivar el box score, y entonces "no se capturó" y "no avanzó" dejan de
+distinguirse — que es justo la confusión que esa regla existe para impedir. El
+validador ya lo exigía; esto es lo que la base no puede dejar pasar por su
+cuenta. Los tres `CHECK` (nivel, tipo de jugada y papel) se construyen desde
+las listas de `utils/plays.js`, como los roles y los estados de asistencia:
+regla 6, la base no puede aceptar un valor que el código no conozca.
 
 **Por qué `play_participants` aparte y no doce columnas de jugador en la
 jugada.** Un pase completo con captura tiene pasador, receptor y dos
@@ -2997,6 +3014,20 @@ el visor no captura el down, lo desmiente cuando se desvía. Se captura la
 posición al **inicio de la serie** y el resto sale solo.
 
 Es la diferencia entre teclear cuatro campos por jugada y confirmar uno.
+
+Tres cosas que se cerraron al construirlo, porque se van a volver a preguntar:
+
+- **`yard_line` son las yardas que faltan para la zona de anotación rival**
+  (0–100), no la numeración pintada en el campo. Se eligió así porque hace que
+  "1 y gol" salga solo: lo que falta por ganar nunca puede ser más que lo que
+  falta para anotar, y `min(10, yard_line)` es toda la regla.
+- **Una corrección rearranca la cadena.** No solo arregla esa jugada: el visor
+  vio el campo y este código no, así que a partir de ahí se deriva desde lo que
+  él dijo. Es también cómo se sale de una cadena rota sin empezar otra serie.
+- **El quinto down no se inventa.** Cuando la cadena se rompe, la jugada sale
+  con el down en blanco y marcada `cadena_rota`. Poner un "5º y 3" sería un
+  dato falso donde un hueco es la verdad, y el hueco es lo que hace que alguien
+  corrija.
 
 ### La serie es la unidad que abarata todo
 
@@ -3118,6 +3149,76 @@ a volver a preguntar.
   cuando se quiera, sin tocar una sola fila. Ahí es donde se usa el
   vocabulario, y ahí es gratis.
 
+  **Y así quedó.** La tabla de equivalencias de veinte líneas está escrita
+  (`EQUIVALENCIAS_SPORTSML`, en `utils/plays.js`) y es lo que las **dos** ramas
+  de la cascada usan para salir: el box score se lee igual venga de las jugadas
+  o de los totales tecleados. Costó lo que se dijo que costaría, no tocó una
+  sola columna y no hubo ventana de incompatibilidad al desplegar. El día que
+  alguien pida la exportación a StatCrew, el mapeo ya existe.
+
+### Endpoints — `routes/plays.js` (`/api/plays`)
+
+| Método | Ruta | Quién |
+|---|---|---|
+| `GET` | `/matches/:matchId/box-score` | **Cualquiera, sin cuenta** |
+| `GET` | `/matches/:matchId/capture` | `estadisticas` |
+| `POST` | `/matches/:matchId/sessions` | `estadisticas` |
+| `PUT` | `/matches/:matchId/sessions/:sessionId/authoritative` | `estadisticas` |
+| `POST` | `/matches/:matchId/plays` | `estadisticas` |
+| `PUT` · `DELETE` | `/matches/:matchId/plays/:clientPlayId` | `estadisticas` |
+
+Cuatro cosas que se decidieron escribiéndolos:
+
+- **El lote hace `ON CONFLICT DO NOTHING`, no `DO UPDATE`**, y la diferencia
+  importa más de lo que parece. Reenviar tiene que ser gratis, pero *pisar* no:
+  una jugada que la liga ya corrigió —revisó el video y el touchdown era del
+  otro— no puede volver a quedar como estaba porque el teléfono del visor
+  recuperó la señal tres horas tarde. Corregir tiene su propio endpoint.
+- **Un lote es todo o nada.** Una jugada mal armada rompe la petición entera en
+  vez de guardar las buenas: media captura subida es peor que ninguna, porque
+  nadie sabe cuál mitad falta. El duplicado es la única excepción —el mismo
+  `client_play_id` dos veces gana el último—, porque eso lo produce la cola de
+  verdad y ya sabemos resolverlo.
+- **Un lote sin sesión no se rechaza: se le abre una.** Es la contraparte de
+  "un partido, un capturista": quien capturó sin haber reclamado sube igual, en
+  su propia sesión, que nace **no autoritativa** si ya había otra. Nunca se
+  descarta lo capturado, y quién tenía razón lo decide una persona.
+- **El panel devuelve las jugadas de TODAS las sesiones**, no solo de la buena.
+  Es lo que permite que alguien compare las dos y elija; enseñar solo la
+  ganadora haría invisible el dato que sigue existiendo.
+
+### Antes de darlo por hecho
+
+El backend se corrió de punta a punta contra una rama de Neon el 2026-09-20
+(`backend/tests/plays.e2e.mjs`, 68 comprobaciones en verde). Lo que esa suite
+cubre y una prueba unitaria no podía:
+
+- ✅ **Reenviar el mismo lote es gratis**: seis jugadas subidas dos veces dejan
+  seis filas y once participantes, no doce y veintidós. Es la promesa entera
+  del modo sin señal y vive en un `ON CONFLICT` de Postgres.
+- ✅ **La cascada entrega un solo box score**, y las dos ramas salen con las
+  mismas llaves. Un partido en `scoring` **no** deriva, aunque tenga jugadas.
+- ✅ **Tomar el control no borra nada**: las jugadas del primer capturista
+  siguen ahí y el panel muestra las dos sesiones.
+- ✅ **Las reglas de la NCAA sobreviven el viaje por la base**, no solo dentro
+  de la función pura: tres intentos de pase y no cuatro, la captura como
+  acarreo de −8, y media captura para cada taqueador.
+
+**Y un bug que solo apareció corriéndolo.** El `PUT` que corrige una jugada
+borraba sus participantes y los volvía a insertar **en la misma sentencia**.
+Los CTE de Postgres comparten un snapshot, así que el `INSERT` veía las filas
+viejas todavía presentes, su `ON CONFLICT` no insertaba nada, y después el
+`DELETE` se las llevaba: la jugada quedaba **sin ningún participante**. No
+fallaba, no avisaba y el 200 se veía igual de bien. Ahora los dos CTE que
+escriben tocan la misma tabla pero nunca la misma fila —el `DELETE` se queda
+con quien ya no viene, el `INSERT` con quien sí—, que es exactamente el patrón
+que el `PUT` del pase de lista ya tenía escrito y que aquí no se había seguido.
+
+**Lo que NO está verificado**, dicho de frente: nada de la pantalla, porque
+todavía no existe. La captura real —ciento veinte jugadas tecleadas por una
+persona con el partido enfrente— es donde se va a ver si la jugada mínima es de
+verdad mínima, y eso no lo contesta ningún endpoint.
+
 ## Capturar sin señal
 
 **Decidido y construido el 2026-09-20.** Es requisito, no mejora. Muchas
@@ -3126,10 +3227,12 @@ sencillamente no se usa: se vuelve al papel en el segundo partido. Gobierna las
 dos pantallas del visor —el pase de lista y la captura por jugada— así que se
 diseña una vez y sirve para las dos.
 
-**La capa está construida y su primer consumidor es el pase de lista.** Lo que
-falta de esta sección es lo que cuelga de la captura por jugada, que todavía no
-existe: la llave de una jugada, el orden por `sequence` y la sesión de captura
-(los tres apartados marcados abajo). La verificación está en `docs/CHANGELOG.md`.
+**La capa está construida y su primer consumidor es el pase de lista.** Los
+tres apartados que colgaban de la captura por jugada —la llave de una jugada,
+el orden por `sequence` y la sesión de captura— ya están construidos también,
+del lado del backend, y la suite `plays.e2e.mjs` los comprueba contra Postgres.
+Lo único que falta es el consumidor: la pantalla de captura y su despachador en
+la cola. La verificación está en `docs/CHANGELOG.md`.
 
 ### Lo que había, y lo que se construyó
 
@@ -3178,7 +3281,7 @@ pantalla misma.
 > la pantalla puede decir "listo, este partido ya se captura sin señal". La
 > diferencia entre las dos es quién se entera del problema y cuándo.
 
-### La llave de una jugada la pone el cliente — llega con las estadísticas
+### La llave de una jugada la pone el cliente — construido
 
 `UNIQUE(match_id, sequence)`, como estaba escrito en "Estadísticas por jugada",
 **no sobrevive al modo sin señal**: `sequence` la asigna el dispositivo, y dos
@@ -3196,7 +3299,7 @@ club, que hace que generar el mismo ciclo dos veces no cobre dos veces. Aquí
 compra lo mismo: subir el mismo lote dos veces es gratis, que es justo lo que
 pasa cuando el internet del campo va y viene.
 
-### El orden sale de `sequence`, nunca de `created_at` — llega con las estadísticas
+### El orden sale de `sequence`, nunca de `created_at` — construido
 
 El `created_at` de una jugada capturada sin señal es **el momento en que se
 subió**, no el momento en que pasó: un partido entero puede llegar con el mismo
@@ -3206,7 +3309,7 @@ Queda escrito porque ordenar por fecha es lo primero que alguien va a intentar,
 el resultado se ve razonable en un partido capturado en vivo, y el partido
 capturado sin señal sale revuelto sin que nada falle.
 
-### Un partido, un capturista a la vez — llega con las estadísticas
+### Un partido, un capturista a la vez — construido
 
 Una **sesión de captura** —`match_capture_sessions`, la tabla que también
 carga el nivel— reclama el partido. Un segundo dispositivo ve "Fulano está
@@ -3248,9 +3351,10 @@ que nadie se entere de que todavía vive ahí.
    `localStorage` no servía: es chico, es síncrono y ya carga el token.
 3. ✅ **La cola de envío**, que reintenta sola y sobrevive a recargar la página
    y a volver a entrar.
-4. ➗ **Los dos endpoints idempotentes**: el `PUT` de asistencia ya nacía
+4. ✅ **Los dos endpoints idempotentes**: el `PUT` de asistencia ya nacía
    idempotente porque recibe la lista completa. El lote de jugadas con
-   `client_play_id` llega con las estadísticas.
+   `client_play_id` se construyó el 2026-09-20 y la suite comprueba que
+   reenviarlo no duplique nada.
 5. ✅ **`manifest.webmanifest`** para que se pueda instalar.
 
 ### Tres cosas que solo se vieron corriéndolo
@@ -3305,10 +3409,11 @@ justo la clase de cosa que se rompe en la cancha y no en el escritorio:
   arriba.
 - ✅ **El mismo lote enviado dos veces**: el `PUT` del pase de lista se probó
   reenviando la misma lista y deja el mismo estado, sin filas de más.
-- ⏳ **Dos dispositivos sobre el mismo partido**: es de la sesión de captura,
-  que llega con las estadísticas. Para el pase de lista no aplica — el `PUT`
-  manda la lista completa y gana el último, que es el comportamiento que se
-  quiere ahí.
+- ✅ **Dos dispositivos sobre el mismo partido**: cubierto por `plays.e2e.mjs`
+  el 2026-09-20 — el segundo capturista recibe 409, tomar el control queda
+  registrado y las jugadas del primero siguen ahí. Para el pase de lista no
+  aplica: el `PUT` manda la lista completa y gana el último, que es el
+  comportamiento que se quiere ahí.
 
 **Lo que este montaje NO prueba**, dicho de frente: un teléfono de verdad. Se
 probó con Chromium y el modo offline de Playwright, que apaga la red pero no

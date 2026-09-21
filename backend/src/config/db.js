@@ -3,6 +3,7 @@ import { HOY_MX } from '../utils/sqlDates.js';
 import { decidirCandadoProduccion, hoyEnMexico } from '../utils/prodGuard.js';
 import { TODOS_LOS_ROLES } from '../utils/orgRoles.js';
 import { ESTADOS_ASISTENCIA } from '../utils/attendance.js';
+import { NIVELES_DE_CAPTURA, TIPOS_DE_JUGADA, ROLES_DE_PARTICIPANTE } from '../utils/plays.js';
 
 const { Pool } = pg;
 
@@ -2066,6 +2067,134 @@ export async function initSchema() {
     // El acumulado se pide siempre por (equipo, rama), y para eso el filtro
     // útil es por equipo: los partidos salen de `matches` y se cruzan aquí.
     await run(`CREATE INDEX IF NOT EXISTS idx_match_attendance_team ON match_attendance(team_id)`);
+
+    // ── Estadísticas por jugada ──
+    //
+    // La jugada es el átomo y el box score se deriva de ahí. No es la opción
+    // barata y se eligió a propósito: es lo único que responde "quién anotó",
+    // que es justo lo que la hoja de visoría necesita y lo que las 16 columnas
+    // de `player_match_stats` nunca van a poder contestar. Todo lo demás
+    // —yardas, intentos, porcentajes, líderes— no se guarda, se suma (regla 4).
+    //
+    // Las tres listas de valores las importa este archivo de `utils/plays.js`,
+    // igual que hace con los roles y con los estados de asistencia: son valores
+    // que viajan por la API, y la regla 6 dice que se cambian en los tres lados
+    // o en ninguno. Así la base no puede aceptar un tipo de jugada que el
+    // código no conozca, ni al revés.
+
+    // La sesión reclama el partido y **declara el nivel**. Lo segundo no es un
+    // adorno: un partido capturado en `scoring` tiene jugadas —las ocho que
+    // anotaron— y derivar un box score de ahí diría que el equipo entero corrió
+    // 80 yardas en todo el partido. Un número falso con cara de verdadero, que
+    // es la peor clase.
+    //
+    // `is_authoritative` es lo único que decide cuál de dos capturas del mismo
+    // partido es la buena, y lo decide una PERSONA. Nunca se descarta lo
+    // capturado: quien capturó sin haber reclamado el partido sube igual, en su
+    // propia sesión, y el panel enseña las dos (regla 10 — la plataforma no
+    // adivina cuál era la buena).
+    await run(`
+      CREATE TABLE IF NOT EXISTS match_capture_sessions (
+        id                 SERIAL PRIMARY KEY,
+        match_id           INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+        capture_level      TEXT NOT NULL CHECK (capture_level IN (${NIVELES_DE_CAPTURA.map((n) => `'${n}'`).join(', ')})),
+        claimed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        claimed_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        released_at        TIMESTAMP,
+        is_authoritative   BOOLEAN NOT NULL DEFAULT TRUE
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_capture_sessions_match ON match_capture_sessions(match_id)`);
+
+    // La jugada. **La identidad es `client_play_id`, no `(match_id, sequence)`**,
+    // y eso lo impuso el modo sin señal: `sequence` la asigna el dispositivo y
+    // dos dispositivos empiezan los dos en 1. La llave nace en el celular
+    // (`crypto.randomUUID()`) junto con la jugada, y el envío hace
+    // `ON CONFLICT DO NOTHING` — subir el mismo lote dos veces es gratis, que es
+    // justo lo que pasa cuando el internet del campo va y viene.
+    //
+    // Es el mismo patrón que `auto_cycle_key` en la mensualidad del club.
+    //
+    // `down`, `distance`, `clock` y `yard_line` son nulables A PROPÓSITO y casi
+    // siempre vienen vacíos:
+    //
+    //   · el down y la distancia se DERIVAN de las yardas dentro de la serie, y
+    //     solo se guardan cuando alguien corrigió el derivado;
+    //   · el reloj y la posición de arranque se capturan UNA VEZ POR SERIE —de
+    //     120 capturas a 10 o 15— y viven en la primera jugada de esa serie.
+    //
+    // No hay tabla de series: una serie ES un grupo de jugadas con el mismo
+    // `drive_number`, y se resuelve al leer.
+    await run(`
+      CREATE TABLE IF NOT EXISTS match_plays (
+        id                 SERIAL PRIMARY KEY,
+        match_id           INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+        session_id         INTEGER NOT NULL REFERENCES match_capture_sessions(id) ON DELETE CASCADE,
+        client_play_id     TEXT NOT NULL,
+        sequence           INTEGER NOT NULL,
+        drive_number       INTEGER NOT NULL,
+        period             TEXT NOT NULL,
+        clock              TEXT,
+        offense_team_id    INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        down               INTEGER,
+        distance           INTEGER,
+        yard_line          INTEGER,
+        play_type          TEXT NOT NULL CHECK (play_type IN (${TIPOS_DE_JUGADA.map((t) => `'${t}'`).join(', ')})),
+        -- NOT NULL a propósito, aunque el borrador del README lo tenía
+        -- nulable: "cero es un valor, no un hueco" (un pase incompleto ganó
+        -- cero). Un NULL aquí se leería como cero al sumar el box score, y
+        -- entonces "no se capturó" y "no avanzó" dejarían de distinguirse —
+        -- que es justo la confusión que esa regla existe para impedir. El
+        -- validador ya lo exige; esto es lo que la base no puede dejar pasar
+        -- por su cuenta.
+        yards_gained       INTEGER NOT NULL,
+        points             INTEGER NOT NULL DEFAULT 0,
+        scoring_team_id    INTEGER REFERENCES teams(id) ON DELETE SET NULL,
+        notes              TEXT,
+        created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(match_id, client_play_id)
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_match_plays_match ON match_plays(match_id)`);
+    // El orden de lectura es (sesión, serie, sequence) y NUNCA `created_at`: el
+    // de una jugada capturada sin señal es el momento en que se subió, no el
+    // momento en que pasó, y un partido entero puede llegar con el mismo
+    // segundo. Ordenar por fecha es lo primero que alguien va a intentar, se ve
+    // razonable en un partido capturado en vivo y sale revuelto justo en el que
+    // se capturó sin señal. El índice existe para que el camino correcto sea
+    // también el rápido.
+    await run(`CREATE INDEX IF NOT EXISTS idx_match_plays_orden ON match_plays(session_id, drive_number, sequence)`);
+
+    // Quién participó, y con qué papel. Tabla aparte y no doce columnas de
+    // jugador en la jugada:
+    //
+    //   · Un pase completo con captura tiene pasador, receptor y dos
+    //     taqueadores; un acarreo tiene uno. Doce columnas nulables obligan a
+    //     leer todas para saber cuáles vienen llenas.
+    //   · Cada estadística nueva sería una columna más. Aquí "intentos de pase
+    //     de fulano" es contar filas con `role = 'passer'`.
+    //   · Es lo que hace que los tres niveles escriban LAS MISMAS FILAS: una
+    //     liga que arranca en `scoring` y en dos temporadas llega a `full` no
+    //     migra nada — sus jugadas viejas se quedan como están y las nuevas
+    //     traen más participantes.
+    //
+    // `yards` por participante existe para repartir una jugada entre dos (la
+    // recepción de 8 y la devolución de 30 que la siguió); en nulo son las de
+    // la jugada completa.
+    await run(`
+      CREATE TABLE IF NOT EXISTS play_participants (
+        id        SERIAL PRIMARY KEY,
+        play_id   INTEGER NOT NULL REFERENCES match_plays(id) ON DELETE CASCADE,
+        player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        role      TEXT NOT NULL CHECK (role IN (${ROLES_DE_PARTICIPANTE.map((r) => `'${r}'`).join(', ')})),
+        yards     INTEGER,
+        UNIQUE(play_id, player_id, role)
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_play_participants_play ON play_participants(play_id)`);
+    // El box score de un jugador a lo largo de la temporada entra por aquí.
+    await run(`CREATE INDEX IF NOT EXISTS idx_play_participants_player ON play_participants(player_id)`);
 
     await client.query('COMMIT');
   } catch (err) {
