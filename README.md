@@ -212,10 +212,13 @@ verificación.
   de `routes/plays.js`, el panel del visor en
   `/partidos/:matchId/estadisticas` y su despachador en la cola sin señal. Su
   sección del README trae la verificación y los tres bugs que salieron. Con eso
-  el bloque del día del partido **no tiene código pendiente**.
+  el bloque del día del partido **no tiene código pendiente de lo que estaba
+  definido** — el hueco de la instalación apareció después, al preguntarse cómo
+  hace un visor para guardar la app en su teléfono.
 
-  Ya se desplegó el 2026-09-20 (ver el CHANGELOG). Lo que le falta a este
-  bloque no se escribe ni se despliega: se prueba. Ver el pendiente de abajo.
+  Ya se desplegó el 2026-09-20 (ver el CHANGELOG). Lo que le queda son los dos
+  pendientes de abajo: probarlo en una cancha, y decidir cómo se le pide al
+  visor que instale la app — que resultó no pedirse en ningún lado.
 
 - **Capturar sin señal no está probado en un teléfono (2026-09-20).** Ahora son
   **dos pantallas** las que dependen de esa capa —el pase de lista y la captura
@@ -228,8 +231,7 @@ verificación.
   Es verificación, no código, y pide un teléfono de verdad en una cancha de
   verdad. **Ya no está bloqueada**: se desplegó el 2026-09-20, así que hay URL
   pública contra la cual probar y la app se puede instalar desde el teléfono.
-  Es el único pendiente que le queda al bloque. Tres cosas que conviene mirar
-  durante esa prueba:
+  Tres cosas que conviene mirar durante esa prueba:
 
   1. **Si la jugada mínima es de verdad mínima.** Ciento veinte capturas
      seguidas, con el partido enfrente y sin poder pedir repetición, es lo
@@ -248,6 +250,43 @@ verificación.
      **descartado por medición**, no por confianza. Lo único que no se puede
      saber sin un iPhone es cómo lo recorta y lo pinta iOS al agregarlo a
      inicio, que es mirada de un segundo durante la prueba.
+
+- **Nadie le dice al visor que instale la app (2026-09-21).** Verificado ese
+  día: **cero ocurrencias** de `beforeinstallprompt`, `appinstalled` o
+  cualquier botón o texto de instalación en todo `frontend/src/`. Instalar es
+  hoy un gesto del navegador que el visor tiene que saber hacer solo.
+
+  No es cosmético, y es incómodo porque contradice al resto del argumento: todo
+  "Capturar sin señal" se sostiene en que **una app instalada aguanta mucho
+  mejor que una pestaña**, y el escenario entero es el administrador de memoria
+  del teléfono decidiendo cerrar algo. El icono de iOS se agregó justo por eso
+  (ver el CHANGELOG del 2026-09-20). Pero si el producto nunca lo pide, el
+  visor va a capturar desde una pestaña — que es el caso frágil para el que se
+  construyó todo lo demás.
+
+  **Son dos problemas distintos, no uno:**
+
+  - **Android/Chrome se puede resolver con código.** El navegador dispara
+    `beforeinstallprompt`; se captura, se guarda y se ofrece como botón propio
+    cuando convenga. Chrome a veces muestra su propio banner, pero no está
+    garantizado y se descarta para siempre con un toque.
+  - **iOS no se puede provocar.** No hay API: es Compartir → "Añadir a pantalla
+    de inicio", y **solo en Safari** —Chrome en iOS no puede instalar—. O sea
+    que ahí la solución no es un botón, es una **instrucción en pantalla**, con
+    el costo de explicar un gesto del sistema operativo dentro de la app.
+
+  **Lo que falta decidir** —y por eso esto es un pendiente y no un commit—: en
+  qué pantalla se dice (¿al llegar a la captura con permiso `estadisticas`?,
+  ¿al preparar partido, que es cuando el visor ya declaró que se va a una
+  cancha?), si se insiste o se dice una sola vez, y si se detecta
+  `display-mode: standalone` para no molestar a quien ya la instaló.
+
+  **Un dato que la prueba del teléfono debería traer de vuelta**: si en iOS la
+  app instalada tiene almacenamiento separado del Safari normal. Si lo tiene,
+  el orden **importa** —instalar antes de "⬇ Preparar partido", o lo preparado
+  se queda en la pestaña y la app abre vacía— y entonces lo que hay que decirle
+  al visor no es solo *que* instale, sino *cuándo*. Mientras no se sepa,
+  conviene hacer la prueba en ese orden.
 
 - **El pase de lista no tiene suite e2e (2026-09-20).** Sus rutas se probaron a
   mano contra la rama de Neon —los cinco casos del `PUT` (marcar, reintentar,
