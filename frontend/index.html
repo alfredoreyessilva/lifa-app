@@ -8,6 +8,10 @@
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
+    <!-- iOS ignora los iconos del manifest y usa esta etiqueta. Sin ella, el
+         icono de la app instalada en un iPhone es una miniatura de la página. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
     <!-- Para que la app se pueda instalar en el teléfono. No es requisito para
          capturar sin señal, pero una app instalada aguanta mucho mejor que una
          pestaña, que el teléfono puede matar a media captura. -->

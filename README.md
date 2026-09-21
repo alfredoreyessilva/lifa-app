@@ -218,7 +218,7 @@ verificación.
   los dos pendientes de abajo, en ese orden.
 
 - **Nada del bloque del día del partido está desplegado (2026-09-20).** Los
-  seis commits viven en la rama local `dia-del-partido` y **no están en el
+  nueve commits viven en la rama local `dia-del-partido` y **no están en el
   remoto**: `origin/main` sigue en `35b3616`. Quien llegue nuevo a esto no debe
   dar por hecho que algo de aquí está en producción — no lo está, y la rama de
   Neon `desarrollo-local` es el único lugar donde existen estas tablas.
@@ -243,18 +243,6 @@ verificación.
     simplemente no lo usa; al revés, `puede()` falla abierto a propósito
     mientras el campo no viene (ver el comentario de `utils/permisos.js`).
 
-- **La app no se instala bien en iPhone (2026-09-20).** El
-  `manifest.webmanifest` declara un solo icono SVG y **no hay
-  `apple-touch-icon`** en `frontend/index.html` (verificado el 2026-09-20: cero
-  ocurrencias); iOS ignora los iconos del manifest y usa esa etiqueta. En
-  Android/Chrome la instalación sí funciona.
-
-  No es cosmético para el caso de la cancha: una app instalada aguanta mucho
-  mejor que una pestaña, y el escenario entero es el administrador de memoria
-  del teléfono decidiendo cerrar algo. Es el arreglo barato que conviene meter
-  **antes** de desplegar, porque después la prueba del teléfono ya depende de
-  él: un PNG de 180×180 en `public/` y una etiqueta en `index.html`.
-
 - **Capturar sin señal no está probado en un teléfono (2026-09-20).** Ahora son
   **dos pantallas** las que dependen de esa capa —el pase de lista y la captura
   por jugada—, y las dos corrieron de punta a punta contra la compilación real,
@@ -264,8 +252,8 @@ verificación.
   para el que existe todo esto.
 
   Es verificación, no código, y pide un teléfono de verdad en una cancha de
-  verdad. Va **después** de desplegar y de arreglar el icono, por lo dicho en
-  esos dos pendientes. Dos cosas que conviene mirar durante esa prueba:
+  verdad. Va **después** de desplegar, por lo dicho en ese pendiente. Tres
+  cosas que conviene mirar durante esa prueba:
 
   1. **Si la jugada mínima es de verdad mínima.** Ciento veinte capturas
      seguidas, con el partido enfrente y sin poder pedir repetición, es lo
@@ -276,6 +264,11 @@ verificación.
      mientras no suben, las capturas viven solo en ese teléfono. La pantalla lo
      dice y el navegador avisa al salir, pero nada de eso se ha visto en manos
      de alguien que no escribió el código.
+  3. **Que el `apple-touch-icon` de verdad se instale.** Se agregó el
+     2026-09-20 y se verificó hasta donde se puede sin un iPhone —el PNG se
+     sirve, el manifest lo declara—, pero quien decide si el icono sale bien
+     es iOS, y eso solo se ve en "Agregar a inicio". Si sale un cuadro negro,
+     es que el PNG se coló con transparencia.
 
 - **El pase de lista no tiene suite e2e (2026-09-20).** Sus rutas se probaron a
   mano contra la rama de Neon —los cinco casos del `PUT` (marcar, reintentar,

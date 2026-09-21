@@ -15,6 +15,39 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **La app ya trae icono para instalarse en iPhone (2026-09-20)** — faltaba el
+  `apple-touch-icon`, que es la única etiqueta que iOS mira: ignora los iconos
+  del manifest, así que una app agregada a inicio salía con una miniatura de la
+  página en vez de la marca. Android/Chrome nunca tuvo el problema.
+
+  Va antes de desplegar por una dependencia, no por orden: la prueba pendiente
+  del teléfono estrena la app instalada, y sin el icono esa prueba arranca con
+  el defecto puesto.
+
+  **El icono se rasterizó del `favicon.svg`**, no del banner `cfbamx.jpg`: el
+  wordmark "CFBAMX" a 180 píxeles de ancho no se lee, y el favicon ya es la
+  marca en cuadrado —balón amarillo sobre verde—. Dos decisiones que no son
+  cosméticas y que conviene no deshacer:
+
+  - **Sin las esquinas redondeadas del SVG.** El favicon trae `rx="12"`;
+    copiarlo dejaría las cuatro esquinas transparentes, iOS las compone sobre
+    **negro** y luego recorta su propia máscara encima. El PNG va a sangre y
+    iOS redondea.
+  - **Sin canal alfa** (`Format24bppRgb`), por lo mismo: cualquier
+    transparencia que se cuele se vuelve negra en el teléfono.
+
+  El balón queda con ~18% de margen, que aguanta el recorte de la máscara de
+  iOS sin comerse las agujetas.
+
+  **Verificado**: PNG de 180×180 sin alfa (3,052 bytes); `npm run build` lo
+  copia a `dist/`; servido con `vite preview`, `/apple-touch-icon.png` responde
+  `200 image/png` y `/manifest.webmanifest` responde `200
+  application/manifest+json` con el JSON válido y las dos entradas de icono.
+  **Lo que NO se verificó**: cómo lo pinta un iPhone de verdad. No se abrió en
+  el navegador —la instancia de Playwright quedó bloqueada por permisos— y de
+  todas formas Chromium en Windows no contesta esa pregunta. Queda como tercer
+  punto de la prueba del teléfono en "Pendientes abiertos".
+
 - **El visor ya captura jugada por jugada, en la cancha y sin señal
   (2026-09-20)** — la pantalla que faltaba, montada sobre el backend de la
   entrada de abajo. `/partidos/:matchId/estadisticas` es el tercer botón del
