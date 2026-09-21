@@ -75,7 +75,7 @@ plataforma (capturar sin señal) ya está construido debajo.
 |-|-|-|
 |Páginas legales|**100%**|Cerrado el 2026-09-19: los cuatro datos llenos, `/terminos` publicado y el Aviso completo|
 |Seguridad|90%|El modelo de roles y fronteras quedó **construido** el 2026-09-20 (ver su sección): seis roles, guardas que se piden por permiso y la liga fuera del padrón del club. Quedan rotar `CLOUDINARY_API_SECRET`, las invitaciones que no caducan, `DELETE /manage/teams/:id` —que destruye contabilidad sin avisar— y la tarjeta pública del jugador, que todavía publica el historial de equipos contra la regla 7 (la **foto** ya se recortó el 2026-09-20, con el roster público)|
-|Pruebas automatizadas|48%|Las 228 del CI (130 backend + 98 frontend) cubren **solo funciones puras**. Todo `routes/` empieza consultando Postgres y sigue fuera del CI. Lo que sí lo toca son las **tres** suites e2e —las dos de cobranza y la de invitaciones y roles, que estrenó la cobertura de auth— y esas se corren a mano|
+|Pruebas automatizadas|50%|Las 285 del CI (164 backend + 121 frontend) cubren **solo funciones puras**. Todo `routes/` empieza consultando Postgres y sigue fuera del CI. Lo que sí lo toca son las **cuatro** suites e2e —las dos de cobranza, la de invitaciones y roles, y la de estadísticas por jugada— y esas se corren a mano|
 |Concentración de archivos|sin urgencia|Cinco archivos concentran demasiado; solo `db.js` tiene techo real (9s de arranque). Ver "Pendientes conocidos"|
 
 ### Roadmap de negocio, por fase
@@ -85,7 +85,7 @@ plataforma (capturar sin señal) ya está construido debajo.
 |0 — Cerrar lo que estaba a medias|70%|Solo esperar tráfico para volver a pedir revisión a Booking.com|
 |1 — Fundación de confiabilidad|80%|Subieron las legales a ✅. Quedan el plan de pago de Render/Neon y rotar el secreto de Cloudinary|
 |2 — Automatizar el cobro|**0%**|No hay ninguna pasarela instalada. Es el bloqueador de fondo y el punto de no retorno: en cuanto una liga cobra por la plataforma, no se va|
-|3 — Red de seguridad técnica|48%|228 pruebas y CI hechos, y tres suites e2e que sí prueban contra la base; falta que esas corran solas, monitoreo de uptime y que el CI bloquee el deploy|
+|3 — Red de seguridad técnica|50%|285 pruebas y CI hechos, y cuatro suites e2e que sí prueban contra la base; falta que esas corran solas, monitoreo de uptime y que el CI bloquee el deploy|
 |4 — Ciclo de vida del cliente|15%|Falta el onboarding por correo; `RESEND_API_KEY` ya está configurada, así que es construir los correos|
 |5 — Crecimiento|5%|Página de precios, analítica de conversión, SEO más allá del sitemap|
 
@@ -189,15 +189,61 @@ verificación.
   del monto.
 
 - **`DELETE /manage/teams/:id` destruye contabilidad sin avisar
-  (2026-09-20).** Es un `DELETE FROM teams` pelón y el esquema encadena
-  `teams → club_members → club_ledger_entries`: borrar un equipo se lleva el
-  padrón del club y su libro de cuotas, que es justo lo que la regla 5 de
-  `CLAUDE.md` declara inborrable. El diálogo del panel solo advierte que los
-  partidos pierden el vínculo. Y la guarda es `teamOwnerRequired`, la misma
-  del perfil, así que la liga alcanza también a un equipo **ya entregado**, que
-  ya no es suyo. Bajo el modelo corregido el 2026-09-20 esto además está mal
-  nombrado: "dar de baja" debería terminar una participación, no destruir un
-  equipo.
+  (2026-09-20).** Es un `DELETE FROM teams` pelón y el esquema encadena a los
+  **dos** libros de dinero, no a uno: `club_ledger_entries` vía
+  `teams → club_members`, y `team_ledger_entries` directo por `team_id`. O sea
+  que borrar un equipo se lleva el padrón del club, su libro de cuotas **y la
+  cuenta liga↔equipo** — justo lo que la regla 5 de `CLAUDE.md` declara
+  inborrable. El diálogo del panel solo advierte que los partidos pierden el
+  vínculo. Y la guarda es `teamOwnerRequired`, la misma del perfil, así que la
+  liga alcanza también a un equipo **ya entregado**, que ya no es suyo.
+
+  **El modelo ya está decidido (2026-09-21)** y escrito en "Quién puede eliminar
+  un equipo, y por qué ese candado y no otro": se puede eliminar **solo mientras
+  nadie más lo administre**, que es `orgTieneMiembros()` sobre la organización
+  del equipo. No es un candado por movimientos. Lo que falta es el código: la
+  guarda en el endpoint y que el diálogo diga lo que de verdad se lleva.
+
+- **La cobranza liga↔equipo está clavada a UNA liga (2026-09-21).** El README
+  promete desde el 2026-09-20 que "un equipo puede participar en torneos de
+  varias ligas a la vez", y para el calendario y la tabla ya es cierto. Para el
+  dinero no: el lado del equipo tiene **un solo** estado de cuenta
+  (`GET /billing/teams/:id/statement`) y sus tres endpoints leen
+  `req.team.league_id`, la columna del modelo viejo. Del otro lado,
+  `teamBelongsToLeague()` valida con `WHERE id = ? AND league_id = ?` — y su
+  comentario ya se llama a sí mismo "modelo clásico".
+
+  El resultado es que **solo la liga de origen le puede cobrar a un equipo**. Si
+  juega en dos, la segunda no tiene cómo.
+
+  **El libro no se migra**: `team_ledger_entries` ya guarda
+  `(league_id, team_id)`, o sea que desde siempre supo distinguir ligas — lo que
+  no existe es la pantalla ni la ruta para leerlo por liga. Lo que falta es una
+  sección **"ligas en las que participa el equipo"**, con una cuenta por liga, y
+  mover esos cinco lugares de `teams.league_id` a `league_teams`.
+
+- **`teams.league_id` todavía contesta las dos preguntas (2026-09-21).** Es la
+  columna del modelo viejo, y el README ya declara que las dos preguntas
+  —"¿se administra solo?" y "¿participa en esta liga?"— se separaron. En el
+  esquema no: `guardaDeEquipo()` lee `team.league_id` para decidir **quién
+  administra**, y las tres tablas N:M que contestan "¿participa?"
+  (`league_teams`, `tournament_teams`, `branch_teams`) conviven con ella.
+
+  Lo que la hace algo más que deuda cosmética es su `ON DELETE CASCADE`:
+
+  ```sql
+  league_id INTEGER REFERENCES leagues(id) ON DELETE CASCADE
+  ```
+
+  **Borrar una liga borra sus equipos** — incluidos los que ya son
+  independientes y juegan en otras ligas, que es el mismo daño del `DELETE` de
+  arriba un piso más arriba. Hoy solo el admin de la plataforma puede borrar una
+  liga (`DELETE /admin/leagues/:id`), así que no es urgente, pero ese botón hace
+  mucho más de lo que su nombre dice.
+
+  Va **después** de la cobranza multi-liga, no antes: ese paso ya mueve la
+  cobranza de `teams.league_id` a `league_teams`, que es justo el terreno que
+  este necesita ganado. Hacerlo al revés es reescribir la cobranza dos veces.
 
 - **El día del partido: el código está completo, falta la cancha
   (2026-09-20).** El **roster público y el pase de lista ya están construidos y
@@ -294,10 +340,13 @@ verificación.
   resultado está en el CHANGELOG, pero nada de eso corre solo. Las 34 pruebas
   nuevas del CI cubren las reglas puras, no las rutas.
 
-  Es el candidato natural a **cuarta suite e2e**, y el árbol de datos que pide
-  —liga, torneo, categoría, rama, equipos inscritos, roster con una baja a media
-  temporada y partidos con equipos vinculados— es el mismo que va a necesitar la
-  captura por jugada. Montarlo dos veces sería pagar el mismo andamio dos veces.
+  **Y ya salió barato (actualizado el 2026-09-21).** Cuando esto se escribió,
+  el árbol de datos que pide —liga, torneo, categoría, rama, equipos inscritos,
+  roster con una baja a media temporada y partidos con equipos vinculados— no
+  existía en ninguna suite, y montarlo se veía caro. Ya no: `plays.e2e.mjs`
+  (2026-09-20) **construye ese mismo andamio** y no cubre asistencia. Así que la
+  del pase de lista sería la **quinta** suite, no la cuarta, y le queda por
+  pagar solo lo suyo.
 
   La otra mitad del trabajo del visor —capturar lo que pasa en el campo—
   también quedó definida el mismo día, en "Estadísticas por jugada": se captura
@@ -1619,15 +1668,43 @@ Son dos estados, no tres, y solo se avanza:
 
 | Estado | La liga puede | El equipo puede |
 |---|---|---|
-| **Registrado, sin entregar** | Perfil, roster, calendario y cobranza liga→equipo. Entregarlo, y cancelar esa entrega mientras nadie la reclame. Eliminarlo | Nada todavía: su organización existe, pero está vacía |
-| **Entregado** | Roster de sus ramas, cuenta liga↔equipo y calendario. **No** padrón, **no** cuotas, **no** invitar, **no** volver a entregarlo | Todo lo suyo, incluido repartir su propio acceso |
+| **Registrado, sin entregar** | Perfil, roster, calendario y cobranza liga→equipo. Entregarlo, y cancelar esa entrega mientras nadie la reclame. **Eliminarlo** | Nada todavía: su organización existe, pero está vacía |
+| **Entregado** | Roster de sus ramas, cuenta liga↔equipo y calendario. **No** padrón, **no** cuotas, **no** invitar, **no** volver a entregarlo, **no** eliminarlo | Todo lo suyo, incluido repartir su propio acceso |
 
-> **Eliminar es la casilla que todavía no cumple, y esta tabla lo decía al
-> revés (corregido el 2026-09-20).** Prometía "eliminarlo, salvo que ya tenga
-> movimientos" y, del lado entregado, "**no** eliminarlo": ninguna de las dos
-> es cierta. `DELETE /manage/teams/:id` no pregunta por movimientos y pasa por
-> `teamOwnerRequired`, que es la guarda del perfil — así que la liga alcanza
-> también a un equipo ya entregado. Está en "Pendientes abiertos".
+#### Quién puede eliminar un equipo, y por qué ese candado y no otro
+
+**Decidido el 2026-09-21.** El candado no es "¿ya tiene movimientos?" sino
+**"¿lo administra alguien más?"**. Es la misma pregunta que ya contesta
+`orgTieneMiembros()` — la del renglón de arriba —, no una nueva.
+
+La razón es de daño, no de contabilidad. Mientras el equipo es solo de la liga,
+borrarlo destruye su cuenta liga↔equipo, pero **esa cuenta es de la liga**: el
+único historial que se pierde es el suyo, y nadie más tiene nada ahí que
+perder. Es su equipo, su libro y su decisión. En cuanto hay otra persona
+administrando, lo que cuelga del equipo dejó de ser de la liga — el padrón del
+club, las cuotas de las familias, el acceso de sus dueños — y entonces ninguna
+liga puede borrarlo, tenga o no movimientos.
+
+Por eso el candado por movimientos habría sido peor: le prohibiría a la liga
+deshacer un equipo que ella misma creó por error y al que ya le cargó algo, que
+es justo el caso donde solo se daña a sí misma.
+
+**El candado no se puede deshacer desde la app.** Una organización que ya tiene
+miembros no puede volver a quedar vacía:
+`DELETE /organizations/:id/members/:userId` rechaza quitar al último miembro
+(400) y rechaza quitar a un `owner` sin ceder antes el puesto (409). Así que
+"entregado" es de ida, y el candado también — sin guardar ningún estado nuevo.
+
+> **La única puerta que queda abierta es `DELETE /admin/users/:id`.**
+> `organization_members.user_id` es `ON DELETE CASCADE`, así que borrar una
+> cuenta desde `/admin` vacía su organización por detrás, saltándose los dos
+> candados de arriba — y el equipo vuelve a ser borrable por su liga. Solo el
+> admin de la plataforma puede provocarlo. No se cerró con código porque borrar
+> una cuenta ya es de por sí una operación de último recurso; queda escrito para
+> que no se descubra tarde.
+
+**Eliminar no es sacar de un torneo.** Son botones distintos, y cuál hace qué
+está en "Sacar a un equipo: dos botones que no hacen lo mismo".
 
 Su participación en los torneos de la liga no es una columna de esta tabla: no
 depende del estado, y se mueve por su cuenta.
@@ -1650,6 +1727,64 @@ Tres consecuencias que no son obvias:
   al representante como `owner`, y esa fila es **lo único** que responde "¿se
   administra solo?" — una sola pregunta, en `orgTieneMiembros()`, para que no
   haya dos respuestas distintas conviviendo.
+
+### Sacar a un equipo: dos botones que no hacen lo mismo
+
+**Escrito el 2026-09-21**, porque los dos existían desde antes y nada decía en
+qué se diferencian. Sacar a un equipo de algo son **tres** acciones distintas, y
+confundirlas es lo que hacía parecer que la plataforma decidía cosas que no le
+tocan:
+
+| Acción | Qué fila borra | Qué se ve |
+|---|---|---|
+| **Sacar de la liga** — `DELETE /leagues/:leagueId/roster/:teamId` | `league_teams` | Desaparece del directorio de Equipos de la liga. **No toca la tabla de posiciones** |
+| **Sacar del torneo** — `DELETE /manage/branches/:branchId/teams/:teamId` | `branch_teams` | Desaparece de la tabla de posiciones de esa rama, y sus partidos dejan de contarle a nadie |
+| **Eliminar el equipo** — `DELETE /manage/teams/:id` | `teams` | Deja de existir. Solo mientras nadie más lo administre (arriba) |
+
+Las dos primeras **no borran la fila de `teams`**, y de ahí sale todo lo demás:
+el logo, el nombre y los datos del equipo siguen vivos, así que **los partidos
+que ya jugó se siguen viendo igual** — con su escudo, en el calendario de
+siempre, sin que nada indique que se fue. Un partido que ya se jugó no se
+deshace. La primera además ni siquiera lo saca de las ramas donde esté inscrito:
+son decisiones separadas, y la liga las toma por separado.
+
+#### Sacarlo del torneo también le borra el récord a los demás
+
+No es un efecto colateral, es la regla, y está en `computeStandings()`
+(`utils/standings.js`):
+
+```js
+const usable = matches.filter((m) =>
+  countsForStandings(m) && teamIds.has(m.home_team_id) && teamIds.has(m.away_team_id));
+```
+
+Un partido solo cuenta **si los dos equipos están en la tabla**. Saca a uno de
+la rama y sus partidos dejan de existir para el récord de todo el mundo: quien
+le ganó pierde esa victoria, quien le perdió se quita esa derrota. Es la misma
+regla que evita que un amistoso contra un invitado de fuera ensucie récords
+ajenos, y `teams` sale de `branch_teams` (`utils/branchStandings.js`).
+
+#### Y eso es justo el interruptor que la liga necesita
+
+Cuando un equipo abandona a media temporada, cada liga lo resuelve distinto, y
+esto es de la regla 10 de `CLAUDE.md`: la plataforma no decide, registra. Las
+dos políticas reales ya son expresables sin construir nada:
+
+| Lo que decide la liga | Qué hace | Resultado |
+|---|---|---|
+| "Se queda en la tabla y sus partidos se dan por perdidos" | No lo saca de la rama, y captura esos marcadores | Sigue en la tabla con su récord. Los demás conservan lo que le ganaron |
+| "Se sale de la tabla, como si no hubiera jugado" | Lo saca de la rama | Desaparece, y sus partidos no le cuentan a nadie |
+
+Se resuelve al leer (regla 4): no se reescribe ninguna fila y la tabla se
+recalcula sola. Y se decide **rama por rama**, que es la granularidad correcta —
+una liga puede querer sacarlo de una categoría y dejarlo en otra.
+
+> **No existe "perdido por default".** `countsForStandings()` exige marcador
+> capturado de verdad, así que la primera política se ejerce tecleando el
+> marcador (`0-20`, o lo que la liga decida) y el partido queda idéntico a uno
+> jugado. Se pierde la distinción entre "perdió 0-20" y "no se presentó". Es
+> chico, nadie lo ha pedido, y está anotado aquí y no en "Pendientes abiertos"
+> porque no bloquea nada.
 
 ### Los roles
 

@@ -15,6 +15,76 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Un equipo solo se elimina mientras nadie más lo administre (2026-09-21)** —
+  `DELETE /manage/teams/:id` era un `DELETE FROM teams` pelón, sin ninguna
+  pregunta previa, y el esquema encadena a los **dos** libros de dinero:
+  `team_ledger_entries` por `team_id`, y `club_ledger_entries` vía
+  `club_members`. Un clic destruía la cuenta liga↔equipo, el padrón del club y
+  las cuotas de las familias — lo que la regla 5 de `CLAUDE.md` declara
+  inborrable — y el diálogo solo advertía que los partidos perdían el vínculo.
+
+  **El candado que se eligió es "¿lo administra alguien más?", no "¿ya tiene
+  movimientos?"**, y el porqué está en el README. En corto: mientras el equipo
+  es solo de la liga, el único historial que se destruye es el de la liga sobre
+  su propio equipo, y nadie más tiene nada que perder ahí. Un candado por
+  movimientos, en cambio, le habría prohibido deshacer un equipo que creó por
+  error y al que ya le cargó algo — justo el caso donde solo se daña a sí misma.
+
+  El candado es una línea: `orgTieneMiembros(req.team.organization_id)` → 409.
+  Es la **misma** función que ya contestaba "¿se administra solo?" en el resto
+  del modelo, así que no hay un segundo estado que pueda contradecirla. Y no
+  necesita pestillo: una organización con miembros no puede volver a quedar
+  vacía, porque `DELETE /organizations/:id/members/:userId` rechaza quitar al
+  último (400) y rechaza quitar a un `owner` sin ceder antes el puesto (409).
+
+  **El diálogo pasó a `TypeNameConfirmModal`**, el mismo patrón que este panel
+  ya usaba para borrar un torneo o una rama — que destruyen menos. Ahora dice
+  que se va la cuenta con el equipo, que los partidos pierden el escudo y no
+  solo el vínculo, y que si lo que se quiere es que deje de participar, el
+  botón es otro.
+
+  **Verificado contra una rama de Neon y en el navegador.** Dos secciones
+  nuevas en `invites-roles.e2e.mjs` (71 ok, 0 fallas; las dos de cobranza
+  siguen en 21 y 40): que un equipo sin entregar **sí** se elimina *después* de
+  que la liga le cargó $500 —y que su fila de `team_ledger_entries` se va con
+  él—, y que uno ya entregado da 409 aunque **no** tenga ni un movimiento, ni
+  para la liga ni para su propio dueño. Las dos mitades importan: la primera
+  prueba que el candado no es por movimientos, la segunda que sí es por
+  administración. En el navegador, contra el backend de pruebas, se vieron las
+  dos pantallas: el modal nuevo con su confirmación por nombre, y el 409
+  llegando al modal con el texto del backend.
+
+  **Lo que este cambio NO toca**: `DELETE /admin/users/:id` sigue pudiendo
+  vaciar una organización por detrás (`organization_members.user_id` es
+  `ON DELETE CASCADE`), y con eso el equipo vuelve a ser borrable. Solo el admin
+  de la plataforma puede provocarlo; queda escrito en el README.
+
+- **Los dos botones de "sacar a un equipo" ya están documentados (2026-09-21)** —
+  existían desde antes y nada decía en qué se diferencian, que es lo que hacía
+  parecer que la plataforma decidía cosas que no le tocan. Sacar de la liga
+  (`league_teams`) es el directorio; sacar del torneo (`branch_teams`) es la
+  tabla de posiciones; eliminar es otra cosa. Ninguno de los dos primeros borra
+  la fila de `teams`, así que los partidos ya jugados se siguen viendo con su
+  escudo.
+
+  Lo que hacía falta escribir es que **sacar del torneo también le borra el
+  récord a los demás**: `computeStandings()` solo cuenta un partido si los dos
+  equipos están en la tabla, así que quien le ganó pierde esa victoria. No es
+  un bug — es el interruptor con el que cada liga decide si al que abandona lo
+  deja en la tabla dando sus partidos por perdidos, o lo saca como si no
+  hubiera jugado. Regla 10: la plataforma registra, la liga decide.
+
+- **Los números de pruebas del README estaban desfasados (2026-09-21)** — decía
+  228 (130 backend + 98 frontend) y **tres** suites e2e. Son **285** (164 + 121,
+  medidas corriendo las dos suites) y **cuatro**: `plays.e2e.mjs` existe desde el
+  2026-09-20 y el README nunca se enteró. `CLAUDE.md` sí traía los números
+  buenos.
+
+  De paso, eso abarata un pendiente: la nota del pase de lista decía que montar
+  su árbol de datos sería pagar el mismo andamio dos veces. Ya no —
+  `plays.e2e.mjs` lo construye y no cubre asistencia—, así que esa suite sería
+  la quinta y solo le queda pagar lo suyo.
+
 - **El bloque del día del partido ya está en producción (2026-09-20)** — los
   nueve commits de `dia-del-partido` pasaron a `origin/main` en fast-forward,
   `35b3616 → 868a31d`. Antes de empujar se confirmó contra el remoto que

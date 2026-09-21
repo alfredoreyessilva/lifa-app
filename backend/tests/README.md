@@ -46,7 +46,7 @@ reenviado no duplique nada.
 |---|---|
 | `billing-player.e2e.mjs` | equipo → jugador: padrón sin liga, cuotas, estado de cuenta público, conciliación |
 | `billing-league.e2e.mjs` | liga → equipo: cargos, reporte del equipo, confirmar/rechazar/retirar |
-| `invites-roles.e2e.mjs` | invitación con rol, la entrega de un equipo y la revocación: quién queda de alta en `organization_members`, y a quién le toca 409, 403 o 200 |
+| `invites-roles.e2e.mjs` | invitación con rol, la entrega de un equipo y la revocación: quién queda de alta en `organization_members`, y a quién le toca 409, 403 o 200. Desde el 2026-09-21 también el candado de **eliminar un equipo**: que uno sin entregar sí se borre aunque deba dinero, y que uno entregado no se borre aunque no deba nada |
 | `plays.e2e.mjs` | estadísticas por jugada: que reenviar el mismo lote sea gratis, que la cascada dé un solo box score, que dos capturistas no se pisen y que las reglas de la NCAA sobrevivan el viaje por la base |
 
 Las dos de cobranza **no** cubren nada de roles ni de fronteras: las dos usan

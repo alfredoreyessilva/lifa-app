@@ -709,9 +709,9 @@ function TreeModal({ modal, token, leagueId, league, leagueTimezone, teams, venu
   }
   if (type === 'delete-team') {
     return (
-      <ConfirmModal title={`Eliminar equipo "${modal.team.name}"`}
-        body="El equipo y sus datos se eliminan. Los partidos donde aparezca por nombre no se borran, pero pierden el vínculo al equipo."
-        confirmLabel="Eliminar equipo" onClose={onClose}
+      <TypeNameConfirmModal title={`Eliminar equipo "${modal.team.name}"`}
+        body={`Esto borra ${modal.team.name} y, con él, su cuenta contigo: los cargos y pagos de tu cobranza con este equipo se van para siempre y no se pueden recuperar. Los partidos donde aparezca no se borran, pero pierden el escudo y el vínculo: queda solo el nombre en texto. Si lo que quieres es que deje de participar, no lo elimines — sácalo de tu liga o del torneo, y sus partidos jugados se conservan intactos.`}
+        name={modal.team.name} confirmLabel="Eliminar equipo para siempre" onClose={onClose}
         onConfirm={async () => { await api.deleteTeam(modal.team.id, token); onDone(); }} />
     );
   }

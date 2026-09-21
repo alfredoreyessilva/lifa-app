@@ -18,6 +18,7 @@ import { PHASE_TYPES, PHASE_TYPE_KEYS } from '../utils/matchPhase.js';
 import { TIEBREAKER_CATALOG, TIEBREAKER_PRESETS } from '../utils/standings.js';
 import { buildBranchStandings } from '../utils/branchStandings.js';
 import { interruptoresDeCategoria } from '../utils/rosterVisibility.js';
+import { orgTieneMiembros } from '../utils/orgMembers.js';
 
 const router = express.Router();
 
@@ -1790,7 +1791,36 @@ async function syncTeamLinksToMatches(team) {
   }
 }
 
+// Eliminar un equipo, y el único candado que tiene: que no lo administre nadie
+// más. Ver README, "Quién puede eliminar un equipo, y por qué ese candado y no
+// otro".
+//
+// El `DELETE FROM teams` encadena a los DOS libros de dinero —
+// `team_ledger_entries` por `team_id`, y `club_ledger_entries` vía
+// `club_members` — que la regla 5 de CLAUDE.md declara inborrables. Mientras el
+// equipo sea solo de la liga eso está bien: el único historial que se destruye
+// es el de la liga misma, sobre un equipo que ella creó, y nadie más tiene nada
+// que perder ahí. En cuanto hay otra persona administrando, lo que cuelga del
+// equipo —padrón del club, cuotas de las familias, el acceso de sus dueños—
+// dejó de ser suyo, y ya no lo puede borrar.
+//
+// El candado NO es "¿ya tiene movimientos?", a propósito: eso le prohibiría a
+// la liga deshacer un equipo que creó por error y al que ya le cargó algo, que
+// es justo el caso donde solo se daña a sí misma.
+//
+// `orgTieneMiembros()` es la MISMA pregunta que contesta "¿se administra solo?"
+// en el resto del modelo — no hay un segundo estado que pueda contradecirla. Y
+// es de una sola vía sin guardar nada: una organización con miembros no puede
+// volver a quedar vacía, porque `DELETE /organizations/:id/members/:userId`
+// rechaza quitar al último (400) y rechaza quitar a un owner sin ceder antes el
+// puesto (409).
 router.delete('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
+  if (await orgTieneMiembros(req.team.organization_id)) {
+    return res.status(409).json({
+      error: 'Este equipo ya tiene su propia administración, así que no se puede eliminar. Si ya no participa, sácalo de tu liga o de un torneo.',
+    });
+  }
+
   await db.prepare('DELETE FROM teams WHERE id = ?').run(req.team.id);
   res.json({ ok: true });
 }));

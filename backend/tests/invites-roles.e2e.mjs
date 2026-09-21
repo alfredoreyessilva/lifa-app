@@ -256,6 +256,63 @@ ok((await call(rutaRoster, { method: 'POST', token: COACH2, body: { first_name: 
   'el coach NO da de alta en el roster: lo lee desde el panel, no lo edita');
 ok((await call(rutaRoster, { method: 'POST', token: TESO2, body: { first_name: 'X', last_name: 'Y' } })).status === 403,
   'y el tesorero tampoco — lleva dinero, no jugadores');
+// ─────────────────────────────────────────────────────────────────────────
+// Eliminar un equipo: el candado es "¿lo administra alguien más?", NO
+// "¿ya tiene movimientos?". Ver README, "Quién puede eliminar un equipo, y
+// por qué ese candado y no otro".
+//
+// Esto no se puede probar con una función pura: el candado pregunta por filas
+// de `organization_members` y el borrado encadena a dos libros de dinero por
+// FK. Las dos mitades viven en Postgres.
+console.log('\n=== 16. Un equipo sin entregar sí se elimina, aunque deba dinero ===');
+
+const tm4 = await call(`/manage/leagues/${LEAGUE}/teams`, { method: 'POST', token: LIGA, body: { name: `Equipo Borrable ${stamp}` } });
+const TEAM4 = tm4.data.team?.id ?? tm4.data.id;
+const { rows: [{ organization_id: ORG4 }] } = await pool.query('SELECT organization_id FROM teams WHERE id=$1', [TEAM4]);
+ok((await miembros(ORG4)).length === 0, 'nace sin nadie administrándolo', `org=${ORG4}`);
+
+// Un cargo de la liga a ese equipo: es justo lo que un candado por movimientos
+// habría bloqueado, y que a propósito NO bloquea.
+const cargo4 = await call(`/billing/leagues/${LEAGUE}/charges`, {
+  method: 'POST', token: LIGA,
+  body: {
+    category: 'inscripcion', concept: 'Inscripción', due_date: '2026-12-31',
+    items: [{ team_id: TEAM4, amount: 500 }],
+  },
+});
+ok(cargo4.status === 201, 'la liga le carga dinero', `=${cargo4.status} ${JSON.stringify(cargo4.data).slice(0, 90)}`);
+const { rows: libroAntes } = await pool.query('SELECT id FROM team_ledger_entries WHERE team_id=$1', [TEAM4]);
+ok(libroAntes.length > 0, 'y el cargo quedó en el libro liga↔equipo', `filas=${libroAntes.length}`);
+
+const borrar4 = await call(`/manage/teams/${TEAM4}`, { method: 'DELETE', token: LIGA });
+ok(borrar4.status === 200, 'la liga SÍ lo elimina: tener movimientos no es el candado', `=${borrar4.status}`);
+const { rows: quedaEquipo } = await pool.query('SELECT id FROM teams WHERE id=$1', [TEAM4]);
+ok(quedaEquipo.length === 0, 'el equipo ya no existe', JSON.stringify(quedaEquipo));
+const { rows: libroDespues } = await pool.query('SELECT id FROM team_ledger_entries WHERE team_id=$1', [TEAM4]);
+ok(libroDespues.length === 0,
+  'y su libro se fue con él — el único historial destruido es el de la liga, sobre su propio equipo',
+  `filas=${libroDespues.length}`);
+
+console.log('\n=== 17. Un equipo entregado NO se elimina, tenga o no movimientos ===');
+// TEAM se entregó en el paso 4 y su organización tiene miembros desde
+// entonces. No se le cargó nada: si el candado fuera por movimientos, este
+// borrado pasaría.
+const { rows: sinLibro } = await pool.query('SELECT id FROM team_ledger_entries WHERE team_id=$1', [TEAM]);
+ok(sinLibro.length === 0, 'este equipo no tiene ni un movimiento', `filas=${sinLibro.length}`);
+ok((await miembros(ORG)).length > 0, 'pero sí tiene quien lo administre', JSON.stringify(await miembros(ORG)));
+
+const borrarEntregado = await call(`/manage/teams/${TEAM}`, { method: 'DELETE', token: LIGA });
+ok(borrarEntregado.status === 409, 'la liga recibe 409 — ya no es suyo', `=${borrarEntregado.status}`);
+const { rows: sigueVivo } = await pool.query('SELECT id FROM teams WHERE id=$1', [TEAM]);
+ok(sigueVivo.length === 1, 'y el equipo sigue existiendo', JSON.stringify(sigueVivo));
+ok((await call(`/player-billing/teams/${TEAM}/overview`, { token: REP })).status === 200,
+  'con su padrón intacto');
+
+// El dueño del propio equipo tampoco: el endpoint es el de la liga y el
+// candado no distingue quién pregunta, solo si hay administración.
+const borrarPorSuDueno = await call(`/manage/teams/${TEAM}`, { method: 'DELETE', token: REP });
+ok(borrarPorSuDueno.status === 409, 'ni siquiera su propio dueño lo borra por esta ruta', `=${borrarPorSuDueno.status}`);
+
 
 console.log(`\n========  ${pass} ok, ${fail} fallas  ========`);
 await pool.end();
