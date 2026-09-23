@@ -15,6 +15,37 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **PD-02 baja de P0 a P2: el cron corre poco, pero no hay nadie esperando el
+  aviso (2026-09-23)**. Se midió antes de construir, que era lo acordado.
+
+  **El cron externo de antes ya no existe.** Las llamadas de la pestaña Cron
+  (8, 7, 5, 6 y 4 del 19 al 23 de septiembre) coinciden una por una, a la misma
+  hora, con las corridas de `cron.yml`. El pendiente "falta apagar el cron
+  viejo" se cierra sin hacer nada, y habría sido un error apagar algo a ciegas
+  antes de medir. El único scheduler real pasa cada ~4 horas.
+
+  **Con eso, los avisos de partido no llegan a tiempo** (solo lectura contra
+  producción): de 29 partidos de ONEFA en 14 días, "próximo" salió en 0 y "en
+  vivo" en 5. **Pero hay 0 dispositivos con push activado**, así que hoy eso no
+  le llega a nadie, y un cron más preciso no le serviría a nadie. El diseño para
+  cuando haga falta quedó escrito en `PD-02`: cron-job.org cada 14 minutos,
+  solo viernes y sábado de 9 a 23 h, que es cuando juega ONEFA, para no gastar
+  las horas de cómputo gratuitas de Neon.
+
+  **Push sí funciona de punta a punta**, verificado en el navegador contra la
+  rama de desarrollo: suscripción con endpoint real de FCM, `web-push` recibe
+  201 y el service worker muestra la notificación. Lo más probable es que haya
+  0 dispositivos porque la casilla de push viene desmarcada en el modal.
+
+  **Y un defecto que salió al revisarlo**: si el navegador fallaba al
+  suscribirse, `SubscribeButton` pintaba "push activado" con lo que la persona
+  había marcado, mientras el backend guardaba que no, y seguía así hasta
+  recargar. Ahora pinta lo que guardó el backend y, si push no quedó, lo dice
+  en el modal. Si además la persona había marcado **solo** push, ya no se guarda
+  una suscripción sin ningún canal: se le pide marcar la bandeja. Se verificó
+  en el navegador con la falla simulada, en tres casos (push bien, push fallido
+  con bandeja, push fallido sin bandeja), y la base cuadró en los tres.
+
 - **Producción ya tiene respaldo propio, y el primero ya se restauró
   (2026-09-23)**: es el `PD-01`, el primer P0 de la lista nueva. Hasta hoy lo
   único era la restauración del plan gratuito de Neon, que cubre 6 horas. El

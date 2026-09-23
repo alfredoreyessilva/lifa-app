@@ -27,12 +27,13 @@
 # Cualquier OTRO problema (HTTP != 200, o la fase de partidos tronando) sí
 # falla el paso, que es lo que hace que GitHub avise por correo.
 #
-# ── Y el cron viejo ──
+# ── Lo que entrega de verdad ──
 #
-# Se puede dejar corriendo mientras se comprueba este: llamar de más es
-# inofensivo por diseño. Una vez que el panel de administración (pestaña Cron)
-# muestre las llamadas de aquí, apaga el de afuera para no pagar dos veces la
-# misma cosa.
+# Se pide cada 15 minutos y GitHub lo corre más o menos cada 4 horas (medido
+# el 2026-09-23). El cron externo de antes ya no llama: las llamadas de la
+# pestaña Cron coinciden una por una con las corridas de aquí. Alcanza para
+# la cobranza; no para los avisos push de partido. Ver PD-02 en
+# docs/PENDIENTES.md.
 
 name: Cron
 

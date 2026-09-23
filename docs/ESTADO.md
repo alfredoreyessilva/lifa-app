@@ -31,7 +31,8 @@ el uso en producción, no que sea cero.
 comprobado; los dos más grandes (cobranza y cuotas del club) están en
 producción con cero uso; y lo más nuevo (el día del partido) está en producción
 sin haberse probado donde se usa. Lo que falla no es el código sino la
-operación: respaldos, cron y un servidor que se duerme.
+operación: un servidor que se duerme y un cron que pasa cada 4 horas. Los
+respaldos se resolvieron el 2026-09-23.
 
 ## Productos
 
@@ -43,7 +44,7 @@ operación: respaldos, cron y un servidor que se duerme.
 | Predicciones y quinielas | **5** | 1,663 predicciones en el concurso de ONEFA (2026-09-23) | — |
 | Tabla de posiciones | 4 | Verificada contra datos reales (2026-09-16) | PD-14 |
 | Transmisiones | 4 | Sin medir | — |
-| Avisos push de partido | 4, degradado | El cron real corre 5–8 veces al día | PD-02 |
+| Avisos push de partido | 4, **sin audiencia** | Funcionan de punta a punta (verificado 2026-09-23), pero hay **0 dispositivos** con push; el cron atrapa casi ninguna ventana | PD-02 |
 | Afiliados de viaje | Vuelo 4 · Hotel 2 | Hotel no genera comisión | Siguiente alcance |
 
 ### Para ligas y equipos
@@ -66,7 +67,7 @@ operación: respaldos, cron y un servidor que se duerme.
 |-|-|-|
 | Respaldos | ✅ Ramas semanales en Neon (se conservan 4) y archivo cada 4 semanas, restaurado de prueba. Las dos capas corrieron de verdad el 2026-09-23 | — |
 | Disponibilidad | ⚠️ Render gratuito: **41.5 s** en frío (medido 2026-09-23) | PD-03 |
-| Cron | ⚠️ 5–8 corridas al día, no 96; hay un segundo scheduler sin identificar | PD-02 |
+| Cron | ⚠️ Una llamada cada ~4 h (GitHub). El externo de antes ya no llama. Alcanza para la cobranza, no para los avisos de partido | PD-02 (P2) |
 | Monitoreo | Sentry en frontend y backend ✅ · caída del servicio ❌ | PD-12 |
 | Pruebas | **287 unitarias** (166 backend + 121 frontend) en el CI ✅ · **5 suites e2e** que se corren a mano | PD-11, PD-25 |
 | Despliegue | Push a `main` = producción, sin protección ni espera al CI | PD-11 |

@@ -89,12 +89,22 @@ detrás del mismo `CRON_SECRET` y sirve para probar y para recuperar a mano.
 
 ### Quién lo dispara
 
-`.github/workflows/cron.yml`, cada 15 minutos. Vive en el repositorio y no en
-el panel de un proveedor de fuera porque eso era exactamente el problema: nadie
-sabía cuál era ni si seguía corriendo. Aquí queda versionado, se ve en el
-historial y **falla ruidosamente** — si el backend no responde, si el HTTP no es
-200, o si `partidos_error` no viene `null`, el paso sale con error y GitHub
-manda correo.
+`.github/workflows/cron.yml`, **pedido** cada 15 minutos. Vive en el
+repositorio y no en el panel de un proveedor de fuera porque eso era
+exactamente el problema: nadie sabía cuál era ni si seguía corriendo. Aquí
+queda versionado, se ve en el historial y **falla ruidosamente** — si el
+backend no responde, si el HTTP no es 200, o si `partidos_error` no viene
+`null`, el paso sale con error y GitHub manda correo.
+
+**Lo que GitHub entrega de verdad es una llamada cada ~4 horas** (medido el
+2026-09-23: 8, 7, 5, 6 y 4 llamadas del 19 al 23 de septiembre). Las llamadas
+de la pestaña Cron coinciden una por una con las corridas del workflow, a la
+misma hora, así que **el cron externo de antes ya no llama**: no hay nada que
+apagar. A la cobranza le basta, porque corre una vez al día. A los avisos push
+de partido no: el de "próximo" salió en 0 de 29 partidos de ONEFA en dos
+semanas. Hoy no le importa a nadie, porque 0 dispositivos tienen push activado;
+el día que eso cambie, el diseño para arreglarlo está en `PD-02` de
+`docs/PENDIENTES.md`.
 
 La única excepción es que falten sus dos secretos (`CRON_TARGET_URL` y
 `CRON_SECRET`, ya creados el 2026-09-19): ahí avisa y se sale sin error, para

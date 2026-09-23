@@ -74,6 +74,10 @@ async function saveSubscription(subscription, preferences, leagueId, matchId, te
     }),
   });
   if (!res.ok) throw new Error('No se pudo guardar la suscripción');
+  // Lo que de verdad quedó guardado: el backend solo prende push si llegó un
+  // endpoint, así que puede no coincidir con lo que la persona marcó.
+  const data = await res.json().catch(() => ({}));
+  return data.preferences || null;
 }
 
 async function removeSubscription(subscription, leagueId, matchId, teamName, token) {
@@ -150,6 +154,7 @@ export default function SubscribeButton({
   async function handleSavePreferences(newPrefs) {
     let sub = null;
     let finalPrefs = { ...newPrefs };
+    let sinPush = null; // por qué no quedó push, si se pidió y no se pudo
 
     // Si el usuario marcó push, intentamos solicitar permiso al navegador
     if (newPrefs.push_enabled) {
@@ -159,22 +164,44 @@ export default function SubscribeButton({
           if (perm === 'granted') {
             const vapidKey = await getVapidKey();
             sub = await getOrCreateSubscription(vapidKey);
+            if (!sub) sinPush = 'Este navegador no pudo activar las notificaciones push.';
           } else {
             // El permiso fue denegado o cerrado: desactivamos push pero mantenemos in-app
             finalPrefs.push_enabled = false;
+            sinPush = 'El navegador no dio permiso para mostrar notificaciones.';
           }
         } else {
           finalPrefs.push_enabled = false;
+          sinPush = 'Este navegador no admite notificaciones push.';
         }
       } catch (err) {
         console.warn('Error al activar push:', err);
         finalPrefs.push_enabled = false;
+        sinPush = 'Este navegador no pudo activar las notificaciones push.';
       }
     }
 
-    await saveSubscription(sub, finalPrefs, leagueId, matchId, teamName, token);
+    // Si solo pidió push y no se pudo, guardar dejaría una suscripción sin
+    // ningún canal: no avisaría nada y el botón diría "Alertas configuradas".
+    if (sinPush && !finalPrefs.in_app) {
+      throw new Error(`${sinPush} Marca "En mi bandeja de CFBAMX" para recibir los avisos sin push.`);
+    }
+
+    const guardadas = await saveSubscription(sub, finalPrefs, leagueId, matchId, teamName, token);
     setStatus('subscribed');
-    setPreferences(finalPrefs);
+    // Se pinta lo que guardó el backend, no lo que se marcó. Antes, si el
+    // navegador fallaba al suscribirse, la pantalla decía "push activado"
+    // hasta recargar, y la base decía que no.
+    setPreferences(guardadas || finalPrefs);
+
+    const quedo = guardadas || finalPrefs;
+    if (newPrefs.push_enabled && !quedo.push_enabled) {
+      // Se lanza DESPUÉS de guardar: lo demás sí quedó, y así el modal se
+      // queda abierto con la explicación en vez de cerrarse como si todo
+      // hubiera salido bien.
+      throw new Error(`${sinPush || 'No se pudieron activar las notificaciones push.'} ${
+        quedo.in_app ? 'Tus avisos quedaron solo en tu bandeja de CFBAMX.' : 'No quedó ningún aviso activo.'}`);
+    }
   }
 
   async function handleUnsubscribe() {

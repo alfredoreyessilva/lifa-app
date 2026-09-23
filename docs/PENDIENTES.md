@@ -33,7 +33,6 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 
 | ID | P | Qué | Tipo |
 |-|-|-|-|
-| PD-02 | P0 | El cron de GitHub corre 5–8 veces al día, y el externo nadie lo identifica | operación |
 | PD-03 | P0 | La API tarda ~40 s en despertar | dinero |
 | PD-04 | P0 | No existe "olvidé mi contraseña" | código |
 | PD-05 | P0 | La tarjeta pública del jugador publica su historial de equipos | código |
@@ -46,6 +45,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-12 | P1 | Nadie avisa si el servicio deja de responder | configuración |
 | PD-13 | P1 | No existe rescate de un equipo cuyo único dueño perdió acceso | código |
 | PD-14 | P1 | ONEFA sin competencia configurada: su tabla no se ve | captura |
+| PD-02 | P2 | Los avisos push de partido casi nunca salen a tiempo, y hoy nadie los recibe | operación |
 | PD-15 | P2 | `PUT /manage/teams/:id` no es atómico | código |
 | PD-16 | P2 | El pie del estado de cuenta público es ilegible | decisión |
 | PD-17 | P2 | Prorrateo de quien entra a media quincena | decisión |
@@ -65,47 +65,6 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 ---
 
 ## P0
-
-### PD-02 · El cron de GitHub corre 5–8 veces al día, y el externo nadie lo identifica
-
-**Medido el 2026-09-23** con `gh run list --workflow cron.yml`: el `schedule` de
-`*/15 * * * *` produjo **5, 8, 5 y 6 corridas** del 19 al 22 de septiembre, con
-huecos de **3 a 5 horas**. No son las ~96 al día que se suponían.
-
-La cobranza aguanta eso: corre una vez al día y es idempotente. **Los avisos de
-partido no.** El push de "próximo" solo sale si una llamada cae en la hora
-anterior al partido (`NOTIFY_WINDOW_MS` en `routes/notifications.js`). Con
-huecos de 3–5 horas, el cron de GitHub se lo salta casi siempre.
-
-**Esto invierte un pendiente viejo.** El README decía "falta apagar el cron
-viejo": un servicio **externo** llama al mismo endpoint, nadie recuerda cuál es,
-y se trataba como un gasto duplicado. Con este número, ese servicio puede ser
-justo lo que hoy sostiene los avisos de partido. **No se apaga hasta medir.**
-
-Cómo se cierra:
-
-1. En `/admin` → pestaña **Cron**, ver las llamadas de un día **completo**. Si
-   son bastantes más de 8, el externo sigue vivo y es quien da la cadencia.
-2. Identificarlo. La pestaña cuenta llamadas pero no dice de quién son;
-   registrar el `User-Agent` de `POST /notifications/trigger` lo contesta en un
-   día (el de GitHub es `curl/…`).
-3. Decidir cuál es **el** scheduler, dejarlo escrito en el repo y medir que
-   cumpla la cadencia. El de GitHub puede quedarse de respaldo: llamar de más es
-   inofensivo por diseño (ver "Cadencia del cron" en el README).
-
-Referencia que ya estaba escrita. Los dos secretos del repositorio (GitHub →
-Settings → Secrets and variables → Actions):
-
-| Secreto | Valor |
-|---|---|
-| `CRON_TARGET_URL` | `https://lifa-backend-p0hq.onrender.com/api/notifications/trigger` |
-| `CRON_SECRET` | el mismo valor que la variable `CRON_SECRET` **del servicio en Render** |
-
-Van en GitHub y **no** en el `.env`: el workflow corre en los servidores de
-GitHub y nunca ve `backend/.env`. Si alguna vez hay que rotarlos, `CRON_SECRET`
-tiene que coincidir con el de **Render**, no con el del `.env` local. Y GitHub
-**deshabilita los workflows programados tras 60 días sin actividad** en el
-repositorio: si el proyecto se queda quieto dos meses, este cron se apaga solo.
 
 ### PD-03 · La API tarda ~40 s en despertar
 
@@ -297,6 +256,47 @@ nivel 4 a nivel 5 en la única liga con uso real. Ver "Lo que queda abierto" en
 ---
 
 ## P2
+
+### PD-02 · Los avisos push de partido casi nunca salen a tiempo, y hoy nadie los recibe
+
+**Bajó de P0 a P2 el 2026-09-23, con datos.** Era P0 porque el cron corre
+mucho menos de lo supuesto; se bajó porque, medido, **no hay nadie del otro
+lado**.
+
+Lo que se midió ese día (solo lectura contra producción):
+
+- **El cron pasa cada ~4 horas, no cada 15 minutos.** 8, 7, 5, 6 y 4 llamadas
+  del 19 al 23 de septiembre, y coinciden una por una, a la misma hora, con las
+  corridas de `cron.yml`. **El cron externo de antes ya no llama**, así que el
+  viejo "falta apagar el cron viejo" se cerró solo: no hay nada que apagar.
+- **Con eso, las ventanas no se atrapan.** De 29 partidos de ONEFA en 14 días,
+  el aviso de "próximo" (ventana de 1 h antes) salió en **0** y el de "en vivo"
+  (3 h después del inicio) en **5**.
+- **Pero hay 0 dispositivos con push activado.** 52 suscripciones de 7 usuarios,
+  todas solo en la bandeja de la app, que no depende de esta cadencia.
+- **Push sí funciona de punta a punta**, verificado en el navegador contra la
+  rama de desarrollo: se suscribe con un endpoint real de FCM, `web-push`
+  recibe 201 y el service worker muestra la notificación. Los 0 dispositivos
+  no son una falla. La explicación más probable es que en el modal la casilla
+  de push **viene desmarcada** y la de la bandeja marcada.
+
+**Se retoma cuando haya dispositivos con push**, o si se decide invitar a
+activarlo (por ejemplo, marcar push por default en el modal: es decisión de
+producto, no de código). En ese momento, el diseño ya está elegido y se
+enciende en minutos:
+
+- **cron-job.org**, `POST` a `https://lifa-backend-p0hq.onrender.com/api/notifications/trigger`
+  con el encabezado `x-cron-secret` (el valor de `CRON_SECRET` de **Render**).
+- **Cada 14 minutos, solo viernes y sábado de 9:00 a 23:00 (CDMX).** Es cuando
+  juega ONEFA: al 2026-09-23, de 133 partidos en una ventana de 120 días, 57 son
+  en viernes (15–20 h) y 75 en sábado (11–13 h y 18–19 h), con un único jueves.
+  Si otra liga empieza a jugar en otros días, se mide otra vez.
+- **Por qué solo en ese horario:** cada llamada despierta a Neon unos 5
+  minutos, y el plan gratuito da 100 horas de cómputo al mes; llamar cada 14
+  minutos siempre gastaría 60–90 de ellas. Y de paso esa cadencia mantiene
+  despierto a Render (`PD-03`), que en fin de semana es cuando más se usa.
+- `cron.yml` se queda como respaldo: llamar de más es inofensivo por diseño.
+- La pestaña Cron de `/admin` mide la cadencia nueva sin tocar nada.
 
 ### PD-15 · `PUT /manage/teams/:id` no es atómico
 
