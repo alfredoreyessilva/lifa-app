@@ -52,6 +52,13 @@ entradas traen el post-mortem del bug que las provocó.
   ella. **La tabla `invites` no guarda a quién se le mandó un link**, solo
   quién lo creó y quién lo usó.
 
+  **La invitación 16 se borró a mano en producción**, con autorización de
+  Alfredo: era un link de Administrador vivo desde el 18-sep, sin usar, y nadie
+  sabía quién lo tenía. El `DELETE` exigía id, organización, `used_at IS NULL`
+  y el prefijo del token, dentro de una transacción que solo confirmaba si
+  afectaba exactamente una fila. Afectó una. GRIZZLIES quedó sin links vivos,
+  y los nuevos los genera su dueña.
+
 - **PD-02 baja de P0 a P2: el cron corre poco, pero no hay nadie esperando el
   aviso (2026-09-23)**. Se midió antes de construir, que era lo acordado.
 
