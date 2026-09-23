@@ -135,6 +135,12 @@ después; guardado ya interpretado, no hay vuelta.
 - **ESM en todo** (`"type": "module"`), Node >= 22.5.
 - **SQL**: `db.prepare('... WHERE id = ?')` con `?` — se traducen a `$n` solos.
   `.get()` una fila · `.all()` varias · `.run()` escribe.
+  - **Ningún otro signo de interrogación dentro de esa cadena**, ni siquiera en
+    un comentario `--`: la traducción cambia **cada** `?` por `$n` sin mirar
+    dónde está, así que una pregunta en español entre signos se vuelve un
+    parámetro fantasma y el endpoint responde 500 en cuanto alguien lo abre.
+    No lo atrapan las unitarias ni el chequeo de sintaxis; lo atrapa
+    `tests/unit/sqlPlaceholders.test.mjs`, que sí corre en el CI.
 - **Todo handler async va envuelto en `asyncHandler`**, o el error se pierde.
 - **Los permisos viven en `utils/orgRoles.js`** —qué puede cada rol, por tipo
   de organización— y las guardas de `middleware/ownership.js` los piden por

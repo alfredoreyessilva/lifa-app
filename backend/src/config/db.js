@@ -1014,14 +1014,24 @@ export async function initSchema() {
         AND sub.league_count = 1
     `);
 
-    // Todo equipo que ya existe hoy "vive" en su liga de origen (league_id)
-    // — se les da de alta como miembros de esa liga automáticamente, para
-    // que nadie quede huérfano al empezar a usar league_teams.
-    await run(`
-      INSERT INTO league_teams (league_id, team_id)
-      SELECT league_id, id FROM teams
-      ON CONFLICT (league_id, team_id) DO NOTHING
-    `);
+    // Nota: aquí vivía el relleno que daba de alta en league_teams a todo
+    // equipo con teams.league_id. Se quitó el 2026-09-22 por DOS razones, y
+    // conviene que estén escritas las dos:
+    //
+    //   1. Llevaba días sin hacer nada. El SELECT no filtraba los NULL, así
+    //      que desde el primer equipo independiente reventaba contra el
+    //      NOT NULL de league_teams.league_id — y como cada migración corre
+    //      en su propio SAVEPOINT, fallaba ENTERA y en silencio, sin insertar
+    //      tampoco las filas válidas. Dejó 44 equipos sin membresía.
+    //   2. Arreglarlo aquí habría sido peor que dejarlo roto. Corriendo en
+    //      cada arranque, le devolvería la membresía a todo equipo que una
+    //      liga sacara de su roster a propósito (DELETE /leagues/:id/roster/
+    //      :teamId), en el siguiente despliegue. Es exactamente el error que
+    //      ya está documentado arriba con `status = 'approved'` -> is_public.
+    //
+    // La reparación de una sola vez es scripts/backfill-league-teams.mjs. Lo
+    // que nace de hoy en adelante no la necesita: POST /manage/leagues/
+    // :leagueId/teams inserta la membresía en el mismo momento.
 
     // Ciudad de la sede — habilita accesos comerciales automáticos ligados al
     // partido (por ahora: botón de Hotel; a futuro, Vuelos) sin que un admin
@@ -2195,6 +2205,46 @@ export async function initSchema() {
     await run(`CREATE INDEX IF NOT EXISTS idx_play_participants_play ON play_participants(play_id)`);
     // El box score de un jugador a lo largo de la temporada entra por aquí.
     await run(`CREATE INDEX IF NOT EXISTS idx_play_participants_player ON play_participants(player_id)`);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Borrar una liga ya no borra sus equipos (README, "Jubilar
+    // `teams.league_id`", 2026-09-22).
+    //
+    // `teams.league_id` nació ON DELETE CASCADE, y el daño no es perder el
+    // equipo: son las 13 tablas que cuelgan de teams(id) también con CASCADE.
+    // Entre ellas, las dos que la regla 5 de CLAUDE.md declara inborrables
+    // —team_ledger_entries y club_ledger_entries— y club_members, el padrón
+    // del club. Un DELETE /admin/leagues/:id se llevaba todo eso de cada uno
+    // de sus equipos, incluidos los ya entregados que juegan en otras ligas.
+    //
+    // SET NULL deja el estado que el modelo nuevo ya sabe leer: el equipo
+    // sobrevive y queda INDEPENDIENTE, que es lo que league_id NULL significa
+    // desde "Equipos independientes" — las dos guardas que leen la columna ya
+    // contemplan ese caso. La membresía sí se va con la liga, y ahí el CASCADE
+    // de league_teams.league_id es el correcto: participar en una liga que ya
+    // no existe no significa nada.
+    //
+    // Va con guarda en vez de DROP + ADD a secas: sin ella, cada arranque
+    // tomaría un ACCESS EXCLUSIVE sobre `teams` para dejar la restricción
+    // igual que estaba. La definición del CREATE TABLE se queda como está
+    // (regla 8) — una base nueva nace con CASCADE y este ALTER la corrige en
+    // el mismo arranque.
+    await run(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conrelid = 'teams'::regclass
+            AND contype = 'f'
+            AND confrelid = 'leagues'::regclass
+            AND confdeltype = 'c'
+        ) THEN
+          ALTER TABLE teams DROP CONSTRAINT teams_league_id_fkey;
+          ALTER TABLE teams ADD CONSTRAINT teams_league_id_fkey
+            FOREIGN KEY (league_id) REFERENCES leagues(id) ON DELETE SET NULL;
+        END IF;
+      END $$;
+    `);
 
     await client.query('COMMIT');
   } catch (err) {

@@ -204,30 +204,66 @@ verificación.
   del equipo. No es un candado por movimientos. Lo que falta es el código: la
   guarda en el endpoint y que el diálogo diga lo que de verdad se lleva.
 
-- **`teams.league_id` todavía contesta las dos preguntas (2026-09-21).** Es la
-  columna del modelo viejo, y el README ya declara que las dos preguntas
-  —"¿se administra solo?" y "¿participa en esta liga?"— se separaron. En el
-  esquema no: `guardaDeEquipo()` lee `team.league_id` para decidir **quién
-  administra**, y las tres tablas N:M que contestan "¿participa?"
-  (`league_teams`, `tournament_teams`, `branch_teams`) conviven con ella.
+- **`teams.league_id` todavía da permisos (2026-09-22).** Es la columna del
+  modelo viejo, y el README ya declara que las dos preguntas —"¿se administra
+  solo?" y "¿participa en esta liga?"— se separaron. En el esquema no:
+  `guardaDeEquipo()` y `teamLeagueOwnerRequired` leen `team.league_id` para
+  decidir **quién administra**, y las tres tablas N:M que contestan
+  "¿participa?" (`league_teams`, `tournament_teams`, `branch_teams`) conviven
+  con ella.
 
-  Lo que la hace algo más que deuda cosmética es su `ON DELETE CASCADE`:
+  **Lo que tenía filo ya no lo tiene.** Su `ON DELETE CASCADE` —que hacía que
+  borrar una liga borrara sus equipos, con los dos libros de dinero y el padrón
+  colgando— es `ON DELETE SET NULL` desde el 2026-09-22, y las diez lecturas de
+  `leagues.js` se mudaron a `league_teams`. Ver "Jubilar `teams.league_id`".
+
+  Lo que queda son dos cosas, y solo la primera es un cambio de modelo:
+
+  1. **Los permisos.** Mover ahí la columna obliga a decidir si una liga que ya
+     entregó un equipo conserva su roster de torneo — es el punto 2 de "Lo que
+     falta para que un equipo viva en varias ligas", y no se contesta
+     sustituyendo una consulta.
+  2. **El respaldo por nombre en otros cuatro archivos** —`board.js`,
+     `manage.js`, `notifications.js` y `admin.js`—, que es el mismo patrón que
+     ya se resolvió en `leagues.js` y se arregla igual. De esos, solo
+     `board.js` es público.
+
+- **`DELETE /admin/leagues/:id` todavía borra el libro liga↔equipo
+  (2026-09-22).** Es la segunda arista del punto anterior, y apareció al medir
+  el borrado contra los datos reales. `teams.league_id` ya es `SET NULL`, así
+  que el equipo sobrevive con su organización, su padrón y su libro de cuotas
+  — pero `team_ledger_entries` tiene **su propia** llave a la liga, y esa sigue
+  siendo `ON DELETE CASCADE`:
 
   ```sql
-  league_id INTEGER REFERENCES leagues(id) ON DELETE CASCADE
+  team_ledger_entries.league_id → leagues(id) ON DELETE CASCADE
   ```
 
-  **Borrar una liga borra sus equipos** — incluidos los que ya son
-  independientes y juegan en otras ligas, que es el mismo daño del `DELETE` de
-  arriba un piso más arriba. Hoy solo el admin de la plataforma puede borrar una
-  liga (`DELETE /admin/leagues/:id`), así que no es urgente, pero ese botón hace
-  mucho más de lo que su nombre dice.
+  Medido en la rama de pruebas: con 5 movimientos colgando, antes sobrevivían
+  0 de 5; después del cambio, **también 0 de 5**. La regla 5 de `CLAUDE.md`
+  dice que un movimiento no se edita ni se borra, y aquí un clic los borra
+  todos. El endpoint sigue siendo un `DELETE FROM leagues` pelón, sin ninguna
+  pregunta previa — la misma forma que tenía el borrado de equipos antes del
+  2026-09-21.
 
-  **La cobranza ya salió de esa columna (2026-09-21)** y con ella se fue el uso
-  más delicado. Lo que queda es `leagues.js` —unos diez lugares, todos de
-  lectura: estadísticas, estructura y conciliación de partidos por nombre— más
-  el `CASCADE`, que es lo único con filo. Ya no bloquea nada; es limpieza con
-  una trampa al final.
+  Hay que **decidirlo antes de escribir código**, porque las dos salidas dicen
+  cosas distintas:
+
+  1. **Una liga con movimientos no se borra.** `RESTRICT` en el esquema y un
+     409 con motivo en el endpoint, igual que `DELETE /manage/teams/:id`. Es la
+     regla 5 escrita donde no se puede esquivar, y deja la decisión en manos de
+     quien tendría que vaciar esa cuenta primero.
+  2. **Se borra, y el libro queda sin liga.** Obliga a que `league_id` deje de
+     ser `NOT NULL` ahí, y a contestar qué significa un saldo con una liga que
+     ya no existe — hoy el estado de cuenta del equipo lista sus ligas por ese
+     `league_id`.
+
+  **Hoy no hay nada que perder, y por eso se puede decidir con calma**: el
+  censo de producción del 2026-09-22 da **0 movimientos** en los dos libros y
+  **0 filas de padrón**. Lo que sí hay en producción y no toca ninguna de las
+  dos salidas son **1,648 predicciones** del concurso de ONEFA, que cuelgan de
+  `matches` y no de ninguna liga. Esto se vuelve urgente el día que una liga
+  cobre el primer peso.
 
 - **El día del partido: el código está completo, falta la cancha
   (2026-09-20).** El **roster público y el pase de lista ya están construidos y
@@ -1972,11 +2008,14 @@ Lo que ya está de ese lado, y no hay que construir:
 
 Lo que falta:
 
-1. **Una tabla de participación por liga**, muchos-a-muchos, que reemplace a
-   `teams.league_id` como "este equipo sale en la lista de esta liga".
-   `branch_teams` **no** alcanza: al 2026-09-20, **59 de los 100 equipos con
-   liga no tienen ni una inscripción en una rama**. Aparecer en la liga y estar
-   inscrito en una rama son dos cosas, y si se colapsan, 59 equipos desaparecen.
+1. ~~**Una tabla de participación por liga**, muchos-a-muchos, que reemplace a
+   `teams.league_id` como "este equipo sale en la lista de esta liga"~~ —
+   **hecha**: es `league_teams`, y desde el 2026-09-22 ya no hay ninguna
+   lectura pública ni de panel que use la columna vieja para contestar eso (ver
+   "Jubilar `teams.league_id`"). `branch_teams` **no** alcanzaba, y ese fue el
+   argumento: al 2026-09-20, **59 de los 100 equipos con liga no tenían ni una
+   inscripción en una rama**. Aparecer en la liga y estar inscrito en una rama
+   son dos cosas, y si se colapsan, 59 equipos desaparecen.
 2. **Que `teams.league_id` deje de dar permisos.** Hoy es lo que hace que una
    liga administre el perfil y el roster de un equipo que ya entregó.
 3. **Que "dar de baja" termine la participación** en vez de borrar el equipo, y
@@ -2162,6 +2201,204 @@ cualquier momento.
 > dos libros tenían **cero movimientos**, ningún equipo había sido entregado y
 > no existía ni un `editor`. No hay datos que migrar, y esa es justo la razón
 > para hacerlo ahora y no después.
+
+### Jubilar `teams.league_id` — lo que se fue el 2026-09-22
+
+**Construido.** Los pasos anteriores le quitaron a esa columna los dos usos que
+movían dinero o repartían acceso; el último fue la cobranza (2026-09-21). Lo
+que quedaba eran **diez lecturas en `leagues.js`** y su `ON DELETE CASCADE`.
+Las lecturas eran limpieza; el `CASCADE` era la trampa, y es con lo que
+conviene empezar a leer esto.
+
+#### Borrar una liga ya no borra sus equipos
+
+Era esta línea, desde el primer día del esquema:
+
+```sql
+league_id INTEGER REFERENCES leagues(id) ON DELETE CASCADE
+```
+
+Lo que la vuelve grave no es que borre un equipo, sino **lo que cuelga de un
+equipo**: hay **13 tablas** apuntando a `teams(id)` con `ON DELETE CASCADE`, y
+entre ellas están las dos que la regla 5 de `CLAUDE.md` declara inborrables
+—`team_ledger_entries` y `club_ledger_entries`— más `club_members`, que es el
+padrón del club. O sea que `DELETE /admin/leagues/:id` —un botón que dice
+"borrar liga"— se llevaba por delante el padrón y los dos libros de dinero de
+cada uno de sus equipos, **incluidos los que ya son independientes y juegan en
+otras ligas**. Es el mismo daño que se le quitó a `DELETE /manage/teams/:id` el
+2026-09-21, un piso más arriba y sin ninguna pregunta previa.
+
+Ahora es `ON DELETE SET NULL`: **la liga se borra, sus equipos sobreviven y
+quedan independientes**, que es exactamente lo que ya significa `league_id`
+NULL desde "Equipos independientes". No hizo falta nada más para que el estado
+resultante fuera coherente, y esa es la señal de que el modelo nuevo ya estaba
+bien: las dos guardas que leen la columna (`guardaDeEquipo` y
+`teamLeagueOwnerRequired`) ya sabían tratar un equipo sin liga, porque un
+equipo puede nacer sin ella. La membresía sí desaparece con la liga, y debe:
+`league_teams.league_id` sigue siendo `ON DELETE CASCADE`, que ahí es lo
+correcto — la participación en una liga que ya no existe no significa nada.
+
+**Pero hay una segunda arista, y esta columna no la tapa.** Se vio al verificar
+el borrado contra los datos reales, no leyendo el código: con `SET NULL` el
+equipo sobrevive y conserva su organización, su padrón y su libro de cuotas
+—esos dos cuelgan solo de `teams`—, y aun así **sus movimientos del libro
+liga↔equipo desaparecen igual**. No por el equipo: `team_ledger_entries` tiene
+su propia llave a la liga, y también es `ON DELETE CASCADE`.
+
+```sql
+team_ledger_entries.league_id → leagues(id) ON DELETE CASCADE
+```
+
+Medido en la rama de pruebas, sobre una liga con 5 movimientos: antes del
+cambio sobrevivían 0 de 5 y 0 de 1 equipos; después, 1 de 1 equipos y **0 de 5
+movimientos**. O sea que `DELETE /admin/leagues/:id` —que sigue siendo un
+`DELETE FROM leagues` pelón, sin una sola pregunta previa, igual que el borrado
+de equipos antes del 2026-09-21— **todavía borra la cuenta liga↔equipo que la
+regla 5 declara inborrable**. Lo que dejó de llevarse es el equipo entero, que
+era el daño irreversible y el que alcanzaba a equipos de otras ligas.
+
+Esa arista queda **abierta a propósito** y anotada en "Pendientes abiertos": no
+es sustituir una consulta, es decidir si una liga con movimientos se puede
+borrar (y entonces el esquema debe decir `RESTRICT`, y el endpoint contestar
+409 con un motivo, como ya hace el de equipos) o si el borrado debe conservar
+el libro sin su liga. Se deja escrito aquí para que no se lea este cambio como
+si hubiera cerrado más de lo que cerró.
+
+> La migración va con guarda (`confdeltype = 'c'`): si la restricción ya es
+> `SET NULL`, no se toca. Sin eso, cada arranque tomaría un `ACCESS EXCLUSIVE`
+> sobre `teams` para dejarla igual. La definición dentro del `CREATE TABLE` se
+> deja como estaba, por la regla 8 — una base nueva nace con `CASCADE` y el
+> `ALTER` del final la corrige en el mismo arranque.
+
+#### Las diez lecturas, y qué contesta cada una ahora
+
+Todas se mudaron a `league_teams`, que es la tabla que desde el 2026-09-21
+contesta "¿este equipo es de esta liga?":
+
+| Dónde | Qué leía la columna |
+|---|---|
+| `GET /matches/:matchId` (×2) | respaldo por nombre cuando el partido no tiene `home_team_id`/`away_team_id` |
+| `GET /all-teams` | "independiente" era `league_id IS NULL` |
+| `GET /:slug` | la lista de equipos de la página pública de la liga |
+| `GET /categories/:categoryId/share-meta` | el logo de un equipo, buscado por nombre |
+| `GET /categories/:categoryId/matches` (×2) | los logos de los dos equipos, buscados por nombre |
+| `GET /:leagueId/tree` | la lista de equipos del panel de estructura |
+| `GET /:leagueId/roster` y `GET /tournaments/:tournamentId/teams` | `home_league_name` |
+
+Tres de esas filas no son un reemplazo mecánico, y vale la pena el porqué:
+
+- **"Independiente" pasó de "no tiene columna" a "no es miembro de ninguna
+  liga"** (`NOT EXISTS` sobre `league_teams`). Es la misma pregunta escrita en
+  la tabla que la contesta, y la única que sigue siendo cierta cuando un equipo
+  está en dos ligas.
+
+- **`home_league_name` se quitó en vez de traducirse.** Bajo el modelo nuevo un
+  equipo no tiene *una* liga de casa, así que el campo o se vuelve una lista o
+  miente. Se revisó antes de decidir: **no lo pinta nadie** —ni el frontend ni
+  las funciones serverless—, así que traducirlo habría sido construir una
+  respuesta plural para un campo muerto. Si alguna pantalla lo llega a
+  necesitar, nace plural. Queda el tercer `home_league_name`, el de
+  `GET /manage/teams/search`, que está fuera de este paso.
+
+- **Los logos del calendario ahora se buscan por `id` y solo después por
+  nombre.** `GET /categories/:categoryId/matches` unía los equipos *solo* por
+  nombre, y encima acotado a la liga de la categoría: un equipo **invitado**
+  desde otra liga (`tournament_teams`) nunca iba a encontrar ahí su logo,
+  aunque el partido sí tuviera su `home_team_id`. Ahora es
+  `COALESCE(m.home_team_id, <respaldo por nombre>)`, igual que
+  `GET /matches/:matchId`, y el respaldo se acota a los miembros de la liga.
+  De paso, el `LIMIT 1` del respaldo le quita casi todo el trabajo al filtro
+  anti-duplicados que viene después (dos equipos con el mismo nombre en la
+  misma liga abrían cada partido en dos filas) — el filtro se queda, porque
+  sigue siendo la red de un dato que ya existe.
+
+**El respaldo por nombre hoy no resuelve ni un partido**, y se midió antes de
+tocarlo: de 185 partidos publicados, **uno** no tiene `home_team_id` y **uno**
+no tiene `away_team_id`, y ninguno de los dos encuentra equipo por nombre — ni
+por la columna vieja ni por la tabla nueva. Es andamio de cuando `home_team_id`
+no existía. Se conserva igual: el día que entre un calendario por Excel sin
+enlazar, es lo único que pone los logos.
+
+#### El relleno que sostenía la tabla nueva llevaba días muerto
+
+Esto salió al revisar los datos, no estaba anotado en ninguna parte, y es lo
+más importante de este paso: **`league_teams` se estaba quedando sin filas**.
+
+`initSchema()` traía, desde que la tabla existe, un relleno que corría en cada
+arranque:
+
+```sql
+INSERT INTO league_teams (league_id, team_id)
+SELECT league_id, id FROM teams
+ON CONFLICT (league_id, team_id) DO NOTHING
+```
+
+Sin `WHERE league_id IS NOT NULL`. En cuanto existió el **primer equipo
+independiente** —el día que `teams.league_id` se volvió opcional— esa
+instrucción empezó a reventar con `null value in column "league_id" … violates
+not-null constraint`, y como cada migración corre dentro de su propio
+`SAVEPOINT`, **fallaba entera y en silencio**: sin error en los logs, sin
+detener el arranque, y sin insertar tampoco las filas que sí eran válidas.
+
+En la rama de pruebas eso dejó **44 equipos con `league_id` y sin membresía**.
+Casi todos son basura de las suites e2e, pero el mecanismo es real y el efecto
+es exactamente el que este paso no puede permitirse: mover las lecturas
+públicas a `league_teams` mientras el relleno está roto es hacer desaparecer de
+su liga a todo equipo al que le falte la fila.
+
+**En producción no alcanzó a hacer daño, y se comprobó antes de desplegar**
+(censo de solo lectura, 2026-09-22): **0 equipos con liga y sin membresía**. Las
+cuatro ligas públicas cuadran por las dos vías —ONEFA 33/33, LFA 10/10, AFC 7/7,
+OFASE 6/6— y las privadas también (NFL 32/32, LEXFA 2/2, IFAF 1/1). 92 equipos,
+91 membresías, y el que falta es el único independiente, GRIZZLIES, que no debe
+tener ninguna.
+
+El porqué de la diferencia vale la pena: el relleno murió el día que se registró
+GRIZZLIES, y **después de eso no se creó ningún equipo de liga en producción**.
+En la rama de pruebas sí —decenas, de las suites e2e—, y por eso allá el hueco
+se ve y aquí no. Producción se salvó por el orden de los hechos, no porque el
+relleno funcionara.
+
+**Y el hueco ya no se puede reabrir**, que es lo que permite quitar el relleno
+sin dejar nada suelto. Solo hay dos formas de crear un equipo, y ninguna lo
+produce: `POST /manage/leagues/:leagueId/teams` escribe la membresía en el
+mismo momento (desde el 2026-09-21), y `POST /manage/teams` nace con
+`league_id = NULL` explícito, o sea independiente. Ninguna ruta del backend
+hace `UPDATE` de `teams.league_id`: se escribe al crear el equipo y nunca más.
+
+**El relleno se quitó del arranque; no se arregló ahí.** Este proyecto ya había
+aprendido esto mismo una vez, y lo tiene escrito unas líneas más arriba en el
+propio `db.js`: la migración que traducía `status = 'approved'` a
+`is_public = TRUE` se quitó de `initSchema()` porque *"dejarla como un UPDATE
+que corre en cada arranque volvía a publicar cualquier liga que alguien hubiera
+ocultado manualmente después"*. Aquí es idéntico: arreglar el `INSERT` y
+dejarlo corriendo le habría devuelto la membresía, en el siguiente despliegue,
+a **todo equipo que una liga hubiera sacado de su roster a propósito** — y
+"Sacar de la liga" (`DELETE /leagues/:leagueId/roster/:teamId`) es un botón que
+ya existe. Habría convertido un relleno muerto en un bug vivo.
+
+La reparación de una sola vez vive en `scripts/backfill-league-teams.mjs`, que
+simula por defecto y solo escribe con `--apply` (regla 3). Lo que nazca de aquí
+en adelante ya no la necesita: `POST /manage/leagues/:leagueId/teams` inserta
+la membresía en el mismo momento desde el 2026-09-21.
+
+#### Lo que todavía lee la columna, y por qué no se fue aquí
+
+`teams.league_id` sigue existiendo y sigue escribiéndose. Lo que queda no es
+una lista de descuidos; son dos cosas distintas:
+
+1. **Los permisos** (`middleware/ownership.js`): `guardaDeEquipo` y
+   `teamLeagueOwnerRequired` deciden con ella quién administra un equipo. Es el
+   punto 2 de "Lo que falta para que un equipo viva en varias ligas" y es un
+   cambio de modelo con su propia discusión —no es sustituir una consulta—,
+   porque moverlo es decidir si una liga que ya entregó un equipo conserva o no
+   su roster de torneo.
+2. **Cuatro archivos más con el mismo respaldo por nombre** que tenía
+   `leagues.js`: `board.js`, `manage.js` (el importador de Excel y la ficha de
+   un equipo), `notifications.js` y `admin.js`. El README decía que "lo que
+   queda es `leagues.js`" y **no era cierto** — se censó al hacer este paso. No
+   se tocaron para no mezclar dos cosas en un cambio: de esos solo `board.js`
+   es público, y todos se arreglan con el mismo patrón de arriba.
 
 ## Tabla de posiciones y modelo de competencia
 

@@ -69,6 +69,15 @@ router.get('/sitemap-data', asyncHandler(async (req, res) => {
 // Se registra con path literal "matches" en el primer segmento, así que
 // nunca choca con la ruta "/:slug" (que es de un solo segmento) ni con
 // "/:slug/teams" (cuyo segundo segmento siempre es la palabra "teams").
+//
+// OJO con los signos de interrogación DENTRO del SQL de db.prepare(), incluso
+// dentro de un comentario "--": toPgPlaceholders() cambia CADA signo de
+// interrogación del texto por $n. Un "por que" escrito en español con sus
+// signos, en un comentario en medio de la consulta, se vuelve un parámetro
+// fantasma y la consulta revienta en tiempo de ejecución con "could not
+// determine data type of parameter". Las pruebas unitarias no lo ven: la
+// consulta solo se arma al llamar al endpoint. Por eso los comentarios de
+// aquí abajo están redactados sin ninguno.
 router.get('/matches/:matchId', asyncHandler(async (req, res) => {
   const match = await db.prepare(`
     SELECT
@@ -121,11 +130,19 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
     FROM matches m
     LEFT JOIN categories c   ON c.id = m.category_id
     LEFT JOIN leagues l      ON l.id = c.league_id
+    -- El respaldo por nombre (para partidos viejos, sin home_team_id/
+    -- away_team_id) se acota a los MIEMBROS de la liga, no a teams.league_id:
+    -- la membresía es lo que dice si un equipo es de esta liga, y un equipo
+    -- puede ser miembro de varias.
     LEFT JOIN teams th       ON th.id = COALESCE(m.home_team_id, (
-      SELECT t.id FROM teams t WHERE t.league_id = l.id AND UPPER(t.name) = UPPER(m.home_team) LIMIT 1
+      SELECT lt.team_id FROM league_teams lt
+      JOIN teams t ON t.id = lt.team_id
+      WHERE lt.league_id = l.id AND UPPER(t.name) = UPPER(m.home_team) LIMIT 1
     ))
     LEFT JOIN teams ta       ON ta.id = COALESCE(m.away_team_id, (
-      SELECT t.id FROM teams t WHERE t.league_id = l.id AND UPPER(t.name) = UPPER(m.away_team) LIMIT 1
+      SELECT lt.team_id FROM league_teams lt
+      JOIN teams t ON t.id = lt.team_id
+      WHERE lt.league_id = l.id AND UPPER(t.name) = UPPER(m.away_team) LIMIT 1
     ))
     LEFT JOIN organizations tho ON tho.id = th.organization_id
     LEFT JOIN organizations tao ON tao.id = ta.organization_id
@@ -185,7 +202,11 @@ router.get('/all-teams', asyncHandler(async (req, res) => {
     LEFT JOIN league_teams lt ON lt.team_id = t.id
     LEFT JOIN leagues l       ON l.id = lt.league_id AND l.is_public = TRUE
     WHERE l.id IS NOT NULL
-       OR (t.league_id IS NULL AND t.show_on_platform = TRUE)
+       -- "Independiente" es no ser miembro de NINGUNA liga. Antes se preguntaba
+       -- por teams.league_id, que solo admite una y deja de ser cierta en
+       -- cuanto un equipo está en dos.
+       OR (NOT EXISTS (SELECT 1 FROM league_teams lt2 WHERE lt2.team_id = t.id)
+           AND t.show_on_platform = TRUE)
     ORDER BY t.id, l.id ASC
   `).all();
   res.json(teams);
@@ -203,10 +224,14 @@ router.get('/:slug', asyncHandler(async (req, res) => {
     ORDER BY sort_order ASC, name ASC
   `).all(league.id);
 
+  // Los equipos de la liga salen de su roster (league_teams), igual que en
+  // GET /:slug/teams — ver el comentario de allá.
   const teams = await db.prepare(`
-    SELECT id, name, logo_url
-    FROM teams WHERE league_id = ?
-    ORDER BY sort_order ASC, name ASC
+    SELECT t.id, t.name, t.logo_url
+    FROM league_teams lt
+    JOIN teams t ON t.id = lt.team_id
+    WHERE lt.league_id = ?
+    ORDER BY t.sort_order ASC, t.name ASC
   `).all(league.id);
 
   // Torneos públicos de la liga, del más antiguo al más reciente. No hay
@@ -278,7 +303,10 @@ router.get('/categories/:categoryId/share-meta', asyncHandler(async (req, res) =
   const teamName = req.query.team;
   if (teamName) {
     const team = await db.prepare(`
-      SELECT logo_url FROM teams WHERE league_id = ? AND UPPER(name) = UPPER(?)
+      SELECT t.logo_url
+      FROM league_teams lt
+      JOIN teams t ON t.id = lt.team_id
+      WHERE lt.league_id = ? AND UPPER(t.name) = UPPER(?)
     `).get(category.league_id, teamName);
     team_logo_url = team?.logo_url || null;
   }
@@ -306,9 +334,13 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
 
   // Conferencia y grupo los resuelve MATCH_SCOPE_COLUMNS desde los equipos
   // que juegan (ver utils/matchScope.js), igual que en las otras dos consultas
-  // públicas. Ojo: aquí los equipos se unen por NOMBRE, no por id, pero la
-  // derivación sí usa m.home_team_id/m.away_team_id — un partido viejo sin
-  // esas llaves cae al valor capturado a mano, que es justo el respaldo.
+  // públicas.
+  //
+  // Los equipos se unen por ID y solo después por nombre, igual que en
+  // GET /matches/:matchId. Antes era SOLO por nombre y acotado a la liga de la
+  // categoría, y eso le negaba el logo a un equipo INVITADO desde otra liga
+  // (tournament_teams) aunque el partido sí tuviera su home_team_id. El
+  // respaldo por nombre se acota a los miembros de la liga (league_teams).
   const rows = await db.prepare(`
     SELECT
       m.*,
@@ -323,26 +355,32 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
       ${MATCH_SCOPE_COLUMNS}
     FROM matches m
     LEFT JOIN categories c  ON c.id  = m.category_id
-    LEFT JOIN teams th      ON th.league_id = c.league_id
-                           AND UPPER(th.name) = UPPER(m.home_team)
-    LEFT JOIN teams ta      ON ta.league_id = c.league_id
-                           AND UPPER(ta.name) = UPPER(m.away_team)
+    LEFT JOIN teams th      ON th.id = COALESCE(m.home_team_id, (
+      SELECT lt.team_id FROM league_teams lt
+      JOIN teams t ON t.id = lt.team_id
+      WHERE lt.league_id = c.league_id AND UPPER(t.name) = UPPER(m.home_team) LIMIT 1
+    ))
+    LEFT JOIN teams ta      ON ta.id = COALESCE(m.away_team_id, (
+      SELECT lt.team_id FROM league_teams lt
+      JOIN teams t ON t.id = lt.team_id
+      WHERE lt.league_id = c.league_id AND UPPER(t.name) = UPPER(m.away_team) LIMIT 1
+    ))
     LEFT JOIN venues v      ON v.id = m.venue_id
     ${MATCH_SCOPE_JOINS}
     WHERE m.category_id = ? AND m.is_draft = FALSE
     ORDER BY m.match_date ASC
   `).all(category.id);
 
-  // Los LEFT JOIN de arriba comparan equipos por nombre (UPPER(th.name) =
-  // UPPER(m.home_team)), no por id. Si en algún momento quedó un equipo
-  // duplicado en la tabla `teams` (mismo league_id, mismo nombre, dos
-  // filas distintas — típicamente por un doble clic al crearlo o una
-  // reimportación), el JOIN "abre" cada partido de ese equipo en dos
-  // filas idénticas, y el calendario público terminaba mostrando el
-  // partido repetido. Esto NO se soluciona borrando el equipo duplicado a
-  // mano cada vez que aparezca: nos protegemos aquí quedándonos con una
-  // sola fila por m.id antes de responder, sin importar cuántas veces se
-  // haya repetido por el JOIN.
+  // Red de seguridad contra el partido repetido. Cuando los LEFT JOIN de
+  // arriba comparaban por nombre a secas, un equipo duplicado en la tabla
+  // `teams` (mismo nombre, dos filas — típicamente por un doble clic al
+  // crearlo o una reimportación) "abría" cada partido suyo en dos filas
+  // idénticas, y el calendario público lo mostraba repetido. El COALESCE de
+  // arriba ya lo cubre —por id no hay ambigüedad, y el respaldo por nombre
+  // lleva LIMIT 1—, pero este filtro se queda: el dato duplicado sigue
+  // existiendo, y esto NO se soluciona borrándolo a mano cada vez que
+  // aparezca. Nos quedamos con una sola fila por m.id antes de responder,
+  // sin importar cuántas veces se haya repetido por el JOIN.
   const seenIds = new Set();
   const matches = rows.filter((m) => {
     if (seenIds.has(m.id)) return false;
@@ -690,7 +728,15 @@ router.get('/:leagueId/tree', authRequired, leagueOwnerRequired, asyncHandler(as
       WHERE tn.league_id = ?
       ORDER BY t.name ASC
     `).all(leagueId),
-    db.prepare('SELECT * FROM teams WHERE league_id = ? ORDER BY sort_order ASC, name ASC').all(leagueId),
+    // Los equipos del panel son los del roster de la liga (league_teams), la
+    // misma lista que ve el público. Las sedes sí son de la liga y solo de
+    // ella (venues.league_id), así que esa sigue igual.
+    db.prepare(`
+      SELECT t.* FROM league_teams lt
+      JOIN teams t ON t.id = lt.team_id
+      WHERE lt.league_id = ?
+      ORDER BY t.sort_order ASC, t.name ASC
+    `).all(leagueId),
     db.prepare('SELECT * FROM venues WHERE league_id = ? ORDER BY sort_order ASC, name ASC').all(leagueId),
     db.prepare(`
       SELECT
@@ -821,11 +867,13 @@ router.get('/tournaments/:tournamentId/categories', authRequired, tournamentOwne
 // y aquí solo se guarda la conexión equipo↔torneo.
 
 router.get('/tournaments/:tournamentId/teams', authRequired, tournamentOwnerRequired, asyncHandler(async (req, res) => {
+  // Sin `home_league_name`: bajo el modelo nuevo un equipo no tiene UNA liga
+  // de casa, y el campo no lo pintaba nadie. Si una pantalla lo necesita,
+  // nace plural (ver README, "Jubilar `teams.league_id`").
   const teams = await db.prepare(`
-    SELECT t.*, tt.id AS inscription_id, tt.created_at AS inscribed_at, l.name AS home_league_name
+    SELECT t.*, tt.id AS inscription_id, tt.created_at AS inscribed_at
     FROM tournament_teams tt
     JOIN teams t ON t.id = tt.team_id
-    LEFT JOIN leagues l ON l.id = t.league_id
     WHERE tt.tournament_id = ?
     ORDER BY t.name ASC
   `).all(req.tournament.id);
@@ -880,11 +928,11 @@ router.delete('/tournaments/:tournamentId/teams/:teamId', authRequired, tourname
 // inscripción aparte ni confirmación del equipo.
 
 router.get('/:leagueId/roster', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
+  // Sin `home_league_name`, por lo mismo que en /tournaments/:id/teams.
   const teams = await db.prepare(`
-    SELECT t.*, lt.id AS membership_id, lt.created_at AS member_since, l.name AS home_league_name
+    SELECT t.*, lt.id AS membership_id, lt.created_at AS member_since
     FROM league_teams lt
     JOIN teams t ON t.id = lt.team_id
-    LEFT JOIN leagues l ON l.id = t.league_id
     WHERE lt.league_id = ?
     ORDER BY t.name ASC
   `).all(req.league.id);

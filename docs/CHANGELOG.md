@@ -15,6 +15,95 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Borrar una liga ya no borra sus equipos, y `leagues.js` soltó
+  `teams.league_id` (2026-09-22)** — es el último paso de jubilar esa columna.
+  El modelo completo está en el README, "Jubilar `teams.league_id`".
+
+  **Lo que tenía filo era el `ON DELETE CASCADE`**, no las lecturas. El daño no
+  es perder el equipo: son las **13 tablas** que cuelgan de `teams(id)` también
+  con CASCADE, y entre ellas están las dos que la regla 5 de `CLAUDE.md`
+  declara inborrables más `club_members`, el padrón del club. Un
+  `DELETE /admin/leagues/:id` —un `DELETE FROM leagues` pelón, sin una sola
+  pregunta previa— se llevaba todo eso de **cada** equipo de la liga, incluidos
+  los ya entregados que juegan en otras. Ahora es `ON DELETE SET NULL`: el
+  equipo sobrevive y queda independiente, que es un estado que el modelo nuevo
+  ya sabe leer sin tocar nada más — las dos guardas que usan la columna ya
+  contemplan un equipo sin liga.
+
+  **Las diez lecturas de `leagues.js` se mudaron a `league_teams`**: el
+  respaldo por nombre de `GET /matches/:matchId`, `/all-teams`, `/:slug`,
+  `share-meta`, `/categories/:id/matches`, `/:leagueId/tree` y los dos
+  `home_league_name`. Tres no fueron reemplazo mecánico: "independiente" pasó a
+  ser "no es miembro de ninguna liga"; `home_league_name` se **quitó** en vez de
+  volverse plural, porque no lo pintaba nadie; y los logos del calendario ahora
+  se buscan por `id` y solo después por nombre —antes solo por nombre, acotado
+  a la liga de la categoría, así que un equipo **invitado** desde otra liga
+  nunca encontraba su logo aunque el partido sí tuviera su llave.
+
+  **Tres cosas que salieron al construirlo y no estaban anotadas en ningún
+  lado:**
+
+  1. **El relleno de `league_teams` llevaba días muerto.** El `INSERT` de
+     `initSchema()` no filtraba los NULL, así que desde el primer equipo
+     independiente reventaba contra el `NOT NULL` de `league_teams.league_id`;
+     como cada migración corre en su propio `SAVEPOINT`, fallaba **entera y en
+     silencio**, sin insertar tampoco las filas válidas. Dejó 44 equipos sin
+     membresía en la rama de pruebas. Se quitó del arranque en vez de
+     arreglarlo ahí: corriendo en cada despliegue le habría devuelto la
+     membresía a todo equipo que una liga sacara de su roster a propósito —el
+     mismo error que este `db.js` ya tiene documentado unas líneas arriba con
+     `status = 'approved'` → `is_public`—. La reparación de una sola vez es
+     `scripts/backfill-league-teams.mjs`, que simula por defecto.
+
+     **Producción se salvó por el orden de los hechos**, y se comprobó con un
+     censo de solo lectura antes de desplegar: **0 equipos con liga y sin
+     membresía**, las cuatro ligas públicas cuadrando por las dos vías
+     (33/33, 10/10, 7/7, 6/6) y 0 partidos sin llave de equipo. El relleno
+     murió el día que se registró GRIZZLIES —el único equipo independiente— y
+     después de eso no se creó ningún equipo de liga allá. Y no se puede
+     reabrir: las dos únicas rutas que crean equipos mantienen `league_teams`
+     al día, y ninguna hace `UPDATE` de `teams.league_id`.
+  2. **Un signo de interrogación dentro de un comentario SQL es un parámetro.**
+     `toPgPlaceholders()` cambia **cada** `?` del texto por `$n` sin mirar
+     dónde está, así que un comentario en español con sus signos, escrito
+     dentro de una consulta de `db.prepare()`, se vuelve un parámetro fantasma
+     y el endpoint responde 500 con *"could not determine data type of
+     parameter"*. Pasó en el respaldo por nombre de `GET /matches/:matchId` y
+     **no lo atrapó nada**: las unitarias no ven una consulta que solo se arma
+     al llamar al endpoint, y el chequeo de sintaxis del CI tampoco, porque el
+     archivo es JS válido. Se encontró abriendo la pantalla en el navegador,
+     que es exactamente lo que dice "Antes de dar algo por hecho". Ahora hay
+     una prueba pura que recorre el `src/` buscando ese patrón
+     (`tests/unit/sqlPlaceholders.test.mjs`) — 164 → 166 unitarias en el
+     backend, y sí corre en el CI.
+  3. **Hay una segunda arista que esta columna no tapa.** `SET NULL` salva al
+     equipo, su organización, su padrón y su libro de cuotas, pero **no** el
+     libro liga↔equipo: `team_ledger_entries.league_id` tiene su propia llave a
+     `leagues` y también es `ON DELETE CASCADE`. Medido: antes sobrevivían 0 de
+     5 movimientos y 0 de 1 equipos; después, 1 de 1 equipos y **0 de 5
+     movimientos**. Queda abierta a propósito y anotada en "Pendientes
+     abiertos" — decidir si una liga con movimientos simplemente **no se puede
+     borrar** (`RESTRICT` + un 409 con motivo, como ya hace el borrado de
+     equipos) es una decisión de producto, no una consulta que sustituir. En
+     producción hoy no hay nada que perder por ahí: **0 movimientos** en los
+     dos libros y 0 filas de padrón.
+
+  **Verificado contra una rama de Neon y en el navegador.** Las cinco suites
+  e2e en **21, 40, 26, 71 y 68 — 0 fallas**, idénticas a sus líneas base. Las
+  285 unitarias pasaron (287 con las dos nuevas). Contra los datos reales,
+  dentro de una transacción con `ROLLBACK` y `lock_timeout`: las cuatro ligas
+  públicas devuelven **exactamente los mismos equipos** por las dos vías
+  (33/33, 10/10, 7/7, 6/6), los 185 partidos publicados resuelven al mismo
+  equipo que antes y sin abrir duplicados, la migración es idempotente
+  —correrla dos veces no vuelve a tomar el `ACCESS EXCLUSIVE`— y al terminar no
+  se había movido ni una fila. Los tres endpoints autenticados que ninguna
+  suite cubre (`/tree`, `/:leagueId/roster`, `/tournaments/:id/teams`) se
+  recorrieron aparte: 16 comprobaciones, incluida que sacar a un equipo del
+  roster ahora también lo saca del panel. En el navegador: la página pública de
+  ONEFA con sus 33 equipos, el calendario con 133 partidos y sus 266 logos sin
+  una imagen rota, y la ficha de un partido — 0 errores en consola.
+
+
 - **Un equipo ya le puede deber a varias ligas (2026-09-21)** — el README
   prometía desde el 2026-09-20 que "un equipo puede participar en torneos de
   varias ligas a la vez". Para el calendario y la tabla de posiciones ya era
