@@ -26,440 +26,21 @@ Las reglas de trabajo (nunca probar contra producción, los libros de dinero son
 append-only, se resuelve al leer y no se migra) están en
 [`CLAUDE.md`](CLAUDE.md).
 
-## Qué tan avanzado está cada parte (2026-09-20)
+## Qué tan avanzado está cada parte
 
-Una foto de dónde está el proyecto, para no tener que reconstruirla leyendo las
-dos mil líneas de abajo. Aquí solo está el **tamaño** de lo que falta; el
-detalle de cada pendiente vive en "Pendientes abiertos" y en la sección de su
-dominio.
-
-**Qué mide el porcentaje.** Qué tanto está terminado del **alcance declarado**
-de esa parte, no de todo lo imaginable. Un 95% no dice que ya no se pueda
-construir nada más ahí: dice que lo que esta versión se propuso hacer está
-hecho y que lo que queda está anotado y es chico. Lo que se decidió dejar fuera
-—el "Fuera de esta versión" de cada sección— **no cuenta como faltante**, o
-todo quedaría en 40% para siempre. Son números a ojo, puestos y actualizados a
-mano: cuando una parte se mueva, se mueve también su renglón.
-
-**La lectura de una línea: el producto está construido, el negocio no.** Nueve
-de los diez dominios funcionales están terminados o casi, y lo que impide
-cobrar —pasarela de pago e infraestructura que no se duerma— no es código. Por
-eso las tablas van partidas en tres.
-
-El décimo es la excepción y por eso está tan abajo: el roster público, el pase
-de lista y la captura de estadísticas se definieron el 2026-09-20 y de los tres
-faltan las estadísticas, que son con mucho la parte más grande. Es alcance
-nuevo, no algo que se haya quedado a medias — y lo que le hacía falta de
-plataforma (capturar sin señal) ya está construido debajo.
-
-### Dominios funcionales
-
-|Parte|%|Lo que falta|
-|-|-|-|
-|Calendarios y estructura (liga → torneo → categoría → rama → partido)|95%|QA visual de `TournamentMatchesPanel`|
-|Tabla de posiciones y modelo de competencia|90%|Configurar ONEFA (captura, no código); `computeQualification` con criterios fijos|
-|Predicciones y quinielas|95%|Nada abierto; lo demás se dejó fuera a propósito|
-|Transmisiones|95%|Nada abierto|
-|Equipos independientes|95%|El modelo de roles, construido el 2026-09-20, ya deja invitar a un **segundo dueño** desde el principio, así que perder una cuenta deja de ser fatal. Lo que no existe es el rescate: un equipo cuyo único dueño ya perdió acceso sigue sin poderse reclamar|
-|Cuotas del club (equipo → jugador)|90%|Prorrateo de quien entra a media quincena; auditoría del padrón; el pie del estado de cuenta a 1.16:1 de contraste. La UI para rotar el link se cerró el 2026-09-19|
-|Cobranza (liga → equipo)|88%|Cobro en línea. La zona horaria se cerró el 2026-09-19 (eran cuatro lugares, no dos)|
-|Roster público, pase de lista y estadísticas|**50%**|Tres piezas **construidas y verificadas** el 2026-09-20: el roster público (con los dos interruptores de la categoría y el veto del equipo sobre la foto), el pase de lista encima de esa misma lista, y **capturar sin señal** — service worker que cachea la app, cola en IndexedDB que reintenta sola y sube al volver la señal. Falta la captura **por jugada**, que es con mucho la parte más grande; está decidida y escrita, y ya no la bloquea nada de plataforma|
-|Roster de jugadores|85%|Credencial digital con QR. La zona horaria de altas y bajas se cerró el 2026-09-19 (eran tres lugares más)|
-|Notificaciones y push|85%|Bandeja propia para jugador/tutor — hoy imposible: `notifications` tiene `CHECK (recipient_type IN ('league','team'))` y los jugadores no tienen cuenta. Que el recordatorio de cobranza SALGA de la plataforma (correo al tutor) sigue sin construirse|
-|Tiendas y bot de WhatsApp|70% · **0% operativo**|Todo el código está; falta el número de WhatsApp Business, saldo de Anthropic y cubrir `bot_messages` en el Aviso de Privacidad|
-|Monetización (afiliados de viaje)|50%|Vuelo funciona; Hotel no genera comisión sin un `VITE_HOTEL_AFFILIATE_ID` de Booking.com|
-
-### Plataforma
-
-|Parte|%|Lo que falta|
-|-|-|-|
-|Páginas legales|**100%**|Cerrado el 2026-09-19: los cuatro datos llenos, `/terminos` publicado y el Aviso completo|
-|Seguridad|90%|El modelo de roles y fronteras quedó **construido** el 2026-09-20 (ver su sección): seis roles, guardas que se piden por permiso y la liga fuera del padrón del club. Quedan rotar `CLOUDINARY_API_SECRET`, las invitaciones que no caducan, `DELETE /manage/teams/:id` —que destruye contabilidad sin avisar— y la tarjeta pública del jugador, que todavía publica el historial de equipos contra la regla 7 (la **foto** ya se recortó el 2026-09-20, con el roster público)|
-|Pruebas automatizadas|50%|Las 285 del CI (164 backend + 121 frontend) cubren **solo funciones puras**. Todo `routes/` empieza consultando Postgres y sigue fuera del CI. Lo que sí lo toca son las **cuatro** suites e2e —las dos de cobranza, la de invitaciones y roles, y la de estadísticas por jugada— y esas se corren a mano|
-|Concentración de archivos|sin urgencia|Cinco archivos concentran demasiado; solo `db.js` tiene techo real (9s de arranque). Ver "Pendientes conocidos"|
-
-### Roadmap de negocio, por fase
-
-|Fase|%|Qué la mueve|
-|-|-|-|
-|0 — Cerrar lo que estaba a medias|70%|Solo esperar tráfico para volver a pedir revisión a Booking.com|
-|1 — Fundación de confiabilidad|80%|Subieron las legales a ✅. Quedan el plan de pago de Render/Neon y rotar el secreto de Cloudinary|
-|2 — Automatizar el cobro|**0%**|No hay ninguna pasarela instalada. Es el bloqueador de fondo y el punto de no retorno: en cuanto una liga cobra por la plataforma, no se va|
-|3 — Red de seguridad técnica|50%|285 pruebas y CI hechos, y cuatro suites e2e que sí prueban contra la base; falta que esas corran solas, monitoreo de uptime y que el CI bloquee el deploy|
-|4 — Ciclo de vida del cliente|15%|Falta el onboarding por correo; `RESEND_API_KEY` ya está configurada, así que es construir los correos|
-|5 — Crecimiento|5%|Página de precios, analítica de conversión, SEO más allá del sitemap|
-
-**Lo que no aparece arriba**: nadie sabe cada cuánto corre el cron. No tiene
-porcentaje porque no es una parte a medio construir — es un dato que hay que ir
-a buscar al panel de un proveedor de fuera. Desde el 2026-09-19 ya no es
-urgente: el endpoint aguanta cualquier frecuencia sin romperse (ver "Cadencia
-del cron"), así que dejó de ser la diferencia entre facturar y no facturar. Pero
-sigue abierto, porque un cron MUERTO sigue siendo un cron muerto. Ver
-"Pendientes abiertos".
+Vive en [`docs/ESTADO.md`](docs/ESTADO.md): cada producto con su **nivel**
+(definido · construido · verificado · en producción · en uso), la evidencia que
+lo prueba y los pendientes que lo detienen. Hasta el 2026-09-22 esta sección era
+una tabla de porcentajes puestos a ojo; se cambió porque medía cuánto se
+construyó y no si sirve.
 
 ## Pendientes abiertos
 
-Solo lo que **falta**. Lo que ya se cerró está en `docs/CHANGELOG.md` con su
-verificación.
-
-- **`PUT /manage/teams/:id` no es atómico (2026-09-18).** Son tres escrituras
-  sueltas: `UPDATE teams`, `UPDATE organizations` y `syncTeamLinksToMatches()`
-  (una consulta por partido). Cualquier error después de la primera deja el
-  equipo **guardado** y a la persona viendo "Error interno del servidor" — el
-  mensaje miente a medias. Es exactamente lo que confundió en el bug del país
-  vacío (ver el CHANGELOG). No es una fuga activa: hoy no se conoce ningún error
-  entre el paso 1 y el 3. Lo que queda vivo es el **modo de falla**, que es caro
-  de diagnosticar cuando vuelve a aparecer.
-
-  Los dos caminos, con su costo:
-
-  1. **Una sola sentencia con CTEs**, el patrón que este proyecto ya eligió
-     (`POST /organizations/:id/transfer-owner`). Los pasos 1 y 2 se juntan sin
-     problema; el 3 obliga a convertir el bucle en un `UPDATE matches … FROM`.
-  2. **Exponer una transacción de verdad** — `db.transaction(async (tx) => …)`.
-     La maquinaria ya existe: `initSchema()` saca **un** cliente del pool y hace
-     `BEGIN`/`SAVEPOINT`/`COMMIT` sobre él, atravesando el mismo endpoint
-     `-pooler` de Neon, y funciona. Lo que falta es exponerla: `db` solo exporta
-     `prepare` y `exec`. Matiz que corrige la lectura fácil de la regla de
-     CLAUDE.md: un pooler en modo transacción **sí** soporta transacciones
-     mientras vivan en **una sola conexión**; lo que no soporta es repartirlas
-     entre varias, que es justo lo que hace `db.prepare` (una conexión por
-     consulta). Mientras la transacción vive, el pooler fija esa conexión, así
-     que tiene que ser corta.
-
-  La opción 2 es la preferida: sirve para cualquier otra ruta con el mismo
-  problema y no obliga a reescribir el bucle de partidos en SQL. Va como cambio
-  aparte, porque toca `db.js`, del que cuelga todo.
-
-- **El pie del estado de cuenta público es ilegible (2026-09-18).** El párrafo
-  "¿Algo no cuadra? Escríbele a tu club…" de `PlayerStatementPage.jsx` usa
-  `--ws-ink-faint` (#6b7378) y cae **fuera** de la tarjeta negra, directo sobre
-  el verde de la cancha: da **1.16:1** de contraste, donde AA para texto chico
-  exige 4.5:1. En la práctica no se ve. Es el mismo problema que arregló el
-  commit `eadac84` para las tarjetas sobre la cancha, pero este párrafo quedó
-  fuera. No se tocó aquí porque la solución es una decisión de diseño —meterlo
-  en la superficie oscura, o darle un color que aguante el verde— y no quería
-  resolverla a ojo.
-
-- **Falta apagar el cron viejo (2026-09-19).** El del repositorio ya está
-  **encendido y verificado**: sus dos secretos existen y la primera corrida
-  manual devolvió `HTTP 200` con `partidos_error: null` y la cobranza corrida.
-  Lo que queda es el otro lado: hay un servicio **externo** llamando al mismo
-  endpoint, nadie recuerda cuál es, y mientras siga vivo se está pagando dos
-  veces la misma cosa.
-
-  No corre prisa y no rompe nada —llamar de más es inofensivo por diseño— pero
-  hasta apagarlo el proyecto sigue dependiendo de un panel que nadie
-  identifica, que era el pendiente original.
-
-  **Cómo saber si sigue vivo**: en `/admin` → pestaña **Cron**, mira las
-  llamadas de un día completo. El workflow solo puede producir ~96 (una cada 15
-  min, y GitHub casi siempre entrega menos). Si ves bastantes más, los dos están
-  llamando.
-
-  Para referencia, los dos secretos del repositorio (GitHub → Settings →
-  Secrets and variables → Actions) son:
-
-  | Secreto | Valor |
-  |---|---|
-  | `CRON_TARGET_URL` | `https://lifa-backend-p0hq.onrender.com/api/notifications/trigger` |
-  | `CRON_SECRET` | el mismo valor que la variable `CRON_SECRET` **del servicio en Render** |
-
-  Van en GitHub y **no** en el `.env`: el workflow corre en los servidores de
-  GitHub y `backend/.env` está en `.gitignore`, así que nunca lo ve.
-  `CRON_TARGET_URL` además el backend no la lee nunca. Si alguna vez hay que
-  rotarlos, `CRON_SECRET` tiene que coincidir con el de **Render**, no con el
-  del `.env` local.
-
-  Dos avisos sobre GitHub Actions, para no descubrirlos tarde:
-
-  1. **`schedule` no es puntual.** En horas pico la cola se atrasa y a veces se
-     salta corridas. Se aguanta porque ninguna de las dos mitades depende de la
-     puntualidad (ver "Cadencia del cron"), pero no esperes 96 llamadas exactas.
-  2. **GitHub deshabilita los workflows programados tras 60 días sin actividad
-     en el repositorio.** Si el proyecto se queda quieto dos meses, el cron se
-     apaga solo y GitHub avisa por correo. La pestaña Cron lo pondría en
-     🔴 sin señal.
-
-- **Falta decidir el prorrateo de quien entra a media quincena.** Hoy el ciclo
-  le cobra el mes completo a quien esté `activo` al generar, y solo se salta los
-  periodos cuya fecha de pago es anterior a su `joined_date`. Si un club espera
-  cobrar medio mes a quien entró el día 20, eso no está resuelto. Se puede
-  agregar después sin tocar la idempotencia, porque `auto_cycle_key` no depende
-  del monto.
-
-- **`DELETE /manage/teams/:id` destruye contabilidad sin avisar
-  (2026-09-20).** Es un `DELETE FROM teams` pelón y el esquema encadena a los
-  **dos** libros de dinero, no a uno: `club_ledger_entries` vía
-  `teams → club_members`, y `team_ledger_entries` directo por `team_id`. O sea
-  que borrar un equipo se lleva el padrón del club, su libro de cuotas **y la
-  cuenta liga↔equipo** — justo lo que la regla 5 de `CLAUDE.md` declara
-  inborrable. El diálogo del panel solo advierte que los partidos pierden el
-  vínculo. Y la guarda es `teamOwnerRequired`, la misma del perfil, así que la
-  liga alcanza también a un equipo **ya entregado**, que ya no es suyo.
-
-  **El modelo ya está decidido (2026-09-21)** y escrito en "Quién puede eliminar
-  un equipo, y por qué ese candado y no otro": se puede eliminar **solo mientras
-  nadie más lo administre**, que es `orgTieneMiembros()` sobre la organización
-  del equipo. No es un candado por movimientos. Lo que falta es el código: la
-  guarda en el endpoint y que el diálogo diga lo que de verdad se lleva.
-
-- **`teams.league_id` todavía da permisos (2026-09-22).** Es la columna del
-  modelo viejo, y el README ya declara que las dos preguntas —"¿se administra
-  solo?" y "¿participa en esta liga?"— se separaron. En el esquema no:
-  `guardaDeEquipo()` y `teamLeagueOwnerRequired` leen `team.league_id` para
-  decidir **quién administra**, y las tres tablas N:M que contestan
-  "¿participa?" (`league_teams`, `tournament_teams`, `branch_teams`) conviven
-  con ella.
-
-  **Lo que tenía filo ya no lo tiene.** Su `ON DELETE CASCADE` —que hacía que
-  borrar una liga borrara sus equipos, con los dos libros de dinero y el padrón
-  colgando— es `ON DELETE SET NULL` desde el 2026-09-22, y las diez lecturas de
-  `leagues.js` se mudaron a `league_teams`. Ver "Jubilar `teams.league_id`".
-
-  Lo que queda son dos cosas, y solo la primera es un cambio de modelo:
-
-  1. **Los permisos.** Mover ahí la columna obliga a decidir si una liga que ya
-     entregó un equipo conserva su roster de torneo — es el punto 2 de "Lo que
-     falta para que un equipo viva en varias ligas", y no se contesta
-     sustituyendo una consulta.
-  2. **El respaldo por nombre en otros cuatro archivos** —`board.js`,
-     `manage.js`, `notifications.js` y `admin.js`—, que es el mismo patrón que
-     ya se resolvió en `leagues.js` y se arregla igual. De esos, solo
-     `board.js` es público.
-
-- **`DELETE /admin/leagues/:id` todavía borra el libro liga↔equipo
-  (2026-09-22).** Es la segunda arista del punto anterior, y apareció al medir
-  el borrado contra los datos reales. `teams.league_id` ya es `SET NULL`, así
-  que el equipo sobrevive con su organización, su padrón y su libro de cuotas
-  — pero `team_ledger_entries` tiene **su propia** llave a la liga, y esa sigue
-  siendo `ON DELETE CASCADE`:
-
-  ```sql
-  team_ledger_entries.league_id → leagues(id) ON DELETE CASCADE
-  ```
-
-  Medido en la rama de pruebas: con 5 movimientos colgando, antes sobrevivían
-  0 de 5; después del cambio, **también 0 de 5**. La regla 5 de `CLAUDE.md`
-  dice que un movimiento no se edita ni se borra, y aquí un clic los borra
-  todos. El endpoint sigue siendo un `DELETE FROM leagues` pelón, sin ninguna
-  pregunta previa — la misma forma que tenía el borrado de equipos antes del
-  2026-09-21.
-
-  Hay que **decidirlo antes de escribir código**, porque las dos salidas dicen
-  cosas distintas:
-
-  1. **Una liga con movimientos no se borra.** `RESTRICT` en el esquema y un
-     409 con motivo en el endpoint, igual que `DELETE /manage/teams/:id`. Es la
-     regla 5 escrita donde no se puede esquivar, y deja la decisión en manos de
-     quien tendría que vaciar esa cuenta primero.
-  2. **Se borra, y el libro queda sin liga.** Obliga a que `league_id` deje de
-     ser `NOT NULL` ahí, y a contestar qué significa un saldo con una liga que
-     ya no existe — hoy el estado de cuenta del equipo lista sus ligas por ese
-     `league_id`.
-
-  **Hoy no hay nada que perder, y por eso se puede decidir con calma**: el
-  censo de producción del 2026-09-22 da **0 movimientos** en los dos libros y
-  **0 filas de padrón**. Lo que sí hay en producción y no toca ninguna de las
-  dos salidas son **1,648 predicciones** del concurso de ONEFA, que cuelgan de
-  `matches` y no de ninguna liga. Esto se vuelve urgente el día que una liga
-  cobre el primer peso.
-
-- **El día del partido: el código está completo, falta la cancha
-  (2026-09-20).** El **roster público y el pase de lista ya están construidos y
-  verificados** — los
-  dos interruptores de la categoría, el veto del equipo sobre la foto, la
-  pantalla que se abre desde el partido y, encima de esa misma lista,
-  `match_attendance` con el permiso `asistencia` y sus tres endpoints. Ver el
-  CHANGELOG.
-
-  **Y "Estadísticas por jugada" también quedó construida el 2026-09-20**, de
-  punta a punta: las tres tablas, el permiso `estadisticas`, los seis endpoints
-  de `routes/plays.js`, el panel del visor en
-  `/partidos/:matchId/estadisticas` y su despachador en la cola sin señal. Su
-  sección del README trae la verificación y los tres bugs que salieron. Con eso
-  el bloque del día del partido **no tiene código pendiente de lo que estaba
-  definido** — el hueco de la instalación apareció después, al preguntarse cómo
-  hace un visor para guardar la app en su teléfono.
-
-  Ya se desplegó el 2026-09-20 (ver el CHANGELOG). Lo que le queda son los dos
-  pendientes de abajo: probarlo en una cancha, y decidir cómo se le pide al
-  visor que instale la app — que resultó no pedirse en ningún lado.
-
-- **Capturar sin señal no está probado en un teléfono (2026-09-20).** Ahora son
-  **dos pantallas** las que dependen de esa capa —el pase de lista y la captura
-  por jugada—, y las dos corrieron de punta a punta contra la compilación real,
-  pero con **Chromium y el modo offline de Playwright**: eso apaga la red, y no
-  mata la pestaña, ni se queda sin batería, ni tiene al administrador de
-  memoria de Android cerrando la app a media captura. Que es justo el escenario
-  para el que existe todo esto.
-
-  Es verificación, no código, y pide un teléfono de verdad en una cancha de
-  verdad. **Ya no está bloqueada**: se desplegó el 2026-09-20, así que hay URL
-  pública contra la cual probar y la app se puede instalar desde el teléfono.
-  Tres cosas que conviene mirar durante esa prueba:
-
-  1. **Si la jugada mínima es de verdad mínima.** Ciento veinte capturas
-     seguidas, con el partido enfrente y sin poder pedir repetición, es lo
-     único que contesta eso — y si resulta que no, la salida ya está escrita:
-     los tres niveles guardan las mismas filas, así que bajar de `full` a
-     `offense` no migra nada.
-  2. **El riesgo que no se puede tapar sigue ahí** (ver "Capturar sin señal"):
-     mientras no suben, las capturas viven solo en ese teléfono. La pantalla lo
-     dice y el navegador avisa al salir, pero nada de eso se ha visto en manos
-     de alguien que no escribió el código.
-  3. **Que el `apple-touch-icon` de verdad se instale.** Se agregó el
-     2026-09-20 y se verificó contra producción en un navegador real: la
-     etiqueta resuelve, el PNG carga 180×180 y **el pixel de la esquina mide
-     `rgba(47,122,53,255)`** — verde opaco, alfa 255. Con eso el modo de falla
-     que preocupaba (esquinas negras porque se coló transparencia) queda
-     **descartado por medición**, no por confianza. Lo único que no se puede
-     saber sin un iPhone es cómo lo recorta y lo pinta iOS al agregarlo a
-     inicio, que es mirada de un segundo durante la prueba.
-
-- **Nadie le dice al visor que instale la app (2026-09-21).** Verificado ese
-  día: **cero ocurrencias** de `beforeinstallprompt`, `appinstalled` o
-  cualquier botón o texto de instalación en todo `frontend/src/`. Instalar es
-  hoy un gesto del navegador que el visor tiene que saber hacer solo.
-
-  No es cosmético, y es incómodo porque contradice al resto del argumento: todo
-  "Capturar sin señal" se sostiene en que **una app instalada aguanta mucho
-  mejor que una pestaña**, y el escenario entero es el administrador de memoria
-  del teléfono decidiendo cerrar algo. El icono de iOS se agregó justo por eso
-  (ver el CHANGELOG del 2026-09-20). Pero si el producto nunca lo pide, el
-  visor va a capturar desde una pestaña — que es el caso frágil para el que se
-  construyó todo lo demás.
-
-  **Son dos problemas distintos, no uno:**
-
-  - **Android/Chrome se puede resolver con código.** El navegador dispara
-    `beforeinstallprompt`; se captura, se guarda y se ofrece como botón propio
-    cuando convenga. Chrome a veces muestra su propio banner, pero no está
-    garantizado y se descarta para siempre con un toque.
-  - **iOS no se puede provocar.** No hay API: es Compartir → "Añadir a pantalla
-    de inicio", y **solo en Safari** —Chrome en iOS no puede instalar—. O sea
-    que ahí la solución no es un botón, es una **instrucción en pantalla**, con
-    el costo de explicar un gesto del sistema operativo dentro de la app.
-
-  **Lo que falta decidir** —y por eso esto es un pendiente y no un commit—: en
-  qué pantalla se dice (¿al llegar a la captura con permiso `estadisticas`?,
-  ¿al preparar partido, que es cuando el visor ya declaró que se va a una
-  cancha?), si se insiste o se dice una sola vez, y si se detecta
-  `display-mode: standalone` para no molestar a quien ya la instaló.
-
-  **Un dato que la prueba del teléfono debería traer de vuelta**: si en iOS la
-  app instalada tiene almacenamiento separado del Safari normal. Si lo tiene,
-  el orden **importa** —instalar antes de "⬇ Preparar partido", o lo preparado
-  se queda en la pestaña y la app abre vacía— y entonces lo que hay que decirle
-  al visor no es solo *que* instale, sino *cuándo*. Mientras no se sepa,
-  conviene hacer la prueba en ese orden.
-
-- **El pase de lista no tiene suite e2e (2026-09-20).** Sus rutas se probaron a
-  mano contra la rama de Neon —los cinco casos del `PUT` (marcar, reintentar,
-  corregir, jugador ajeno, lista vacía) y las cuatro fronteras de permiso— y el
-  resultado está en el CHANGELOG, pero nada de eso corre solo. Las 34 pruebas
-  nuevas del CI cubren las reglas puras, no las rutas.
-
-  **Y ya salió barato (actualizado el 2026-09-21).** Cuando esto se escribió,
-  el árbol de datos que pide —liga, torneo, categoría, rama, equipos inscritos,
-  roster con una baja a media temporada y partidos con equipos vinculados— no
-  existía en ninguna suite, y montarlo se veía caro. Ya no: `plays.e2e.mjs`
-  (2026-09-20) **construye ese mismo andamio** y no cubre asistencia. Así que la
-  del pase de lista sería la **quinta** suite, no la cuarta, y le queda por
-  pagar solo lo suyo.
-
-  La otra mitad del trabajo del visor —capturar lo que pasa en el campo—
-  también quedó definida el mismo día, en "Estadísticas por jugada": se captura
-  **jugada por jugada** y el box score se deriva, con las reglas de
-  acreditación del manual de estadísticos de la NCAA (que es con lo que ONEFA
-  juega) y los nombres de SportsML. Subir solo los totales sigue siendo válido:
-  `player_match_stats` pasa a ser esa ruta, y el partido se lee de una o de la
-  otra, nunca de las dos.
-
-  Capturar **sin señal** dejó de ser una decisión abierta y es requisito: tiene
-  su propia sección, y de ahí salió que la identidad de una jugada sea una
-  llave generada en el celular. Arrastra trabajo de plataforma que hoy no
-  existe — el service worker solo hace push y no cachea nada.
-
-  **Ya no queda ninguna decisión abierta de esta línea.** La jugada mínima se
-  definió el 2026-09-20 contra cómo se lleva esto de verdad —una cuadrilla de
-  tres en la NCAA, once columnas y por serie en preparatoria, la defensiva
-  siempre al final— y de ahí salieron los tres niveles de captura y la serie
-  como unidad.
-
-  **La hoja de visoría no se diseña todavía, y es una decisión, no un olvido**
-  (2026-09-20). Primero corre la captura por jugada; la hoja se arma con lo que
-  esa captura ya esté produciendo, y diseñarla antes es diseñar contra un dato
-  que nadie ha visto.
-
-- **El nombre del proyecto ya está decidido: CFBAMX.** El texto visible al
-  usuario, los comentarios y los nombres de paquete ya dicen CFBAMX. Lo que
-  sigue diciendo `lifa` es infraestructura heredada que no se renombró a
-  propósito, porque cambiarla rompe cosas en producción: la carpeta del repo
-  (`lifa-app/`), el servicio de Render (`lifa-backend-p0hq.onrender.com`), las
-  llaves de `localStorage` (`lifa_token` — cambiarla desloguea a todos los
-  usuarios ya registrados) y las carpetas de Cloudinary (`lifa-app/logos`,
-  `lifa-app/comprobantes`). Cada una se puede migrar por separado cuando
-  convenga; ninguna es urgente. La razón social ya se eligió: opera José Alfredo
-  Reyes Silva como persona física, y CFBAMX es el nombre comercial (ver
-  `frontend/src/config/legal.js`).
-- **No hay auditoría del padrón.** Se sabe cuál es la cuota de alguien, no
-  quién se la cambió ni cuándo. El patrón a imitar ya existe: el trío
-  `created_by_user_id` / `voided_by_user_id` / `reverses_entry_id` del libro.
-- **Falta sacar la trayectoria de la tarjeta del jugador (2026-09-19).** Es lo
-  que queda de recortar la tarjeta pública. `GET /players/:id/card` publica el
-  historial de equipos, que es de la **tarjeta histórica** y no de la de
-  temporada: la tarjeta describe la participación de **una** temporada, y
-  acumular una carrera en un solo lugar es otra función —que el jugador
-  "recolecte" su tarjeta— que no existe y no está diseñada. Ver "Qué se publica
-  de un roster, y qué no".
-
-  **La otra mitad se cerró el 2026-09-20**: la foto ya no sale siempre. Sale
-  solo si la categoría la permite y el equipo no la vetó, y el recorte se hace
-  en la respuesta del backend, así que tampoco entra en la imagen que
-  `playerShareCard.js` arma para redes.
-- **No hay archivo `LICENSE`.** El repositorio no declara nada sobre qué se
-  puede hacer con este código. Es decisión de negocio, no técnica: o el repo es
-  privado, o lleva una licencia propietaria explícita. Hoy no es ninguna de las
-  dos cosas por omisión, no por elección.
-- **Renombrar `/api/player-billing`** — es lo único que quedó de la fase B (ya
-  hecha; ver "Cuotas del club"). El prefijo y el archivo `routes/playerBilling.js`
-  siguen diciendo "player" donde quieren decir "miembro del club". Se dejó fuera
-  porque mueve los 18 endpoints del router de un golpe —incluidos los tres
-  públicos del papá— en vez de los 5 que movió la fase, y **toda esta clase de
-  cambio tiene ventana de incompatibilidad al desplegar**: eso está explicado,
-  con sus salidas, en la nota de "Fase B". Junto con el prefijo van
-  `created_by_side = 'player'` y los tipos de notificación `player_*`, que son
-  valores guardados y piden migración.
-- **Scroll horizontal en el modal de la ficha del padrón** — las rejillas de
-  "Categoría / Número / Posición" y "Cuota / Situación" desbordan el ancho del
-  modal. Es preexistente y está medido en "Fase B".
-- **Reactivar comisión de Hotel sin Drive**: desde que se quitó Travelpayouts Drive (ver "Monetización"), el botón 🏨 Hotel no genera comisión. Ya no depende de la aprobación de Booking.com dentro de Travelpayouts (ese flujo se fue junto con Drive) — la alternativa ya integrada en el código es configurar `VITE_HOTEL_AFFILIATE_ID` con un ID de afiliado directo de Booking.com. Falta conseguir/confirmar ese ID y configurarlo en Vercel.
-- **Configurar la competencia de ONEFA** — es captura, no código: su temporada
-  está en curso y todavía no tiene fases ni títulos declarados, así que su
-  página pública no muestra tabla. Se hace desde Estructura → rama →
-  **⚙ competencia**. Ver "Lo que queda abierto" al final de "Tabla de
-  posiciones y modelo de competencia", donde está también lo único de código
-  que quedó suelto de esa línea.
-- **QA visual de `TournamentMatchesPanel`** — es la única de las tres pantallas
-  con `.dashboard-panel` que sigue sin verificarse en navegador: llegar a ella
-  pide categoría, rama y partidos. `Dashboard` y `LeagueStructurePanel` ya se
-  revisaron (2026-09-17).
-- **"Notificaciones" ya muestra contenido real** (cobranza en los dos libros, avisos de partidos, aprobaciones) — lo que falta es que el jugador/tutor tenga bandeja propia. Hoy no puede: `notifications` tiene `CHECK (recipient_type IN ('league','team'))` y los jugadores no tienen cuenta. Por eso los recordatorios de cuotas llegan **agregados a la bandeja del equipo** y el aviso al papá lo dispara el tesorero por WhatsApp.
-- **Permisos de colaboración entre organizaciones** — ver punto 2 de "Roadmap —
-  en construcción". Los cuatro tipos de organización **ya se registran** (eso
-  era el punto 1 y quedó hecho); lo que sigue pendiente es que una organización
-  pueda darle permiso a otra. Nota: el caso de **transmisiones** ya está
-  construido y sirve de precedente, pero resuelve el problema por el otro lado —
-  el medio se autoasigna, la liga no le concede nada (ver "Transmisiones").
-- **Conectar el bot de WhatsApp** — es lo único que separa al bot de funcionar,
-  y no es código: falta el número de WhatsApp Business
-  (`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_VERIFY_TOKEN`) y cargar la cuenta de
-  Anthropic para tener `ANTHROPIC_API_KEY` con saldo. Ver "Tiendas y bot de
-  WhatsApp". **Antes de conectarlo** hay que cubrir en el Aviso de Privacidad
-  qué guarda `bot_messages` (teléfono y conversación de clientes de la tienda,
-  que no tienen cuenta en la plataforma) y por cuánto tiempo — hoy esa tabla no
-  tiene borrado por antigüedad y crece sin límite.
+Viven en [`docs/PENDIENTES.md`](docs/PENDIENTES.md), con un ID fijo (`PD-01`,
+`PD-02`…) y una prioridad (P0 · P1 · P2). Es el **único** lugar de lo que falta:
+cuando una sección de este README dice "ver Pendientes abiertos", el detalle
+está ahí. El commit que cierra un pendiente borra su renglón y deja la entrada
+en `docs/CHANGELOG.md`.
 
 ## Cadencia del cron
 
@@ -1966,27 +1547,17 @@ Lo que sigue abierto, y **no** es parte de estos cinco pasos:
   y "este equipo sale en la lista de esta liga". Por eso una liga que ya entregó
   un equipo sigue pasando por `teamOwnerRequired` para su perfil y su roster —
   lo único que perdió es el padrón, las cuotas y el poder de repartir su acceso.
-  Separarlo es un cambio de modelo de datos con su propia sección, abajo.
-- `DELETE /manage/teams/:id` es un `DELETE FROM teams` pelón, y el esquema
-  encadena `teams → club_members → club_ledger_entries`. El botón está en el
-  panel de la liga y el diálogo no menciona nada de eso. Su guarda es
-  `teamOwnerRequired` —la del perfil—, así que la liga alcanza también a un
-  equipo ya entregado: es la misma confusión de `teams.league_id` del punto
-  anterior, pero aquí lo que está del otro lado es un borrado. Bajo el modelo
-  corregido esto además está mal nombrado: "dar de baja" debería terminar una
-  participación, no destruir un equipo.
-- **El visor no tiene pantalla propia** — *y desde el 2026-09-20 ya está
-  diseñada la mitad que le faltaba: ver "Roster público y pase de lista".* Con el paso 5, un visor entra al panel
-  de la liga con casi todo apagado: le queda el partido y nada más. Funciona y
-  no filtra nada, pero es el panel de otro con botones escondidos, no una
-  herramienta para lo que esa persona de verdad hace el día del partido —pasar
-  lista del roster de los dos equipos, capturar anotaciones y conversiones, y
-  llenar la hoja de visoría que firman los coaches y el árbitro central—. Se
-  dejó así **a propósito**: construirle una pantalla ahora, antes de que esa
-  función esté diseñada, es construir algo que habría que arrancar. Lo mismo
-  vale para las estadísticas, que hoy son 16 columnas de contadores por
-  (jugador, partido) y no pueden responder "quién anotó" — que es justo lo que
-  una hoja de visoría necesita. Ver "Pendientes abiertos".
+  Separarlo es un cambio de modelo de datos con su propia sección, abajo. Sigue
+  abierto: es `PD-07` en `docs/PENDIENTES.md`.
+- ~~`DELETE /manage/teams/:id` es un `DELETE FROM teams` pelón~~ — **cerrado el
+  2026-09-21**: un equipo solo se elimina mientras nadie más lo administre, y el
+  diálogo dice lo que se lleva. Ver "Quién puede eliminar un equipo, y por qué
+  ese candado y no otro".
+- ~~**El visor no tiene pantalla propia**~~ — **cerrado el 2026-09-20**: pasa
+  lista encima del roster público y captura por jugada en
+  `/partidos/:matchId/estadisticas`. Ver "Roster público y pase de lista" y
+  "Estadísticas por jugada". La hoja de visoría sigue sin diseñarse, a
+  propósito: se arma con lo que la captura ya esté produciendo.
 
 ### Lo que falta para que un equipo viva en varias ligas
 
@@ -2187,9 +1758,10 @@ hizo falta la tercera.
    abiertos".
 
 
-`DELETE /manage/teams/:id` —409 si hay movimientos, y prohibido a la liga una
-vez entregado el equipo— es independiente de los cinco pasos y cabe en
-cualquier momento.
+`DELETE /manage/teams/:id` era independiente de los cinco pasos, y se cerró el
+2026-09-21 con un candado distinto al que este plan anotaba: no "409 si hay
+movimientos", sino "409 si alguien más lo administra". El porqué está en "Quién
+puede eliminar un equipo, y por qué ese candado y no otro".
 
 > La contradicción que este plan tenía anotada aquí —"Entregado es entregado"
 > contra "Revocado"— **se disolvió el 2026-09-20**, y no arreglándola sino
@@ -4246,10 +3818,14 @@ Estas dos siguen apareciendo en `npm audit` del frontend. No es que se nos olvid
 - **`esbuild`/`vite`** (`GHSA-67mh-4wv8-2f99`): permitiría a un sitio malicioso leer respuestas del servidor de desarrollo local. Solo afecta mientras `npm run dev` está corriendo en tu máquina — no afecta producción. Arreglarlo requiere saltar a `vite@8` (cambio mayor, rompe cosas).
 - **`react-router`** (`GHSA-wrjc-x8rr-h8h6`, `GHSA-337j-9hxr-rhxg`): open redirect e inyección en hidratación SSR. Ambas fallas requieren el modo "Data/Framework" de React Router (`createBrowserRouter` + `RouterProvider`) o renderizado del lado del servidor. Este proyecto usa `<BrowserRouter>` (modo declarativo, en `main.jsx`) — no tiene ese código, así que no está expuesto.
 
-## Pendientes conocidos (deuda técnica, sin urgencia)
+## Limitaciones aceptadas
 
-- Rotar `CLOUDINARY_API_SECRET` (ver "Pendientes abiertos" arriba para el resto de pendientes funcionales).
-- **El verdadero límite hoy es la infraestructura gratuita, no el código**: Render (plan gratuito) corre una sola instancia y se "duerme" tras ~15 min sin tráfico; Neon (plan gratuito) tiene un comportamiento similar. Se resuelve pasando a un plan de pago barato en ambos — decisión pendiente, no técnica.
+Decisiones que dejan algo sin resolver **a propósito**, con su razón. No son
+pendientes: esos viven en `docs/PENDIENTES.md`. Los cuatro que antes se
+anotaban aquí se mudaron allá: Render y Neon gratuitos (`PD-03`), invitaciones
+que no caducan (`PD-08`), el secreto de Cloudinary (`PD-21`) y los archivos que
+concentran demasiado (`PD-28`, con los tamaños medidos otra vez).
+
 - No hay ninguna capa de caché todavía; cada visita al calendario consulta Postgres directo.
 - El pool de conexiones de Postgres (`config/db.js`) ya no usa los valores de
   fábrica de `pg`: `max` 10 (configurable con `PG_POOL_MAX`),
@@ -4260,30 +3836,6 @@ Estas dos siguen apareciendo en `npm audit` del frontend. No es que se nos olvid
   Neon corta del otro lado al dormirse) se emitía sin escucha y eso tiraba el
   proceso entero de Node.
 - JWT guardado en `localStorage` (no en cookie `httpOnly`): trade-off aceptado por simplicidad de configuración entre dominios distintos (Vercel + Render).
-- **Cinco archivos concentran demasiado.** Hoy funcionan y no hay razón para
-  tocarlos, pero es donde va a doler cuando toque:
-
-  | Archivo | Líneas | Qué concentra |
-  |---|---|---|
-  | `frontend/src/styles.css` | 3,800 | **Todos** los estilos de la app, en un solo archivo |
-  | `backend/src/routes/manage.js` | 2,294 | El CRUD entero de liga, torneo, categoría, rama, equipo, sede y partido |
-  | `backend/src/config/db.js` | 1,706 | Las 38 tablas más ~150 migraciones |
-  | `frontend/src/pages/LeagueStructurePanel.jsx` | 1,119 | El árbol completo del panel de liga |
-  | `frontend/src/pages/AdminPanel.jsx` | 977 | Las cuatro pestañas de `/admin` |
-
-  El de `db.js` es el que tiene techo real: el arranque ya tarda 9s corriendo
-  todas las migraciones, y crece con cada una. El día que eso estorbe, la salida
-  es congelar las migraciones viejas en un esquema base y dejar en `db.js` solo
-  las nuevas — pero todavía no estorba, y partirlo antes de tiempo costaría la
-  tolerancia a fallos que hoy da el `SAVEPOINT` por instrucción.
-- **Las invitaciones no caducan.** El esquema de `invites` no tiene `expires_at`
-  y el único freno es `used_at`. Un link que nunca se usó sigue sirviendo
-  indefinidamente, hasta que alguien genere otro para esa misma organización
-  (generar uno nuevo invalida el anterior, porque `routes/invites.js` borra las
-  no usadas antes de crear la siguiente). Trade-off aceptable hoy —el link se
-  manda por WhatsApp y se usa en el momento—, pero si algún día se reenvía un
-  chat viejo, ese link todavía funciona. Salió de la QA de "Invitar
-  administrador"; el detalle está en `docs/CHANGELOG.md`.
 
 ## Roadmap — en construcción
 
@@ -4304,19 +3856,18 @@ Objetivo: que la plataforma genere flujo de cobro real sin que cada venta depend
 - ✅ Páginas legales (`/terminos`, `/privacidad`) escritas y **publicadas**: los cuatro datos de `frontend/src/config/legal.js` se llenaron el 2026-09-19, así que `/terminos` volvió a existir y el Aviso de Privacidad quedó completo.
 - ✅ Monitoreo de errores (Sentry) en frontend y backend, verificado en producción.
 - ✅ CI en GitHub Actions (pruebas unitarias + build + chequeo de sintaxis en cada push).
-- ⏳ Pendiente: subir Render y Neon a un plan de pago (hoy se "duerme" en free tier — ver "Pendientes conocidos").
-- ⏳ Pendiente: rotar `CLOUDINARY_API_SECRET`.
+- ⏳ Pendiente: subir Render y Neon a un plan de pago. Hoy el servicio se "duerme" y tarda ~40 s en despertar (`PD-03`).
+- ⏳ Pendiente: un respaldo propio de producción (`PD-01`). No estaba en esta lista y es lo más básico de la fase.
+- ⏳ Pendiente: rotar `CLOUDINARY_API_SECRET` (`PD-21`).
 
 **Fase 2 — Automatizar el cobro (el bloqueador real de fondo)**
 No iniciado. Hoy `PUT /organizations/:id/plan` (`admin.js`) requiere que el admin active el plan "pro" a mano después de un pago fuera de la plataforma (transferencia/PayPal). Lo único que ese plan **hace** hoy es prender el bot de WhatsApp de una tienda — ver "Tiendas y bot de WhatsApp". Reemplazar por checkout self-serve + webhook (Conekta o Stripe — Conekta tiene ventaja en México por soportar OXXO/SPEI) que actualice `plan`/`plan_expires_at` solo, con downgrade automático si el pago falla. Después, evaluar extender el mismo mecanismo a `billing.js`: cobro en línea liga→equipo, y eventualmente equipo→jugador (para que los equipos cobren a sus propios jugadores).
 
 **Fase 3 — Red de seguridad técnica**
-En marcha. **Hecho (2026-09-16)**: 135 pruebas unitarias que corren solas en cada
-push (54 en `backend/tests/unit/` y 81 en `frontend/tests/unit/`, con
-`node --test`) — ver `docs/CHANGELOG.md`. Las 18 más nuevas son de
-`matchScope.js`, la herencia de conferencia. Siguen existiendo los dos recorridos de punta a punta de
-cobranza (`backend/tests/billing-*.e2e.mjs`), que se corren a mano contra una
-rama de Neon y **no** están en el CI porque necesitan Postgres vivo.
+En marcha. **Hecho**: las pruebas unitarias corren solas en cada push, con
+`node --test` (los números al día están en `docs/ESTADO.md`). Las **cinco**
+suites de punta a punta (`backend/tests/*.e2e.mjs`) se corren a mano contra una
+rama de Neon y **no** están en el CI, porque necesitan Postgres vivo.
 
 Lo que falta de esta fase:
 - **Pruebas de lo que toca la base de datos** — todo `routes/` empieza
@@ -4324,11 +3875,11 @@ Lo que falta de esta fase:
   en el CI (un servicio de Postgres en el workflow, o Neon con una rama
   efímera por corrida). Es el paso grande que queda, y donde entraría auth.
 - **Monitoreo de uptime y alertas** — hoy Sentry avisa de errores, pero nadie
-  avisa si el servicio simplemente no responde.
+  avisa si el servicio simplemente no responde (`PD-12`).
 - **Que el CI bloquee el deploy** si algo falla: hoy Render y Vercel despliegan
   sin esperar el resultado del CI. Esto no es código, es configuración en
   Render/Vercel (y, del lado de GitHub, un required status check sobre los
-  jobs `frontend-build` y `backend-syntax-check`).
+  jobs `frontend-build` y `backend-syntax-check`) (`PD-11`).
 
 **Fase 4 — Automatizar el ciclo de vida del cliente**
 No iniciado, salvo el rechazo de solicitud de publicación (ya hecho, ver `docs/CHANGELOG.md`). Falta: onboarding automático por correo para organizaciones nuevas — `RESEND_API_KEY`/`EMAIL_FROM` ya están configurados para los códigos de verificación, así que no hace falta cuenta nueva, solo construir los correos. Los tipos de organización pendientes ya se habilitaron (los cuatro se registran).

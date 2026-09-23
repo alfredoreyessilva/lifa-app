@@ -15,6 +15,58 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El estado y los pendientes salen del README (2026-09-23)**: una revisión
+  del proyecto completo al terminar de jubilar `teams.league_id`, comparando lo
+  que el README decía con el código, GitHub y producción. No se tocó código.
+
+  **Lo que el README ya no contaba bien:**
+
+  - `DELETE /manage/teams/:id` seguía listado como pendiente en tres lugares,
+    dos días después de cerrarse. "El visor no tiene pantalla propia" seguía
+    abierto, y ya tenía dos. Cinco hallazgos de
+    `panel-del-club-hallazgos.md` (H4, H5, H6, H9 y H10) seguían como
+    "ABIERTO" y estaban cerrados.
+  - La foto de avance, del 2026-09-20, ponía el día del partido al 50% aunque
+    las estadísticas se construyeron ese mismo día. Los números se habían
+    movido sin que nadie los actualizara: cuatro suites e2e (son cinco), 164
+    unitarias en el backend (son 166), `db.js` con 1,706 líneas y 38 tablas
+    (son 2,262 y 44). Y la regla 1 de `CLAUDE.md` decía que el `.env` local
+    apunta a producción, cosa que dejó de ser cierta el 2026-09-19.
+
+  **Tres huecos graves que no estaban en ninguna lista:**
+
+  1. **No hay respaldo propio de producción.** Solo existe la restauración
+     del plan gratuito de Neon, que cubre horas.
+  2. **El cron de GitHub corre 5–8 veces al día, no 96.** Se midió con
+     `gh run list`: 5, 8, 5 y 6 corridas del 19 al 22 de septiembre. Con eso,
+     el pendiente "apagar el cron viejo" se volvió peligroso: el externo puede
+     ser lo que hoy sostiene los avisos de partido.
+  3. **No existe "olvidé mi contraseña".**
+
+  También se midió que `/api/health` tarda **41.5 s** en frío, que `main` no
+  tiene protección y que `npm audit` trae dos vulnerabilidades altas con
+  parche que no rompe y que el README no mencionaba.
+
+  **Lo que cambió:**
+
+  - [`docs/ESTADO.md`](ESTADO.md) reemplaza la tabla de porcentajes por
+    **niveles que se comprueban** (definido · construido · verificado · en
+    producción · en uso). El porcentaje medía cuánto se construyó y no si
+    sirve: la cobranza salía con 88% con cero movimientos en producción.
+  - [`docs/PENDIENTES.md`](PENDIENTES.md) es la **lista única** de lo que
+    falta, con un ID que no se reusa (`PD-01`…`PD-29`) y una prioridad
+    (P0 · P1 · P2). Antes vivían en cinco secciones del README sin prioridad.
+    El detalle de "Pendientes abiertos" se mudó allá sin repetirse; los
+    encabezados del README se conservan como puntero, para que las
+    referencias del código y de los documentos sigan llevando a algún lado.
+  - "Pendientes conocidos" del README pasó a llamarse "Limitaciones
+    aceptadas" y se quedó solo con lo que se decidió no resolver.
+  - `CLAUDE.md`: el commit que cierra un pendiente borra su renglón, y **no se
+    empieza un plan nuevo con un P0 abierto**.
+
+  **Verificado**: las 287 unitarias pasan (166 + 121) y el CI del último push
+  terminó bien. Las suites e2e no se corrieron, porque no se tocó código.
+
 - **Borrar una liga ya no borra sus equipos, y `leagues.js` soltó
   `teams.league_id` (2026-09-22)** — es el último paso de jubilar esa columna.
   El modelo completo está en el README, "Jubilar `teams.league_id`".

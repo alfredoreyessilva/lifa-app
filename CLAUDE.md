@@ -30,7 +30,9 @@ Dónde buscar antes de preguntar: **README** tiene una sección por dominio
 (Cobranza · Cuotas del club · Tabla de posiciones · Predicciones y quinielas ·
 Roster · Roster público y pase de lista · Estadísticas por jugada · Capturar
 sin señal · Equipos independientes · Transmisiones · Tiendas y bot de WhatsApp ·
-Seguridad), cada una con el porqué de sus decisiones.
+Seguridad), cada una con el porqué de sus decisiones. **`docs/ESTADO.md`** dice
+qué producto está a qué nivel, y **`docs/PENDIENTES.md`** es la lista única de lo
+que falta, con prioridad.
 
 ## Correrlo y probarlo
 
@@ -40,7 +42,8 @@ cd frontend && npm install && npm run dev    # :5173
 npm test                                      # en cualquiera de los dos: node --test, <1s
 ```
 
-285 pruebas unitarias (164 backend + 121 frontend) corren en el CI en cada push.
+Las pruebas unitarias de los dos lados corren en el CI en cada push (el número
+al día está en `docs/ESTADO.md`, no aquí, para que no se desfase).
 Las **cinco** suites de punta a punta —las dos de cobranza, la de invitaciones
 y roles, la de estadísticas por jugada y la de un equipo en varias ligas—
 **no**: necesitan Postgres vivo. Instrucciones en `backend/tests/README.md`.
@@ -49,10 +52,12 @@ y roles, la de estadísticas por jugada y la de un equipo en varias ligas—
 
 ## Reglas que no se negocian
 
-**1. Nunca probar contra producción.** Hoy la `DATABASE_URL` local apunta a la
-base real: todo lo que registres desde `localhost:5173` crea filas de verdad.
-Para cualquier prueba que escriba, crea una rama en Neon (Branches → New branch,
-copia instantánea) y apunta ahí.
+**1. Nunca probar contra producción.** Desde el 2026-09-19 el `.env` local
+apunta a la rama `desarrollo-local` de Neon, y `npm run dev` se niega a arrancar
+si `DATABASE_URL` es la de producción (candado en `config/db.js`). Pero el
+candado solo cubre `npm run dev`: `npm start` en local y los scripts no lo
+tienen. Para cualquier prueba que escriba, usa una rama de Neon (Branches → New
+branch, copia instantánea), nunca la de producción.
 
 **2. Nunca levantar un segundo backend en el 4000.** El que falla por
 `EADDRINUSE` alcanza a correr `initSchema()` antes de morir, y eso tumba las
@@ -172,13 +177,30 @@ lo inventaba el mismo código que se estaba probando.
 - Cambio de esquema o de consulta → correrlo contra los datos reales dentro de
   una transacción con `ROLLBACK` y `lock_timeout`, y comprobar que las filas que
   no debían moverse no se movieron.
+- Cierra un pendiente → en el mismo commit se borra su renglón de
+  `docs/PENDIENTES.md` y, si un producto cambió de nivel, se mueve en
+  `docs/ESTADO.md`. Un pendiente cerrado que sigue listado hace dudar de todos
+  los demás.
 
 ## Documentación
 
 El README documenta **por qué**, no solo qué. Cuando una decisión no sea obvia
 —o cuando algo se haya dejado a medias a propósito— se escribe ahí, en la
 sección de su dominio. Lo que se termina pasa a `docs/CHANGELOG.md` con fecha;
-lo que queda abierto, a "Pendientes abiertos" del README.
+lo que queda abierto, a `docs/PENDIENTES.md`, con un ID que no se reusa y una
+prioridad:
+
+- **P0**: puede perder datos, ya afecta a usuarios, o es un hueco que nadie
+  sabía que existía. **No se empieza un plan nuevo con un P0 abierto.**
+- **P1**: hoy no daña, pero frena el siguiente paso del negocio.
+- **P2**: deuda y pulido.
+
+Al terminar un plan, antes de empezar el siguiente, se revisa esa lista y
+`docs/ESTADO.md` contra lo que de verdad hay: el código, GitHub y producción.
+La del 2026-09-23 encontró pendientes cerrados que seguían listados (el borrado
+de equipos, en tres lugares; la pantalla del visor; cinco hallazgos del panel
+del club) y tres huecos graves que no estaban en ninguna lista: el respaldo, la
+cadencia real del cron y la recuperación de contraseña.
 
 Los mensajes de commit son una frase en español que dice qué cambió y, cuando
 importa, por qué: *"La conferencia se dice una vez por equipo, no una vez por

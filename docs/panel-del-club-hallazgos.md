@@ -1,11 +1,14 @@
 # Panel del club — errores y áreas de oportunidad
 
-> **Estado (2026-09-18, misma fecha).** Ya se cerraron **H1, H2, H3, H7, H8 y
-> M1, M5, M8**, y el ciclo mensual automático reemplazó a "Repetir el mes
-> pasado" — ver `docs/CHANGELOG.md`. Cada hallazgo cerrado lleva abajo su marca
-> ✅. **Las correcciones no se verificaron contra una base real**: ver el primer
-> punto de "Pendientes abiertos" del README. Lo que sigue abierto son H4, H5,
-> H6, H9, H10 y los menores restantes.
+> **Estado (2026-09-23).** Los diez hallazgos mayores están cerrados: H1, H2,
+> H3, H7 y H8 el 2026-09-18; H4, H9 y H10 el 2026-09-19; H6 el 2026-09-20; H5
+> el 2026-09-21. Cada uno tiene su entrada en `docs/CHANGELOG.md` y su marca ✅
+> abajo. De los menores se cerraron M1, M5 y M8; **M2, M3, M6 y M7 siguen
+> abiertos** y viven en `docs/PENDIENTES.md` como `PD-27`, y M4 no es un
+> defecto. Las "Áreas de oportunidad" del final son producto, no pendientes.
+>
+> Este documento se deja como está por lo que explica. Lo que falta ya no se
+> sigue aquí sino en `docs/PENDIENTES.md`.
 
 Revisión de lectura del código (2026-09-18), aparte del guion descriptivo
 (`docs/panel-del-club-guion.md`). **Nada de esto se verificó corriendo la app ni
@@ -114,7 +117,7 @@ cargo **cancelado** en septiembre se vuelve a crear en octubre.
 
 ---
 
-## H4 · ABIERTO · No hay manera de rotar el link público desde ninguna pantalla
+## H4 · ✅ CERRADO (2026-09-19, `6e2e4de`) · No hay manera de rotar el link público desde ninguna pantalla
 
 **Severidad: media-alta. Es un hueco de seguridad sin remedio operativo.**
 
@@ -135,7 +138,7 @@ esa persona.
 
 ---
 
-## H5 · ABIERTO (decisión tuya) · Borrar un equipo borra su contabilidad completa, en cascada
+## H5 · ✅ CERRADO (2026-09-21, `db4eccc`) · Borrar un equipo borra su contabilidad completa, en cascada
 
 **Severidad: media-alta. Choca de frente con la invariante del libro.**
 
@@ -167,7 +170,7 @@ El diálogo de esa pantalla no menciona nada de esto.
 
 ---
 
-## H6 · ABIERTO (decisión tuya) · El padrón del club —con CURP y fechas de nacimiento de menores— lo ve la liga
+## H6 · ✅ CERRADO (2026-09-20, `d3899c8`) · El padrón del club —con CURP y fechas de nacimiento de menores— lo ve la liga
 
 **Severidad: media. Es una decisión de producto, no un bug, pero hay que tomarla.**
 
@@ -238,7 +241,7 @@ patrón que ya se usó para `transfer-owner` con CTEs.
 
 ---
 
-## H9 · ABIERTO · El WhatsApp de "Recordar" se lo va a comer el bloqueador de popups
+## H9 · ✅ CERRADO (2026-09-19, `2402659`) · El WhatsApp de "Recordar" se lo va a comer el bloqueador de popups
 
 **Severidad: media. Depende del navegador, y Safari es el caso malo.**
 
@@ -267,7 +270,7 @@ y asignarle `.location` al terminar).
 
 ---
 
-## H10 · ABIERTO · "Copiar link" solo existe cuando NO hay teléfono
+## H10 · ✅ CERRADO (2026-09-19, `6e2e4de`) · "Copiar link" solo existe cuando NO hay teléfono
 
 `TeamFinancesSection.jsx:315-323`: los dos botones son excluyentes. Si el
 miembro tiene `tutor_phone`, sale "Recordar"; si no, sale "Copiar link".
