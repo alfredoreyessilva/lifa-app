@@ -15,6 +15,43 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Por qué una de las dos invitaciones de GRIZZLIES no sirvió, y un botón
+  para mandarlas completas (2026-09-23)**. Alfredo invitó a dos personas como
+  administradoras, antes de los roles. Una entró; a la otra le apareció
+  "Página no encontrada".
+
+  **La causa que se pudo probar:** hasta el 2026-09-20, el modal "Invitar
+  administrador" **generaba un link cada vez que se abría** (en un
+  `useEffect`), y el backend borraba cualquier otro link sin usar de la
+  organización. Volver a abrir el modal para copiar el link otra vez mataba en
+  silencio el que ya se había mandado. Se reconstruyó con un censo de solo
+  lectura: la secuencia de `invites` termina en 16, y entre la invitación que
+  sí se usó (la 10, del 15-sep, reclamada el 17) y la 16 (18-sep, todavía sin
+  usar) **se crearon y se borraron cinco links**. Ese modal ya no genera nada
+  al abrirse desde los roles.
+
+  **Lo que no se pudo cerrar:** un link borrado así muestra "No pudimos abrir
+  esta invitación" en panel negro. "Página no encontrada" sobre la cancha
+  (reproducido en producción) sale cuando el link llega **sin su código**, por
+  ejemplo cortado al pegarlo. Cualquiera de las dos pudo pasarle a esa persona.
+
+  **Lo que se hizo:** un botón **"Enviar por WhatsApp"** en los dos modales de
+  invitación, que abre WhatsApp con el mensaje y el link completo al final, en
+  su propia línea. Y la nota del modal ahora dice la mitad que faltaba: generar
+  otro link **del mismo rol** mata el anterior. Verificado en el navegador
+  contra la rama de desarrollo: el link del mensaje es el mismo del campo y
+  abre la invitación con su rol.
+
+  **Lo que salió al verificarlo:** el modal de **"Entregar perfil"** (liga →
+  equipo) sigue generando un link cada vez que se abre. Se comprobó: al
+  reabrirlo, el link anterior desapareció de la base. Es `PD-30` (P1). Y un
+  dueño que acepta por error el link de otra persona lo gasta: `PD-31` (P2).
+
+  De paso se corrigió una suposición propia: en la primera revisión se le puso
+  nombre a la segunda persona cruzando horarios de alta de cuentas, y no era
+  ella. **La tabla `invites` no guarda a quién se le mandó un link**, solo
+  quién lo creó y quién lo usó.
+
 - **PD-02 baja de P0 a P2: el cron corre poco, pero no hay nadie esperando el
   aviso (2026-09-23)**. Se midió antes de construir, que era lo acordado.
 

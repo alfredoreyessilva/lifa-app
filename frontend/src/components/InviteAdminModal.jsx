@@ -152,8 +152,8 @@ export default function InviteAdminModal({ organizationId, organizationName, org
       {link && (
         <>
           <p style={{ fontSize: 13, color: 'var(--ink-dim)', marginTop: 0 }}>
-            Copia este link y mándaselo por tu cuenta (WhatsApp, correo, etc.). Al abrirlo va a crear su
-            cuenta o iniciar sesión, y va a entrar a {organizationName} como <strong>{etiqueta || rol}</strong>.
+            Mándaselo por WhatsApp con el botón, o cópialo para mandarlo por otro lado. Al abrirlo va a
+            crear su cuenta o iniciar sesión, y va a entrar a {organizationName} como <strong>{etiqueta || rol}</strong>.
             El link deja de funcionar en cuanto se usa una vez.
           </p>
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
@@ -162,8 +162,26 @@ export default function InviteAdminModal({ organizationId, organizationName, org
               {copied ? '✓ Copiado' : 'Copiar'}
             </button>
           </div>
+          {/* El link viaja completo dentro del mensaje. Copiarlo y pegarlo a
+              mano es donde puede llegar cortado, y un link sin su código abre
+              "Página no encontrada" (le pasó a una de las invitaciones de
+              GRIZZLIES, 2026-09). Va al final y en su propia línea para que
+              WhatsApp no le pegue nada. Es un <a> y no un window.open: así el
+              navegador no lo bloquea (ver el botón "Recordar"). */}
+          <a
+            className="btn btn-accent"
+            style={{ display: 'block', textAlign: 'center', marginTop: 10 }}
+            href={`https://wa.me/?text=${encodeURIComponent(
+              `Te invito a ${organizationName} en CFBAMX como ${etiqueta || rol}. Abre este link para aceptar (sirve una sola vez):\n${link}`
+            )}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Enviar por WhatsApp
+          </a>
           <p style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: 10 }}>
-            Puedes generar otro link con un rol distinto sin que este deje de servir — hay uno vigente por rol.
+            Hay un link vigente por rol: si generas otro de <strong>este mismo rol</strong>, este deja
+            de servir. Con un rol distinto, los dos siguen vigentes.
           </p>
 
           <div className="modal-actions">

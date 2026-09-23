@@ -82,6 +82,19 @@ export default function InviteTeamModal({ team, token, onClose, onDone }) {
               {copied ? '✓ Copiado' : 'Copiar'}
             </button>
           </div>
+          {/* Mismo porqué que en InviteAdminModal: el link viaja completo, al
+              final y en su propia línea. */}
+          <a
+            className="btn btn-accent"
+            style={{ display: 'block', textAlign: 'center', marginTop: 10 }}
+            href={`https://wa.me/?text=${encodeURIComponent(
+              `Te entrego el perfil de ${team.name} en CFBAMX. Abre este link para administrarlo (sirve una sola vez):\n${link}`
+            )}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Enviar por WhatsApp
+          </a>
         </>
       )}
 
