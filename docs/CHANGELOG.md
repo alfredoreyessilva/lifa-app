@@ -38,8 +38,10 @@ entradas traen el post-mortem del bug que las provocó.
   borrando todos los respaldos. Se probó contra una API de Neon simulada, en
   seis casos. La prueba destapó un falso fallo: `jq` en Windows escribe `\r\n`
   y los ids salían con un `\r` pegado. En Linux no pasa, y la prueba se rehízo
-  con `jq -b`. **Falta su primera corrida real**, que espera una llave de API
-  limitada al proyecto.
+  con `jq -b`. Su primera corrida real esperaba una llave de API limitada al
+  proyecto, y **ya corrió** el mismo día, a mano con `workflow_dispatch`: creó
+  `respaldo-2026-09-23`, y en el log público no hay ninguna cadena de conexión
+  ni contraseña (se revisó). Con eso `PD-01` salió de `docs/PENDIENTES.md`.
 
   Dos decisiones que no son obvias: `verify-full` y no `require` (en Windows,
   `libpq` no ve los certificados del sistema, así que el script le pasa los de

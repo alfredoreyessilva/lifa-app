@@ -40,7 +40,7 @@ operación: respaldos, cron y un servidor que se duerme.
 | Producto | Nivel | Evidencia | Qué lo detiene |
 |-|-|-|-|
 | Calendario, resultados y páginas públicas | **5** | 4 ligas públicas, 92 equipos, 168 partidos | PD-03 |
-| Predicciones y quinielas | **5** | 1,663 predicciones en el concurso de ONEFA (2026-09-23) | PD-01 |
+| Predicciones y quinielas | **5** | 1,663 predicciones en el concurso de ONEFA (2026-09-23) | — |
 | Tabla de posiciones | 4 | Verificada contra datos reales (2026-09-16) | PD-14 |
 | Transmisiones | 4 | Sin medir | — |
 | Avisos push de partido | 4, degradado | El cron real corre 5–8 veces al día | PD-02 |
@@ -64,7 +64,7 @@ operación: respaldos, cron y un servidor que se duerme.
 
 | Parte | Cómo está | Qué falta |
 |-|-|-|
-| Respaldos | ✅ Archivo cada 4 semanas, restaurado de prueba (2026-09-23) · ⏳ ramas semanales de Neon, esperan su llave de API | PD-01 |
+| Respaldos | ✅ Ramas semanales en Neon (se conservan 4) y archivo cada 4 semanas, restaurado de prueba. Las dos capas corrieron de verdad el 2026-09-23 | — |
 | Disponibilidad | ⚠️ Render gratuito: **41.5 s** en frío (medido 2026-09-23) | PD-03 |
 | Cron | ⚠️ 5–8 corridas al día, no 96; hay un segundo scheduler sin identificar | PD-02 |
 | Monitoreo | Sentry en frontend y backend ✅ · caída del servicio ❌ | PD-12 |
@@ -89,7 +89,7 @@ El detalle de cada fase está en "Roadmap de negocio" del README.
 | Fase | Cómo va | Qué la mueve |
 |-|-|-|
 | 0 — Cerrar lo que estaba a medias | Casi hecha | ID de afiliado de Booking.com |
-| 1 — Fundación de confiabilidad | En curso | PD-01, PD-03, PD-21 |
+| 1 — Fundación de confiabilidad | En curso | PD-03, PD-21 (el respaldo se cerró el 2026-09-23) |
 | 2 — Automatizar el cobro | **Sin empezar** | Una pasarela. Es el punto de no retorno: una liga que cobra por la plataforma no se va |
 | 3 — Red de seguridad técnica | En curso | PD-11, PD-12, y las e2e dentro del CI |
 | 4 — Ciclo de vida del cliente | Sin empezar | Correos de onboarding; Resend ya está configurado |

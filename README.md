@@ -3947,7 +3947,7 @@ Objetivo: que la plataforma genere flujo de cobro real sin que cada venta depend
 - ✅ Monitoreo de errores (Sentry) en frontend y backend, verificado en producción.
 - ✅ CI en GitHub Actions (pruebas unitarias + build + chequeo de sintaxis en cada push).
 - ⏳ Pendiente: subir Render y Neon a un plan de pago. Hoy el servicio se "duerme" y tarda ~40 s en despertar (`PD-03`).
-- ⏳ Pendiente: un respaldo propio de producción (`PD-01`). No estaba en esta lista y es lo más básico de la fase.
+- ✅ Respaldo propio de producción (2026-09-23): ramas semanales en Neon y un archivo cada 4 semanas, restaurado de prueba. Ver "Respaldos".
 - ⏳ Pendiente: rotar `CLOUDINARY_API_SECRET` (`PD-21`).
 
 **Fase 2 — Automatizar el cobro (el bloqueador real de fondo)**
