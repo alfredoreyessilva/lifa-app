@@ -1,0 +1,166 @@
+# Respaldo semanal de producción, como rama de Neon.
+#
+# Cada lunes crea la rama 'respaldo-AAAA-MM-DD' a partir de 'production' y
+# conserva las CONSERVAR más recientes. Una rama de Neon es una copia
+# instantánea (copy-on-write): no copia datos, no sale de Neon y no deja
+# ningún dato personal en GitHub. Eso importa porque este repositorio es
+# público y sus logs también: aquí NUNCA se imprime una respuesta completa
+# de la API, solo campos elegidos con jq. La respuesta de crear una rama
+# puede traer cadenas de conexión con contraseña.
+#
+# Por qué existe (ver "Respaldos" en el README): el plan gratuito de Neon solo
+# permite restaurar las últimas 6 horas y un solo snapshot manual. Un borrado
+# malo que se nota al día siguiente ya no tenía vuelta.
+#
+# ── Lo que protege y lo que no ──
+#
+# Protege de un error propio (una migración, un DELETE, un CASCADE) que se
+# note hasta ~4 semanas después. NO protege de perder la cuenta o el proyecto
+# de Neon: para eso está el respaldo mensual a disco,
+# backend/scripts/respaldo-local.mjs.
+#
+# ── Secretos (Settings → Secrets and variables → Actions) ──
+#
+#   NEON_API_KEY      llave de API de Neon LIMITADA AL PROYECTO ("project-scoped").
+#                     Esa clase de llave no puede borrar el proyecto.
+#   NEON_PROJECT_ID   el id del proyecto de Neon de CFBAMX
+#
+# A diferencia de cron.yml, si faltan los secretos este workflow FALLA: corre
+# una vez por semana, así que el correo de GitHub no es ruido, y un respaldo
+# que no se hizo tiene que verse.
+#
+# ── Ojo ──
+#
+# GitHub deshabilita los workflows programados tras 60 días sin actividad en
+# el repositorio. Por eso aquí nada caduca solo: si este workflow deja de
+# correr, las ramas que ya existen se quedan. Solo se borra una rama vieja
+# después de haber creado la nueva, y nunca por debajo de CONSERVAR.
+
+name: Respaldo
+
+on:
+  schedule:
+    # Lunes 12:00 UTC = 06:00 en México, después de los partidos del fin de
+    # semana y de las predicciones que se capturan antes de ellos.
+    - cron: '0 12 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: respaldo
+  cancel-in-progress: false
+
+# No necesita leer ni escribir nada del repositorio.
+permissions: {}
+
+jobs:
+  rama:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Crear la rama de respaldo y podar las viejas
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          PROJECT:      ${{ secrets.NEON_PROJECT_ID }}
+          CONSERVAR:    4
+        run: |
+          set -euo pipefail
+
+          if [ -z "${NEON_API_KEY:-}" ] || [ -z "${PROJECT:-}" ]; then
+            echo "::error::Faltan los secretos NEON_API_KEY y/o NEON_PROJECT_ID. No se hizo el respaldo."
+            exit 1
+          fi
+
+          API=https://console.neon.tech/api/v2
+          CUERPO=$(mktemp)
+
+          # neon MÉTODO RUTA [JSON] — imprime el cuerpo por stdout (a una
+          # variable, nunca al log). Reintenta el 423, que es lo que Neon
+          # contesta mientras hay otra operación corriendo sobre el proyecto
+          # (por ejemplo, justo después de crear una rama).
+          neon() {
+            local metodo=$1 ruta=$2 datos=${3:-} codigo intento
+            for intento in 1 2 3 4 5 6 7 8 9 10; do
+              if [ -n "$datos" ]; then
+                codigo=$(curl -sS -o "$CUERPO" -w '%{http_code}' -X "$metodo" \
+                  -H "Authorization: Bearer $NEON_API_KEY" -H 'Accept: application/json' \
+                  -H 'Content-Type: application/json' -d "$datos" "$API$ruta")
+              else
+                codigo=$(curl -sS -o "$CUERPO" -w '%{http_code}' -X "$metodo" \
+                  -H "Authorization: Bearer $NEON_API_KEY" -H 'Accept: application/json' \
+                  "$API$ruta")
+              fi
+              if [ "$codigo" = 423 ]; then sleep 6; continue; fi
+              if [ "${codigo:0:1}" != 2 ]; then
+                # El mensaje de error de Neon no trae secretos; el cuerpo
+                # completo de una respuesta buena sí podría.
+                echo "::error::Neon respondió $codigo a $metodo $ruta: $(jq -r '.message // "sin mensaje"' "$CUERPO" 2>/dev/null)" >&2
+                return 1
+              fi
+              cat "$CUERPO"
+              return 0
+            done
+            echo "::error::Neon siguió ocupado (423) después de 10 intentos en $metodo $ruta" >&2
+            return 1
+          }
+
+          ramas=$(neon GET "/projects/$PROJECT/branches")
+
+          # La rama de producción es la default, y además se tiene que llamar
+          # así. Si alguna de las dos cosas cambió, mejor no tocar nada.
+          prod=$(jq -r '[.branches[] | select(.default == true)] | if length == 1 then .[0] else empty end
+                        | select(.name == "production") | .id' <<<"$ramas")
+          if [ -z "$prod" ]; then
+            echo "::error::No encontré una sola rama default llamada 'production'. No se tocó nada."
+            exit 1
+          fi
+
+          nombre="respaldo-$(TZ=America/Mexico_City date +%F)"
+
+          if jq -e --arg n "$nombre" '.branches[] | select(.name == $n)' <<<"$ramas" >/dev/null; then
+            creada="ya existía (se volvió a correr el mismo día)"
+          else
+            # Sin 'endpoints': la rama nace sin compute, así que no gasta horas
+            # de cómputo mientras nadie la consulte.
+            neon POST "/projects/$PROJECT/branches" \
+              "$(jq -nc --arg p "$prod" --arg n "$nombre" '{branch: {parent_id: $p, name: $n}}')" >/dev/null
+            creada="creada"
+          fi
+
+          # Se vuelve a listar DESPUÉS de crear: la poda solo corre si la rama
+          # nueva de verdad está ahí.
+          ramas=$(neon GET "/projects/$PROJECT/branches")
+          if ! jq -e --arg n "$nombre" '.branches[] | select(.name == $n)' <<<"$ramas" >/dev/null; then
+            echo "::error::La rama $nombre no aparece después de crearla. No se podó nada."
+            exit 1
+          fi
+
+          # Solo son candidatas las que se llaman EXACTAMENTE respaldo-AAAA-MM-DD
+          # y cuelgan de producción. Las fechas se ordenan bien como texto.
+          respaldos=$(jq -c --arg p "$prod" '[.branches[]
+                        | select(.name | test("^respaldo-[0-9]{4}-[0-9]{2}-[0-9]{2}$"))
+                        | select(.parent_id == $p and .default != true)]
+                        | sort_by(.name) | reverse' <<<"$ramas")
+
+          borradas=""
+          for id in $(jq -r --argjson k "$CONSERVAR" '.[$k:][] | .id' <<<"$respaldos"); do
+            n=$(jq -r --arg i "$id" '.[] | select(.id == $i) | .name' <<<"$respaldos")
+            neon DELETE "/projects/$PROJECT/branches/$id" >/dev/null
+            borradas="$borradas $n"
+          done
+
+          tam=$(jq -r --arg p "$prod" '.branches[] | select(.id == $p) | .logical_size // 0' <<<"$ramas")
+
+          {
+            echo "### Respaldo de producción"
+            echo
+            echo "- **$nombre**: $creada"
+            echo "- Tamaño lógico de producción: $(( tam / 1024 / 1024 )) MB (el plan gratuito permite 512 MB por proyecto)"
+            echo "- Ramas en el proyecto: $(( $(jq '.branches | length' <<<"$ramas") - $(wc -w <<<"$borradas") )) de 10"
+            echo "- Podadas:${borradas:- ninguna}"
+            echo
+            echo "| Respaldos que quedan | Creado |"
+            echo "|-|-|"
+            jq -r --argjson k "$CONSERVAR" '.[:$k][] | "| \(.name) | \(.created_at) |"' <<<"$respaldos"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "Respaldo $nombre: $creada. Podadas:${borradas:- ninguna}."

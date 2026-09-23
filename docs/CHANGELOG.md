@@ -15,6 +15,37 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Producción ya tiene respaldo propio, y el primero ya se restauró
+  (2026-09-23)**: es el `PD-01`, el primer P0 de la lista nueva. Hasta hoy lo
+  único era la restauración del plan gratuito de Neon, que cubre 6 horas. El
+  diseño está en "Respaldos" del README; son dos capas porque cada una cubre
+  lo que la otra no.
+
+  **El archivo** (`scripts/respaldo-local.mjs`, cada 4 semanas en la
+  computadora de Alfredo) protege de perder la cuenta de Neon. Los conteos y
+  `pg_dump` comparten el mismo snapshot, así que la verificación compara
+  números exactos. Con `--probar` lo restaura en una base temporal de
+  `desarrollo-local`, compara tabla por tabla y la borra. Primera corrida: 44
+  tablas, 3,897 filas, 1,663 predicciones, 0.3 MB, restaurado con exactamente
+  las mismas filas. Se corrió otra vez desde el Programador de tareas para
+  comprobar que funciona en ese entorno y no solo desde una terminal
+  (resultado 0), y se verificó que no quedara ninguna base temporal.
+
+  **Las ramas** (`.github/workflows/respaldo.yml`, cada lunes) protegen de un
+  error propio, que es el riesgo realista, sin sacar datos de Neon: el repo es
+  público y sus logs también. Nada caduca solo, a propósito: con GitHub
+  apagando los workflows tras 60 días sin actividad, una expiración terminaría
+  borrando todos los respaldos. Se probó contra una API de Neon simulada, en
+  seis casos. La prueba destapó un falso fallo: `jq` en Windows escribe `\r\n`
+  y los ids salían con un `\r` pegado. En Linux no pasa, y la prueba se rehízo
+  con `jq -b`. **Falta su primera corrida real**, que espera una llave de API
+  limitada al proyecto.
+
+  Dos decisiones que no son obvias: `verify-full` y no `require` (en Windows,
+  `libpq` no ve los certificados del sistema, así que el script le pasa los de
+  Node), y los binarios de PostgreSQL 18 vienen del zip oficial de EDB, sin
+  instalador, sin servicio y sin permisos de administrador.
+
 - **El estado y los pendientes salen del README (2026-09-23)**: una revisión
   del proyecto completo al terminar de jubilar `teams.league_id`, comparando lo
   que el README decía con el código, GitHub y producción. No se tocó código.

@@ -33,7 +33,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 
 | ID | P | Qué | Tipo |
 |-|-|-|-|
-| PD-01 | P0 | No hay respaldo propio de producción | operación |
+| PD-01 | P0 | Respaldo: el archivo ya corre; las ramas semanales esperan la llave de API de Neon | operación |
 | PD-02 | P0 | El cron de GitHub corre 5–8 veces al día, y el externo nadie lo identifica | operación |
 | PD-03 | P0 | La API tarda ~40 s en despertar | dinero |
 | PD-04 | P0 | No existe "olvidé mi contraseña" | código |
@@ -67,22 +67,30 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 
 ## P0
 
-### PD-01 · No hay respaldo propio de producción
+### PD-01 · Respaldo de producción: falta la mitad de las ramas
 
-No existe `pg_dump`, ni script, ni rutina de respaldo en ningún lado del
-proyecto. Lo único que protege los datos es la restauración a un punto en el
-tiempo que trae Neon, y en el plan gratuito esa ventana es de **horas**, no de
-semanas. Si un borrado malo se nota al día siguiente, ya no se puede deshacer.
+**En curso desde el 2026-09-23.** El diseño completo está en "Respaldos" del
+README: dos capas, ramas de Neon cada semana y un archivo cada 4 semanas.
 
-Lo que hay que proteger (ver "Qué hay en juego" en [`ESTADO.md`](ESTADO.md)): las
-**1,648 predicciones** del concurso de ONEFA y su calendario. Y este proyecto ya
-tuvo, en una semana, dos `ON DELETE CASCADE` que borraban de más con un solo
-clic: el riesgo realista no es que Neon pierda la base, sino un borrado o una
-migración propia.
+- ✅ **El archivo ya corre.** `scripts/respaldo-local.mjs` respaldó producción
+  el 2026-09-23 (44 tablas, 3,897 filas, 1,663 predicciones) y lo **restauró de
+  prueba** con exactamente las mismas filas. La tarea programada de Windows
+  quedó registrada, se corrió una vez desde el propio Programador de tareas
+  (resultado 0) y vuelve a correr el lunes 2026-09-28.
+- ⏳ **Las ramas semanales esperan la llave.** `respaldo.yml` se probó contra
+  una API de Neon simulada (seis casos: poda, 423, mismo día, rama default
+  renombrada, secretos faltantes y el límite de ramas), pero no ha corrido
+  contra Neon. Falta crear una llave de API **limitada al proyecto** en la
+  consola de Neon, guardarla como secreto `NEON_API_KEY` y correrlo una vez a
+  mano.
 
-**Una restricción que cambia el cómo:** el repositorio es **público**, así que
-el respaldo **no** puede guardarse como artefacto de GitHub Actions. Llevaría
-los correos de los usuarios y sus contraseñas cifradas.
+Se cierra cuando esa primera corrida real deje su rama `respaldo-AAAA-MM-DD`.
+
+Antes de esto, lo único que protegía los datos era la restauración de Neon, que
+en el plan gratuito cubre **6 horas**. **Una restricción que definió el cómo:**
+el repositorio es **público**, así que un volcado no puede guardarse como
+artefacto de GitHub Actions: llevaría los correos de los usuarios y sus
+contraseñas cifradas.
 
 ### PD-02 · El cron de GitHub corre 5–8 veces al día, y el externo nadie lo identifica
 

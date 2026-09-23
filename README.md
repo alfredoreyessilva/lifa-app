@@ -173,6 +173,96 @@ sea la primera del día. Las dos claves de la raíz se conservan porque eran lo
 único que esta respuesta decía antes y del otro lado hay un servicio que no
 podemos inspeccionar; valen `null` —no `0`— cuando el bloque diario no corrió.
 
+## Respaldos
+
+Hasta el 2026-09-23 **no había ninguno propio**. Lo único era la restauración a
+un punto en el tiempo de Neon, que en el plan gratuito cubre **6 horas**: un
+borrado malo que se notara al día siguiente ya no tenía vuelta. El plan
+gratuito permite además **un solo** snapshot manual y ningún respaldo
+programado.
+
+Lo que hay que proteger es poco pero no se repone: las predicciones del
+concurso de ONEFA (1,663 el 2026-09-23) y su calendario. El riesgo realista no
+es que Neon pierda la base, sino un error propio: en una semana este proyecto
+encontró dos `ON DELETE CASCADE` que borraban de más con un solo clic.
+
+Por eso son **dos capas**, y cada una cubre lo que la otra no:
+
+| Capa | Qué hace | Cuándo | Dónde queda | Protege de |
+|-|-|-|-|-|
+| Ramas de Neon | Crea `respaldo-AAAA-MM-DD` desde `production` y conserva las 4 más recientes | Lunes 06:00 (México), `.github/workflows/respaldo.yml` | Dentro de Neon | Un error propio que se note hasta ~4 semanas después |
+| Archivo | `pg_dump`, verificado y **restaurado de prueba** | Cada 4 semanas, lunes 10:00, en la computadora de Alfredo | `Documentos\cfbamx-respaldos` | Perder la cuenta o el proyecto de Neon |
+
+### Las ramas semanales
+
+Una rama de Neon es una copia instantánea (copy-on-write): no copia datos y no
+sale de Neon, así que **ningún dato personal pasa por GitHub**. Nace sin
+compute, así que no gasta horas de cómputo mientras nadie la consulte.
+
+- **Los logs de GitHub Actions de un repo público son públicos.** El workflow
+  nunca imprime una respuesta completa de la API, solo campos elegidos con
+  `jq`: la respuesta de crear una rama puede traer cadenas de conexión con
+  contraseña.
+- **La llave de API es de proyecto** ("project-scoped"): puede crear y borrar
+  ramas, pero **no puede borrar el proyecto**. Una llave personal o de
+  organización guardada en GitHub sería mucho más poder del que esto necesita.
+- **Nada caduca solo.** Neon permite ponerle fecha de expiración a una rama, y
+  no se usa a propósito: GitHub apaga los workflows programados tras 60 días
+  sin actividad en el repo, y con expiración, un workflow apagado terminaría
+  borrando todos los respaldos. Aquí una rama vieja solo se borra **después**
+  de que la nueva existe, nunca por debajo de 4, y solo si se llama
+  exactamente `respaldo-AAAA-MM-DD` y cuelga de `production`.
+- Si faltan los secretos, **falla** (a diferencia de `cron.yml`, que avisa y
+  sale sin error): corre una vez por semana, así que el correo de GitHub no es
+  ruido.
+
+Cuenta contra los límites del plan gratuito: 10 ramas por proyecto (con
+`production`, `desarrollo-local` y 4 respaldos quedan 4 para ramas de prueba) y
+512 MB de almacenamiento. El resumen de cada corrida dice cuántas ramas hay y
+cuánto pesa producción.
+
+### El archivo cada 4 semanas
+
+`backend/scripts/respaldo-local.mjs`. Es de **solo lectura** contra
+producción: `pg_dump` con `default_transaction_read_only`, sin importar
+`config/db.js` (que correría las migraciones).
+
+- **Cuenta y respalda el mismo instante.** Los conteos de filas y `pg_dump`
+  comparten un snapshot (`pg_export_snapshot()` + `--snapshot`), así que
+  cuadran exactos aunque producción reciba escrituras en medio.
+- **`--probar` lo restaura de verdad**: crea una base temporal en la rama
+  `desarrollo-local`, le hace `pg_restore`, compara tabla por tabla contra
+  producción y la borra al final, aunque algo falle en medio. Un respaldo que
+  nunca se restauró no está probado. La tarea programada siempre corre con
+  `--probar`.
+- **`verify-full`, no `require`.** `libpq` en Windows no encuentra los
+  certificados raíz del sistema; en vez de bajar a `require`, que cifra pero no
+  comprueba con quién habla, el script le pasa las raíces que trae Node.
+- **Se niega a escribir dentro del repo**, que es público: el archivo lleva
+  correos, contraseñas cifradas y, el día que haya padrón, CURP de menores. Y
+  escribe a un `.parcial` que solo se renombra si todo salió bien.
+- **`pg_dump` tiene que ser 18 o mayor**, igual que Neon. Se usan los
+  binarios oficiales de EDB (el zip, no el instalador) con solo `pg_dump`,
+  `pg_restore`, `psql` y sus DLL, en `%LOCALAPPDATA%\Programs\pgsql18`: sin
+  servicio y sin permisos de administrador.
+
+La tarea es **CFBAMX - respaldo de produccion** en el Programador de tareas, con
+"ejecutar en cuanto sea posible" si la computadora estaba apagada a esa hora.
+**No manda correo si falla**: lo que pasó queda en
+`Documentos\cfbamx-respaldos\bitacora.txt`, que hay que mirar en la revisión
+semanal.
+
+### Cómo se restaura
+
+- **Recuperar filas sueltas**, que es lo más probable (un borrado malo): a la
+  rama de respaldo se le agrega un compute desde la consola de Neon, o se
+  restaura el archivo en una base aparte (`pg_restore --no-owner
+  --no-privileges --dbname <base> archivo.dump`), y se copian solo las filas
+  perdidas. El script ya hace exactamente eso en cada `--probar`.
+- **Regresar producción entera a un respaldo**: Neon permite restaurar una
+  rama a partir de otra. **No se ha ensayado aquí**; antes de hacerlo sobre
+  `production` hay que probarlo sobre una rama de prueba.
+
 ## Estructura
 
 ```
