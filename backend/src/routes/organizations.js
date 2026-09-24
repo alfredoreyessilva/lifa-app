@@ -5,7 +5,7 @@ import { isValidUrl, isNonEmptyString } from '../utils/validation.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isOrgMember } from '../utils/orgMembers.js';
 import { organizationAdminRequired } from '../middleware/ownership.js';
-import { rolesDeTipo, etiquetaDeRol, puede } from '../utils/orgRoles.js';
+import { rolesDeTipo, etiquetaDeRol, puede, esRolValido } from '../utils/orgRoles.js';
 
 const router = express.Router();
 
@@ -249,6 +249,54 @@ router.delete('/:id/members/:userId', authRequired, organizationAdminRequired, a
   ).run(req.organization.id, targetUserId);
 
   res.json({ ok: true });
+}));
+
+// Cambia el rol de alguien que ya está adentro (2026-09-23). Hasta aquí la
+// única forma de cambiar un rol era mandarle a esa persona una invitación
+// nueva, y por eso el claim reescribía el rol de quien ya era miembro. Desde
+// que un link es para alguien que todavía no está (README, "Dos links
+// distintos: la entrega y la invitación con rol"), esa puerta se cerró y esta
+// es la que la reemplaza.
+//
+// Pide lo mismo que invitar: el permiso `miembros` (lo revisa la guarda), y
+// nombrar dueños es solo de quien tiene `duenos`. Y a un dueño no se le cambia
+// el rol desde aquí: es el mismo candado que tiene DELETE para quitarlo, por
+// la misma razón — el respaldo por `owner_user_id` de ownership.js lo seguiría
+// autorizando, y la pantalla diría algo que no es cierto. Si ese candado se
+// angosta algún día (PD-32), se angosta en los dos lugares.
+router.patch('/:id/members/:userId', authRequired, organizationAdminRequired, asyncHandler(async (req, res) => {
+  const targetUserId = Number(req.params.userId);
+  const role = req.body?.role;
+
+  if (!esRolValido(req.organization.type, role)) {
+    return res.status(400).json({
+      error: 'Ese rol no existe para este tipo de organización',
+      roles: rolesDeTipo(req.organization.type),
+    });
+  }
+
+  const target = await db.prepare(
+    `SELECT role FROM organization_members WHERE organization_id = ? AND user_id = ? AND status = 'active'`
+  ).get(req.organization.id, targetUserId);
+  if (!target) {
+    return res.status(404).json({ error: 'Esa persona no administra esta organización' });
+  }
+
+  if (target.role === 'owner') {
+    return res.status(409).json({ error: 'A un dueño no se le cambia el rol desde aquí' });
+  }
+  if (role === 'owner' && !puede(req.organization.type, req.orgRole, 'duenos')) {
+    return res.status(403).json({ error: 'Solo un dueño puede nombrar a otro dueño' });
+  }
+
+  // `role <> 'owner'` repite el candado de arriba dentro de la sentencia: entre
+  // la lectura y la escritura alguien pudo haber nombrado dueño a esta persona.
+  await db.prepare(`
+    UPDATE organization_members SET role = ?
+     WHERE organization_id = ? AND user_id = ? AND status = 'active' AND role <> 'owner'
+  `).run(role, req.organization.id, targetUserId);
+
+  res.json({ ok: true, user_id: targetUserId, role, role_label: etiquetaDeRol(role, req.organization.type) });
 }));
 
 // Cede el puesto de administrador principal a otro administrador ya existente.

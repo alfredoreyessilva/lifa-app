@@ -53,7 +53,7 @@ respaldos se resolvieron el 2026-09-23.
 |-|-|-|-|
 | Estructura y panel de liga (torneo → categoría → rama → partido, importador de Excel) | 4 | Las ligas públicas las captura Alfredo | PD-26 |
 | Equipos independientes | **5** | Un caso: GRIZZLIES | PD-13 |
-| Roles, invitaciones y entrega de equipos | **5** | Un caso: GRIZZLIES tiene un administrador invitado | PD-07, PD-08 |
+| Roles, invitaciones y entrega de equipos | **5** | Un caso: GRIZZLIES tiene un administrador invitado | PD-07, PD-32 |
 | Cobranza liga → equipo (varias ligas) | 4 | **0 movimientos** en producción | PD-06; cobro en línea |
 | Cuotas del club y estado de cuenta del papá | 4 | **0 filas de padrón** en producción | PD-16, PD-17, PD-27 |
 | Roster (Excel, foto, altas y bajas) | 4 | Sin medir | PD-05 |
@@ -69,9 +69,9 @@ respaldos se resolvieron el 2026-09-23.
 | Disponibilidad | ⚠️ Render gratuito: **41.5 s** en frío (medido 2026-09-23) | PD-03 |
 | Cron | ⚠️ Una llamada cada ~4 h (GitHub). El externo de antes ya no llama. Alcanza para la cobranza, no para los avisos de partido | PD-02 (P2) |
 | Monitoreo | Sentry en frontend y backend ✅ · caída del servicio ❌ | PD-12 |
-| Pruebas | **287 unitarias** (166 backend + 121 frontend) en el CI ✅ · **5 suites e2e** que se corren a mano | PD-11, PD-25 |
+| Pruebas | **305 unitarias** (177 backend + 128 frontend) en el CI ✅ · **5 suites e2e** que se corren a mano | PD-11, PD-25 |
 | Despliegue | Push a `main` = producción, sin protección ni espera al CI | PD-11 |
-| Seguridad | JWT obligatorio, límite de intentos en login y en el estado de cuenta público, CORS con lista, SQL parametrizado, candado contra producción ✅ | PD-04, PD-08, PD-20, PD-21 |
+| Seguridad | JWT obligatorio, límite de intentos en login y en el estado de cuenta público, CORS con lista, SQL parametrizado, candado contra producción, invitaciones que caducan a los 7 días ✅ | PD-04, PD-20, PD-21 |
 | Páginas legales | ✅ Completas desde el 2026-09-19 | — |
 
 ## Qué hay en juego en producción

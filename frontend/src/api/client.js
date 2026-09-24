@@ -585,7 +585,11 @@ export const api = {
   adminDeleteUser: (id, token) =>
     request(`/admin/users/${id}`, { method: 'DELETE', token }),
 
-  // Invitaciones (entregar el perfil de un equipo a su representante)
+  // Invitaciones (entregar el perfil de un equipo a su representante). Es la
+  // única que cancela la anterior al generar otra, así que el modal primero
+  // PREGUNTA por la vigente (`getTeamInvite`) y solo genera si se le pide.
+  getTeamInvite: (teamId, token) =>
+    request(`/invites/teams/${teamId}`, { token }),
   createTeamInvite: (teamId, token) =>
     request(`/invites/teams/${teamId}`, { method: 'POST', token }),
   removeTeamOwner: (teamId, token) =>
@@ -598,8 +602,16 @@ export const api = {
   // link, y se valida contra el TIPO de organización en el backend. Sin él, el
   // backend entrega 'admin' — que es lo que esta ruta hacía antes de que los
   // roles existieran.
-  createOrgAdminInvite: (organizationId, role, token) =>
-    request(`/invites/organizations/${organizationId}/admins`, { method: 'POST', body: { role }, token }),
+  // `note` es para quién es el link ("Yayo", "Coach de línea"): opcional, y
+  // solo la ve la organización en su lista de pendientes.
+  createOrgAdminInvite: (organizationId, role, token, note) =>
+    request(`/invites/organizations/${organizationId}/admins`, { method: 'POST', body: { role, note }, token }),
+  // Los links con rol vivos de una organización. Pueden ser muchos a la vez;
+  // el de dueño llega sin `token` a quien no puede invitar dueños.
+  getOrganizationInvites: (organizationId, token) =>
+    request(`/invites/organizations/${organizationId}`, { token }),
+  cancelOrganizationInvite: (organizationId, inviteId, token) =>
+    request(`/invites/organizations/${organizationId}/${inviteId}`, { method: 'DELETE', token }),
   // Los roles que se pueden repartir en ESTA organización, ya con su etiqueta
   // y ya sabiendo cuáles puede repartir quien pregunta (`grantable`). No se
   // arma en el frontend a propósito: los roles válidos y sus nombres dependen
@@ -614,6 +626,11 @@ export const api = {
     request(`/organizations/${organizationId}/members/${userId}`, { method: 'DELETE', token }),
   transferOrganizationOwner: (organizationId, userId, token) =>
     request(`/organizations/${organizationId}/transfer-owner`, { method: 'POST', body: { userId }, token }),
+  // Cambiar el rol de alguien que ya está adentro. Antes se hacía mandándole
+  // otra invitación; desde que un link es solo para quien todavía no está,
+  // es esto.
+  updateOrganizationMemberRole: (organizationId, userId, role, token) =>
+    request(`/organizations/${organizationId}/members/${userId}`, { method: 'PATCH', body: { role }, token }),
 
   // Bandeja de notificaciones (pantalla "Notificaciones")
   getLeagueNotifications: (leagueId, token) => request(`/notifications/league/${leagueId}`, { token }),

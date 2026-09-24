@@ -6,17 +6,33 @@ import { teamLeagueOwnerRequired, organizationAdminRequired } from '../middlewar
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { orgTieneMiembros } from '../utils/orgMembers.js';
 import { esRolValido, rolesDeTipo, etiquetaDeRol, puede, rolDeInvitacion } from '../utils/orgRoles.js';
+import { VIGENCIA_DIAS, vigenteSql, segundosRestantesSql, motivoInvalido, limpiarNota } from '../utils/invitaciones.js';
 
 const router = express.Router();
+
+// Hay dos tipos de link, y comparten esta tabla y la pantalla de llegada pero
+// NO sus reglas (README, "Dos links distintos: la entrega y la invitación con
+// rol"). En corto:
+//
+//   - La ENTREGA (`type = 'team'`) es el primer acceso a un equipo. Una sola
+//     viva a la vez —generar otra cancela la anterior— y una sola vez en la
+//     vida del equipo.
+//   - La INVITACIÓN CON ROL (`type = 'org_admin'`) suma a una persona más a una
+//     organización que ya tiene dueño. Las que hagan falta, a la vez.
+//
+// Lo que comparten: caducan a los VIGENCIA_DIAS de generadas, y se gastan en la
+// misma sentencia que da de alta a quien las usa.
 
 function generateToken() {
   return crypto.randomBytes(12).toString('hex'); // ej. "a1b2c3d4e5f6…"
 }
 
+const YA_ENTREGADO = 'Este equipo ya se administra solo. Su acceso lo reparten sus dueños, no la liga — '
+  + 'su participación en los torneos no cambia.';
+
 /* ===================== ENTREGAR UN EQUIPO A SU REPRESENTANTE ===================== */
 // Solo el representante de la liga (o un admin) puede generar esto — ver
-// teamLeagueOwnerRequired. Si ya había una invitación sin usar para este
-// equipo, se elimina primero para que solo quede una vigente a la vez.
+// teamLeagueOwnerRequired.
 //
 // Esta invitación NO lleva selector de rol y siempre entrega 'owner': es la
 // ENTREGA del equipo, no un reparto de acceso. La liga no decide quién es el
@@ -37,12 +53,42 @@ function generateToken() {
 // eso vive en `branch_teams` y no se toca aquí. Son dos preguntas distintas
 // —¿el equipo se administra solo? y ¿el equipo participa en esta liga?— y
 // confundirlas es lo que hacía falta de este modelo (README).
+
+// La entrega vigente de un equipo, para que volver a abrir "Entregar perfil"
+// enseñe el link que ya se mandó en vez de generar otro. Hasta el 2026-09-23 el
+// modal generaba uno al montarse, y como generar mata el anterior, abrirlo solo
+// para copiar el link otra vez dejaba muerto el que ya estaba en el WhatsApp de
+// alguien (PD-30).
+//
+// Devuelve la más reciente. Dos vivas no debería haber, pero dos peticiones al
+// mismo tiempo (un doble clic) sí las dejan; no es un riesgo, porque el claim
+// de abajo solo deja entregar el equipo una vez.
+router.get('/teams/:teamId', authRequired, teamLeagueOwnerRequired, asyncHandler(async (req, res) => {
+  if (await orgTieneMiembros(req.team.organization_id)) {
+    return res.status(409).json({ error: YA_ENTREGADO });
+  }
+
+  const vigente = await db.prepare(`
+    SELECT i.token, ${segundosRestantesSql('i')} AS seconds_left
+    FROM invites i
+    WHERE i.team_id = ? AND i.type = 'team' AND i.used_at IS NULL AND ${vigenteSql('i')}
+    ORDER BY i.created_at DESC
+    LIMIT 1
+  `).get(req.team.id);
+
+  res.json({
+    invite: vigente
+      ? { ...vigente, role: 'owner', role_label: etiquetaDeRol('owner', 'team') }
+      : null,
+  });
+}));
+
+// Generar una entrega nueva CANCELA la anterior. Es el único link que funciona
+// así: del otro lado siempre hay una sola persona, el representante, y dos
+// links vivos para lo mismo solo sirven para que uno se pierda en un chat.
 router.post('/teams/:teamId', authRequired, teamLeagueOwnerRequired, asyncHandler(async (req, res) => {
   if (await orgTieneMiembros(req.team.organization_id)) {
-    return res.status(409).json({
-      error: 'Este equipo ya se administra solo. Su acceso lo reparten sus dueños, no la liga — '
-        + 'su participación en los torneos no cambia.',
-    });
+    return res.status(409).json({ error: YA_ENTREGADO });
   }
 
   await db.prepare(`DELETE FROM invites WHERE team_id = ? AND used_at IS NULL`).run(req.team.id);
@@ -53,7 +99,12 @@ router.post('/teams/:teamId', authRequired, teamLeagueOwnerRequired, asyncHandle
     VALUES (?, 'team', ?, 'owner', ?)
   `).run(token, req.team.id, req.user.id);
 
-  res.status(201).json({ token, role: 'owner', role_label: etiquetaDeRol('owner', 'team') });
+  res.status(201).json({
+    token,
+    role: 'owner',
+    role_label: etiquetaDeRol('owner', 'team'),
+    seconds_left: VIGENCIA_DIAS * 24 * 60 * 60,
+  });
 }));
 
 /* ===================== CANCELAR UNA ENTREGA QUE NADIE RECLAMÓ ===================== */
@@ -87,10 +138,10 @@ router.delete('/teams/:teamId/owner', authRequired, teamLeagueOwnerRequired, asy
 }));
 
 /* ===================== GENERAR INVITACIÓN CON ROL ===================== */
-// A diferencia de la de arriba (que REEMPLAZA al representante de un
-// equipo), esta AGREGA a quien la reclame como un miembro más de la
-// organización — liga o equipo, misma ruta para ambas, porque los dos ya
-// tienen su organización propia (leagues.organization_id / teams.organization_id).
+// A diferencia de la entrega (que le da un equipo a su primer dueño), esta
+// AGREGA a quien la reclame como un miembro más de la organización — liga o
+// equipo, misma ruta para ambas, porque los dos ya tienen su organización
+// propia (leagues.organization_id / teams.organization_id).
 //
 // El rol viaja en el cuerpo y se valida contra el TIPO de organización, que es
 // la validación que un CHECK no puede hacer: el esquema acepta la unión de los
@@ -99,8 +150,7 @@ router.delete('/teams/:teamId/owner', authRequired, teamLeagueOwnerRequired, asy
 //
 // Sin `role` se entrega 'admin', que es lo único que esta ruta sabía dar antes
 // del paso 4. Así el frontend viejo —que manda el cuerpo vacío— sigue haciendo
-// exactamente lo mismo mientras llega su selector, y no hay ventana de
-// incompatibilidad al desplegar.
+// exactamente lo mismo, y no hay ventana de incompatibilidad al desplegar.
 router.post('/organizations/:organizationId/admins', authRequired, organizationAdminRequired, asyncHandler(async (req, res) => {
   const role = req.body?.role ?? 'admin';
 
@@ -119,25 +169,102 @@ router.post('/organizations/:organizationId/admins', authRequired, organizationA
     return res.status(403).json({ error: 'Solo un dueño puede invitar a otro dueño' });
   }
 
-  // Una invitación vigente POR ROL, no una sola para toda la organización.
-  // Con roles, "solo una a la vez" se volvió un error: generar el link del
-  // tesorero mataría en silencio el del coach que se mandó por WhatsApp hace
-  // diez minutos, y esa persona llegaría a un 404 sin saber por qué.
-  // COALESCE porque las invitaciones de antes del paso 4 tienen role NULL y
-  // valen como 'admin'.
-  await db.prepare(`
-    DELETE FROM invites
-    WHERE organization_id = ? AND type = 'org_admin' AND used_at IS NULL
-      AND COALESCE(role, 'admin') = ?
-  `).run(req.organization.id, role);
+  // Antes de la entrega no hay invitaciones con rol a un equipo: su primera
+  // persona entra SIEMPRE por la entrega. Ninguna liga llega hasta aquí
+  // (organizationAdminRequired no la deja entrar a la organización del
+  // equipo), pero el admin de la plataforma sí. Un coach que entrara por esta
+  // vía haría que `orgTieneMiembros()` diera el equipo por entregado sin que
+  // tenga dueño: la liga lo perdería y nadie adentro podría repartir su acceso.
+  if (req.organization.type === 'team' && !(await orgTieneMiembros(req.organization.id))) {
+    return res.status(409).json({
+      error: 'Este equipo todavía no se entrega. Su primer acceso es la entrega del perfil, '
+        + 'que se genera desde el panel de su liga.',
+    });
+  }
 
+  // Ya NO se borra ningún link anterior (2026-09-23). Hasta aquí había uno
+  // vigente por rol, y un equipo que quería invitar a veinte entrenadores no
+  // podía: cada link de Coach mataba el anterior. Ahora cada link es para una
+  // persona, y los vivos se ven y se cancelan en la lista de pendientes.
+  const note = limpiarNota(req.body?.note);
   const token = generateToken();
-  await db.prepare(`
-    INSERT INTO invites (token, type, organization_id, role, created_by)
-    VALUES (?, 'org_admin', ?, ?, ?)
-  `).run(token, req.organization.id, role, req.user.id);
+  const { id } = await db.prepare(`
+    INSERT INTO invites (token, type, organization_id, role, note, created_by)
+    VALUES (?, 'org_admin', ?, ?, ?, ?)
+    RETURNING id
+  `).get(token, req.organization.id, role, note, req.user.id);
 
-  res.status(201).json({ token, role, role_label: etiquetaDeRol(role, req.organization.type) });
+  res.status(201).json({
+    id,
+    token,
+    role,
+    role_label: etiquetaDeRol(role, req.organization.type),
+    note,
+    seconds_left: VIGENCIA_DIAS * 24 * 60 * 60,
+  });
+}));
+
+/* ===================== INVITACIONES CON ROL PENDIENTES ===================== */
+// Los links vivos (sin usar y sin caducar) de una organización. Los usados ya
+// se ven como personas en la lista de miembros, y los caducados no le sirven
+// a nadie.
+//
+// Ves y cancelas lo que tú mismo podrías generar. La lista enseña el link
+// completo, y un link de dueño en manos de un administrador es una escalera:
+// lo copia, lo usa él mismo y se asciende solo, que es justo lo que impide la
+// regla de invitar dueños. Así que a un administrador se le dice que existe,
+// pero sin el link. Los demás no le dan nada nuevo: los podría generar él.
+function puedeManejarInvitacion(req, rol) {
+  return rol !== 'owner' || puede(req.organization.type, req.orgRole, 'duenos');
+}
+
+router.get('/organizations/:organizationId', authRequired, organizationAdminRequired, asyncHandler(async (req, res) => {
+  const filas = await db.prepare(`
+    SELECT i.id, i.token, i.type, i.role, i.note, u.name AS created_by_name,
+           ${segundosRestantesSql('i')} AS seconds_left
+    FROM invites i
+    LEFT JOIN users u ON u.id = i.created_by
+    WHERE i.organization_id = ? AND i.type = 'org_admin'
+      AND i.used_at IS NULL AND ${vigenteSql('i')}
+    ORDER BY i.created_at DESC
+  `).all(req.organization.id);
+
+  const invites = filas.map(({ type, token, ...fila }) => {
+    // Las de antes del paso 4 tienen role NULL y valen como 'admin'.
+    const role = rolDeInvitacion({ type, role: fila.role });
+    const puedeManejar = puedeManejarInvitacion(req, role);
+    return {
+      ...fila,
+      role,
+      role_label: etiquetaDeRol(role, req.organization.type),
+      token: puedeManejar ? token : null,
+      can_cancel: puedeManejar,
+    };
+  });
+
+  res.json({ invites });
+}));
+
+// Cancelar un link con rol que nadie ha usado. Misma regla que generarlo: el
+// de dueño, solo quien puede invitar dueños.
+router.delete('/organizations/:organizationId/:inviteId', authRequired, organizationAdminRequired, asyncHandler(async (req, res) => {
+  const invite = await db.prepare(`
+    SELECT id, type, role, used_at FROM invites
+    WHERE id = ? AND organization_id = ? AND type = 'org_admin'
+  `).get(Number(req.params.inviteId), req.organization.id);
+  if (!invite) return res.status(404).json({ error: 'Esa invitación no existe' });
+
+  if (invite.used_at) {
+    return res.status(409).json({
+      error: 'Esa invitación ya se usó. Para quitarle el acceso a esa persona, quítala de la lista de quién tiene acceso.',
+    });
+  }
+  if (!puedeManejarInvitacion(req, rolDeInvitacion(invite))) {
+    return res.status(403).json({ error: 'Solo un dueño puede cancelar la invitación de otro dueño' });
+  }
+
+  await db.prepare(`DELETE FROM invites WHERE id = ? AND used_at IS NULL`).run(invite.id);
+  res.json({ ok: true });
 }));
 
 /* ===================== VER INFO PÚBLICA DE UNA INVITACIÓN ===================== */
@@ -146,8 +273,9 @@ router.post('/organizations/:organizationId/admins', authRequired, organizationA
 router.get('/:token', asyncHandler(async (req, res) => {
   const invite = await db.prepare(`
     SELECT
-      i.token, i.type, i.used_at, i.role,
+      i.token, i.type, i.used_at, i.role, (${vigenteSql('i')}) AS vigente,
       t.id AS team_id, t.name AS team_name, t.logo_url AS team_logo_url,
+      t.organization_id AS team_organization_id,
       l.name AS league_name,
       o.id AS organization_id, o.name AS organization_name, o.logo_url AS organization_logo_url, o.type AS organization_type
     FROM invites i
@@ -157,8 +285,16 @@ router.get('/:token', asyncHandler(async (req, res) => {
     WHERE i.token = ?
   `).get(req.params.token);
 
-  if (!invite) return res.status(404).json({ error: 'Esta invitación no existe o ya no es válida' });
-  if (invite.used_at) return res.status(410).json({ error: 'Esta invitación ya fue utilizada' });
+  const motivo = motivoInvalido(invite);
+  if (motivo) return res.status(motivo.status).json({ error: motivo.error });
+
+  const { vigente, team_organization_id: orgDelEquipo, ...publica } = invite;
+
+  // Una entrega de un equipo que ya se entregó por otro link. Se dice aquí, y
+  // no hasta el claim, para no pedirle a nadie que cree una cuenta para nada.
+  if (invite.type === 'team' && await orgTieneMiembros(orgDelEquipo)) {
+    return res.status(409).json({ error: 'Este equipo ya fue entregado. Si necesitas entrar, pídele acceso a quien lo administra.' });
+  }
 
   // Con qué rol va a entrar, ya resuelto y ya legible. Quien recibe un link
   // tiene derecho a saber a qué lo están invitando ANTES de crearse una
@@ -173,76 +309,143 @@ router.get('/:token', asyncHandler(async (req, res) => {
   const role = rolDeInvitacion(invite);
   const tipo = invite.type === 'team' ? 'team' : invite.organization_type;
 
-  res.json({ ...invite, role, role_label: etiquetaDeRol(role, tipo) });
+  res.json({ ...publica, role, role_label: etiquetaDeRol(role, tipo) });
 }));
 
 /* ===================== RECLAMAR UNA INVITACIÓN ===================== */
 // Requiere sesión iniciada (el frontend manda a la persona a iniciar sesión
 // o crear una cuenta primero si hace falta).
+//
+// En los dos tipos, el link se GASTA EN LA MISMA SENTENCIA que da de alta a la
+// persona: `UPDATE invites … WHERE used_at IS NULL` como primer CTE, y el alta
+// colgada de lo que ese UPDATE devolvió. Hasta el 2026-09-23 se revisaba
+// `used_at`, se daba de alta y se marcaba en tres llamadas, así que dos
+// personas que abrían el mismo link reenviado al mismo tiempo entraban las dos.
+// Ahora la segunda encuentra el link ya gastado y recibe 410.
+//
+// Una sola sentencia y no una transacción repartida en varias llamadas
+// (CLAUDE.md): `db.prepare` toma una conexión del pool por consulta y del otro
+// lado hay un pooler en modo transacción.
 router.post('/:token/claim', authRequired, asyncHandler(async (req, res) => {
-  const invite = await db.prepare(`SELECT * FROM invites WHERE token = ?`).get(req.params.token);
-  if (!invite) return res.status(404).json({ error: 'Esta invitación no existe o ya no es válida' });
-  if (invite.used_at) return res.status(410).json({ error: 'Esta invitación ya fue utilizada' });
+  const invite = await db.prepare(`
+    SELECT i.*, (${vigenteSql('i')}) AS vigente FROM invites i WHERE i.token = ?
+  `).get(req.params.token);
+
+  const motivo = motivoInvalido(invite);
+  if (motivo) return res.status(motivo.status).json({ error: motivo.error });
 
   const role = rolDeInvitacion(invite);
+  const yaGastada = () => res.status(410).json({ error: 'Esta invitación ya fue utilizada' });
+
+  let organization = null;
 
   if (invite.type === 'team') {
-    // LA ENTREGA PUEBLA LA ORGANIZACIÓN. Antes del paso 4 esto solo llenaba
-    // `teams.owner_user_id` y la organización del equipo —que ya existía, la
-    // crea una migración de db.js para todo equipo que no la tenga— se quedaba
-    // vacía. Un equipo entregado no tenía ni un miembro, así que el modelo de
-    // roles no tenía sobre qué pararse y `teamClubRequired` necesitaba el
-    // respaldo por `owner_user_id` para saber siquiera si había sido
-    // entregado. Desde aquí ya no: quien reclama queda de alta como 'owner'.
-    //
-    // Las dos escrituras van en UNA sentencia con CTE, no en dos seguidas
-    // (CLAUDE.md): `db.prepare` toma una conexión del pool por consulta y del
-    // otro lado hay un pooler en modo transacción, así que dos llamadas no
-    // tienen garantizada ni la misma conexión ni atomicidad. Y aquí sí
-    // importa — a la mitad quedaría un equipo con dueño y sin miembros, que
-    // es exactamente el estado que este paso vino a eliminar.
-    //
-    // DO UPDATE y no DO NOTHING: si quien reclama ya era miembro del equipo
-    // con otro rol (un coach al que después le entregan el equipo), la entrega
-    // lo asciende. Reclamar la entrega es lo más fuerte que hay.
-    //
-    // El WHERE de la subconsulta cubre al equipo sin `organization_id`: el
-    // INSERT no corre y el UPDATE sí, que es el comportamiento de antes. No
-    // debería pasar —db.js rellena esa columna en cada arranque— pero esta
-    // ruta no es lugar para averiguarlo.
-    await db.prepare(`
-      WITH entregado AS (
-        UPDATE teams SET owner_user_id = ? WHERE id = ?
-        RETURNING organization_id
-      )
-      INSERT INTO organization_members (organization_id, user_id, role, status)
-      SELECT organization_id, ?, 'owner', 'active'
-        FROM entregado
-       WHERE organization_id IS NOT NULL
-      ON CONFLICT (organization_id, user_id)
-      DO UPDATE SET role = 'owner', status = 'active'
-    `).run(req.user.id, invite.team_id, req.user.id);
-  } else if (invite.type === 'org_admin') {
-    // A diferencia de 'team', aquí NO se reemplaza a nadie — se agrega a
-    // quien reclama con el rol que la invitación diga (antes del paso 4
-    // siempre era 'admin'; ahora lo eligió quien generó el link).
-    //
-    // El conflicto es real: la persona pudo ya ser miembro por otro lado. Se
-    // resuelve poniendo el rol de la invitación, porque invitar es un acto
-    // explícito y silenciarlo dejaría al coach de siempre creyendo que ya es
-    // tesorero. La excepción es no degradar a un dueño: para eso está el
-    // WHERE, y es la misma regla que impide quitar al último dueño en
-    // DELETE /organizations/:id/members/:userId.
-    await db.prepare(`
-      INSERT INTO organization_members (organization_id, user_id, role, status)
-      VALUES (?, ?, ?, 'active')
-      ON CONFLICT (organization_id, user_id)
-      DO UPDATE SET role = EXCLUDED.role, status = 'active'
-      WHERE organization_members.role <> 'owner'
-    `).run(invite.organization_id, req.user.id, role);
-  }
+    const equipo = await db.prepare('SELECT organization_id FROM teams WHERE id = ?').get(invite.team_id);
+    if (!equipo) return res.status(404).json({ error: 'Esta invitación no existe o ya no es válida' });
 
-  await db.prepare(`UPDATE invites SET used_by = ?, used_at = CURRENT_TIMESTAMP WHERE id = ?`).run(req.user.id, invite.id);
+    // La entrega es una sola vez en la vida del equipo. Antes esto escribía el
+    // dueño sin preguntar si el equipo ya había sido entregado: con un solo
+    // link vivo no se notaba, pero un doble clic en "Entregar perfil" deja dos,
+    // y el segundo metía como dueño a quien lo tuviera DESPUÉS de la entrega.
+    // Si lo tiene la liga, esa es la puerta trasera al padrón que "entregado
+    // es entregado" vino a cerrar. El link no se gasta: ya no sirve de todos
+    // modos, y así la pantalla dice la razón verdadera.
+    if (await orgTieneMiembros(equipo.organization_id)) {
+      return res.status(409).json({ error: 'Este equipo ya fue entregado. Si necesitas entrar, pídele acceso a quien lo administra.' });
+    }
+
+    // LA ENTREGA PUEBLA LA ORGANIZACIÓN: quien reclama queda de alta como
+    // 'owner' y en `teams.owner_user_id`, en la misma sentencia — a la mitad
+    // quedaría un equipo con dueño y sin miembros.
+    //
+    // `owner_user_id IS NULL` en el UPDATE es lo que cierra la carrera entre
+    // dos entregas del mismo equipo reclamadas al mismo instante: la segunda
+    // espera el candado de la fila, la vuelve a leer ya con dueño y no la
+    // toca. Su link sí queda gastado, que es lo correcto: el equipo ya se
+    // entregó y ese link no le iba a servir a nadie.
+    //
+    // El WHERE de `organization_id IS NOT NULL` cubre al equipo sin
+    // organización: el INSERT no corre y el UPDATE sí. No debería pasar
+    // —db.js rellena esa columna en cada arranque— pero esta ruta no es lugar
+    // para averiguarlo.
+    const r = await db.prepare(`
+      WITH gastada AS (
+        UPDATE invites SET used_by = ?, used_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND used_at IS NULL AND ${vigenteSql('invites')}
+        RETURNING team_id
+      ), entregado AS (
+        UPDATE teams SET owner_user_id = ?
+         WHERE id IN (SELECT team_id FROM gastada) AND owner_user_id IS NULL
+        RETURNING organization_id
+      ), alta AS (
+        INSERT INTO organization_members (organization_id, user_id, role, status)
+        SELECT organization_id, ?, 'owner', 'active'
+          FROM entregado
+         WHERE organization_id IS NOT NULL
+        ON CONFLICT (organization_id, user_id)
+        DO UPDATE SET role = 'owner', status = 'active'
+        RETURNING 1
+      )
+      SELECT (SELECT COUNT(*) FROM gastada)::int   AS gastadas,
+             (SELECT COUNT(*) FROM entregado)::int AS entregados
+    `).get(req.user.id, invite.id, req.user.id, req.user.id);
+
+    if (r.gastadas === 0) return yaGastada();
+    if (r.entregados === 0) {
+      return res.status(409).json({ error: 'Este equipo ya fue entregado. Si necesitas entrar, pídele acceso a quien lo administra.' });
+    }
+  } else if (invite.type === 'org_admin') {
+    organization = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(invite.organization_id);
+    if (!organization) return res.status(404).json({ error: 'Esta invitación no existe o ya no es válida' });
+
+    // Mismo candado que al generarla: a un equipo sin entregar solo se entra
+    // por la entrega. Cubre los links que se hubieran generado antes de él.
+    if (organization.type === 'team' && !(await orgTieneMiembros(organization.id))) {
+      return res.status(409).json({
+        error: 'Este equipo todavía no se entrega, así que esta invitación no puede usarse todavía.',
+      });
+    }
+
+    // Un link es para alguien que todavía no está (2026-09-23). Antes, el rol
+    // de la invitación reemplazaba al de quien ya era miembro —salvo a un
+    // dueño—, y con varios links vivos eso se volvió peligroso: un
+    // administrador que abría uno de los veinte links de Coach quedaba como
+    // Coach, y encima gastaba el link de otra persona. Un dueño que abría uno
+    // lo gastaba sin cambiar nada (PD-31). Ahora ninguno de los dos se gasta,
+    // y cambiar un rol es un botón aparte (PATCH /organizations/:id/members/:userId).
+    const yaEsMiembro = await db.prepare(`
+      SELECT role FROM organization_members
+      WHERE organization_id = ? AND user_id = ? AND status = 'active'
+    `).get(organization.id, req.user.id);
+    if (yaEsMiembro) {
+      const suRol = etiquetaDeRol(yaEsMiembro.role, organization.type) ?? yaEsMiembro.role;
+      return res.status(409).json({
+        error: `Ya eres parte de ${organization.name} como ${suRol}. Este link es para otra persona: `
+          + 'no se gastó, y todavía le sirve a quien se lo mandaron.',
+      });
+    }
+
+    // No se reemplaza a nadie: se agrega a quien reclama con el rol que la
+    // invitación diga. El ON CONFLICT solo alcanza a una fila que no esté
+    // activa; a un miembro activo ya se le contestó arriba.
+    const r = await db.prepare(`
+      WITH gastada AS (
+        UPDATE invites SET used_by = ?, used_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND used_at IS NULL AND ${vigenteSql('invites')}
+        RETURNING organization_id
+      ), alta AS (
+        INSERT INTO organization_members (organization_id, user_id, role, status)
+        SELECT organization_id, ?, ?, 'active' FROM gastada
+        ON CONFLICT (organization_id, user_id)
+        DO UPDATE SET role = EXCLUDED.role, status = 'active'
+        WHERE organization_members.status <> 'active'
+        RETURNING 1
+      )
+      SELECT (SELECT COUNT(*) FROM gastada)::int AS gastadas
+    `).get(req.user.id, invite.id, req.user.id, role);
+
+    if (r.gastadas === 0) return yaGastada();
+  }
 
   const team = await db.prepare('SELECT * FROM teams WHERE id = ?').get(invite.team_id);
 
@@ -263,10 +466,7 @@ router.post('/:token/claim', authRequired, asyncHandler(async (req, res) => {
     );
   }
 
-  let organization = null;
-  if (invite.type === 'org_admin' && invite.organization_id) {
-    organization = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(invite.organization_id);
-
+  if (organization) {
     // Mismo aviso que arriba pero para el nuevo administrador de una
     // organización: se manda a la bandeja de la liga o del equipo detrás
     // de ella (notifications solo acepta esos dos recipient_type hoy).

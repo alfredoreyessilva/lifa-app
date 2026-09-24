@@ -1617,6 +1617,174 @@ Dos decisiones sobre los valores guardados:
   sin dueño principal no hay puesto que ceder — se invita a otro dueño y quien
   quiera se retira.
 
+### Dos links distintos: la entrega y la invitación con rol
+
+**Decidido y construido el 2026-09-23.** Cerró `PD-08`, `PD-30` y `PD-31`; lo
+que cambió y cómo se comprobó está en el CHANGELOG.
+
+Hay dos tipos de link. Comparten tabla (`invites`) y pantalla de llegada
+(`/invitaciones/:token`), y hasta aquí se parecían lo suficiente como para
+confundirse: los dos borraban el link anterior al generar otro, ninguno
+caducaba, y ninguno tenía una lista donde verlos. Aquí se separan del todo.
+Cada regla dice a cuál de los dos aplica, y la única que funciona distinto es
+la entrega.
+
+| | **Entrega de perfil** (`type = 'team'`) | **Invitación con rol** (`type = 'org_admin'`) |
+|-|-|-|
+| Para qué | Darle un equipo a su primer dueño. La liga se sale de su administración | Sumar a una persona más a una liga o a un equipo que ya tiene dueño |
+| Quién la genera | La liga que registró el equipo (`entregar_equipos`) | Dueños y administradores de esa organización |
+| Con qué rol entra | Siempre dueño | El que se eligió al generarla |
+| Cuántas vivas a la vez | **Una.** Generar otra cancela la anterior | **Las que hagan falta.** Generar otra no toca a las demás |
+| Reabrir el modal | Muestra la que ya existe | Deja generar otra |
+| Para quién | No lleva nota: hay un solo destinatario | Nota opcional |
+| Dónde se cancela | "Cancelar entrega", en la fila del equipo | En la lista de pendientes del panel de miembros |
+| Quién la puede usar | Cualquiera con el link, mientras el equipo no tenga miembros | Solo alguien que todavía no es miembro |
+| Después de usarla | **La opción desaparece**: la liga ya no puede entregar, ni cancelar, ni eliminar el equipo | Nada cambia: se pueden seguir generando |
+| Caducidad | 7 días | 7 días |
+
+#### La entrega: una sola, y una sola vez en la vida del equipo
+
+Es el link más privado que existe en la plataforma: es **el primer acceso** a un
+equipo. Antes de usarlo, el equipo no tiene miembros y lo administra su liga;
+después, solo sus dueños reparten el acceso, y la liga ya no entra al padrón
+del club (ver "Administrarse solo y participar son dos preguntas distintas").
+Por eso es el único link del que puede haber uno solo.
+
+- **Generar otro cancela el anterior.** Es lo que ya hace
+  `POST /invites/teams/:teamId`, y se queda. Lo que cambió es `PD-30`: abrir
+  "Entregar perfil" ya no genera un link al montarse, sino que **muestra el que
+  ya existe** (`GET /invites/teams/:teamId`). "Generar otro" es un botón aparte
+  que avisa que el anterior deja de servir. Hasta aquí, volver a abrir el modal
+  para copiar el link mataba en silencio el que ya estaba en el WhatsApp de
+  alguien.
+- **Una vez usado, las tres opciones desaparecen** de la fila del equipo en el
+  panel de la liga: "Entregar perfil", "Cancelar entrega" y el 🗑 de eliminar.
+  Las dos primeras ya se escondían. El 🗑 seguía apareciendo aunque el backend
+  conteste 409, y ofrecerlo es prometer algo que no se puede (ver "Quién puede
+  eliminar un equipo").
+- **Al reclamarla se revisa si el equipo ya tiene miembros, y si sí, 409.**
+  Hoy el claim de tipo `team` escribe el dueño sin preguntar. Con un solo link
+  vivo no se nota, pero un doble clic ya deja dos (se vio en desarrollo), y el
+  segundo metía como dueño a quien lo tuviera **después** de la entrega. Si lo
+  tiene la liga, esa es la puerta trasera al padrón que "entregado es entregado"
+  vino a cerrar. Con este candado, el primero entrega el equipo y el segundo ya
+  no sirve.
+- **Antes de la entrega no hay invitaciones con rol a ese equipo.**
+  `POST /invites/organizations/:id/admins` sobre la organización de un equipo
+  sin miembros contesta 409 ("primero se entrega el perfil"). Ninguna liga llega
+  hoy ahí (`organizationAdminRequired` no la deja entrar a la organización del
+  equipo), pero el admin de la plataforma sí. Un coach que entrara por esa vía
+  haría que `orgTieneMiembros()` diera el equipo por entregado sin que tenga
+  dueño: la liga lo perdería y nadie adentro podría repartir su acceso. Con este
+  candado, la primera persona de un equipo entra **siempre** por la entrega.
+
+Ese último candado es también lo que mantiene de acuerdo a la pantalla y al
+backend. La fila de la liga decide "entregado" leyendo `owner_user_id`, y el
+backend lo decide con `orgTieneMiembros()`. Las dos coinciden porque la entrega
+escribe las dos cosas en una sola sentencia, y porque la entrega es la única
+forma de poblar un equipo vacío.
+
+#### La invitación con rol: las que hagan falta
+
+Es para sumar gente a una organización que ya tiene dueño: los veinte
+entrenadores de un equipo grande, el tesorero, el visor de una liga.
+
+1. **Un link, una persona.** Generar otro del mismo rol ya no toca a los
+   anteriores. Para veinte coaches se generan veinte links, uno tras otro, con
+   "Generar otro" y sin cerrar el modal. Hasta aquí había uno vigente *por rol*
+   (el paso 4 del plan de roles, más abajo), y generar otro era la **única**
+   forma de cancelar uno. Por eso quitar el borrado no alcanza solo, y entran
+   juntas las dos reglas siguientes.
+2. **Para quién, opcional.** Al generar hay un campo libre ("Yayo", "Coach de
+   línea ofensiva") que se guarda en `invites.note`. Lo ve **solo la
+   organización** en su lista de pendientes. Quien recibe el link no lo ve: es
+   una nota de quien invita, no un mensaje. Es lo único que dice a quién se
+   mandó un link; `invites` no lo guardaba.
+3. **La lista de pendientes** vive en el panel de miembros, debajo de las
+   personas. Muestra rol, para quién, quién lo generó y cuándo caduca, y cada
+   link se puede copiar, mandar por WhatsApp o cancelar. Solo lista links vivos
+   (sin usar y sin caducar). Los usados ya se ven como personas; los caducados
+   no le sirven a nadie.
+4. **Ves y cancelas lo que tú mismo podrías generar.** La lista enseña el link
+   completo, y un link de dueño en manos de un administrador es una escalera:
+   lo copia, lo usa él mismo y se asciende solo, que es justo lo que impide la
+   regla de invitar dueños. Así que un administrador ve que hay una invitación
+   de dueño pendiente, pero **sin el link**, y no la puede cancelar. Los demás
+   links no le dan nada nuevo: los podría generar él mismo.
+5. **Un link es para alguien que todavía no está.** Si quien lo abre ya es
+   miembro de esa organización, con el rol que sea, recibe 409 ("este link es
+   para otra persona") y el link **no se gasta**. Esto cerró `PD-31` (el dueño
+   que gastaba el link de otro) y un caso peor con la misma causa: un
+   administrador que abría uno de los veinte links de Coach quedaba como Coach,
+   porque el rol de la invitación reemplazaba al suyo.
+6. **Cambiar el rol de alguien es un botón**, no una invitación:
+   `PATCH /organizations/:id/members/:userId`, en el panel de miembros. Hasta
+   aquí la invitación era la única forma de cambiar un rol, y por eso el claim
+   tenía que poder reescribirlo. Con la regla 5 esa puerta se cierra y hace
+   falta otra. Pide los mismos permisos que invitar: solo quien tiene `duenos`
+   nombra dueños, y **a un dueño no se le cambia el rol desde ahí**. Es el mismo
+   candado que tiene `DELETE /organizations/:id/members/:userId` para quitarlo,
+   y por la misma razón: el respaldo por `owner_user_id` de `ownership.js` lo
+   seguiría autorizando, y la pantalla diría algo que no es cierto.
+
+#### Lo que comparten
+
+- **Caducan a los 7 días de generados.** Se resuelve al leer (regla 4): se
+  compara contra `created_at`, que ya existe, así que no hay columna nueva ni
+  filas que migrar, y un link viejo caduca con la misma regla que uno nuevo.
+  Los 7 días viven en una función pura, para que entren al CI. En la entrega,
+  un link caducado se ve así al reabrir el modal, con "Generar otro".
+- **Se gastan en la misma sentencia que da de alta a la persona.** Hoy se
+  revisa `used_at`, se da de alta y se marca en tres pasos, así que dos
+  personas que abren el mismo link reenviado al mismo tiempo entran las dos.
+  Con un `UPDATE … WHERE used_at IS NULL` dentro del mismo CTE que el alta,
+  entra la primera y la segunda recibe 410.
+- **La pantalla de llegada dice por qué no sirve**, con un mensaje distinto
+  para cada caso: caducado ("pide que te manden otro"), ya usado, "este link es
+  para otra persona" (ya eres miembro) y "este equipo ya fue entregado". Hoy
+  los dos primeros dicen lo mismo, y decir "ya fue utilizada" de un link que
+  nadie usó es decir algo que no pasó.
+
+#### Endpoints nuevos
+
+| Método | Ruta | Tipo | Qué hace |
+|-|-|-|-|
+| GET | `/invites/teams/:teamId` | Entrega | La entrega vigente de un equipo, o `null` |
+| GET | `/invites/organizations/:id` | Con rol | Links vivos de la organización. El link de dueño solo va completo a quien puede invitar dueños |
+| DELETE | `/invites/organizations/:id/:inviteId` | Con rol | Cancela un link vivo, con la misma regla que generarlo |
+| PATCH | `/organizations/:id/members/:userId` | — | Cambia el rol de un miembro que no es dueño |
+
+La entrega se sigue cancelando con `DELETE /invites/teams/:teamId/owner`, que
+ya existe.
+
+**Al desplegar.** Los links sin usar de más de 7 días dejan de servir en ese
+momento. Antes de subirlo se cuentan en producción (solo lectura) y se revisa
+que ninguno sea uno que alguien esté por abrir. El orden es backend primero: el
+frontend viejo sigue funcionando contra él (generar sin nota vale igual, y el
+modal viejo de entrega sigue matando el anterior, que es lo de hoy), y el
+frontend nuevo contra el backend viejo se queda sin la lista de pendientes, que
+se esconde sola si la ruta no existe.
+
+**Cómo se verifica.** `invites-roles.e2e.mjs` comprueba hoy justo la regla que
+se va ("una vigente por rol") y se reescribe por tipo:
+
+- **Entrega**: generar otra mata la anterior; la vigente se puede volver a
+  leer; la segunda entrega de un equipo da 409; y una invitación con rol a un
+  equipo sin entregar, también 409.
+- **Con rol**: dos links de Coach vivos a la vez; cancelar uno no toca al
+  otro; un administrador no ve el link de dueño ni lo cancela; un miembro que
+  abre un link recibe 409 y el link sigue vivo; cambiar el rol no alcanza a un
+  dueño.
+- **Las dos**: un link caducado da 410.
+
+Y en el navegador, contra `desarrollo-local`: generar varios links seguidos, la
+lista de pendientes, "Entregar perfil" abierto dos veces, y que la fila de un
+equipo entregado ya no ofrezca ni entregar ni eliminar.
+
+**Resultado (2026-09-23):** la suite pasó de 59 a **122 comprobaciones, 0
+fallas**, y todo lo del navegador se vio funcionar. El detalle está en el
+CHANGELOG.
+
 ### Cómo está hoy, y qué falta
 
 **Los cinco pasos, hechos (2026-09-20).** El modelo entero corre: el backend
@@ -3923,7 +4091,8 @@ Estas dos siguen apareciendo en `npm audit` del frontend. No es que se nos olvid
 Decisiones que dejan algo sin resolver **a propósito**, con su razón. No son
 pendientes: esos viven en `docs/PENDIENTES.md`. Los cuatro que antes se
 anotaban aquí se mudaron allá: Render y Neon gratuitos (`PD-03`), invitaciones
-que no caducan (`PD-08`), el secreto de Cloudinary (`PD-21`) y los archivos que
+que no caducan (`PD-08`, cerrado el 2026-09-23), el secreto de Cloudinary
+(`PD-21`) y los archivos que
 concentran demasiado (`PD-28`, con los tamaños medidos otra vez).
 
 - No hay ninguna capa de caché todavía; cada visita al calendario consulta Postgres directo.

@@ -15,6 +15,62 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Dos links distintos: la entrega y la invitación con rol (2026-09-23)**.
+  Cierra `PD-08`, `PD-30` y `PD-31`. El modelo está en "Dos links distintos:
+  la entrega y la invitación con rol" del README; aquí va lo que cambió y cómo
+  se comprobó.
+
+  **Lo que lo pidió:** un equipo grande que quiere invitar a veinte
+  entrenadores no podía, porque había un link vivo *por rol* y cada link de
+  Coach mataba el anterior. Al definirlo salió que generar otro era la
+  **única** forma de cancelar un link, así que quitar el borrado sin más
+  habría dejado veinte links vivos para siempre (`PD-08`).
+
+  **La invitación con rol**: se pueden tener las que hagan falta. Llevan una
+  nota opcional de para quién (`invites.note`, columna nueva), hay una lista de
+  pendientes en el panel de miembros con copiar, WhatsApp y cancelar, y el
+  modal tiene "Invitar a alguien más" para sacar varios seguidos. Un
+  administrador ve que hay un link de dueño pendiente, pero sin el link: copiarlo
+  y usarlo sería ascenderse solo. Quien ya es miembro y abre un link recibe 409
+  y el link no se gasta (`PD-31`, y el caso peor de la misma causa: un
+  administrador que abría un link de Coach quedaba como Coach). Cambiar un rol
+  es ahora un botón, `PATCH /organizations/:id/members/:userId`, con los mismos
+  permisos que invitar; a un dueño no se le cambia desde ahí (ver `PD-32`).
+
+  **La entrega**: sigue siendo una sola viva, y generar otra cancela la
+  anterior. Abrir "Entregar perfil" ya no genera un link: enseña el que existe
+  (`PD-30`), y "Generar otro" es un botón aparte que avisa. Entregado el
+  equipo, la fila de la liga ya no ofrece ni el 🗑 de eliminar, que seguía
+  apareciendo aunque el backend contestara 409.
+
+  **Dos huecos que se cerraron de paso.** El claim de una entrega no revisaba
+  si el equipo ya estaba entregado: con dos links vivos (un doble clic los
+  deja), el segundo metía como dueño a quien lo tuviera después de la entrega,
+  incluida la liga, que así llegaba al padrón. Ahora es 409. Y el admin de la
+  plataforma podía mandarle un link con rol a un equipo sin entregar, lo que
+  lo habría dejado "entregado" sin dueño. También 409: la primera persona de un
+  equipo entra siempre por la entrega.
+
+  **Lo que comparten**: los dos caducan a los 7 días. Se resuelve al leer
+  contra `created_at` con `LOCALTIMESTAMP` (`utils/invitaciones.js`), sin
+  columna ni migración de filas, porque `created_at` es TIMESTAMP sin zona y
+  compararlo en JavaScript lo correría seis horas en una PC en México. Un link
+  caducado dice que caducó, no que alguien lo usó. Y el link se gasta en la
+  misma sentencia que da de alta a la persona: antes eran tres llamadas, y dos
+  personas con el mismo link reenviado entraban las dos.
+
+  **Verificación.** Unitarias 287 → 305 (11 del backend para la caducidad y la
+  nota, 7 del frontend para "caduca en…"). `invites-roles.e2e.mjs` se reescribió
+  por tipo de link y pasó de 59 a **122/0** contra `desarrollo-local`;
+  `billing-multiliga.e2e.mjs`, la otra que entrega un equipo, **26/0**. En el
+  navegador, contra la misma rama: "Entregar perfil" abierto dos veces enseña
+  el mismo link (y el backend lo sigue dando por vivo), "Generar otro" pide
+  confirmación y mata el anterior; dos links de Coach con nota en una vuelta,
+  la lista de pendientes con los dos, cancelar uno sin tocar al otro, "Cambiar
+  rol" de Coach a Editor de roster, un dueño que abre un link de coach ve "Ya
+  eres parte… este link es para otra persona" y el link sigue en 200, y la
+  fila de un equipo entregado ya sin 🗑.
+
 - **Por qué una de las dos invitaciones de GRIZZLIES no sirvió, y un botón
   para mandarlas completas (2026-09-23)**. Alfredo invitó a dos personas como
   administradoras, antes de los roles. Una entró; a la otra le apareció

@@ -244,7 +244,14 @@ export default function LeagueStructurePanel() {
                         </button>
                       </>
                     ) : null}
-                    <IconBtn danger title="Eliminar equipo" onClick={() => setModal({ type: 'delete-team', team: tm })}>🗑</IconBtn>
+                    {/* Entregado, tampoco se elimina: el backend contesta 409
+                        (README, "Quién puede eliminar un equipo"), y ofrecer el
+                        botón era prometer algo que no se puede. Las tres
+                        opciones de la liga sobre el equipo —entregar, cancelar
+                        la entrega y eliminar— se van juntas. */}
+                    {!tm.owner_user_id && (
+                      <IconBtn danger title="Eliminar equipo" onClick={() => setModal({ type: 'delete-team', team: tm })}>🗑</IconBtn>
+                    )}
                   </span>
                 </div>
               )))}

@@ -38,14 +38,12 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-05 | P0 | La tarjeta pública del jugador publica su historial de equipos | código |
 | PD-06 | P1 | `DELETE /admin/leagues/:id` borra el libro liga↔equipo | decisión |
 | PD-07 | P1 | `teams.league_id` todavía da permisos | decisión |
-| PD-08 | P1 | Las invitaciones no caducan | código |
 | PD-09 | P1 | El día del partido no se ha probado en una cancha | verificación |
 | PD-10 | P1 | Nadie le dice al visor que instale la app | decisión |
 | PD-11 | P1 | `main` sin protección y el CI no frena el despliegue | configuración |
 | PD-12 | P1 | Nadie avisa si el servicio deja de responder | configuración |
 | PD-13 | P1 | No existe rescate de un equipo cuyo único dueño perdió acceso | código |
 | PD-14 | P1 | ONEFA sin competencia configurada: su tabla no se ve | captura |
-| PD-30 | P1 | "Entregar perfil" genera un link cada vez que se abre, y mata el que ya se mandó | código |
 | PD-02 | P2 | Los avisos push de partido casi nunca salen a tiempo, y hoy nadie los recibe | operación |
 | PD-15 | P2 | `PUT /manage/teams/:id` no es atómico | código |
 | PD-16 | P2 | El pie del estado de cuenta público es ilegible | decisión |
@@ -62,7 +60,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-27 | P2 | Los menores del panel del club (M2, M3, M6, M7) | código |
 | PD-28 | P2 | Cinco archivos concentran demasiado | deuda |
 | PD-29 | P2 | Ramas viejas en local y en el remoto | limpieza |
-| PD-31 | P2 | Un dueño que acepta el link de otra persona lo gasta | código |
+| PD-32 | P2 | Un dueño no se puede retirar aunque haya otros dueños, y el README dice que sí | decisión |
 
 ---
 
@@ -161,14 +159,6 @@ README, y es un cambio de modelo: moverlo obliga a decidir si una liga que ya
 entregó un equipo conserva su roster de torneo. Las tres preguntas que hay que
 contestar antes del código están escritas ahí.
 
-### PD-08 · Las invitaciones no caducan
-
-`invites` no tiene `expires_at`; el único freno es `used_at`. Un link que nunca
-se usó sigue sirviendo indefinidamente, hasta que se genere otro para la misma
-organización y el mismo rol. El link se manda por WhatsApp y se usa en el
-momento, pero si alguien reenvía un chat viejo, ese link todavía funciona, y
-ahora puede llevar rol de **dueño**.
-
 ### PD-09 · El día del partido no se ha probado en una cancha
 
 El pase de lista y la captura por jugada corrieron de punta a punta contra la
@@ -254,27 +244,6 @@ declarados, así que su página pública no muestra tabla. Se hace desde
 Estructura → rama → **⚙ competencia**. Es lo que lleva la tabla de posiciones de
 nivel 4 a nivel 5 en la única liga con uso real. Ver "Lo que queda abierto" en
 "Tabla de posiciones y modelo de competencia".
-
-### PD-30 · "Entregar perfil" genera un link cada vez que se abre, y mata el que ya se mandó
-
-**Verificado el 2026-09-23** contra la rama de desarrollo: se abrió "Entregar
-perfil", se cerró y se volvió a abrir, y el primer link desapareció de la base.
-`InviteTeamModal` pide el link en un `useEffect` al montarse, y
-`POST /invites/teams/:teamId` borra antes cualquier link sin usar de ese
-equipo. Abrir el modal para volver a copiar el link mata el que ya estaba en el
-WhatsApp de alguien, en silencio.
-
-Es **la misma falla que le costó una invitación a GRIZZLIES**. El modal de
-invitar a una organización tenía el mismo `useEffect` hasta el 2026-09-20, y
-entre el 17 y el 18-sep se generaron y se borraron así cinco links (ids 11 a
-15). Ese modal ya se arregló con los roles: ahora se elige el rol y se aprieta
-"Generar link". Este no.
-
-Cómo se cierra: igual que `InviteAdminModal`, un botón "Generar link" en vez
-del efecto, y una nota que diga que generar otro mata el anterior. De paso: el
-backend borra y luego inserta en dos sentencias, así que dos peticiones al
-mismo tiempo (un doble clic) dejan **dos** links vivos. Se vio en desarrollo,
-donde React corre el efecto dos veces.
 
 ---
 
@@ -464,17 +433,32 @@ está contenida en `main`; `origin/panel-equipo-y-cuotas-del-club` tiene dos
 commits que no están en `main` con esos hashes (probablemente versiones previas
 de commits que ya entraron). Revisar y borrar.
 
-### PD-31 · Un dueño que acepta el link de otra persona lo gasta
+### PD-32 · Un dueño no se puede retirar aunque haya otros dueños, y el README dice que sí
 
-Si quien acepta una invitación de organización ya es `owner`, su rol no cambia
-(la regla no degrada a un dueño), pero **el link queda marcado como usado** y
-la pantalla le dice "Entraste como Coach" (o el rol que fuera). La persona para
-quien era el link ya no puede usarlo. Pasa en cuanto un dueño abre, con su
-sesión iniciada, un link que generó para otro.
+Encontrado el 2026-09-23 al definir las invitaciones. "Los roles" del README
+dice que con varios dueños "la única regla es que no puede quedar en cero" y
+que "se va `transfer-owner`: se invita a otro dueño y quien quiera se retira".
+El código dice otra cosa:
 
-Cómo se cierra: si quien reclama ya es dueño, contestar 409 con "este link es
-para otra persona" **sin** marcarlo como usado. Va con una sección nueva en
-`invites-roles.e2e.mjs`.
+- `DELETE /organizations/:id/members/:userId` rechaza con 409 quitar a
+  **cualquier** `owner`, aunque haya tres, con el mensaje "Es el administrador
+  principal". Un equipo que lleva una familia (el caso que pidió varios dueños)
+  no puede sacar a ninguno de los suyos, y ninguno se puede retirar.
+- `POST /organizations/:id/transfer-owner` sigue existiendo, y es la única
+  salida: ceder el puesto baja a quien cede a `admin`, y ya como admin se
+  puede retirar.
+
+El candado tiene una razón real, pero es más angosta que "cualquier dueño": el
+respaldo por `owner_user_id` de `ownership.js` sigue autorizando a **una**
+persona, la que está en `leagues.owner_user_id` o `teams.owner_user_id`.
+Quitarle la fila a esa persona no le quita el acceso. A los demás dueños sí.
+
+Falta decidir cuál de los dos tiene razón, y escribirlo antes del código. Una
+salida posible: el candado solo para quien está en `owner_user_id` (que primero
+cede con `transfer-owner`), y los demás dueños se quitan y se retiran como
+cualquiera, mientras quede al menos uno. "Cambiar rol"
+(`PATCH /organizations/:id/members/:userId`) nace copiando el candado de hoy, y
+se mueve con este.
 
 ---
 

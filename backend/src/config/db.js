@@ -2246,6 +2246,21 @@ export async function initSchema() {
       END $$;
     `);
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Para quién es un link de invitación con rol (README, "Dos links
+    // distintos: la entrega y la invitación con rol", 2026-09-23).
+    //
+    // Desde que se pueden tener varios links del mismo rol vivos a la vez,
+    // veinte links de Coach en la lista de pendientes no se distinguen entre
+    // sí sin esto. Es una nota libre y opcional de QUIEN INVITA: la ve la
+    // organización, nunca quien recibe el link. Nace NULL y lo ya generado se
+    // queda NULL — no hay a quién preguntarle para quién era.
+    //
+    // La caducidad NO lleva columna: se resuelve al leer contra `created_at`
+    // (utils/invitaciones.js), así que un link viejo caduca con la misma regla
+    // que uno nuevo y no hay filas que migrar.
+    await run(`ALTER TABLE invites ADD COLUMN IF NOT EXISTS note TEXT`);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se

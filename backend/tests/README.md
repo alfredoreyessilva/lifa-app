@@ -23,6 +23,7 @@ entorno, así que el CI las corre en cada push (ver `.github/workflows/ci.yml`).
 |---|---|
 | `unit/timezones.test.mjs` | Conversión hora local ↔ UTC: el desfase de cada zona, que Tijuana sí tenga horario de verano y el resto de México no, la medianoche, y el viaje redondo en las 36 zonas |
 | `unit/validation.test.mjs` | Los validadores de correo, URL y links de Google Maps — incluido que `javascript:` no pase |
+| `unit/invitaciones.test.mjs` | Cuánto vive un link de invitación: que uno caducado diga que caducó y no que alguien lo usó, que la vigencia se compare en SQL con `LOCALTIMESTAMP` (la columna es TIMESTAMP sin zona) y la nota de "para quién" |
 | `unit/plays.test.mjs` | La aritmética de acreditación de la **NCAA**: que una captura no sea intento de pase, que se parta entre los taqueadores, que los dos puntos no entren en los totales individuales, y que un partido en `scoring` no derive box score |
 
 Por qué estas y no otras: son las funciones que **se pueden** probar sin
@@ -46,7 +47,7 @@ reenviado no duplique nada.
 |---|---|
 | `billing-player.e2e.mjs` | equipo → jugador: padrón sin liga, cuotas, estado de cuenta público, conciliación |
 | `billing-league.e2e.mjs` | liga → equipo: cargos, reporte del equipo, confirmar/rechazar/retirar |
-| `invites-roles.e2e.mjs` | invitación con rol, la entrega de un equipo y la revocación: quién queda de alta en `organization_members`, y a quién le toca 409, 403 o 200. Desde el 2026-09-21 también el candado de **eliminar un equipo**: que uno sin entregar sí se borre aunque deba dinero, y que uno entregado no se borre aunque no deba nada |
+| `invites-roles.e2e.mjs` | los dos tipos de link, cada uno con sus reglas: la **entrega** de un equipo (una sola viva, generar otra mata la anterior, se entrega una vez) y la **invitación con rol** (varias vivas a la vez, lista de pendientes, cancelar una sin tocar a las otras, el link de dueño que un admin no ve, 409 sin gastar el link a quien ya es miembro, cambiar un rol con `PATCH`). Las dos caducan a los 7 días (se envejece `created_at` en la base para probarlo). También quién queda de alta en `organization_members`, a quién le toca 409, 403 o 200, y desde el 2026-09-21 el candado de **eliminar un equipo**: que uno sin entregar sí se borre aunque deba dinero, y que uno entregado no se borre aunque no deba nada |
 | `plays.e2e.mjs` | estadísticas por jugada: que reenviar el mismo lote sea gratis, que la cascada dé un solo box score, que dos capturistas no se pisen y que las reglas de la NCAA sobrevivan el viaje por la base |
 | `billing-multiliga.e2e.mjs` | un equipo en DOS ligas: que los dos libros no se mezclen, que no se adivine de cuál liga es un pago, y que sacarlo de un roster no le esconda la deuda |
 

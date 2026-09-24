@@ -37,6 +37,17 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { re
 const miembros = async (organizationId) => (await pool.query(
   "SELECT user_id, role, status FROM organization_members WHERE organization_id=$1 ORDER BY id", [organizationId]
 )).rows;
+const idDe = async (quien) => (await pool.query(
+  'SELECT id FROM users WHERE email=$1', [`${quien.toLowerCase()}${stamp}@example.com`]
+)).rows[0]?.id;
+const rolDe = async (organizationId, userId) => (await pool.query(
+  "SELECT role FROM organization_members WHERE organization_id=$1 AND user_id=$2 AND status='active'", [organizationId, userId]
+)).rows[0]?.role ?? null;
+// Un link generado hace ocho días. La caducidad se resuelve al leer contra
+// `created_at` (utils/invitaciones.js), así que envejecerlo es todo lo que
+// hace falta para probarla sin esperar una semana.
+const envejecer = (token) => pool.query("UPDATE invites SET created_at = created_at - INTERVAL '8 days' WHERE token=$1", [token]);
+const sinUsar = async (token) => (await pool.query('SELECT used_at FROM invites WHERE token=$1', [token])).rows[0]?.used_at === null;
 
 console.log('\n=== 1. Una liga con un equipo sin entregar ===');
 const LIGA = await alta('Liga');
@@ -59,11 +70,29 @@ const sinEntregar = await call(`/player-billing/teams/${TEAM}/overview`, { token
 ok(sinEntregar.status === 409, 'la liga recibe 409, no 403: la función no está encendida', `=${sinEntregar.status}`);
 
 console.log('\n=== 3. La invitación dice a qué invita ===');
+const nada = await call(`/invites/teams/${TEAM}`, { token: LIGA });
+ok(nada.status === 200 && nada.data.invite === null, 'antes de generarla, no hay entrega vigente', JSON.stringify(nada.data));
+const primera = await call(`/invites/teams/${TEAM}`, { method: 'POST', token: LIGA });
 const inv = await call(`/invites/teams/${TEAM}`, { method: 'POST', token: LIGA });
 ok(inv.status === 201 && inv.data.role === 'owner', 'la entrega de un equipo siempre es como dueño', JSON.stringify(inv.data));
 const pub = await call(`/invites/${inv.data.token}`);
 ok(pub.data.role === 'owner' && pub.data.role_label === 'Dueño',
   'el link público dice el rol con su etiqueta, antes de crear cuenta', JSON.stringify({ r: pub.data.role, l: pub.data.role_label }));
+
+console.log('\n=== 3b. La entrega es la única que cancela la anterior (PD-30) ===');
+ok((await call(`/invites/${primera.data.token}`)).status === 404,
+  'generar otra entrega MATA la anterior: del otro lado hay una sola persona');
+const vigente = await call(`/invites/teams/${TEAM}`, { token: LIGA });
+ok(vigente.data.invite?.token === inv.data.token,
+  'volver a abrir "Entregar perfil" enseña la que ya existe, en vez de generar otra', JSON.stringify(vigente.data));
+ok(vigente.data.invite?.seconds_left > 6 * 86400, 'y dice cuánto le queda: casi siete días', `=${vigente.data.invite?.seconds_left}`);
+ok((await call(`/invites/${inv.data.token}`)).status === 200, 'leerla no la mata');
+
+// Un doble clic en "Entregar perfil" deja DOS entregas vivas (las dos
+// peticiones borran antes de insertar). Se fabrica directo en la base para
+// probar lo que importa: que la segunda no sirva después de la entrega.
+const TOKEN_DOBLE = `doble${stamp}`;
+await pool.query("INSERT INTO invites (token, type, team_id, role) VALUES ($1, 'team', $2, 'owner')", [TOKEN_DOBLE, TEAM]);
 
 console.log('\n=== 4. Reclamar puebla la organización del equipo ===');
 const claim = await call(`/invites/${inv.data.token}/claim`, { method: 'POST', token: REP });
@@ -71,6 +100,16 @@ ok(claim.status === 200 && claim.data.role === 'owner', 'reclamado', JSON.string
 const m1 = await miembros(ORG);
 ok(m1.length === 1 && m1[0].role === 'owner' && m1[0].status === 'active',
   'el representante quedó de alta como owner de la organización', JSON.stringify(m1));
+ok((await call(`/invites/${inv.data.token}/claim`, { method: 'POST', token: TESO })).status === 410,
+  'el mismo link, usado otra vez, da 410');
+
+console.log('\n=== 4b. La segunda entrega ya no entrega nada ===');
+const pubDoble = await call(`/invites/${TOKEN_DOBLE}`);
+ok(pubDoble.status === 409, 'el link público de la segunda entrega ya dice que el equipo fue entregado', `=${pubDoble.status}`);
+const claimDoble = await call(`/invites/${TOKEN_DOBLE}/claim`, { method: 'POST', token: LIGA });
+ok(claimDoble.status === 409, 'y si la LIGA la reclama, 409: era la puerta trasera al padrón', `=${claimDoble.status}`);
+ok((await miembros(ORG)).length === 1, 'la organización sigue con su único dueño', JSON.stringify(await miembros(ORG)));
+ok((await call(`/player-billing/teams/${TEAM}/overview`, { token: LIGA })).status === 403, 'y la liga no alcanzó el padrón');
 
 console.log('\n=== 5. Y con eso, el padrón es del equipo y de nadie más ===');
 ok((await call(`/player-billing/teams/${TEAM}/overview`, { token: REP })).status === 200, 'el representante sí entra al padrón');
@@ -87,8 +126,24 @@ const invTeso = await call(`/invites/organizations/${ORG}/admins`, { method: 'PO
 ok(invTeso.status === 201 && invTeso.data.role_label === 'Tesorero', 'invitación de tesorero', JSON.stringify(invTeso.data));
 const invCoach = await call(`/invites/organizations/${ORG}/admins`, { method: 'POST', token: REP, body: { role: 'coach' } });
 ok(invCoach.status === 201, 'invitación de coach');
-ok((await call(`/invites/${invTeso.data.token}`)).status === 200,
-  'el link del tesorero SIGUE VIVO después de generar el del coach (una vigente por rol)');
+const invCoachB = await call(`/invites/organizations/${ORG}/admins`, {
+  method: 'POST', token: REP, body: { role: 'coach', note: '  Coach   de línea ' },
+});
+ok(invCoachB.status === 201 && invCoachB.data.note === 'Coach de línea',
+  'otra de coach, con nota de para quién (limpia de espacios)', JSON.stringify(invCoachB.data));
+ok((await call(`/invites/${invCoach.data.token}`)).status === 200,
+  'la PRIMERA de coach sigue viva después de generar la segunda: un link por persona, no uno por rol');
+ok((await call(`/invites/${invTeso.data.token}`)).status === 200, 'y la del tesorero también');
+
+const pendientes = await call(`/invites/organizations/${ORG}`, { token: REP });
+ok(pendientes.status === 200 && pendientes.data.invites.length === 3,
+  'la lista de pendientes trae las tres', JSON.stringify(pendientes.data).slice(0, 160));
+ok(pendientes.data.invites.find((i) => i.id === invCoachB.data.id)?.note === 'Coach de línea',
+  'con su nota, para distinguir un link de Coach de otro');
+ok(pendientes.data.invites.every((i) => i.token && i.can_cancel && i.created_by_name === 'Rep'),
+  'el dueño ve todos los links completos, quién los generó, y puede cancelarlos',
+  JSON.stringify(pendientes.data.invites.map((i) => [i.role, !!i.token, i.can_cancel, i.created_by_name])));
+ok((await call(`/invites/organizations/${ORG}`, { token: COACH })).status === 403, 'alguien de fuera no ve la lista');
 
 console.log('\n=== 7. Cada quien entra con lo suyo ===');
 await call(`/invites/${invTeso.data.token}/claim`, { method: 'POST', token: TESO });
@@ -97,6 +152,40 @@ const m2 = await miembros(ORG);
 ok(m2.length === 3, 'la organización tiene tres personas', JSON.stringify(m2));
 ok(m2.some((m) => m.role === 'treasurer') && m2.some((m) => m.role === 'coach'),
   'y cada una con el rol que decía su invitación, no todas como admin', JSON.stringify(m2.map((m) => m.role)));
+ok((await call(`/invites/organizations/${ORG}`, { token: REP })).data.invites.length === 1,
+  'las dos usadas salen de la lista de pendientes: ya se ven como personas');
+
+console.log('\n=== 7b. Un link es para alguien que todavía no está (PD-31) ===');
+const coachOtraVez = await call(`/invites/${invCoachB.data.token}/claim`, { method: 'POST', token: COACH });
+ok(coachOtraVez.status === 409, 'un miembro que abre un link recibe 409', `=${coachOtraVez.status} ${coachOtraVez.data.error}`);
+const duenoAbre = await call(`/invites/${invCoachB.data.token}/claim`, { method: 'POST', token: REP });
+ok(duenoAbre.status === 409 && /otra persona/.test(duenoAbre.data.error),
+  'un DUEÑO que abre el link de otro, también 409, y le dice que es para otra persona', duenoAbre.data.error);
+ok(await sinUsar(invCoachB.data.token), 'y el link NO se gastó: le sigue sirviendo a quien se lo mandaron');
+ok(await rolDe(ORG, await idDe('Rep')) === 'owner', 'el dueño sigue siendo dueño');
+
+console.log('\n=== 7c. Un link vivo se cancela sin tocar a los demás ===');
+const invCoachC = await call(`/invites/organizations/${ORG}/admins`, { method: 'POST', token: REP, body: { role: 'coach' } });
+const cancelarB = await call(`/invites/organizations/${ORG}/${invCoachB.data.id}`, { method: 'DELETE', token: REP });
+ok(cancelarB.status === 200, 'el dueño cancela un link de coach', `=${cancelarB.status}`);
+ok((await call(`/invites/${invCoachB.data.token}`)).status === 404, 'ese link deja de servir');
+ok((await call(`/invites/${invCoachC.data.token}`)).status === 200, 'y el otro de coach sigue vivo');
+const cancelarUsada = await call(`/invites/organizations/${ORG}/${invCoach.data.id}`, { method: 'DELETE', token: REP });
+ok(cancelarUsada.status === 409, 'una ya usada no se "cancela": a esa persona se le quita de la lista de acceso', `=${cancelarUsada.status}`);
+const cancelarAjena = await call(`/invites/organizations/${ORG}/${invCoachC.data.id}`, { method: 'DELETE', token: COACH });
+ok(cancelarAjena.status === 403, 'un coach no cancela links', `=${cancelarAjena.status}`);
+
+console.log('\n=== 7d. Los links caducan a los 7 días ===');
+await envejecer(invCoachC.data.token);
+const caducada = await call(`/invites/${invCoachC.data.token}`);
+ok(caducada.status === 410 && /caducó/.test(caducada.data.error) && !/utilizada/.test(caducada.data.error),
+  'un link de hace 8 días da 410 y dice que caducó, no que alguien lo usó', caducada.data.error);
+const NUEVO = await alta('Nuevo');
+ok((await call(`/invites/${invCoachC.data.token}/claim`, { method: 'POST', token: NUEVO })).status === 410,
+  'y no deja entrar a nadie');
+ok(await rolDe(ORG, await idDe('Nuevo')) === null, 'la persona no quedó de alta');
+ok(!(await call(`/invites/organizations/${ORG}`, { token: REP })).data.invites.some((i) => i.id === invCoachC.data.id),
+  'y ya no sale en la lista de pendientes');
 
 const lista = await call(`/organizations/${ORG}/members`, { token: REP });
 ok(lista.data.members.every((m) => !!m.role_label), 'la lista de miembros trae la etiqueta lista para pintar',
@@ -115,8 +204,51 @@ ok(catAdmin.data.roles.find((r) => r.value === 'owner')?.grantable === false,
   'el admin VE el rol de dueño pero no lo puede repartir', JSON.stringify(catAdmin.data.roles));
 const intento = await call(`/invites/organizations/${ORG}/admins`, { method: 'POST', token: ADMIN, body: { role: 'owner' } });
 ok(intento.status === 403, 'y si lo intenta de todas formas, 403 — no se puede ascender solo', `=${intento.status}`);
-ok((await call(`/invites/organizations/${ORG}/admins`, { method: 'POST', token: REP, body: { role: 'owner' } })).status === 201,
-  'el dueño sí puede invitar a otro dueño');
+const invDueno = await call(`/invites/organizations/${ORG}/admins`, { method: 'POST', token: REP, body: { role: 'owner' } });
+ok(invDueno.status === 201, 'el dueño sí puede invitar a otro dueño');
+
+console.log('\n=== 8b. El admin ve que hay un link de dueño, pero no el link ===');
+const vistaAdmin = await call(`/invites/organizations/${ORG}`, { token: ADMIN });
+const duenoVistoPorAdmin = vistaAdmin.data.invites?.find((i) => i.id === invDueno.data.id);
+ok(!!duenoVistoPorAdmin && duenoVistoPorAdmin.token === null && duenoVistoPorAdmin.can_cancel === false,
+  'en su lista el link de dueño aparece SIN token: copiarlo y usarlo sería ascenderse solo', JSON.stringify(duenoVistoPorAdmin));
+const vistaDueno = await call(`/invites/organizations/${ORG}`, { token: REP });
+ok(vistaDueno.data.invites.find((i) => i.id === invDueno.data.id)?.token === invDueno.data.token,
+  'el dueño sí lo ve completo');
+ok((await call(`/invites/organizations/${ORG}/${invDueno.data.id}`, { method: 'DELETE', token: ADMIN })).status === 403,
+  'y el admin no lo puede cancelar');
+
+// El caso que obligó a la regla "un link es para alguien que todavía no está":
+// antes, un admin que abría un link de Coach quedaba como Coach.
+const invCoachD = await call(`/invites/organizations/${ORG}/admins`, { method: 'POST', token: REP, body: { role: 'coach' } });
+ok((await call(`/invites/${invCoachD.data.token}/claim`, { method: 'POST', token: ADMIN })).status === 409,
+  'un admin que abre un link de Coach recibe 409');
+ok(await rolDe(ORG, await idDe('Admin')) === 'admin', 'y sigue siendo admin: el link ya no lo degrada');
+ok(await sinUsar(invCoachD.data.token), 'y el link sigue vivo');
+
+console.log('\n=== 8c. Cambiar un rol es un botón, no una invitación ===');
+const idCoach = await idDe('Coach');
+const cambio = await call(`/organizations/${ORG}/members/${idCoach}`, { method: 'PATCH', token: REP, body: { role: 'roster_editor' } });
+ok(cambio.status === 200 && cambio.data.role_label === 'Editor de roster',
+  'el dueño cambia al coach a editor de roster', JSON.stringify(cambio.data));
+ok(await rolDe(ORG, idCoach) === 'roster_editor', 'y la fila cambió');
+ok((await call(`/organizations/${ORG}/members/${idCoach}`, { method: 'PATCH', token: ADMIN, body: { role: 'coach' } })).status === 200,
+  'un admin también cambia roles que no son de dueño');
+ok((await call(`/organizations/${ORG}/members/${idCoach}`, { method: 'PATCH', token: ADMIN, body: { role: 'owner' } })).status === 403,
+  'pero no nombra dueños');
+ok((await call(`/organizations/${ORG}/members/${await idDe('Rep')}`, { method: 'PATCH', token: ADMIN, body: { role: 'coach' } })).status === 409,
+  'ni le cambia el rol a un dueño');
+ok((await call(`/organizations/${ORG}/members/${await idDe('Rep')}`, { method: 'PATCH', token: REP, body: { role: 'admin' } })).status === 409,
+  'y a un dueño no se le cambia el rol desde ahí, ni siquiera él mismo (PD-32)');
+ok((await call(`/organizations/${ORG}/members/${idCoach}`, { method: 'PATCH', token: REP, body: { role: 'editor' } })).status === 400,
+  'un rol que no existe en un equipo, 400');
+ok((await call(`/organizations/${ORG}/members/${idCoach}`, { method: 'PATCH', token: COACH, body: { role: 'admin' } })).status === 403,
+  'y un coach no se asciende solo');
+ok(await rolDe(ORG, idCoach) === 'coach', 'al final sigue siendo coach', await rolDe(ORG, idCoach));
+
+// Se cancelan los dos que quedaron vivos, para que la sección 9 cuente limpio.
+await call(`/invites/organizations/${ORG}/${invDueno.data.id}`, { method: 'DELETE', token: REP });
+await call(`/invites/organizations/${ORG}/${invCoachD.data.id}`, { method: 'DELETE', token: REP });
 
 console.log('\n=== 9. Una invitación vieja (sin rol) vale lo que valía ===');
 const vieja = await call(`/invites/organizations/${ORG}/admins`, { method: 'POST', token: REP, body: { role: 'coach' } });
@@ -134,6 +266,8 @@ const reinvitar = await call(`/invites/teams/${TEAM}`, { method: 'POST', token: 
 ok(reinvitar.status === 409, 'la liga NO puede generar otra entrega de un equipo que ya se administra solo', `=${reinvitar.status}`);
 const revocar = await call(`/invites/teams/${TEAM}/owner`, { method: 'DELETE', token: LIGA });
 ok(revocar.status === 409, 'y tampoco puede quitarle el representante', `=${revocar.status}`);
+ok((await call(`/invites/teams/${TEAM}`, { token: LIGA })).status === 409,
+  'ni leer una entrega vigente: para la liga, la opción ya no existe');
 ok((await miembros(ORG)).length > 0, 'la organización del equipo sigue intacta', JSON.stringify(await miembros(ORG)));
 ok((await call(`/player-billing/teams/${TEAM}/overview`, { token: REP })).status === 200, 'el representante conserva su padrón');
 ok((await call(`/player-billing/teams/${TEAM}/overview`, { token: LIGA })).status === 403, 'y la liga sigue sin poder entrar');
@@ -146,8 +280,34 @@ ok(inv2.status === 201, 'un equipo sin entregar sí acepta invitación', `=${inv
 const cancel = await call(`/invites/teams/${TEAM2}/owner`, { method: 'DELETE', token: LIGA });
 ok(cancel.status === 200, 'la liga cancela la entrega que todavía nadie usó', `=${cancel.status}`);
 ok((await call(`/invites/${inv2.data.token}`)).status === 404, 'y el link deja de servir');
-ok((await call(`/invites/teams/${TEAM2}`, { method: 'POST', token: LIGA })).status === 201,
-  'cancelar no deja al equipo trabado: se puede volver a entregar');
+const inv2b = await call(`/invites/teams/${TEAM2}`, { method: 'POST', token: LIGA });
+ok(inv2b.status === 201, 'cancelar no deja al equipo trabado: se puede volver a entregar');
+
+console.log('\n=== 11b. La entrega también caduca ===');
+await envejecer(inv2b.data.token);
+ok((await call(`/invites/teams/${TEAM2}`, { token: LIGA })).data.invite === null,
+  'una entrega de hace 8 días ya no sale como vigente al reabrir el modal');
+ok((await call(`/invites/${inv2b.data.token}`)).status === 410, 'y su link da 410');
+
+console.log('\n=== 11c. Antes de la entrega, no hay invitaciones con rol al equipo ===');
+// Ninguna liga llega a la organización de un equipo sin entregar, pero el
+// admin de la plataforma sí. Se fabrica uno en esta rama de pruebas.
+await alta('Plataforma');
+const idPlat = await idDe('Plataforma');
+await pool.query("UPDATE users SET role='admin' WHERE id=$1", [idPlat]);
+const PLAT = (await call('/auth/login', {
+  method: 'POST', body: { email: `plataforma${stamp}@example.com`, password: 'prueba123' },
+})).data.token;
+const { rows: [{ organization_id: ORG2pre }] } = await pool.query('SELECT organization_id FROM teams WHERE id=$1', [TEAM2]);
+const rolAntes = await call(`/invites/organizations/${ORG2pre}/admins`, { method: 'POST', token: PLAT, body: { role: 'coach' } });
+ok(rolAntes.status === 409, 'ni el admin de la plataforma genera un link con rol para un equipo sin entregar', `=${rolAntes.status} ${rolAntes.data.error}`);
+// Y uno que ya existiera de antes del candado tampoco sirve.
+const TOKEN_ANTES = `antes${stamp}`;
+await pool.query("INSERT INTO invites (token, type, organization_id, role) VALUES ($1, 'org_admin', $2, 'coach')", [TOKEN_ANTES, ORG2pre]);
+ok((await call(`/invites/${TOKEN_ANTES}/claim`, { method: 'POST', token: NUEVO })).status === 409,
+  'un link con rol viejo a un equipo sin entregar tampoco deja entrar');
+ok((await miembros(ORG2pre)).length === 0, 'el equipo sigue vacío: su primera persona entra por la entrega');
+await pool.query("UPDATE users SET role='rep' WHERE id=$1", [idPlat]);
 
 console.log('\n=== 12. Administrarse solo y participar son cosas distintas ===');
 // El corazón del modelo corregido. Entregar el perfil de un equipo NO lo saca
