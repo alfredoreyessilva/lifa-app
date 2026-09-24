@@ -17,8 +17,9 @@ entradas traen el post-mortem del bug que las provocó.
 
 - **"Mis notificaciones": una bandeja por persona, y el push en pausa
   (2026-09-24)**. El modelo está en "Notificaciones: la bandeja y el push" del
-  README; aquí va lo que cambió y cómo se comprobó. **Construido y verificado,
-  sin desplegar.**
+  README; aquí va lo que cambió y cómo se comprobó. **Desplegado el mismo día**
+  (commit `537f335`, de madrugada, aceptando la ventana entre Vercel y Render:
+  solo afecta la lectura de notificaciones y la cartelera).
 
   **Lo que lo pidió:** el push estaba en producción a medias (salía casi nunca a
   tiempo y lo tenían 0 dispositivos) y se quería esconder sin perder la bandeja.

@@ -45,7 +45,7 @@ respaldos se resolvieron el 2026-09-23.
 | Tabla de posiciones | 4 | Verificada contra datos reales (2026-09-16) | PD-14 |
 | Transmisiones | 4 | Sin medir | — |
 | Avisos push de partido | **En pausa** | Funcionaban de punta a punta (verificado 2026-09-23), pero con **0 dispositivos** con push y un cron que atrapa casi ninguna ventana. Apagados desde el 2026-09-24 | PD-02 |
-| Mis notificaciones (una bandeja por persona) y seguir partidos | 3 | Verificado el 2026-09-24 contra `desarrollo-local`: `invites-roles.e2e.mjs` (quién lee cada aviso, el balón, el marcador final que le llega a quien sigue) y recorrido en el navegador, escritorio y celular. **Sin desplegar** | Despliegue |
+| Mis notificaciones (una bandeja por persona) y seguir partidos | 4 | Verificado el 2026-09-24 contra `desarrollo-local` (`invites-roles.e2e.mjs` y recorrido en el navegador, escritorio y celular) y desplegado ese día: `push-status` responde `enabled: false`, las rutas viejas dan 404 y la página de un partido de ONEFA dice "Seguir este partido" | — |
 | Afiliados de viaje | Vuelo 4 · Hotel 2 | Hotel no genera comisión | Siguiente alcance |
 
 ### Para ligas y equipos
