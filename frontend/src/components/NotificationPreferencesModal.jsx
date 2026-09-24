@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import Modal from './Modal.jsx';
 
+// El menú de "Seguir". Las cuatro casillas dicen qué avisos de lo que sigues
+// llegan a "Mis notificaciones". La elección de canal (bandeja o push) solo
+// aparece con el push encendido: hoy está en pausa y la bandeja es el único.
 export default function NotificationPreferencesModal({
   isOpen,
   onClose,
@@ -8,7 +11,8 @@ export default function NotificationPreferencesModal({
   onUnsubscribe,
   isSubscribed = false,
   initialPreferences = null,
-  title = 'Configurar avisos',
+  pushDisponible = false,
+  title = 'Seguir',
   targetName = '',
 }) {
   const [inApp, setInApp] = useState(
@@ -36,16 +40,16 @@ export default function NotificationPreferencesModal({
 
   async function handleSave(e) {
     e.preventDefault();
-    if (!inApp && !pushEnabled) {
-      setError('Debes seleccionar al menos un canal (Bandeja de CFBAMX o Notificaciones Push).');
+    if (pushDisponible && !inApp && !pushEnabled) {
+      setError('Elige al menos un canal: Mis notificaciones o notificaciones push.');
       return;
     }
     setError('');
     setSaving(true);
     try {
       await onSave({
-        in_app: inApp,
-        push_enabled: pushEnabled,
+        in_app: pushDisponible ? inApp : true,
+        push_enabled: pushDisponible ? pushEnabled : false,
         notify_upcoming: notifyUpcoming,
         notify_live: notifyLive,
         notify_final: notifyFinal,
@@ -65,7 +69,7 @@ export default function NotificationPreferencesModal({
       await onUnsubscribe();
       onClose();
     } catch (err) {
-      setError(err.message || 'Error al cancelar notificaciones');
+      setError(err.message || 'No se pudo dejar de seguir');
     } finally {
       setSaving(false);
     }
@@ -86,7 +90,8 @@ export default function NotificationPreferencesModal({
       )}
 
       <form onSubmit={handleSave}>
-        {/* Canales */}
+        {/* Canales — solo con el push encendido */}
+        {pushDisponible && (
         <div style={{ marginBottom: 16 }}>
           <label style={{ display: 'block', fontFamily: 'var(--font-eyebrow)', fontSize: 11, color: 'var(--ink-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
             ¿Dónde quieres recibir avisos?
@@ -100,9 +105,9 @@ export default function NotificationPreferencesModal({
                 style={{ marginTop: 3, accentColor: 'var(--flag)' }}
               />
               <div>
-                <strong>📥 En mi bandeja de CFBAMX</strong>
+                <strong>📥 En Mis notificaciones</strong>
                 <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: 2 }}>
-                  Guarda el partido en "Partidos que sigo" en tu cuenta (no requiere permisos del navegador).
+                  Los avisos te esperan en la app, en el balón de arriba (no requiere permisos del navegador).
                 </div>
               </div>
             </label>
@@ -123,11 +128,12 @@ export default function NotificationPreferencesModal({
             </label>
           </div>
         </div>
+        )}
 
         {/* Tipos de Alertas */}
         <div style={{ marginBottom: 20 }}>
           <label style={{ display: 'block', fontFamily: 'var(--font-eyebrow)', fontSize: 11, color: 'var(--ink-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
-            ¿Qué avisos deseas recibir?
+            {pushDisponible ? '¿Qué avisos deseas recibir?' : '¿Qué quieres ver en Mis notificaciones?'}
           </label>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--field-deep, #141814)', padding: '12px 14px', borderRadius: 6, border: '1px solid var(--line)' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, color: 'var(--paper)' }}>
@@ -147,7 +153,7 @@ export default function NotificationPreferencesModal({
                 onChange={(e) => setNotifyLive(e.target.checked)}
                 style={{ accentColor: 'var(--flag)' }}
               />
-              <span>🔴 Inicio y transmisiones en vivo</span>
+              <span>🔴 Cuando empieza el partido</span>
             </label>
 
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, color: 'var(--paper)' }}>
@@ -180,7 +186,7 @@ export default function NotificationPreferencesModal({
             disabled={saving}
             style={{ width: '100%', justifyContent: 'center' }}
           >
-            {saving ? 'Guardando…' : isSubscribed ? 'Actualizar preferencias' : 'Activar avisos'}
+            {saving ? 'Guardando…' : isSubscribed ? 'Guardar' : 'Seguir'}
           </button>
 
           {isSubscribed && (
@@ -191,7 +197,7 @@ export default function NotificationPreferencesModal({
               className="btn btn-outline"
               style={{ width: '100%', justifyContent: 'center', color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.3)' }}
             >
-              Dejar de recibir notificaciones
+              Dejar de seguir
             </button>
           )}
         </div>

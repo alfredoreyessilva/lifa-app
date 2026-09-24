@@ -7,14 +7,19 @@ const router = express.Router();
 
 // "Mi cartelera": junta en una sola lista los partidos que le interesan al
 // usuario, por cualquiera de estas razones:
-//   1) Pidió aviso de ESE partido puntual ("Avisarme de este partido").
-//   2) Pidió aviso de un EQUIPO completo ("Notificarme de partidos de X") —
-//      se expande a todos los partidos (pasados y futuros) de ese equipo
-//      en esa liga.
+//   1) Sigue ESE partido ("Seguir este partido").
+//   2) Sigue a un EQUIPO ("Seguir a X") — se expande a todos los partidos
+//      (pasados y futuros) de ese equipo en esa liga, o en cualquier liga si
+//      el seguimiento no dice cuál (un equipo independiente juega en varias).
 //   3) Predijo quién gana ese partido.
 // Un mismo partido puede caer en más de una razón — aparece una sola vez,
-// con banderas notified/predicted que dicen por qué está ahí. Se queda en
-// la lista para siempre, incluso después de jugarse (es un historial).
+// con banderas que dicen por qué está ahí. Se queda en la lista para siempre,
+// incluso después de jugarse (es un historial).
+//
+// Desde el 2026-09-24 es también el lugar de "Partidos que sigo", que leía lo
+// mismo y se retiró (README, "Notificaciones"). Por eso distingue cómo lo
+// sigues: `followed_directly` se puede dejar desde aquí; `followed_team` se
+// deja desde la página del equipo.
 router.get('/', authRequired, asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
@@ -28,22 +33,29 @@ router.get('/', authRequired, asyncHandler(async (req, res) => {
   // consulta más compleja para esto.
   const teamSubs = await db.prepare(`
     SELECT DISTINCT league_id, team_name FROM push_subscriptions
-    WHERE user_id = ? AND team_name IS NOT NULL AND league_id IS NOT NULL
+    WHERE user_id = ? AND team_name IS NOT NULL AND match_id IS NULL
   `).all(userId);
 
-  const teamMatchIds = new Set();
+  const teamByMatch = new Map();
   for (const sub of teamSubs) {
-    const rows = await db.prepare(`
-      SELECT m.id FROM matches m
-      JOIN categories c ON c.id = m.category_id
-      WHERE c.league_id = ?
-        AND (UPPER(m.home_team) = UPPER(?) OR UPPER(m.away_team) = UPPER(?))
-        AND m.is_draft = FALSE
-    `).all(sub.league_id, sub.team_name, sub.team_name);
-    rows.forEach((r) => teamMatchIds.add(r.id));
+    const rows = sub.league_id != null
+      ? await db.prepare(`
+          SELECT m.id FROM matches m
+          JOIN categories c ON c.id = m.category_id
+          WHERE c.league_id = ?
+            AND (UPPER(m.home_team) = UPPER(?) OR UPPER(m.away_team) = UPPER(?))
+            AND m.is_draft = FALSE
+        `).all(sub.league_id, sub.team_name, sub.team_name)
+      : await db.prepare(`
+          SELECT m.id FROM matches m
+          WHERE (UPPER(m.home_team) = UPPER(?) OR UPPER(m.away_team) = UPPER(?))
+            AND m.is_draft = FALSE
+        `).all(sub.team_name, sub.team_name);
+    rows.forEach((r) => { if (!teamByMatch.has(r.id)) teamByMatch.set(r.id, sub.team_name); });
   }
 
-  const notifiedIds = new Set([...matchSubs.map((r) => r.match_id), ...teamMatchIds]);
+  const directIds = new Set(matchSubs.map((r) => r.match_id));
+  const notifiedIds = new Set([...directIds, ...teamByMatch.keys()]);
 
   const predictions = await db.prepare(`
     SELECT match_id, pick FROM predictions WHERE user_id = ?
@@ -75,7 +87,11 @@ router.get('/', authRequired, asyncHandler(async (req, res) => {
 
   const result = matches.map((m) => ({
     ...m,
+    // `notified` se conserva con su nombre de siempre: es "lo sigues, de una
+    // forma u otra". Las otras dos dicen de cuál.
     notified:  notifiedIds.has(m.id),
+    followed_directly: directIds.has(m.id),
+    followed_team:     directIds.has(m.id) ? null : (teamByMatch.get(m.id) ?? null),
     predicted: pickByMatch.has(m.id),
     myPick:    pickByMatch.get(m.id) || null,
   }));

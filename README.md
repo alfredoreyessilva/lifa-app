@@ -12,7 +12,7 @@ App full-stack para publicar calendarios, resultados y transmisiones de ligas de
 |Imágenes (logos, fotos)|Cloudinary (plan gratuito)|
 |Deploy backend|Render (plan gratuito)|
 |Deploy frontend|Vercel (plan gratuito)|
-|Notificaciones push|Web Push (VAPID), sin servicio de terceros|
+|Notificaciones push|Web Push (VAPID), sin servicio de terceros. **En pausa** desde el 2026-09-24 — ver "Notificaciones"|
 
 > Nota: versiones antiguas de este README mencionaban SQLite — eso ya no aplica, el proyecto usa Postgres desde hace tiempo.
 
@@ -50,7 +50,7 @@ encarga de que cada mitad corra a su ritmo.
 
 | Bloque | Cuándo corre | Qué hace |
 |---|---|---|
-| Partidos | **cada** llamada | Push de "próximo" / "en vivo", y los avisos a la bandeja de la liga de marcador faltante y partido no iniciado |
+| Partidos | **cada** llamada | Push de "próximo" / "en vivo" (en pausa, ver "Notificaciones"), y los avisos a la bandeja de la liga de marcador faltante y partido no iniciado |
 | Cobranza | **una vez al día** | `runBillingReminders` (liga→equipo), `runPlayerBillingReminders` (equipo→jugadores) y `runMonthlyChargeGeneration` |
 
 **Por qué no podían compartir cadencia.** Los avisos de partido leen una ventana
@@ -102,9 +102,10 @@ de la pestaña Cron coinciden una por una con las corridas del workflow, a la
 misma hora, así que **el cron externo de antes ya no llama**: no hay nada que
 apagar. A la cobranza le basta, porque corre una vez al día. A los avisos push
 de partido no: el de "próximo" salió en 0 de 29 partidos de ONEFA en dos
-semanas. Hoy no le importa a nadie, porque 0 dispositivos tienen push activado;
-el día que eso cambie, el diseño para arreglarlo está en `PD-02` de
-`docs/PENDIENTES.md`.
+semanas. Hoy no le importa a nadie, porque 0 dispositivos tienen push activado
+y desde el 2026-09-24 el push está en pausa (ver "Notificaciones"); el día que
+se encienda, el diseño para arreglarlo está en `PD-02` de `docs/PENDIENTES.md`.
+La bandeja no tiene este problema: sus avisos de partido no dependen del cron.
 
 La única excepción es que falten sus dos secretos (`CRON_TARGET_URL` y
 `CRON_SECRET`, ya creados el 2026-09-19): ahí avisa y se sale sin error, para
@@ -182,6 +183,216 @@ Es el único rastro que deja este handler, así que trae todo lo que pasó:
 sea la primera del día. Las dos claves de la raíz se conservan porque eran lo
 único que esta respuesta decía antes y del otro lado hay un servicio que no
 podemos inspeccionar; valen `null` —no `0`— cuando el bloque diario no corrió.
+
+## Notificaciones: la bandeja y el push
+
+Definido el 2026-09-24. Son **dos canales distintos**, y en el código nunca
+compartieron nada: ningún aviso salía por los dos.
+
+| | Bandeja | Push |
+|---|---|---|
+| Qué es | Un aviso guardado que se lee dentro de la app | Un aviso que salta en el celular o la computadora aunque la página esté cerrada |
+| Llega a | Una **persona**, en "Mis notificaciones" | Un **dispositivo** que dio permiso en el navegador |
+| Cuándo se entera | Al abrir la app: el balón de arriba cuenta lo nuevo | Al instante |
+| Depende del cron | No | Sí, para "próximo" y "en vivo" |
+| Hoy | Encendida | **En pausa** (ver abajo) |
+
+Antes de este cambio cada organización tenía **su propia bandeja**, a la que se
+entraba tocando su logo en una cuadrícula, y el aficionado no tenía ninguna: la
+opción "En mi bandeja de CFBAMX" del botón de avisos solo guardaba el partido en
+"Partidos que sigo". Nada avisaba que había algo nuevo, así que una bandeja que
+nadie abría era lo mismo que no tener aviso — el caso de los recordatorios de
+cobranza, que llegaban a una página que había que ir a buscar.
+
+### Una sola bandeja por persona: "Mis notificaciones"
+
+La pantalla `/notificaciones` es **una lista**, lo más nuevo arriba, que junta
+dos orígenes:
+
+- **Lo de tus organizaciones**: los avisos que ya existían (tabla
+  `notifications`, dirigida a una liga o a un equipo), filtrados por lo que tu
+  rol puede ver. Cada uno lleva el logo y el nombre de su organización.
+- **Lo que sigues**: los avisos de los partidos y equipos que sigues, según las
+  cuatro casillas del menú de "Seguir".
+
+Se van la cuadrícula de logos de esa pantalla y la sección "Partidos que sigo".
+La barra de logos de los paneles (`OrgLogoBar`) se queda: esa sirve para
+navegar, no para leer avisos.
+
+Las organizaciones de cada quien son **las mismas que ya devuelve
+`/auth/me`**: donde es miembro activo, o dueño por `owner_user_id`. La cuenta de
+administrador de la plataforma no es la excepción: aunque pase todas las
+guardas, en su bandeja solo ve las organizaciones de las que es miembro. Si no,
+le llegaría el aviso de cada liga de la plataforma.
+
+### Quién ve cada aviso de una organización
+
+**Lo que había, verificado el 2026-09-24:** la bandeja se leía con una sola
+guarda por organización, sin mirar de qué trataba el aviso.
+
+- La del **equipo** pedía `ver` (`teamViewRequired`). El coach y el editor de
+  roster —que no entran a ningún libro de dinero— leían cargos, cuotas vencidas
+  y avisos como "Juan Pérez reportó un pago de $800": un nombre del padrón con un
+  monto. Es justo lo que `utils/orgRoles.js` dice que `ver` no debe traer.
+- La de la **liga** pedía `estructura` (`leagueOwnerRequired`). El tesorero de la
+  liga no veía "Un pago espera tu confirmación", que va dirigido a él, y el
+  editor de partidos no veía "Falta capturar un marcador", que es su trabajo.
+
+No hubo exposición real (los dos libros tenían 0 movimientos), pero al juntar
+todo en una sola lista había que decidirlo. **Cada tipo de aviso lleva el
+permiso de su tema**, y lo ve quien tenga ese permiso en esa organización
+(`PERMISO_POR_AVISO` en `utils/bandeja.js`):
+
+| Tipo | Llega a | Permiso | En la liga lo ven | En el equipo lo ven |
+|---|---|---|---|---|
+| `billing_charge_new`, `billing_payment_recorded`, `billing_payment_rejected`, `billing_due_soon`, `billing_overdue` | equipo | `cobranza_liga` | — | dueño, admin, tesorero |
+| `team_payment_reported` | liga | `cobranza_liga` | dueño, admin, tesorero | — |
+| `player_payment_reported`, `player_billing_due_soon`, `player_billing_overdue` | equipo | `cuotas_club` | — | dueño, admin, tesorero |
+| `score_reminder`, `match_not_started` | liga | `marcadores` | dueño, admin, editor | — |
+| `broadcast_added` | liga | `estructura` | dueño, admin | — |
+| `league_approved`, `league_unapproved`, `league_publish_declined`, `league_verified`, `league_unverified` | liga | `perfil` | dueño, admin | — |
+| `team_claimed`, `org_admin_claimed` | liga o equipo | `miembros` | dueño, admin | dueño, admin |
+
+Un tipo que no esté en la tabla **solo lo ven los dueños**. Falla cerrado, pero
+no invisible: un aviso nuevo que alguien olvidó clasificar sigue llegando a
+alguien, y no se le cuela a un coach.
+
+Los endpoints de antes (`GET /notifications/league/:id`,
+`GET /notifications/team/:id` y sus dos `…/read`) **se retiran**. No bastaba con
+esconder la cuadrícula: el coach podía seguir leyendo la bandeja del equipo
+llamando a la API directamente.
+
+### Los avisos de lo que sigues
+
+"Seguir" es una fila de `push_subscriptions` con `user_id`: un partido, un
+equipo dentro de una liga, o una liga entera. La tabla se llama así porque nació
+para el push; renombrarla sería una migración que no cambia nada de lo que hace.
+
+| Aviso | Casilla del menú | De dónde sale | Cuándo aparece |
+|---|---|---|---|
+| Próximo | `notify_upcoming` | Se **calcula al leer**, con la hora del partido | Una hora antes de `match_date` |
+| En vivo | `notify_live` | Se **calcula al leer** | A la hora de `match_date` |
+| Marcador final | `notify_final` | Se **guarda** en `match_events` cuando el marcador pasa de incompleto a completo | Al guardar el marcador |
+| Cambio de fecha o sede | `notify_changes` | Se **guarda** en `match_events` al editar un partido que todavía no ocurre | Al guardar el cambio |
+
+**Por qué "próximo" y "en vivo" se calculan y no se guardan:** la bandeja se lee
+cuando la abres, así que basta con comparar la hora del partido contra la hora
+de ahora. **No dependen del cron**, que es justo lo que tiene detenido al push
+(pasa cada ~4 horas, ver "Cadencia del cron"). Y si la fecha del partido cambia,
+el aviso se mueve con ella sin tocar ninguna fila — regla 4 de `CLAUDE.md`.
+
+**Por qué los otros dos sí se guardan:** importa *cuándo* pasó (el marcador se
+puede capturar dos días después del partido) y el dato de antes ya no existe
+(la fecha vieja se sobrescribió). Se guarda **un registro por partido**, no una
+copia por seguidor: quien sigue una liga como ONEFA vería avisos de sus 133
+partidos, y con copias eso se multiplicaría por cada persona que la sigue. El
+texto se arma **al leer** con los datos de hoy: si un marcador se corrige, el
+aviso dice el corregido.
+
+Tres reglas de armado:
+
+- **Solo lo que pasó desde que empezaste a seguir** (`created_at` del
+  seguimiento) y dentro de los últimos 30 días. Seguir a un equipo a media
+  temporada no te vacía su historial en la bandeja. Por eso guardar las
+  preferencias **conserva** el `created_at` original en vez de reiniciarlo.
+- **Un aviso por partido y por tipo**, aunque sigas el partido y además a su
+  equipo. De los cambios de fecha o sede se enseña solo el último de cada
+  partido: los anteriores ya no son verdad.
+- Solo cuentan los seguimientos con `in_app` distinto de `FALSE`, y nunca un
+  partido en borrador.
+
+### Lo nuevo y el numerito del balón
+
+Lo leído es **de cada persona**, no de la organización. Hoy `notifications.read_at`
+es una sola marca por aviso: si un administrador lo abre, queda leído para todos
+los de su organización. En una bandeja personal eso no tiene sentido, así que
+cada usuario guarda **hasta dónde ya vio** (`users.notifications_seen_at`). Un
+aviso es nuevo si su hora es posterior a esa marca y no está en el futuro; abrir
+"Mis notificaciones" la mueve a ahora. `read_at` se queda en la tabla (regla 8)
+pero deja de usarse.
+
+**"Ahora" es la hora de la base, no la del servidor.** Los avisos, los eventos
+y la marca los fecha Postgres; si el reloj de Node va atrasado, lo recién creado
+parece del futuro y no cuenta como nuevo. Lo encontró la suite e2e: Neon iba
+tres segundos adelante de la máquina local, y el balón decía 0 con dos avisos
+recién llegados.
+
+La marca arranca **en el momento de la migración** para todos los usuarios que
+ya existen. Si arrancara vacía, cada administrador amanecería con todos sus
+avisos viejos contados como nuevos.
+
+El balón amarillo de la barra de arriba enseña **cuántos avisos nuevos hay**
+(hasta "9+"). Se actualiza al abrir la app, al cambiar de página y al volver a
+la pestaña. **No pregunta cada tantos minutos**: una consulta con la app abierta
+pero quieta despertaría a Neon sin que nadie la esté usando, y el plan gratuito
+tiene 100 horas de cómputo al mes.
+
+### Seguir un partido
+
+- El botón dice **"Seguir este partido"** en la página del partido y **"Seguir a
+  {equipo}"** en la del equipo; ya siguiéndolo, **"✓ Siguiendo"**.
+- El menú conserva las cuatro casillas, ahora como *qué quieres ver en Mis
+  notificaciones*. La parte de canales (bandeja o push) solo aparece con el push
+  encendido.
+- "Partidos que sigo" **duplicaba "Mi cartelera"**: las dos leían los mismos
+  seguimientos (`routes/board.js`). Se va, y lo que tenía de propio pasa a la
+  cartelera: la etiqueta "✓ Siguiendo" y el botón "Dejar de seguir" en los
+  partidos que sigues directamente. En los que están ahí porque sigues a su
+  equipo, la etiqueta dice "Sigues a {equipo}" y se deja de seguir desde la
+  página del equipo. El "Dejar de seguir" de antes, en esos partidos, no hacía
+  nada: borraba un seguimiento de partido que no existía.
+
+### El push, en pausa
+
+Apagado en producción desde el 2026-09-24, para no tener a la vista algo que no
+está terminado: casi nunca llega a tiempo (el cron pasa cada ~4 horas) y hay 0
+dispositivos con push activado.
+
+- **Un solo interruptor, en el backend**: `PUSH_NOTIFICATIONS=on`. Sin la
+  variable, apagado — producción queda apagada sin tocar Render, y en local se
+  prende en el `.env`. El frontend lo pregunta a
+  `GET /api/notifications/push-status` en vez de tener su propia variable: con
+  dos interruptores se podría encender el botón y olvidar el backend, y la gente
+  se suscribiría a avisos que nunca llegan.
+- **Con el push apagado:** no sale ningún push (ni los del cron ni los de
+  guardar un partido), `/subscribe` guarda el seguimiento sin dispositivo, el
+  menú no ofrece el canal y el navegador nunca pide permiso.
+- **Lo que se queda:** el service worker (también es el que deja capturar sin
+  señal), las llaves VAPID, las filas de `push_subscriptions` (son los
+  seguimientos) y el cron (del que dependen la mensualidad y los avisos a la
+  liga).
+- **Volver a encenderlo no manda nada viejo**: el cron solo mira partidos dentro
+  de un margen de 4 horas, y los avisos de guardar solo salen cuando alguien
+  edita. Antes de encenderlo está la lista de `PD-02` en `docs/PENDIENTES.md`.
+- **Cuando vuelva, leerá del mismo registro** que la bandeja: un aviso se guarda
+  una vez y cada canal lo entrega.
+
+### Endpoints — `routes/notifications.js`
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| GET | `/api/notifications/mine` | "Mis notificaciones": `{ items, seen_at, unread }` |
+| GET | `/api/notifications/mine/unread` | Solo `{ unread }`, para el balón |
+| POST | `/api/notifications/mine/seen` | Mueve `notifications_seen_at` a ahora |
+| GET | `/api/notifications/push-status` | `{ enabled }`. Público |
+| POST | `/api/notifications/subscribe` · `/check` · `/unsubscribe` | Seguir, leer y dejar de seguir (sin cambios de contrato) |
+| POST | `/api/notifications/unfollow-match` | Dejar de seguir un partido; ahora lo usa la cartelera |
+
+Se retiran `GET /notifications/league/:id`, `GET /notifications/team/:id`,
+`POST /notifications/league/:id/:notifId/read`,
+`POST /notifications/team/:id/:notifId/read` y
+`GET /notifications/followed-matches`.
+
+### Fuera de esta versión
+
+- **Push de cobranza.** Cada libro necesita su propio diseño (a quién, a qué
+  hora, con qué plazos), y una pieza que no existe: un registro de dispositivos
+  por persona, separado de lo que sigue. Hoy `push_subscriptions` mezcla las
+  dos cosas.
+- **Avisos a la familia que paga una cuota.** No tiene cuenta; su canal hoy es
+  el WhatsApp que manda el tesorero.
+- Marcar leído aviso por aviso, o borrar avisos.
+- Correo.
 
 ## Respaldos
 
@@ -297,8 +508,10 @@ lifa-app/
                               (reemplaza al representante), o sumar un administrador más a una
                               liga/equipo (org_admin, agrega sin reemplazar a nadie)
         admin.js             Endpoints exclusivos para role = 'admin' (incluye aprobar ligas)
-        notifications.js     Suscripción push + endpoint /trigger del cron
-                              (dos cadencias en un endpoint — ver "Cadencia del cron")
+        notifications.js     "Mis notificaciones" (una bandeja por persona), seguir partidos,
+                              el interruptor del push y el endpoint /trigger del cron
+                              (dos cadencias en un endpoint) — ver "Notificaciones" y
+                              "Cadencia del cron"
         players.js           Roster por equipo+rama: alta manual, plantilla de Excel (logos vía
                               exceljs), foto/CURP por jugador, stats de partido, PASE DE LISTA
                               (leer, marcar y el acumulado) y tarjeta pública
@@ -309,8 +522,8 @@ lifa-app/
                               calendario — ver "Predicciones y quinielas"
         pools.js             Quinielas privadas por código de invitación — misma sección
         board.js             "Mi cartelera": junta en una lista los partidos que le
-                              interesan al usuario (pidió aviso del partido, pidió aviso
-                              de un equipo, o predijo). No tiene tabla propia — es una
+                              interesan al usuario (sigue el partido, sigue a su equipo,
+                              o predijo). No tiene tabla propia — es una
                               vista derivada de push_subscriptions + predictions, y es
                               historial: el partido se queda ahí después de jugarse
         broadcasts.js        Un medio verificado se suma solo a un partido y pone su
@@ -776,7 +989,9 @@ las veces que lo llamen; ver "Cadencia del cron". Solo corre para ligas con
 `billing_reminders_enabled = TRUE`. Cadencia fija: "por vencer" una vez cuando
 faltan ≤3 días; "vencido" cada 3 días, hasta 4 veces. Todo va a la bandeja in-app
 del equipo (tabla `notifications`, tipos `billing_charge_new` / `billing_due_soon` /
-`billing_overdue` / `billing_payment_recorded`), sin push ni correo.
+`billing_overdue` / `billing_payment_recorded`), sin push ni correo. Lo leen, en
+"Mis notificaciones", quienes tienen `cobranza_liga` en el equipo — dueño,
+administrador y tesorero; ver "Notificaciones".
 
 ### Frontend
 
@@ -1086,7 +1301,8 @@ hoy, no el detalle fila por fila (ese ya está en el panel).
 **El aviso nunca le llega al papá**: `notifications` tiene
 `CHECK (recipient_type IN ('league','team'))` y los jugadores no tienen cuenta.
 Tipos nuevos: `player_payment_reported`, `player_billing_due_soon`,
-`player_billing_overdue`.
+`player_billing_overdue`. Los tres piden `cuotas_club` para leerse — dueño,
+administrador y tesorero del equipo, nunca el coach; ver "Notificaciones".
 
 ### Frontend — el panel de trabajo
 
@@ -2709,8 +2925,8 @@ distinta y ninguna sería "el ranking".
 - `PoolJoinPage.jsx` — `/quiniela/:code`, público, para abrir el link recibido.
 
 **"Mi cartelera"** (`routes/board.js`) junta en una sola lista los partidos que
-te interesan por cualquiera de tres razones: pediste aviso de ese partido,
-pediste aviso de un equipo completo (se expande a todos sus partidos de esa
+te interesan por cualquiera de tres razones: sigues ese partido, sigues a un
+equipo completo (se expande a todos sus partidos de esa
 liga), o predijiste. Un partido que cae en varias razones aparece **una sola
 vez**, con banderas que dicen por qué está ahí. No tiene tabla propia —se deriva
 de `push_subscriptions` + `predictions`— y es historial: el partido se queda en

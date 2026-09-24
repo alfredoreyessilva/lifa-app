@@ -358,9 +358,37 @@ ok((await padron(TESO2)).status === 200, 'el TESORERO del equipo sí entra al pa
 ok((await padron(ROSTER2)).status === 403, 'el editor de roster NO entra al padrón');
 ok((await padron(COACH2)).status === 403, 'el coach NO entra al padrón: ahí hay CURP de menores');
 
-const bandeja = (token) => call(`/notifications/team/${TEAM2}`, { token });
-ok((await bandeja(COACH2)).status === 200, 'pero el coach sí ve el equipo en solo lectura');
-ok((await bandeja(ROSTER2)).status === 200, 'y el editor de roster también');
+// La bandeja: cada aviso pide el permiso de su tema (README, "Quién ve cada
+// aviso de una organización"). Antes se leía entera con `ver`, y el coach veía
+// cuotas vencidas con nombres del padrón.
+await pool.query(
+  `INSERT INTO notifications (recipient_type, recipient_id, type, title, body, data) VALUES
+     ('team', $1, 'billing_charge_new',      'Cargo e2e',       'Tu liga te registró un cargo', '{}'),
+     ('team', $1, 'player_payment_reported', 'Pago padrón e2e', 'Juan Pérez reportó un pago',   '{}')`,
+  [TEAM2]);
+const bandejaDe = async (token) => {
+  const r = await call('/notifications/mine', { token });
+  return (r.data.items || []).filter((i) => i.org?.kind === 'team' && i.org?.id === TEAM2).map((i) => i.type);
+};
+const deCoach = await bandejaDe(COACH2);
+ok(!deCoach.includes('billing_charge_new') && !deCoach.includes('player_payment_reported'),
+  'el COACH ya no lee avisos de dinero en su bandeja', JSON.stringify(deCoach));
+ok(deCoach.length === 0, 'ni ningún otro del equipo: `ver` no lee avisos', JSON.stringify(deCoach));
+ok((await bandejaDe(ROSTER2)).length === 0, 'el editor de roster tampoco');
+const deTeso2 = await bandejaDe(TESO2);
+ok(deTeso2.includes('billing_charge_new') && deTeso2.includes('player_payment_reported'),
+  'el TESORERO lee los dos libros', JSON.stringify(deTeso2));
+ok(!deTeso2.includes('org_admin_claimed'), 'pero no quién entró al equipo', JSON.stringify(deTeso2));
+const deRep2 = await bandejaDe(REP2);
+ok(deRep2.includes('billing_charge_new') && deRep2.includes('org_admin_claimed'), 'el DUEÑO lee todo', JSON.stringify(deRep2));
+ok((await call(`/notifications/team/${TEAM2}`, { token: COACH2 })).status === 404,
+  'y la bandeja vieja por organización ya no existe: el coach tampoco la alcanza por la API');
+
+const nuevasDe = async (token) => (await call('/notifications/mine/unread', { token })).data.unread;
+ok((await nuevasDe(TESO2)) >= 2, 'el balón del tesorero cuenta lo nuevo', `=${await nuevasDe(TESO2)}`);
+ok((await call('/notifications/mine/seen', { method: 'POST', token: TESO2 })).status === 200, 'abrir la bandeja la marca como vista');
+ok((await nuevasDe(TESO2)) === 0, 'y el balón se pone en cero', `=${await nuevasDe(TESO2)}`);
+ok((await nuevasDe(REP2)) >= 2, 'solo para él: lo leído es de cada persona, no del equipo', `=${await nuevasDe(REP2)}`);
 
 const cuenta = (token) => call(`/billing/teams/${TEAM2}/statement`, { token });
 ok((await cuenta(TESO2)).status === 200, 'el tesorero ve la cuenta con la liga (la otra mitad de su trabajo)');
@@ -379,8 +407,64 @@ const partido = await call(`/manage/categories/${CAT}/matches`, {
 const MATCH = partido.data.match?.id ?? partido.data.id;
 ok(!!MATCH, 'partido creado por la liga', JSON.stringify(partido.data).slice(0, 120));
 
+// Un aficionado lo sigue ANTES del marcador: la bandeja no enseña lo que pasó
+// antes de que empezaras a seguir.
+const FAN = await alta('Fan');
+const { enabled: conPush } = (await call('/notifications/push-status')).data;
+const seguir = (prefs) => call('/notifications/subscribe', {
+  method: 'POST', token: FAN,
+  body: {
+    match_id: MATCH, preferences: prefs,
+    subscription: { endpoint: `https://push.example.com/${stamp}`, keys: { p256dh: 'x', auth: 'y' } },
+  },
+});
+const seguido = await seguir({ push_enabled: true, notify_final: true });
+ok(seguido.status === 201, 'el aficionado sigue el partido', `=${seguido.status}`);
+if (!conPush) {
+  ok(seguido.data.preferences?.push_enabled === false && seguido.data.preferences?.in_app === true,
+    'con el push en pausa se guarda el seguimiento, sin dispositivo y con la bandeja encendida', JSON.stringify(seguido.data.preferences));
+}
+const desdeDe = async () => (await pool.query(
+  'SELECT created_at FROM push_subscriptions WHERE user_id=$1 AND match_id=$2', [await idDe('Fan'), MATCH]
+)).rows.map((r) => r.created_at.toISOString());
+const desdeAntes = await desdeDe();
+await new Promise((r) => setTimeout(r, 1100));
+await seguir({ push_enabled: false, notify_final: true, notify_upcoming: false });
+const desdeDespues = await desdeDe();
+ok(desdeDespues.length === 1 && desdeDespues[0] === desdeAntes[0],
+  'ajustar las casillas no reinicia "desde cuándo lo sigues" (ni duplica el seguimiento)', JSON.stringify({ desdeAntes, desdeDespues }));
+
 const marcador = await call(`/manage/matches/${MATCH}`, { method: 'PUT', token: VISOR, body: { home_score: 21, away_score: 14 } });
 ok(marcador.status === 200, 'el VISOR sí edita el marcador — es todo lo que hace', `=${marcador.status}`);
+
+// El aviso se registra después de responder (no frena el guardado), así que se
+// espera a que aparezca.
+let finales = [];
+for (let i = 0; i < 20 && finales.length === 0; i++) {
+  await new Promise((r) => setTimeout(r, 150));
+  finales = (await pool.query("SELECT id FROM match_events WHERE match_id=$1 AND type='final_score'", [MATCH])).rows;
+}
+ok(finales.length === 1, 'capturar el marcador deja UN "marcador final" en match_events', `filas=${finales.length}`);
+const delFan = (await call('/notifications/mine', { token: FAN })).data.items || [];
+const finalDelFan = delFan.find((i) => i.type === 'final_score' && i.match?.id === MATCH);
+ok(!!finalDelFan && finalDelFan.match.home_score === 21 && finalDelFan.is_new === true,
+  'y le llega al aficionado a Mis notificaciones, con el marcador y como nuevo', JSON.stringify(delFan).slice(0, 200));
+
+// La bandeja de la liga, por permiso. Antes el visor y el tesorero de liga no
+// veían nada: la bandeja de la liga pedía `estructura`.
+await pool.query(
+  `INSERT INTO notifications (recipient_type, recipient_id, type, title, body, data) VALUES
+     ('league', $1, 'score_reminder',        'Falta capturar un marcador e2e',  '', '{}'),
+     ('league', $1, 'team_payment_reported', 'Un pago espera tu confirmación e2e', '', '{}')`,
+  [LEAGUE]);
+const ligaDe = async (token) => ((await call('/notifications/mine', { token })).data.items || [])
+  .filter((i) => i.org?.kind === 'league' && i.org?.id === LEAGUE).map((i) => i.type);
+const deVisor = await ligaDe(VISOR);
+ok(deVisor.includes('score_reminder') && !deVisor.includes('team_payment_reported'),
+  'el VISOR lee "falta capturar un marcador", y nada de dinero', JSON.stringify(deVisor));
+const deTesoLiga = await ligaDe(TESOLIGA);
+ok(deTesoLiga.includes('team_payment_reported') && !deTesoLiga.includes('score_reminder'),
+  'el TESORERO DE LIGA lee el pago que le toca confirmar', JSON.stringify(deTesoLiga));
 const borrar = await call(`/manage/matches/${MATCH}`, { method: 'DELETE', token: VISOR });
 ok(borrar.status === 403, 'pero NO puede borrar el partido: un resultado borrado no se recupera', `=${borrar.status}`);
 ok((await call(`/billing/leagues/${LEAGUE}/overview`, { token: VISOR })).status === 403, 'ni tocar la cobranza de la liga');

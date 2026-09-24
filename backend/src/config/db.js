@@ -2261,6 +2261,45 @@ export async function initSchema() {
     // que uno nuevo y no hay filas que migrar.
     await run(`ALTER TABLE invites ADD COLUMN IF NOT EXISTS note TEXT`);
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // "Mis notificaciones": una bandeja por persona (README, "Notificaciones: la
+    // bandeja y el push", 2026-09-24).
+    //
+    // `match_events` guarda lo que le pasó a un partido y NO se puede deducir
+    // después: cuándo se capturó el marcador, y que la fecha o la sede cambió
+    // (la de antes ya se sobrescribió). Una fila por partido, no una copia por
+    // seguidor: quien sigue una liga entera vería avisos de todos sus partidos,
+    // y con copias eso se multiplicaría por cada persona que la sigue. El texto
+    // del aviso se arma al leer, con los datos de hoy (regla 4). "Próximo" y
+    // "en vivo" no se guardan: se calculan con la hora del partido.
+    //
+    // Los tipos se repiten en el frontend (pages/Notifications.jsx): un tipo
+    // nuevo se agrega en los tres lados o en ninguno (regla 6).
+    await run(`
+      CREATE TABLE IF NOT EXISTS match_events (
+        id         SERIAL PRIMARY KEY,
+        match_id   INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+        type       TEXT NOT NULL CHECK (type IN ('final_score', 'schedule_change')),
+        data       JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_match_events_match ON match_events(match_id, created_at)`);
+    // El marcador final se avisa una vez por partido, aunque dos guardados
+    // lleguen juntos: el segundo choca aquí y su ON CONFLICT DO NOTHING lo
+    // deja sin fila. La bandera `notified_final` sola tiene ventana de carrera.
+    await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_match_events_final_once ON match_events(match_id) WHERE type = 'final_score'`);
+
+    // Hasta dónde vio cada persona su bandeja. Lo leído es de la persona, no de
+    // la organización: `notifications.read_at` marcaba un aviso como leído para
+    // todos los de la organización en cuanto uno lo abría, y se queda en la
+    // tabla sin usarse.
+    //
+    // El DEFAULT NOW() llena las filas que ya existen con el momento de esta
+    // migración, a propósito: si arrancara vacía, cada administrador amanecería
+    // con todos sus avisos viejos contados como nuevos.
+    await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se

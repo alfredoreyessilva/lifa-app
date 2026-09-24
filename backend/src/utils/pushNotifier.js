@@ -3,6 +3,15 @@ import db from '../config/db.js';
 
 let vapidConfigured = false;
 
+// El interruptor del push (README, "El push, en pausa"). Apagado salvo que la
+// variable diga exactamente 'on': así producción queda apagada sin tocar
+// Render, y en local se prende en el `.env`. Es el ÚNICO interruptor — el
+// frontend lo pregunta a GET /notifications/push-status en vez de tener el
+// suyo, para que no se pueda encender el botón y olvidar el backend.
+export function pushEncendido() {
+  return process.env.PUSH_NOTIFICATIONS === 'on';
+}
+
 export function ensureVapid() {
   if (vapidConfigured) return;
   const email  = process.env.VAPID_EMAIL;

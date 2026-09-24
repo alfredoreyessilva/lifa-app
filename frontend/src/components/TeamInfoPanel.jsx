@@ -103,14 +103,14 @@ export default function TeamInfoPanel({ team, leagueId, onClose, inline = false,
           </p>
         )}
 
-        {/* Botón de notificaciones por equipo — se le pasa leagueId para que la
-            suscripción quede amarrada a este equipo DE ESTA LIGA específica,
-            y no se cruce con un equipo del mismo nombre en otra liga. */}
+        {/* Seguir al equipo — se le pasa leagueId para que el seguimiento
+            quede amarrado a este equipo DE ESTA LIGA específica, y no se cruce
+            con un equipo del mismo nombre en otra liga. */}
         <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>
           <SubscribeButton
             leagueId={leagueId}
             teamName={team.name}
-            label={`Notificarme de partidos de ${team.name}`}
+            label={`Seguir a ${team.name}`}
             targetName={`Partidos de ${team.name}`}
           />
         </div>

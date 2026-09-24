@@ -4,10 +4,14 @@ import jwt from 'jsonwebtoken';
 import db from '../config/db.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { authRequired } from '../middleware/auth.js';
-import { leagueOwnerRequired, teamViewRequired } from '../middleware/ownership.js';
 import { runBillingReminders, runPlayerBillingReminders } from '../utils/billingReminders.js';
 import { runMonthlyChargeGeneration } from '../utils/monthlyCharges.js';
 import { runOncePerDay, registrarLlamada, podarBitacora } from '../utils/cronSchedule.js';
+import { pushEncendido } from '../utils/pushNotifier.js';
+import {
+  filtrosDeBandeja, avisosDeSeguimiento, contarNuevos, juntarBandeja, esNuevo,
+  DIAS_DE_BANDEJA, LIMITE_DE_BANDEJA,
+} from '../utils/bandeja.js';
 
 const router = express.Router();
 
@@ -69,6 +73,12 @@ router.get('/vapid-public-key', (req, res) => {
   res.json({ key: process.env.VAPID_PUBLIC_KEY });
 });
 
+// Si el push está encendido. Público: el botón de "Seguir" lo pregunta antes de
+// ofrecer el canal. Ver pushEncendido() en utils/pushNotifier.js.
+router.get('/push-status', (req, res) => {
+  res.json({ enabled: pushEncendido() });
+});
+
 // Suscribirse o actualizar preferencias — acepta opciones granulares
 // y permite guardar seguimiento en bandeja (in-app) sin requerir push de navegador.
 router.post('/subscribe', authRequired, asyncHandler(async (req, res) => {
@@ -77,32 +87,45 @@ router.post('/subscribe', authRequired, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Debes indicar una liga, partido o equipo' });
   }
 
-  const inApp = preferences?.in_app !== undefined ? Boolean(preferences.in_app) : true;
-  const pushEnabled = Boolean(subscription?.endpoint && preferences?.push_enabled);
+  // Con el push en pausa se guarda el seguimiento, pero ningún dispositivo: ni
+  // la bandera ni el endpoint. Y la bandeja queda siempre encendida, porque
+  // sin push es el único canal — un seguimiento sin ninguno no avisaría nada.
+  const conPush = pushEncendido();
+  const dispositivo = conPush && subscription?.endpoint ? subscription : null;
+  const inApp = !conPush || (preferences?.in_app !== undefined ? Boolean(preferences.in_app) : true);
+  const pushEnabled = Boolean(dispositivo && preferences?.push_enabled);
   const notifyUpcoming = preferences?.notify_upcoming !== undefined ? Boolean(preferences.notify_upcoming) : true;
   const notifyLive = preferences?.notify_live !== undefined ? Boolean(preferences.notify_live) : true;
   const notifyFinal = preferences?.notify_final !== undefined ? Boolean(preferences.notify_final) : true;
   const notifyChanges = preferences?.notify_changes !== undefined ? Boolean(preferences.notify_changes) : true;
 
-  // Limpiamos cualquier registro previo idéntico para este usuario antes de insertar
-  await db.prepare(`
-    DELETE FROM push_subscriptions
-    WHERE user_id = ?
-      AND league_id IS NOT DISTINCT FROM ?
-      AND match_id  IS NOT DISTINCT FROM ?
-      AND team_name IS NOT DISTINCT FROM ?
-  `).run(req.user.id, league_id || null, match_id || null, team_name || null);
-
+  // Un seguimiento por usuario y por cosa seguida (índice `idx_push_user_sub`):
+  // si ya existía, se actualiza en su lugar. Antes se borraba y se volvía a
+  // insertar, y eso reiniciaba `created_at` — que es "desde cuándo lo sigues",
+  // y la bandeja no enseña lo que pasó antes de esa fecha (utils/bandeja.js).
+  // Ajustar las casillas habría borrado los avisos anteriores.
   await db.prepare(`
     INSERT INTO push_subscriptions (
       endpoint, p256dh, auth, league_id, match_id, team_name, user_id,
       in_app, push_enabled, notify_upcoming, notify_live, notify_final, notify_changes
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (user_id, (COALESCE(league_id, 0)), (COALESCE(match_id, 0)), (COALESCE(team_name, '')))
+      WHERE user_id IS NOT NULL
+    DO UPDATE SET
+      endpoint        = EXCLUDED.endpoint,
+      p256dh          = EXCLUDED.p256dh,
+      auth            = EXCLUDED.auth,
+      in_app          = EXCLUDED.in_app,
+      push_enabled    = EXCLUDED.push_enabled,
+      notify_upcoming = EXCLUDED.notify_upcoming,
+      notify_live     = EXCLUDED.notify_live,
+      notify_final    = EXCLUDED.notify_final,
+      notify_changes  = EXCLUDED.notify_changes
   `).run(
-    subscription?.endpoint || null,
-    subscription?.keys?.p256dh || null,
-    subscription?.keys?.auth || null,
+    dispositivo?.endpoint || null,
+    dispositivo?.keys?.p256dh || null,
+    dispositivo?.keys?.auth || null,
     league_id  || null,
     match_id   || null,
     team_name  || null,
@@ -211,67 +234,9 @@ router.post('/unsubscribe', asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// Partidos que sigue el usuario (vía suscripciones vinculadas a su user_id)
-router.get('/followed-matches', authRequired, asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-
-  const matchSubs = await db.prepare(`
-    SELECT DISTINCT match_id FROM push_subscriptions
-    WHERE user_id = ? AND match_id IS NOT NULL
-  `).all(userId);
-
-  const teamSubs = await db.prepare(`
-    SELECT DISTINCT league_id, team_name FROM push_subscriptions
-    WHERE user_id = ? AND team_name IS NOT NULL AND league_id IS NOT NULL
-  `).all(userId);
-
-  const teamMatchIds = new Set();
-  for (const sub of teamSubs) {
-    const rows = await db.prepare(`
-      SELECT m.id FROM matches m
-      JOIN categories c ON c.id = m.category_id
-      WHERE c.league_id = ?
-        AND (UPPER(m.home_team) = UPPER(?) OR UPPER(m.away_team) = UPPER(?))
-        AND m.is_draft = FALSE
-    `).all(sub.league_id, sub.team_name, sub.team_name);
-    rows.forEach((r) => teamMatchIds.add(r.id));
-  }
-
-  const allMatchIds = Array.from(new Set([...matchSubs.map((r) => r.match_id), ...teamMatchIds]));
-  if (allMatchIds.length === 0) return res.json({ matches: [] });
-
-  const placeholders = allMatchIds.map(() => '?').join(',');
-  const matches = await db.prepare(`
-    SELECT
-      m.*,
-      c.name AS category_name,
-      c.season AS season,
-      c.year AS year,
-      c.auto_status_enabled AS auto_status_enabled,
-      c.auto_status_window_hours AS auto_status_window_hours,
-      l.id AS league_id,
-      l.name AS league_name,
-      l.slug AS league_slug,
-      l.logo_url AS league_logo_url,
-      l.timezone AS league_timezone,
-      th.logo_url AS home_logo_url,
-      COALESCE(ta.away_logo_url, ta.logo_url) AS away_logo_url,
-      v.name AS venue_name,
-      v.city AS venue_city
-    FROM matches m
-    LEFT JOIN categories c ON c.id = m.category_id
-    LEFT JOIN leagues l    ON l.id = c.league_id
-    LEFT JOIN teams th     ON th.league_id = l.id AND UPPER(th.name) = UPPER(m.home_team)
-    LEFT JOIN teams ta     ON ta.league_id = l.id AND UPPER(ta.name) = UPPER(m.away_team)
-    LEFT JOIN venues v     ON v.id = m.venue_id
-    WHERE m.id IN (${placeholders}) AND m.is_draft = FALSE
-    ORDER BY m.match_date ASC
-  `).all(...allMatchIds);
-
-  res.json({ matches });
-}));
-
-// Dejar de seguir un partido puntual desde el centro de notificaciones
+// Dejar de seguir un partido puntual. Lo usa "Mi cartelera"; solo borra el
+// seguimiento de ESE partido — uno que está ahí porque sigues a su equipo se
+// deja desde la página del equipo.
 router.post('/unfollow-match', authRequired, asyncHandler(async (req, res) => {
   const { match_id } = req.body;
   if (!match_id) return res.status(400).json({ error: 'match_id requerido' });
@@ -300,6 +265,19 @@ router.post('/unfollow-match', authRequired, asyncHandler(async (req, res) => {
 // tienen absolutamente nada que ver entre sí.
 // ─────────────────────────────────────────────────────────────────────────────
 async function faseDePartidos() {
+  // El push de "próximo" y "en vivo" está en pausa (README, "El push, en
+  // pausa"). La bandeja no lo necesita: esos dos avisos los calcula al leer,
+  // con la hora del partido (utils/bandeja.js).
+  if (pushEncendido()) {
+    await pushDePartidosProximos();
+  }
+  await recordatoriosDeCaptura();
+}
+
+// Push a los seguidores de los partidos que están por empezar o empezaron.
+// Antes de encenderlo, ver PD-02 en docs/PENDIENTES.md: aquí se manda antes de
+// marcar, y la marca no se reinicia si cambia la fecha.
+async function pushDePartidosProximos() {
   ensureVapid();
 
   const now = Date.now();
@@ -381,7 +359,9 @@ async function faseDePartidos() {
     const notifiedColumn = isLive ? 'notified_live' : 'notified_upcoming';
     await db.prepare(`UPDATE matches SET ${notifiedColumn} = TRUE WHERE id = ?`).run(match.id);
   }
+}
 
+async function recordatoriosDeCaptura() {
   // ─────────────────────────────────────────────────────────────────────────
   // Recordatorios de captura a la BANDEJA de la liga (in-app, sin push a nadie).
   // Van a la tabla `notifications` (recipient_type='league'), igual que los
@@ -561,47 +541,236 @@ router.post('/trigger', asyncHandler(async (req, res) => {
   });
 }));
 
-// Notificaciones de organizaciones (bandeja de entrada)
-router.get('/league/:id', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
-  const items = await db.prepare(`
-    SELECT id, type, title, body, data, read_at, created_at
-    FROM notifications
-    WHERE recipient_type = 'league' AND recipient_id = ?
-    ORDER BY created_at DESC
-    LIMIT 100
-  `).all(req.league.id);
+// ─────────────────────────────────────────────────────────────────────────────
+// "Mis notificaciones": una bandeja por persona (README, "Notificaciones: la
+// bandeja y el push"). Junta lo de sus organizaciones —filtrado por lo que su
+// rol puede leer— con lo de los partidos y equipos que sigue. Las reglas son
+// puras y viven en utils/bandeja.js; aquí solo se junta lo que necesitan.
+//
+// Reemplaza a GET /league/:id y GET /team/:id, que leían la bandeja de una
+// organización con una sola guarda (`estructura` o `ver`) sin mirar de qué
+// trataba el aviso: el coach leía cuotas vencidas con nombres del padrón, y el
+// tesorero de la liga no veía el pago que le tocaba confirmar. Se retiraron en
+// vez de esconderse: esconder la pantalla no le quitaba al coach la API.
+// ─────────────────────────────────────────────────────────────────────────────
 
-  res.json({ notifications: items });
+// Las organizaciones de la persona, con su rol. Mismo criterio que /auth/me:
+// miembro activo, o dueño por `owner_user_id`. La cuenta de administrador de
+// la plataforma no es la excepción — pasa todas las guardas, pero su bandeja es
+// la de sus organizaciones, no la de todas las de la plataforma.
+async function organizacionesDe(userId) {
+  const ligas = await db.prepare(`
+    SELECT l.id, l.name, l.logo_url,
+           COALESCE(om.role, CASE WHEN l.owner_user_id = ? THEN 'owner' END) AS rol
+    FROM leagues l
+    LEFT JOIN organization_members om
+           ON om.organization_id = l.organization_id AND om.user_id = ? AND om.status = 'active'
+    WHERE l.owner_user_id = ? OR om.id IS NOT NULL
+  `).all(userId, userId, userId);
+  const equipos = await db.prepare(`
+    SELECT t.id, t.name, t.logo_url,
+           COALESCE(om.role, CASE WHEN t.owner_user_id = ? THEN 'owner' END) AS rol
+    FROM teams t
+    LEFT JOIN organization_members om
+           ON om.organization_id = t.organization_id AND om.user_id = ? AND om.status = 'active'
+    WHERE t.owner_user_id = ? OR om.id IS NOT NULL
+  `).all(userId, userId, userId);
+  return [
+    ...ligas.map((o) => ({ ...o, tipo: 'league' })),
+    ...equipos.map((o) => ({ ...o, tipo: 'team' })),
+  ];
+}
+
+// Los avisos de `notifications` que esta persona puede leer. Con `desde`, solo
+// los posteriores (para contar lo nuevo sin traer la lista entera).
+//
+// `created_at` es TIMESTAMP sin zona y se guarda en UTC (Neon corre en UTC). Se
+// convierte con AT TIME ZONE 'UTC' ANTES de salir: sin eso, `pg` lo leería en
+// la zona del proceso de Node, que en una máquina de México son seis horas de
+// diferencia contra la hora del partido y la de "visto hasta".
+async function avisosDeOrganizaciones(organizaciones, desde = null) {
+  const grupos = filtrosDeBandeja(organizaciones);
+  if (grupos.length === 0) return [];
+
+  const condiciones = [];
+  const params = [];
+  for (const g of grupos) {
+    if (g.avisos) {
+      condiciones.push('(n.recipient_type = ? AND n.recipient_id = ANY(?::int[]) AND n.type = ANY(?::text[]))');
+      params.push(g.tipo, g.ids, g.avisos);
+    } else {
+      condiciones.push('(n.recipient_type = ? AND n.recipient_id = ANY(?::int[]))');
+      params.push(g.tipo, g.ids);
+    }
+  }
+  let soloDesde = '';
+  if (desde) {
+    soloDesde = `AND (n.created_at AT TIME ZONE 'UTC') > ?`;
+    params.push(desde);
+  }
+
+  const filas = await db.prepare(`
+    SELECT n.id, n.recipient_type, n.recipient_id, n.type, n.title, n.body, n.data,
+           n.created_at AT TIME ZONE 'UTC' AS at
+    FROM notifications n
+    WHERE (${condiciones.join(' OR ')})
+      ${soloDesde}
+    ORDER BY n.created_at DESC
+    LIMIT ${LIMITE_DE_BANDEJA}
+  `).all(...params);
+
+  const porClave = new Map(organizaciones.map((o) => [`${o.tipo}-${o.id}`, o]));
+  return filas.map((n) => {
+    const org = porClave.get(`${n.recipient_type}-${n.recipient_id}`);
+    let data = n.data;
+    if (typeof data === 'string') {
+      try { data = JSON.parse(data); } catch { data = null; }
+    }
+    return {
+      key: `n-${n.id}`,
+      origin: 'organization',
+      type: n.type,
+      title: n.title,
+      body: n.body,
+      url: data?.url ?? null,
+      at: n.at,
+      org: org ? { kind: org.tipo, id: org.id, name: org.name, logo_url: org.logo_url } : null,
+    };
+  });
+}
+
+// Los avisos de los partidos, equipos y ligas que sigue. Se traen todos los
+// partidos que cubren sus seguimientos (una liga son cientos, no miles) y sus
+// eventos de los últimos días; qué aviso sale de ahí lo decide
+// avisosDeSeguimiento(), que es pura.
+async function avisosDeLoQueSigue(userId, ahora) {
+  const seguimientos = await db.prepare(`
+    SELECT match_id, team_name, league_id,
+           notify_upcoming, notify_live, notify_final, notify_changes,
+           created_at AT TIME ZONE 'UTC' AS desde
+    FROM push_subscriptions
+    WHERE user_id = ? AND in_app IS DISTINCT FROM FALSE
+  `).all(userId);
+  if (seguimientos.length === 0) return [];
+
+  const condiciones = [];
+  const params = [];
+  const partidosSeguidos = seguimientos.filter((s) => s.match_id != null).map((s) => s.match_id);
+  if (partidosSeguidos.length > 0) {
+    condiciones.push('m.id = ANY(?::int[])');
+    params.push(partidosSeguidos);
+  }
+  const ligasSeguidas = seguimientos
+    .filter((s) => s.match_id == null && !s.team_name && s.league_id != null)
+    .map((s) => s.league_id);
+  if (ligasSeguidas.length > 0) {
+    condiciones.push('c.league_id = ANY(?::int[])');
+    params.push(ligasSeguidas);
+  }
+  // Un equipo sin liga en el seguimiento cuenta en cualquier liga: es el caso
+  // de un equipo independiente que juega en varias.
+  for (const s of seguimientos.filter((x) => x.match_id == null && x.team_name)) {
+    if (s.league_id != null) {
+      condiciones.push('(c.league_id = ? AND (UPPER(m.home_team) = UPPER(?) OR UPPER(m.away_team) = UPPER(?)))');
+      params.push(s.league_id, s.team_name, s.team_name);
+    } else {
+      condiciones.push('(UPPER(m.home_team) = UPPER(?) OR UPPER(m.away_team) = UPPER(?))');
+      params.push(s.team_name, s.team_name);
+    }
+  }
+  if (condiciones.length === 0) return [];
+
+  const partidos = await db.prepare(`
+    SELECT m.id, m.match_date, m.timezone, m.home_team, m.away_team,
+           m.home_score, m.away_score, m.category_id,
+           c.league_id, l.name AS league_name
+    FROM matches m
+    JOIN categories c   ON c.id = m.category_id
+    LEFT JOIN leagues l ON l.id = c.league_id
+    WHERE m.is_draft = FALSE
+      AND (${condiciones.join(' OR ')})
+  `).all(...params);
+  if (partidos.length === 0) return [];
+
+  const eventos = await db.prepare(`
+    SELECT id, match_id, type, data, created_at AS at
+    FROM match_events
+    WHERE match_id = ANY(?::int[])
+      AND created_at > NOW() - INTERVAL '${DIAS_DE_BANDEJA} days'
+  `).all(partidos.map((p) => p.id));
+
+  return avisosDeSeguimiento({ seguimientos, partidos, eventos, ahora }).map((a) => ({
+    key: a.key,
+    origin: 'follow',
+    type: a.type,
+    url: `/partidos/${a.partido.id}`,
+    at: a.at,
+    data: a.data,
+    match: {
+      id: a.partido.id,
+      home_team: a.partido.home_team,
+      away_team: a.partido.away_team,
+      home_score: a.partido.home_score,
+      away_score: a.partido.away_score,
+      match_date: a.partido.match_date,
+      timezone: a.partido.timezone,
+      league_name: a.partido.league_name,
+    },
+  }));
+}
+
+// La bandeja completa de una persona y hasta dónde la vio. Con `soloNuevos`,
+// los avisos de organizaciones se piden ya filtrados desde esa marca: es lo
+// que pregunta el balón de arriba en cada cambio de página.
+async function armarBandeja(userId, { soloNuevos = false } = {}) {
+  // "Ahora" es la hora de la BASE, no la del proceso: los avisos, los eventos y
+  // la marca de "visto hasta" los fecha Postgres, y si el reloj de Node va
+  // atrasado, lo recién creado parece del futuro y no cuenta como nuevo. No es
+  // teórico: la suite e2e lo encontró con Neon tres segundos adelante de la
+  // máquina local.
+  const usuario = await db.prepare(
+    'SELECT notifications_seen_at AS seen_at, NOW() AS ahora FROM users WHERE id = ?'
+  ).get(userId);
+  const ahora = usuario?.ahora ? new Date(usuario.ahora) : new Date();
+  const vistoHasta = usuario?.seen_at ?? ahora;
+
+  const organizaciones = await organizacionesDe(userId);
+  const [deOrganizaciones, deLoQueSigue] = await Promise.all([
+    avisosDeOrganizaciones(organizaciones, soloNuevos ? vistoHasta : null),
+    avisosDeLoQueSigue(userId, ahora),
+  ]);
+  const items = juntarBandeja([deOrganizaciones, deLoQueSigue]);
+  return { items, vistoHasta, ahora, unread: contarNuevos(items, vistoHasta, ahora) };
+}
+
+router.get('/mine', authRequired, asyncHandler(async (req, res) => {
+  const { items, vistoHasta, ahora, unread } = await armarBandeja(req.user.id);
+  res.json({
+    items: items.map((a) => ({
+      ...a,
+      at: new Date(a.at).toISOString(),
+      is_new: esNuevo(a.at, vistoHasta, ahora),
+    })),
+    seen_at: new Date(vistoHasta).toISOString(),
+    unread,
+  });
 }));
 
-router.get('/team/:id', authRequired, teamViewRequired, asyncHandler(async (req, res) => {
-  const items = await db.prepare(`
-    SELECT id, type, title, body, data, read_at, created_at
-    FROM notifications
-    WHERE recipient_type = 'team' AND recipient_id = ?
-    ORDER BY created_at DESC
-    LIMIT 100
-  `).all(req.team.id);
-
-  res.json({ notifications: items });
+// Solo el número, para el balón de la barra de arriba.
+router.get('/mine/unread', authRequired, asyncHandler(async (req, res) => {
+  const { unread } = await armarBandeja(req.user.id, { soloNuevos: true });
+  res.json({ unread });
 }));
 
-router.post('/league/:id/:notifId/read', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
-  await db.prepare(`
-    UPDATE notifications SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
-    WHERE id = ? AND recipient_type = 'league' AND recipient_id = ?
-  `).run(Number(req.params.notifId), req.league.id);
-
-  res.json({ ok: true });
-}));
-
-router.post('/team/:id/:notifId/read', authRequired, teamViewRequired, asyncHandler(async (req, res) => {
-  await db.prepare(`
-    UPDATE notifications SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
-    WHERE id = ? AND recipient_type = 'team' AND recipient_id = ?
-  `).run(Number(req.params.notifId), req.team.id);
-
-  res.json({ ok: true });
+// Abrir "Mis notificaciones" mueve la marca a ahora. Lo leído es de la
+// persona: que un administrador vea un aviso no lo marca para los demás.
+router.post('/mine/seen', authRequired, asyncHandler(async (req, res) => {
+  const fila = await db.prepare(`
+    UPDATE users SET notifications_seen_at = NOW()
+    WHERE id = ?
+    RETURNING notifications_seen_at AS seen_at
+  `).get(req.user.id);
+  res.json({ ok: true, seen_at: fila?.seen_at ?? null });
 }));
 
 export default router;

@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
+import { api } from '../api/client.js';
+import { pushDisponible } from '../utils/pushStatus.js';
 import AuthModal from './AuthModal.jsx';
 import NotificationPreferencesModal from './NotificationPreferencesModal.jsx';
 
-const BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
-
-async function getVapidKey() {
-  const res  = await fetch(`${BASE}/notifications/vapid-public-key`);
-  const data = await res.json();
-  return data.key;
-}
+// "Seguir" un partido, un equipo o una liga. Lo que sigues aparece en "Mi
+// cartelera" y sus avisos llegan a "Mis notificaciones" (README,
+// "Notificaciones: la bandeja y el push").
+//
+// El push es un canal APARTE y hoy está en pausa: mientras el backend diga que
+// está apagado, este botón no lo ofrece y el navegador nunca pide permiso.
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -35,112 +36,55 @@ async function getOrCreateSubscription(vapidKey) {
   }
 }
 
-async function checkSubscription(endpoint, leagueId, matchId, teamName, token) {
-  const headers = { 'Content-Type': 'application/json' };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const res = await fetch(`${BASE}/notifications/check`, {
-    method:  'POST',
-    headers,
-    body: JSON.stringify({
-      endpoint:  endpoint || null,
-      league_id: leagueId || null,
-      match_id:  matchId  || null,
-      team_name: teamName || null,
-    }),
-  });
-  return await res.json().catch(() => ({ subscribed: false }));
+// El dispositivo ya suscrito, si lo hay. Solo se mira con el push encendido.
+async function suscripcionActual() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  const reg = await navigator.serviceWorker.ready.catch(() => null);
+  return (await reg?.pushManager?.getSubscription().catch(() => null)) || null;
 }
 
-async function saveSubscription(subscription, preferences, leagueId, matchId, teamName, token) {
-  const res = await fetch(`${BASE}/notifications/subscribe`, {
-    method:  'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization:  `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      subscription: subscription ? {
-        endpoint: subscription.endpoint,
-        keys: {
-          p256dh: subscription.toJSON ? subscription.toJSON().keys?.p256dh : subscription.keys?.p256dh,
-          auth:   subscription.toJSON ? subscription.toJSON().keys?.auth   : subscription.keys?.auth,
-        },
-      } : null,
-      preferences,
-      league_id: leagueId || null,
-      match_id:  matchId  || null,
-      team_name: teamName || null,
-    }),
-  });
-  if (!res.ok) throw new Error('No se pudo guardar la suscripción');
-  // Lo que de verdad quedó guardado: el backend solo prende push si llegó un
-  // endpoint, así que puede no coincidir con lo que la persona marcó.
-  const data = await res.json().catch(() => ({}));
-  return data.preferences || null;
-}
-
-async function removeSubscription(subscription, leagueId, matchId, teamName, token) {
-  const headers = { 'Content-Type': 'application/json' };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  await fetch(`${BASE}/notifications/unsubscribe`, {
-    method:  'POST',
-    headers,
-    body: JSON.stringify({
-      subscription: subscription?.endpoint ? { endpoint: subscription.endpoint } : null,
-      league_id: leagueId || null,
-      match_id:  matchId  || null,
-      team_name: teamName || null,
-    }),
-  });
+function paraLaApi(subscription) {
+  if (!subscription) return null;
+  const json = subscription.toJSON ? subscription.toJSON() : subscription;
+  return { endpoint: subscription.endpoint, keys: { p256dh: json.keys?.p256dh, auth: json.keys?.auth } };
 }
 
 // Props:
-// leagueId   → suscripción a toda la liga
-// matchId    → suscripción a un partido específico
-// teamName   → suscripción a un equipo específico
-// label      → texto del botón cuando no está suscrito
-// targetName → texto identificador del partido/equipo para el modal
+// leagueId   → seguir toda la liga
+// matchId    → seguir un partido específico
+// teamName   → seguir un equipo (con leagueId, el de esa liga)
+// label      → texto del botón cuando todavía no lo sigues
+// targetName → qué se está siguiendo, para el menú
 export default function SubscribeButton({
   leagueId,
   matchId,
   teamName,
-  label = 'Notificarme',
+  label = 'Seguir',
   targetName = '',
 }) {
   const [status, setStatus] = useState('loading');
   const [preferences, setPreferences] = useState(null);
+  const [conPush, setConPush] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showPrefsModal, setShowPrefsModal] = useState(false);
   const { token } = useAuth();
 
+  const target = { league_id: leagueId || null, match_id: matchId || null, team_name: teamName || null };
+
   useEffect(() => {
-    let endpoint = null;
-
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
-      navigator.serviceWorker.ready.then(async (reg) => {
-        const sub = await reg.pushManager.getSubscription().catch(() => null);
-        endpoint = sub?.endpoint || null;
-        doCheck(endpoint);
-      }).catch(() => {
-        doCheck(null);
-      });
-    } else {
-      doCheck(null);
-    }
-
-    function doCheck(ep) {
-      checkSubscription(ep, leagueId, matchId, teamName, token)
-        .then((data) => {
-          setStatus(data.subscribed ? 'subscribed' : 'unsubscribed');
-          setPreferences(data.preferences || null);
-        })
-        .catch(() => {
-          setStatus('unsubscribed');
-        });
-    }
+    let vigente = true;
+    (async () => {
+      const push = await pushDisponible();
+      // Sin sesión, el seguimiento se busca por el dispositivo; eso solo
+      // existe con el push encendido.
+      const sub = push ? await suscripcionActual() : null;
+      const data = await api.checkFollow(target, sub?.endpoint, token).catch(() => ({ subscribed: false }));
+      if (!vigente) return;
+      setConPush(push);
+      setStatus(data.subscribed ? 'subscribed' : 'unsubscribed');
+      setPreferences(data.preferences || null);
+    })();
+    return () => { vigente = false; };
   }, [leagueId, matchId, teamName, token]);
 
   function handleClick() {
@@ -156,17 +100,19 @@ export default function SubscribeButton({
     let finalPrefs = { ...newPrefs };
     let sinPush = null; // por qué no quedó push, si se pidió y no se pudo
 
-    // Si el usuario marcó push, intentamos solicitar permiso al navegador
-    if (newPrefs.push_enabled) {
+    if (!conPush) {
+      // Con el push en pausa el único canal es la bandeja.
+      finalPrefs = { ...finalPrefs, in_app: true, push_enabled: false };
+    } else if (newPrefs.push_enabled) {
       try {
         if ('Notification' in window) {
           const perm = await Notification.requestPermission();
           if (perm === 'granted') {
-            const vapidKey = await getVapidKey();
-            sub = await getOrCreateSubscription(vapidKey);
+            const { key } = await api.getVapidPublicKey();
+            sub = await getOrCreateSubscription(key);
             if (!sub) sinPush = 'Este navegador no pudo activar las notificaciones push.';
           } else {
-            // El permiso fue denegado o cerrado: desactivamos push pero mantenemos in-app
+            // El permiso fue denegado o cerrado: desactivamos push pero mantenemos la bandeja
             finalPrefs.push_enabled = false;
             sinPush = 'El navegador no dio permiso para mostrar notificaciones.';
           }
@@ -181,13 +127,14 @@ export default function SubscribeButton({
       }
     }
 
-    // Si solo pidió push y no se pudo, guardar dejaría una suscripción sin
-    // ningún canal: no avisaría nada y el botón diría "Alertas configuradas".
+    // Si solo pidió push y no se pudo, guardar dejaría un seguimiento sin
+    // ningún canal: no avisaría nada y el botón diría "Siguiendo".
     if (sinPush && !finalPrefs.in_app) {
-      throw new Error(`${sinPush} Marca "En mi bandeja de CFBAMX" para recibir los avisos sin push.`);
+      throw new Error(`${sinPush} Marca "En Mis notificaciones" para recibir los avisos sin push.`);
     }
 
-    const guardadas = await saveSubscription(sub, finalPrefs, leagueId, matchId, teamName, token);
+    const respuesta = await api.saveFollow(target, paraLaApi(sub), finalPrefs, token);
+    const guardadas = respuesta?.preferences || null;
     setStatus('subscribed');
     // Se pinta lo que guardó el backend, no lo que se marcó. Antes, si el
     // navegador fallaba al suscribirse, la pantalla decía "push activado"
@@ -195,22 +142,18 @@ export default function SubscribeButton({
     setPreferences(guardadas || finalPrefs);
 
     const quedo = guardadas || finalPrefs;
-    if (newPrefs.push_enabled && !quedo.push_enabled) {
-      // Se lanza DESPUÉS de guardar: lo demás sí quedó, y así el modal se
+    if (conPush && newPrefs.push_enabled && !quedo.push_enabled) {
+      // Se lanza DESPUÉS de guardar: lo demás sí quedó, y así el menú se
       // queda abierto con la explicación en vez de cerrarse como si todo
       // hubiera salido bien.
       throw new Error(`${sinPush || 'No se pudieron activar las notificaciones push.'} ${
-        quedo.in_app ? 'Tus avisos quedaron solo en tu bandeja de CFBAMX.' : 'No quedó ningún aviso activo.'}`);
+        quedo.in_app ? 'Tus avisos quedaron solo en Mis notificaciones.' : 'No quedó ningún aviso activo.'}`);
     }
   }
 
   async function handleUnsubscribe() {
-    let sub = null;
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-      const reg = await navigator.serviceWorker.ready.catch(() => null);
-      sub = await reg?.pushManager?.getSubscription().catch(() => null);
-    }
-    await removeSubscription(sub, leagueId, matchId, teamName, token);
+    const sub = conPush ? await suscripcionActual() : null;
+    await api.removeFollow(target, sub?.endpoint ? { endpoint: sub.endpoint } : null, token);
     setStatus('unsubscribed');
     setPreferences(null);
   }
@@ -224,15 +167,15 @@ export default function SubscribeButton({
       <button
         className={`btn btn-sm ${isSubscribed ? 'btn-flag' : 'btn-outline'}`}
         onClick={handleClick}
-        title={isSubscribed ? 'Configurar notificaciones' : label}
+        title={isSubscribed ? 'Ajustar qué te avisamos, o dejar de seguir' : label}
         type="button"
       >
-        {isSubscribed ? '🔔 Alertas configuradas' : `🔔 ${label}`}
+        {isSubscribed ? '✓ Siguiendo' : label}
       </button>
 
       {showAuthModal && (
         <AuthModal
-          title="Inicia sesión para recibir avisos"
+          title="Inicia sesión para seguir partidos"
           onClose={() => setShowAuthModal(false)}
           onSuccess={() => {
             setShowAuthModal(false);
@@ -249,7 +192,8 @@ export default function SubscribeButton({
           onUnsubscribe={handleUnsubscribe}
           isSubscribed={isSubscribed}
           initialPreferences={preferences}
-          title={isSubscribed ? 'Ajustar avisos' : 'Configurar avisos'}
+          pushDisponible={conPush}
+          title={isSubscribed ? 'Siguiendo' : 'Seguir'}
           targetName={targetName}
         />
       )}

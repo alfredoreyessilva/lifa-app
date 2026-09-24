@@ -346,7 +346,7 @@ export default function MatchPage() {
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
             <SubscribeButton
               matchId={match.id}
-              label="Avisarme de este partido"
+              label="Seguir este partido"
               targetName={`${match.home_team} vs ${match.away_team}`}
             />
           </div>

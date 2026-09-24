@@ -29,7 +29,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | **P1** | Hoy no daña, pero frena el siguiente paso: la primera liga que cobre, la prueba en cancha, el siguiente cliente |
 | **P2** | Deuda y pulido. Se toma cuando hay tiempo o cuando se toca ese archivo |
 
-## Índice (2026-09-23)
+## Índice (2026-09-24)
 
 | ID | P | Qué | Tipo |
 |-|-|-|-|
@@ -44,7 +44,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-12 | P1 | Nadie avisa si el servicio deja de responder | configuración |
 | PD-13 | P1 | No existe rescate de un equipo cuyo único dueño perdió acceso | código |
 | PD-14 | P1 | ONEFA sin competencia configurada: su tabla no se ve | captura |
-| PD-02 | P2 | Los avisos push de partido casi nunca salen a tiempo, y hoy nadie los recibe | operación |
+| PD-02 | P2 | El push de partido está en pausa: casi nunca salía a tiempo, y nadie lo recibía | operación |
 | PD-15 | P2 | `PUT /manage/teams/:id` no es atómico | código |
 | PD-16 | P2 | El pie del estado de cuenta público es ilegible | decisión |
 | PD-17 | P2 | Prorrateo de quien entra a media quincena | decisión |
@@ -61,6 +61,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-28 | P2 | Cinco archivos concentran demasiado | deuda |
 | PD-29 | P2 | Ramas viejas en local y en el remoto | limpieza |
 | PD-32 | P2 | Un dueño no se puede retirar aunque haya otros dueños, y el README dice que sí | decisión |
+| PD-33 | P2 | Los recordatorios de cobranza esconden su error y pierden el día | código |
 
 ---
 
@@ -249,7 +250,12 @@ nivel 4 a nivel 5 en la única liga con uso real. Ver "Lo que queda abierto" en
 
 ## P2
 
-### PD-02 · Los avisos push de partido casi nunca salen a tiempo, y hoy nadie los recibe
+### PD-02 · El push de partido está en pausa: casi nunca salía a tiempo, y nadie lo recibía
+
+**En pausa desde el 2026-09-24.** Se apagó con `PUSH_NOTIFICATIONS` para no
+tener a la vista algo sin terminar, y los avisos de partido se quedaron en la
+bandeja ("Mis notificaciones"), que no depende del cron. Ver "Notificaciones" en
+el README. Lo de abajo sigue siendo el diseño para cuando se encienda.
 
 **Bajó de P0 a P2 el 2026-09-23, con datos.** Era P0 porque el cron corre
 mucho menos de lo supuesto; se bajó porque, medido, **no hay nadie del otro
@@ -289,6 +295,26 @@ enciende en minutos:
   despierto a Render (`PD-03`), que en fin de semana es cuando más se usa.
 - `cron.yml` se queda como respaldo: llamar de más es inofensivo por diseño.
 - La pestaña Cron de `/admin` mide la cadencia nueva sin tocar nada.
+
+**Antes de encenderlo, además de la cadencia**, cuatro fallas del push que se
+encontraron el 2026-09-24 y que no se arreglaron porque quedó apagado:
+
+1. **Primero manda y después marca.** `faseDePartidos()` pone
+   `notified_upcoming`/`notified_live` después de enviar. Dos corridas encimadas
+   mandan el mismo aviso dos veces. Se reclama antes de enviar, con un
+   `UPDATE … WHERE notified_x = FALSE RETURNING`, como el candado diario.
+2. **Cambiar la fecha no reinicia las marcas.** Un partido que ya avisó
+   "próximo" y se pospone no vuelve a avisar en su fecha nueva. (La bandeja no
+   tiene el problema: calcula esos dos avisos al leer.)
+3. **Los seguidores de un equipo se buscan por nombre exacto**
+   (`team_name IN (?, ?)` en `pushNotifier.js` y en `faseDePartidos()`), y la
+   bandeja y la cartelera comparan sin mayúsculas. Con nombres que difieren en
+   una letra, el partido aparece pero el push no llega.
+4. **El envío está copiado en dos archivos** (`sendToSubs` y `ensureVapid`, en
+   `routes/notifications.js` y en `utils/pushNotifier.js`), y ya se
+   diferencian: uno truena sin llaves VAPID y el otro se calla. Al encenderlo,
+   que el push lea los avisos de `match_events` —el mismo registro de la
+   bandeja— en vez de tener su propia lógica.
 
 ### PD-15 · `PUT /manage/teams/:id` no es atómico
 
@@ -459,6 +485,22 @@ cede con `transfer-owner`), y los demás dueños se quitan y se retiran como
 cualquiera, mientras quede al menos uno. "Cambiar rol"
 (`PATCH /organizations/:id/members/:userId`) nace copiando el candado de hoy, y
 se mueve con este.
+
+### PD-33 · Los recordatorios de cobranza esconden su error y pierden el día
+
+Encontrado el 2026-09-24 al separar la bandeja del push. `runBillingReminders`
+y `runPlayerBillingReminders` (`utils/billingReminders.js`) capturan su propio
+error y devuelven el conteo parcial como si hubieran terminado bien. Del otro
+lado, `runOncePerDay` ve una tarea que no lanzó, marca el día como hecho y ya no
+reintenta: los recordatorios de ese día se pierden, el error no aparece en la
+respuesta del cron y GitHub no manda correo. Es lo contrario de lo que el mismo
+endpoint dice en `routes/notifications.js`: "capturar no puede significar
+esconder".
+
+La salida es la de la mensualidad: que el error suba a la respuesta
+(`billing_reminders_error`, como `monthly_charges_error`) y que el workflow lo
+trate como falla. P2 porque los dos libros tienen 0 movimientos; pasa a P1 el
+día que una liga cobre.
 
 ---
 

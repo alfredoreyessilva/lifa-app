@@ -11,17 +11,42 @@ const PICK_LABELS = { home: 'Local', away: 'Visitante', tie: 'Empate' };
 //
 // Cada partido se pinta con el mismo MatchCard que usa el calendario (para
 // que se vea idéntico), y debajo se agrega un renglón chico con las
-// etiquetas propias de la cartelera (por qué está aquí: notificación y/o
-// predicción) — eso no es parte de MatchCard porque no aplica en el
+// etiquetas propias de la cartelera (por qué está aquí: lo sigues y/o lo
+// predijiste) — eso no es parte de MatchCard porque no aplica en el
 // calendario normal.
+//
+// Desde el 2026-09-24 es también donde se deja de seguir un partido: la
+// sección "Partidos que sigo" de Notificaciones leía lo mismo y se retiró
+// (README, "Notificaciones").
 export default function MiCartelera() {
   const { token } = useAuth();
   const [board, setBoard]   = useState(null);
   const [error, setError]   = useState('');
+  const [dejando, setDejando] = useState(null);
+  const [aviso, setAviso]   = useState('');
+
+  function cargar() {
+    return api.getBoard(token).then(setBoard).catch((e) => setError(e.message));
+  }
 
   useEffect(() => {
-    api.getBoard(token).then(setBoard).catch((e) => setError(e.message));
+    cargar();
   }, [token]);
+
+  async function dejarDeSeguir(matchId) {
+    setDejando(matchId);
+    setAviso('');
+    try {
+      await api.unfollowMatch(matchId, token);
+      // Se vuelve a pedir en vez de quitarlo a mano: si también lo predijiste,
+      // se queda en la cartelera, solo que ya sin "Siguiendo".
+      await cargar();
+    } catch (e) {
+      setAviso(e.offline ? 'Sin conexión: inténtalo cuando vuelva la señal.' : 'No se pudo dejar de seguir.');
+    } finally {
+      setDejando(null);
+    }
+  }
 
   if (error) return null; // no tiene sentido tronar el panel entero por esto
   if (!board) return null; // cargando, sin parpadeo de "vacío" mientras tanto
@@ -33,7 +58,7 @@ export default function MiCartelera() {
           <h2>Mi cartelera</h2>
         </div>
         <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>
-          Todavía no tienes partidos aquí. Pide que te avisen de un partido, o vota quién gana en uno próximo.
+          Todavía no tienes partidos aquí. Sigue un partido o a un equipo, o vota quién gana en uno próximo.
         </p>
       </div>
     );
@@ -53,9 +78,13 @@ export default function MiCartelera() {
         <span className="count">{board.length}</span>
       </div>
 
+      {aviso && <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>{aviso}</p>}
+
       {upcoming.length > 0 && (
         <div className="match-grid">
-          {upcoming.map((m) => <BoardItem key={m.id} match={m} />)}
+          {upcoming.map((m) => (
+            <BoardItem key={m.id} match={m} onUnfollow={dejarDeSeguir} unfollowing={dejando === m.id} />
+          ))}
         </div>
       )}
 
@@ -65,7 +94,9 @@ export default function MiCartelera() {
             <h3 style={{ fontSize: 16, color: 'var(--ink-dim)' }}>Partidos pasados</h3>
           </div>
           <div className="match-grid">
-            {past.map((m) => <BoardItem key={m.id} match={m} />)}
+            {past.map((m) => (
+              <BoardItem key={m.id} match={m} onUnfollow={dejarDeSeguir} unfollowing={dejando === m.id} />
+            ))}
           </div>
         </>
       )}
@@ -73,13 +104,34 @@ export default function MiCartelera() {
   );
 }
 
-function BoardItem({ match }) {
+function BoardItem({ match, onUnfollow, unfollowing }) {
   return (
     <div>
       <MatchCard match={match} />
       <div className="board-item-tags">
         {match.league_name && <span className="tag">{match.league_name}</span>}
-        {match.notified  && <span className="tag" style={{ color: 'var(--flag)', borderColor: 'var(--flag)' }}>🔔 Notificación</span>}
+        {/* Lo sigues directo: se deja desde aquí. Por su equipo: se deja desde
+            la página del equipo, porque ese seguimiento cubre todos sus
+            partidos y no solo este. */}
+        {match.followed_directly && (
+          <>
+            <span className="tag" style={{ color: 'var(--flag)', borderColor: 'var(--flag)' }}>✓ Siguiendo</span>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => onUnfollow(match.id)}
+              disabled={unfollowing}
+              style={{ fontSize: 11, padding: '2px 8px' }}
+            >
+              {unfollowing ? 'Quitando…' : 'Dejar de seguir'}
+            </button>
+          </>
+        )}
+        {!match.followed_directly && match.followed_team && (
+          <span className="tag" style={{ color: 'var(--flag)', borderColor: 'var(--flag)' }}>
+            ✓ Sigues a {match.followed_team}
+          </span>
+        )}
         {match.predicted && (
           <span className="tag" style={{ color: 'var(--field)', borderColor: 'var(--field)' }}>
             🎯 Tu predicción: {PICK_LABELS[match.myPick]}

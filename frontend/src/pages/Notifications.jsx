@@ -2,8 +2,15 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
-import MatchCard from '../components/MatchCard.jsx';
-import { getMatchStatus } from '../utils/matchStatus.js';
+import { textoDeSeguimiento, EVENTO_NOTIFICACIONES_VISTAS } from '../utils/misNotificaciones.js';
+
+// "Mis notificaciones": UNA bandeja por persona (README, "Notificaciones: la
+// bandeja y el push"). Junta los avisos de las organizaciones que administras
+// —solo los que tu rol puede leer, eso lo decide el backend— con los de los
+// partidos y equipos que sigues.
+//
+// Reemplaza a la cuadrícula de logos (había que entrar a cada organización
+// para ver sus avisos) y a "Partidos que sigo", que duplicaba "Mi cartelera".
 
 function initials(name) {
   if (!name) return '';
@@ -16,79 +23,114 @@ function formatWhen(isoDate) {
   return date.toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+// Ícono, etiqueta y texto del botón de cada tipo. Los de organización traen su
+// título y cuerpo guardados; los de seguimiento se arman al leer
+// (utils/misNotificaciones.js). Los cuatro últimos son los de `match_events`
+// más los dos que el backend calcula — un tipo nuevo va en los tres lados.
 const TYPE_META = {
   league_approved:   { icon: '🎉', label: 'Liga aprobada', color: 'var(--flag)' },
   league_unapproved: { icon: '⚠️', label: 'Publicación', color: 'var(--ink-dim)' },
   // Rechazo de la SOLICITUD de publicación (admin.js, decline-publish). No es
   // lo mismo que league_unapproved, que es ocultar una liga que ya era pública.
   league_publish_declined: { icon: '📝', label: 'Solicitud rechazada', color: 'var(--live)' },
-  league_verified:   { icon: '⭐', label: 'Verificada', color: 'var(--field)' },
+  league_verified:   { icon: '⭐', label: 'Verificada', color: 'var(--paper)' },
   league_unverified: { icon: '⚠️', label: 'Verificación retirada', color: 'var(--ink-dim)' },
   team_claimed:      { icon: '🤝', label: 'Equipo reclamado', color: 'var(--flag)' },
+  org_admin_claimed: { icon: '👋', label: 'Nuevo miembro', color: 'var(--flag)' },
   broadcast_added:   { icon: '🎥', label: 'Transmisión', color: 'var(--live)' },
-  score_reminder:    { icon: '⏳', label: 'Marcador pendiente', color: 'var(--ink-dim)' },
-  match_not_started: { icon: '📅', label: 'Partido sin actualizar', color: 'var(--ink-dim)' },
-  billing_charge_new:       { icon: '🧾', label: 'Nuevo cargo',     color: 'var(--flag)' },
-  billing_due_soon:         { icon: '⏰', label: 'Cargo por vencer', color: 'var(--ink-dim)' },
-  billing_overdue:          { icon: '🔴', label: 'Cargo vencido',    color: 'var(--live)' },
-  billing_payment_recorded: { icon: '✅', label: 'Pago registrado',  color: 'var(--field)' },
-  // El equipo le reporta un pago a su liga (bandeja de la LIGA), y el aviso de
-  // vuelta si se lo rechazan (bandeja del EQUIPO).
-  team_payment_reported:    { icon: '🧾', label: 'Pago por confirmar', color: 'var(--flag)' },
-  billing_payment_rejected: { icon: '⚠️', label: 'Pago rechazado',     color: 'var(--live)' },
+  score_reminder:    { icon: '⏳', label: 'Marcador pendiente', color: 'var(--ink-dim)', cta: 'Ir al partido →' },
+  match_not_started: { icon: '📅', label: 'Partido sin actualizar', color: 'var(--ink-dim)', cta: 'Ir al partido →' },
+  billing_charge_new:       { icon: '🧾', label: 'Nuevo cargo',     color: 'var(--flag)',     cta: 'Ver estado de cuenta →' },
+  billing_due_soon:         { icon: '⏰', label: 'Cargo por vencer', color: 'var(--ink-dim)', cta: 'Ver estado de cuenta →' },
+  billing_overdue:          { icon: '🔴', label: 'Cargo vencido',    color: 'var(--live)',    cta: 'Ver estado de cuenta →' },
+  billing_payment_recorded: { icon: '✅', label: 'Pago registrado',  color: 'var(--paper)',   cta: 'Ver estado de cuenta →' },
+  // El equipo le reporta un pago a su liga (lo lee la LIGA), y el aviso de
+  // vuelta si se lo rechazan (lo lee el EQUIPO).
+  team_payment_reported:    { icon: '🧾', label: 'Pago por confirmar', color: 'var(--flag)', cta: 'Ir a Cobranza →' },
+  billing_payment_rejected: { icon: '⚠️', label: 'Pago rechazado',     color: 'var(--live)', cta: 'Ver estado de cuenta →' },
   // Cuotas del club a sus jugadores (routes/playerBilling.js). Los dos de
   // vencimiento llegan agregados, uno por equipo y no uno por jugador —
   // ver utils/billingReminders.js.
-  player_payment_reported:  { icon: '🧾', label: 'Pago por confirmar', color: 'var(--flag)' },
-  player_billing_due_soon:  { icon: '⏰', label: 'Cuotas por vencer',  color: 'var(--ink-dim)' },
-  player_billing_overdue:   { icon: '🔴', label: 'Cuotas vencidas',    color: 'var(--live)' },
+  player_payment_reported:  { icon: '🧾', label: 'Pago por confirmar', color: 'var(--flag)',     cta: 'Ir a Finanzas →' },
+  player_billing_due_soon:  { icon: '⏰', label: 'Cuotas por vencer',  color: 'var(--ink-dim)', cta: 'Ir a Finanzas →' },
+  player_billing_overdue:   { icon: '🔴', label: 'Cuotas vencidas',    color: 'var(--live)',    cta: 'Ir a Finanzas →' },
+  // Lo que sigues.
+  upcoming:        { icon: '⏰', label: 'Próximo',        color: 'var(--flag)',     cta: 'Ver partido →' },
+  live:            { icon: '🔴', label: 'En vivo',        color: 'var(--live)',     cta: 'Ver partido →' },
+  final_score:     { icon: '🏆', label: 'Marcador final', color: 'var(--paper)',    cta: 'Ver partido →' },
+  schedule_change: { icon: '📅', label: 'Cambio',         color: 'var(--ink-dim)', cta: 'Ver partido →' },
 };
 
-function OrgNotificationItem({ notification }) {
-  const meta = TYPE_META[notification.type] || { icon: '📢', label: 'Aviso', color: 'var(--ink-dim)' };
+const SIN_META = { icon: '📢', label: 'Aviso', color: 'var(--ink-dim)' };
 
-  let dataObj = notification.data;
-  if (typeof dataObj === 'string') {
-    try {
-      dataObj = JSON.parse(dataObj);
-    } catch {}
+// De quién es el aviso: la organización (con su logo) o la liga del partido
+// que sigues.
+function Origen({ item }) {
+  if (item.origin === 'organization' && item.org) {
+    return (
+      <span className="notification-origin">
+        <span className="notification-origin-logo">
+          {item.org.logo_url ? <img src={item.org.logo_url} alt="" /> : initials(item.org.name)}
+        </span>
+        {item.org.name}
+      </span>
+    );
   }
+  if (item.origin === 'follow') {
+    return (
+      <span className="notification-origin">
+        <span className="notification-origin-logo">🏈</span>
+        {item.match?.league_name ? `Sigues · ${item.match.league_name}` : 'Sigues'}
+      </span>
+    );
+  }
+  return null;
+}
 
-  const targetUrl = dataObj?.url;
+function NotificationItem({ item }) {
+  const meta = TYPE_META[item.type] || SIN_META;
+  const { title, body } = item.origin === 'follow'
+    ? textoDeSeguimiento(item)
+    : { title: item.title, body: item.body };
 
   return (
-    <div className="notification-item" style={{ position: 'relative' }}>
-      <div className="notification-item-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 16 }}>{meta.icon}</span>
-          <span className="notification-item-title">{notification.title}</span>
-          <span
-            className="tag"
-            style={{
-              fontSize: 10,
-              padding: '2px 6px',
-              color: meta.color,
-              borderColor: meta.color,
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em'
-            }}
-          >
-            {meta.label}
-          </span>
-        </div>
-        <span className="notification-item-time">{formatWhen(notification.created_at)}</span>
+    <div className={`notification-item${item.is_new ? ' notification-item--new' : ''}`}>
+      <div className="notification-item-head">
+        <Origen item={item} />
+        <span className="notification-item-time">
+          {item.is_new && <span className="notification-new-tag">Nuevo</span>}
+          {formatWhen(item.at)}
+        </span>
       </div>
 
-      {notification.body && (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
+        <span style={{ fontSize: 16 }} aria-hidden="true">{meta.icon}</span>
+        <span className="notification-item-title">{title}</span>
+        <span
+          className="tag"
+          style={{
+            fontSize: 10,
+            padding: '2px 6px',
+            color: meta.color,
+            borderColor: meta.color,
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+          }}
+        >
+          {meta.label}
+        </span>
+      </div>
+
+      {body && (
         <span className="notification-item-body" style={{ marginTop: 4, lineHeight: 1.4 }}>
-          {notification.body}
+          {body}
         </span>
       )}
 
-      {targetUrl && (
+      {item.url && (
         <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-start' }}>
-          <Link to={targetUrl} className="btn btn-outline btn-sm" style={{ fontSize: 12, padding: '3px 10px' }}>
-            {notification.type?.startsWith('billing_') ? 'Ver estado de cuenta →' : 'Ir a la publicación →'}
+          <Link to={item.url} className="btn btn-outline btn-sm" style={{ fontSize: 12, padding: '3px 10px' }}>
+            {meta.cta || 'Abrir →'}
           </Link>
         </div>
       )}
@@ -97,242 +139,66 @@ function OrgNotificationItem({ notification }) {
 }
 
 export default function Notifications() {
-  const { token, leagues, teams } = useAuth();
-  const [selected, setSelected] = useState(null);
-  const [notifByOrg, setNotifByOrg] = useState({});
+  const { token } = useAuth();
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState('');
 
-  // Partidos que sigue el usuario
-  const [followedMatches, setFollowedMatches] = useState(null);
-  const [loadingMatches, setLoadingMatches] = useState(false);
-  const [unfollowingId, setUnfollowingId] = useState(null);
-
-  const orgs = [
-    ...leagues.map((lg) => ({ ...lg, kind: 'liga' })),
-    ...teams.map((tm) => ({ ...tm, kind: 'equipo' })),
-  ];
-
-  // 1. Carga notificaciones de organizaciones administradas
   useEffect(() => {
-    if (!token) return;
-    orgs.forEach((org) => {
-      const key = `${org.kind}-${org.id}`;
-      const fetcher = org.kind === 'liga' ? api.getLeagueNotifications : api.getTeamNotifications;
-      fetcher(org.id, token)
-        .then((data) => setNotifByOrg((prev) => ({ ...prev, [key]: data.notifications })))
-        .catch(() => setNotifByOrg((prev) => ({ ...prev, [key]: [] })));
-    });
-  }, [token, leagues.length, teams.length]);
-
-  // 2. Carga los partidos seguidos por el usuario
-  useEffect(() => {
-    if (!token) {
-      setFollowedMatches([]);
-      return;
-    }
-    setLoadingMatches(true);
-    api.getFollowedMatches(token)
+    if (!token) return undefined;
+    let vigente = true;
+    setError('');
+    api.getMyNotifications(token)
       .then((data) => {
-        setFollowedMatches(data.matches || []);
+        if (!vigente) return null;
+        setItems(data.items || []);
+        // Se marca como visto DESPUÉS de traer la lista: lo que era nuevo se
+        // pinta como nuevo en esta visita, y deja de contar en el balón.
+        return api.markMyNotificationsSeen(token).then(() => {
+          window.dispatchEvent(new Event(EVENTO_NOTIFICACIONES_VISTAS));
+        });
       })
-      .catch(() => {
-        setFollowedMatches([]);
-      })
-      .finally(() => {
-        setLoadingMatches(false);
+      .catch((err) => {
+        if (!vigente) return;
+        setError(err.offline
+          ? 'Sin conexión: no se pudieron cargar tus notificaciones.'
+          : (err.message || 'No se pudieron cargar tus notificaciones.'));
+        setItems((prev) => prev ?? []);
       });
+    return () => { vigente = false; };
   }, [token]);
-
-  function handleLogoClick(org) {
-    const isClosing = selected && selected.kind === org.kind && selected.id === org.id;
-    setSelected(isClosing ? null : org);
-    if (isClosing) return;
-
-    const key = `${org.kind}-${org.id}`;
-    const unread = (notifByOrg[key] || []).filter((n) => !n.read_at);
-    if (unread.length === 0) return;
-
-    setNotifByOrg((prev) => ({
-      ...prev,
-      [key]: prev[key].map((n) => (n.read_at ? n : { ...n, read_at: new Date().toISOString() })),
-    }));
-    const markRead = org.kind === 'liga' ? api.markLeagueNotificationRead : api.markTeamNotificationRead;
-    unread.forEach((n) => { markRead(org.id, n.id, token).catch(() => {}); });
-  }
-
-  async function handleUnfollow(matchId, e) {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    setUnfollowingId(matchId);
-    try {
-      await api.unfollowMatch(matchId, token);
-      setFollowedMatches((prev) => (prev || []).filter((m) => m.id !== matchId));
-    } catch (err) {
-      console.error('Error al dejar de seguir partido:', err);
-    } finally {
-      setUnfollowingId(null);
-    }
-  }
-
-  const selectedKey = selected ? `${selected.kind}-${selected.id}` : null;
-  const selectedNotifs = selectedKey ? notifByOrg[selectedKey] : null;
-
-  const upcomingMatches = (followedMatches || []).filter((m) => getMatchStatus(m) !== 'finished');
-  const pastMatches = (followedMatches || []).filter((m) => getMatchStatus(m) === 'finished');
 
   return (
     <div className="container">
       <div className="section-head">
-        <h2>Notificaciones</h2>
+        <h2>Mis notificaciones</h2>
       </div>
 
-      {/* Organizaciones administradas */}
-      {orgs.length > 0 && (
-        <>
-          <div className="section-head" style={{ marginTop: 8 }}>
-            <h2 style={{ fontSize: 16 }}>Organizaciones administradas</h2>
-          </div>
-          <div className="org-logo-grid">
-            {orgs.map((org) => {
-              const key = `${org.kind}-${org.id}`;
-              const hasUnread = (notifByOrg[key] || []).some((n) => !n.read_at);
-              return (
-                <button
-                  key={key}
-                  onClick={() => handleLogoClick(org)}
-                  className={`league-logo-btn${selected && selected.kind === org.kind && selected.id === org.id ? ' league-logo-btn--active' : ''}`}
-                  style={{ width: 72, height: 72, position: 'relative' }}
-                >
-                  {hasUnread && <span className="notification-dot" aria-label="Notificaciones sin leer" />}
-                  <div className="league-logo" style={{ width: '100%', height: '100%', fontSize: 22 }}>
-                    {org.logo_url ? <img src={org.logo_url} alt={org.name} /> : initials(org.name)}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {selected && (
-            <div className="section-head" style={{ marginTop: 32 }}>
-              <h2>Notificaciones de {selected.name}</h2>
-            </div>
-          )}
-
-          {selected && selectedNotifs === null && (
-            <div className="empty-state">
-              <h3>Cargando…</h3>
-            </div>
-          )}
-
-          {selected && selectedNotifs && selectedNotifs.length === 0 && (
-            <div className="empty-state">
-              <h3>Sin notificaciones todavía</h3>
-            </div>
-          )}
-
-          {selected && selectedNotifs && selectedNotifs.length > 0 && (
-            <div className="notification-list" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
-              {selectedNotifs.map((n) => (
-                <OrgNotificationItem key={n.id} notification={n} />
-              ))}
-            </div>
-          )}
-        </>
+      {error && (
+        <div className="empty-state" style={{ padding: '16px 20px' }}>
+          <p style={{ color: 'var(--ink-dim)', margin: 0 }}>{error}</p>
+        </div>
       )}
 
-      {/* Partidos que sigo */}
-      <div className="section-head" style={{ marginTop: 36 }}>
-        <h2 style={{ fontSize: 16 }}>Partidos que sigo</h2>
-        {followedMatches && followedMatches.length > 0 && (
-          <span className="count">{followedMatches.length}</span>
-        )}
-      </div>
+      {items === null && !error && (
+        <div className="empty-state">
+          <h3>Cargando…</h3>
+        </div>
+      )}
 
-      {!token ? (
+      {items && items.length === 0 && !error && (
         <div className="empty-state" style={{ padding: '36px 20px', background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 8, marginTop: 12 }}>
-          <p style={{ color: 'var(--paper)', fontSize: 15, marginBottom: 12 }}>
-            Inicia sesión para ver los partidos que sigues y gestionar tus avisos.
-          </p>
-          <Link to="/iniciar-sesion" className="btn btn-primary btn-sm">
-            Iniciar sesión
-          </Link>
-        </div>
-      ) : loadingMatches ? (
-        <div className="empty-state" style={{ padding: '36px 20px' }}>
-          <h3>Cargando partidos…</h3>
-        </div>
-      ) : followedMatches && followedMatches.length === 0 ? (
-        <div className="empty-state" style={{ padding: '36px 20px', background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 8, marginTop: 12 }}>
+          <h3 style={{ marginBottom: 8 }}>Sin notificaciones todavía</h3>
           <p style={{ color: 'var(--ink-dim)', fontSize: 14, margin: 0 }}>
-            Todavía no sigues ningún partido. Haz clic en <strong>"Avisarme"</strong> en el calendario de cualquier partido para recibir alertas y verlos aquí.
+            Sigue un partido o a un equipo y aquí te llegan sus avisos. Si administras una liga o un club, aquí llegan también los suyos.
           </p>
         </div>
-      ) : (
-        <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 24 }}>
-          {upcomingMatches.length > 0 && (
-            <div>
-              <div className="match-grid">
-                {upcomingMatches.map((match) => (
-                  <div key={match.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <MatchCard match={match} isNext={getMatchStatus(match) === 'scheduled'} />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px' }}>
-                      <span style={{ fontSize: 12, color: 'var(--flag)', fontWeight: 600 }}>🔔 Alertas activadas</span>
-                      <button
-                        type="button"
-                        onClick={(e) => handleUnfollow(match.id, e)}
-                        disabled={unfollowingId === match.id}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--ink-dim)',
-                          fontSize: 12,
-                          cursor: 'pointer',
-                          textDecoration: 'underline',
-                          padding: '2px 6px',
-                        }}
-                      >
-                        {unfollowingId === match.id ? 'Cancelando…' : 'Dejar de seguir'}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+      )}
 
-          {pastMatches.length > 0 && (
-            <div>
-              <div className="section-head" style={{ marginBottom: 12 }}>
-                <h3 style={{ fontSize: 14, color: 'var(--ink-dim)' }}>Partidos finalizados</h3>
-              </div>
-              <div className="match-grid">
-                {pastMatches.map((match) => (
-                  <div key={match.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <MatchCard match={match} />
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 4px' }}>
-                      <button
-                        type="button"
-                        onClick={(e) => handleUnfollow(match.id, e)}
-                        disabled={unfollowingId === match.id}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--ink-dim)',
-                          fontSize: 12,
-                          cursor: 'pointer',
-                          textDecoration: 'underline',
-                          padding: '2px 6px',
-                        }}
-                      >
-                        {unfollowingId === match.id ? 'Cancelando…' : 'Quitar de la lista'}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+      {items && items.length > 0 && (
+        <div className="notification-list" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+          {items.map((item) => (
+            <NotificationItem key={item.key} item={item} />
+          ))}
         </div>
       )}
     </div>

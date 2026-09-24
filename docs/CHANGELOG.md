@@ -15,6 +15,46 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **"Mis notificaciones": una bandeja por persona, y el push en pausa
+  (2026-09-24)**. El modelo está en "Notificaciones: la bandeja y el push" del
+  README; aquí va lo que cambió y cómo se comprobó. **Construido y verificado,
+  sin desplegar.**
+
+  **Lo que lo pidió:** el push estaba en producción a medias (salía casi nunca a
+  tiempo y lo tenían 0 dispositivos) y se quería esconder sin perder la bandeja.
+  Al separarlos salió que la bandeja tampoco servía: había una por
+  organización, escondida detrás de una cuadrícula de logos, y el aficionado no
+  tenía ninguna.
+
+  **Lo que cambió:** una sola lista por persona que junta lo de sus
+  organizaciones con lo que sigue; el numerito en el balón de la barra; "Seguir
+  este partido" y "Seguir a {equipo}" en lugar de "Avisarme"; "Partidos que
+  sigo" se fue a "Mi cartelera", que ya leía lo mismo; y el push quedó detrás
+  de `PUSH_NOTIFICATIONS`, apagado si no existe. Esquema: `match_events`
+  (marcador final y cambio de fecha o sede) y `users.notifications_seen_at`.
+
+  **El hueco que se cerró de paso:** la bandeja del equipo se leía con `ver`, así
+  que el coach y el editor de roster leían cargos y cuotas vencidas con nombres
+  del padrón; la de la liga pedía `estructura`, así que el tesorero no veía el
+  pago que le tocaba confirmar. Ahora cada tipo de aviso pide el permiso de su
+  tema, y las dos rutas viejas se retiraron: esconder la pantalla no le quitaba
+  al coach la API.
+
+  **Dos bugs que solo aparecieron corriéndolo:** guardar las casillas de
+  "Seguir" borraba y volvía a insertar el seguimiento, lo que reiniciaba "desde
+  cuándo lo sigues" (ahora es `ON CONFLICT … DO UPDATE`). Y el balón decía 0 con
+  avisos recién llegados porque Neon iba tres segundos adelante del reloj local;
+  "ahora" pasó a ser la hora de la base.
+
+  **Verificado** contra `desarrollo-local`: 19 unitarias nuevas en el backend y
+  5 en el frontend; `invites-roles.e2e.mjs` con 138 comprobaciones (quién lee
+  cada aviso, el balón por persona, el marcador final que le llega a quien
+  sigue) y las tres de cobranza sin fallas; el cron con el push apagado
+  (`partidos_error: null`); y un recorrido en el navegador, escritorio y 375 px:
+  el balón con su número, la lista, el menú de "Seguir" sin canales, seguir y
+  dejar de seguir sin que el navegador pida permiso. Abre `PD-33` y le agrega a
+  `PD-02` lo que hay que arreglar antes de encender el push.
+
 - **Dos links distintos: la entrega y la invitación con rol (2026-09-23)**.
   Cierra `PD-08`, `PD-30` y `PD-31`. El modelo está en "Dos links distintos:
   la entrega y la invitación con rol" del README; aquí va lo que cambió y cómo

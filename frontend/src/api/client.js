@@ -632,14 +632,22 @@ export const api = {
   updateOrganizationMemberRole: (organizationId, userId, role, token) =>
     request(`/organizations/${organizationId}/members/${userId}`, { method: 'PATCH', body: { role }, token }),
 
-  // Bandeja de notificaciones (pantalla "Notificaciones")
-  getLeagueNotifications: (leagueId, token) => request(`/notifications/league/${leagueId}`, { token }),
-  getTeamNotifications: (teamId, token) => request(`/notifications/team/${teamId}`, { token }),
-  markLeagueNotificationRead: (leagueId, notifId, token) =>
-    request(`/notifications/league/${leagueId}/${notifId}/read`, { method: 'POST', token }),
-  markTeamNotificationRead: (teamId, notifId, token) =>
-    request(`/notifications/team/${teamId}/${notifId}/read`, { method: 'POST', token }),
-  getFollowedMatches: (token) => request('/notifications/followed-matches', { token }),
+  // "Mis notificaciones": una bandeja por persona, con lo de sus organizaciones
+  // y lo que sigue (README, "Notificaciones: la bandeja y el push").
+  getMyNotifications: (token) => request('/notifications/mine', { token }),
+  getMyUnreadCount: (token) => request('/notifications/mine/unread', { token }),
+  markMyNotificationsSeen: (token) => request('/notifications/mine/seen', { method: 'POST', token }),
+
+  // Seguir un partido, un equipo o una liga. Las tres rutas conservan su
+  // contrato de cuando eran "suscribirse a avisos".
+  getPushStatus: () => request('/notifications/push-status'),
+  getVapidPublicKey: () => request('/notifications/vapid-public-key'),
+  checkFollow: (target, endpoint, token) =>
+    request('/notifications/check', { method: 'POST', body: { endpoint: endpoint || null, ...target }, token }),
+  saveFollow: (target, subscription, preferences, token) =>
+    request('/notifications/subscribe', { method: 'POST', body: { subscription, preferences, ...target }, token }),
+  removeFollow: (target, subscription, token) =>
+    request('/notifications/unsubscribe', { method: 'POST', body: { subscription, ...target }, token }),
   unfollowMatch: (matchId, token) =>
     request('/notifications/unfollow-match', { method: 'POST', body: { match_id: matchId }, token }),
 

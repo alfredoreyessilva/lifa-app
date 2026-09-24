@@ -13,7 +13,7 @@ import {
   parseLocalDateTimeString,
 } from '../utils/timezones.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { notifyMatchFollowers } from '../utils/pushNotifier.js';
+import { notifyMatchFollowers, pushEncendido } from '../utils/pushNotifier.js';
 import { PHASE_TYPES, PHASE_TYPE_KEYS } from '../utils/matchPhase.js';
 import { TIEBREAKER_CATALOG, TIEBREAKER_PRESETS } from '../utils/standings.js';
 import { buildBranchStandings } from '../utils/branchStandings.js';
@@ -59,34 +59,50 @@ function validateLinksList(links, label) {
 // determina el estado, solo es un dato que se guarda aparte.
 const LIVE_WINDOW_MS = 3 * 60 * 60 * 1000;
 
-// Fase 3 — avisos push en tiempo real a los SEGUIDORES de un partido, tras
-// guardar una edición. Compara la fila antes/después y manda push solo por
-// lo que cambió de verdad. Nunca lanza hacia afuera (el que llama la envuelve
-// en try/catch); pushNotifier además captura sus propios errores de red.
-// Coordina con el cronjob a través de las mismas banderas notified_live /
-// notified_final para que un evento no se avise dos veces.
-async function pushMatchEditAlerts(before, after) {
+// Lo que un guardado le avisa a los SEGUIDORES de un partido. Compara la fila
+// antes/después y avisa solo por lo que cambió de verdad. Nunca lanza hacia
+// afuera (el que llama la envuelve en .catch); pushNotifier además captura sus
+// propios errores de red.
+//
+// Dos canales, y cada uno por su lado (README, "Notificaciones: la bandeja y
+// el push"):
+//   - La BANDEJA: el marcador final y el cambio de fecha o sede se guardan en
+//     `match_events`, que es de donde "Mis notificaciones" los lee. Siempre.
+//   - El PUSH: solo con el interruptor encendido (hoy, en pausa). Coordina con
+//     el cron a través de las banderas notified_live / notified_final para que
+//     un evento no se avise dos veces.
+async function avisosDeEdicionDePartido(before, after) {
   if (!after || after.is_draft) return;
 
+  const conPush = pushEncendido();
   const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
   const hadScore = num(before.home_score) !== null && num(before.away_score) !== null;
   const hasScore = num(after.home_score)  !== null && num(after.away_score)  !== null;
 
   // 1. Marcador final: pasó de "sin marcador completo" a "con marcador
-  //    completo" y aún no se había avisado.
+  //    completo" y aún no se había avisado. El índice único parcial de
+  //    `match_events` es el que garantiza UNA fila aunque dos guardados
+  //    lleguen juntos; la bandera sola tiene ventana de carrera.
   if (!before.notified_final && !hadScore && hasScore) {
-    await notifyMatchFollowers(after.id, {
-      eventType: 'final_score',
-      title: `🏆 Marcador final — ${after.home_team} vs ${after.away_team}`,
-      body:  `Resultado: ${after.home_team} ${after.home_score} · ${after.away_team} ${after.away_score}.`,
-      url:   `/partidos/${after.id}`,
-    });
+    await db.prepare(`
+      INSERT INTO match_events (match_id, type) VALUES (?, 'final_score')
+      ON CONFLICT (match_id) WHERE type = 'final_score' DO NOTHING
+    `).run(after.id);
+    if (conPush) {
+      await notifyMatchFollowers(after.id, {
+        eventType: 'final_score',
+        title: `🏆 Marcador final — ${after.home_team} vs ${after.away_team}`,
+        body:  `Resultado: ${after.home_team} ${after.home_score} · ${after.away_team} ${after.away_score}.`,
+        url:   `/partidos/${after.id}`,
+      });
+    }
     await db.prepare('UPDATE matches SET notified_final = TRUE WHERE id = ?').run(after.id);
   }
 
   // 2. Arranque manual: el organizador marcó "en vivo" antes de que el cron
-  //    lo detectara (o en una categoría sin auto-status).
-  if (after.status === 'live' && before.status !== 'live' && !before.notified_live) {
+  //    lo detectara (o en una categoría sin auto-status). Solo es push: la
+  //    bandeja calcula "en vivo" con la hora del partido.
+  if (conPush && after.status === 'live' && before.status !== 'live' && !before.notified_live) {
     await notifyMatchFollowers(after.id, {
       eventType: 'live',
       title: `🔴 EN VIVO — ${after.home_team} vs ${after.away_team}`,
@@ -101,16 +117,23 @@ async function pushMatchEditAlerts(before, after) {
   const venueChanged = (before.venue_id || null) !== (after.venue_id || null);
   const isFuture     = new Date(after.match_date).getTime() > Date.now();
   if (isFuture && (dateChanged || venueChanged)) {
-    const body =
-      dateChanged && venueChanged ? 'Cambiaron la fecha/hora y la sede de este partido.'
-      : dateChanged               ? 'Cambió la fecha u hora de este partido.'
-      :                             'Cambió la sede de este partido.';
-    await notifyMatchFollowers(after.id, {
-      eventType: 'schedule_change',
-      title: `📅 Cambio de programación — ${after.home_team} vs ${after.away_team}`,
-      body,
-      url:   `/partidos/${after.id}`,
-    });
+    // Se guarda QUÉ cambió y no el texto: el aviso se arma al leer con la
+    // fecha y la sede de hoy, que son las que valen.
+    await db.prepare(`
+      INSERT INTO match_events (match_id, type, data) VALUES (?, 'schedule_change', ?)
+    `).run(after.id, JSON.stringify({ date_changed: dateChanged, venue_changed: venueChanged }));
+    if (conPush) {
+      const body =
+        dateChanged && venueChanged ? 'Cambiaron la fecha/hora y la sede de este partido.'
+        : dateChanged               ? 'Cambió la fecha u hora de este partido.'
+        :                             'Cambió la sede de este partido.';
+      await notifyMatchFollowers(after.id, {
+        eventType: 'schedule_change',
+        title: `📅 Cambio de programación — ${after.home_team} vs ${after.away_team}`,
+        body,
+        url:   `/partidos/${after.id}`,
+      });
+    }
   }
 }
 // Busca si el nombre de equipo (texto libre) coincide con un equipo real
@@ -1439,10 +1462,10 @@ router.put('/matches/:id', authRequired, matchScoreRequired, asyncHandler(async 
   );
 
   const updatedMatch = await db.prepare('SELECT * FROM matches WHERE id = ?').get(m.id);
-  // No bloqueamos la respuesta con el envío de push (puede tardar por red).
+  // No bloqueamos la respuesta con los avisos (el push puede tardar por red).
   // pushNotifier ya captura sus propios errores; aquí solo lo dejamos logueado.
-  pushMatchEditAlerts(m, updatedMatch).catch((err) =>
-    console.error('Error al mandar avisos push de edición de partido:', err)
+  avisosDeEdicionDePartido(m, updatedMatch).catch((err) =>
+    console.error('Error al registrar los avisos de edición de partido:', err)
   );
   res.json(updatedMatch);
 }));
@@ -1466,8 +1489,8 @@ router.patch('/matches/:id/status', authRequired, matchScoreRequired, asyncHandl
   await db.prepare('UPDATE matches SET status = ? WHERE id = ?').run(status, req.match.id);
 
   const updatedMatch = await db.prepare('SELECT * FROM matches WHERE id = ?').get(req.match.id);
-  pushMatchEditAlerts(req.match, updatedMatch).catch((err) =>
-    console.error('Error al mandar avisos push de cambio de estado de partido:', err)
+  avisosDeEdicionDePartido(req.match, updatedMatch).catch((err) =>
+    console.error('Error al registrar los avisos de cambio de estado de partido:', err)
   );
   res.json(updatedMatch);
 }));
