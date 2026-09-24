@@ -62,7 +62,7 @@ export default function TeamPanel({ section = 'resumen' }) {
             ) : (
               <p style={{ color: 'var(--ws-ink-dim)', fontSize: 13 }}>
                 Este equipo todavía no tiene una organización enlazada, así que no se le pueden
-                invitar administradores. Avísanos para revisarlo.
+                invitar a nadie a su staff. Avísanos para revisarlo.
               </p>
             )
           )}

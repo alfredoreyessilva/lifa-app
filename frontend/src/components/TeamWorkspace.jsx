@@ -35,7 +35,10 @@ const SECTIONS = [
   // los campos, adentro. Esconderle a un coach el equipo entero le dejaría un
   // panel vacío, y ese rol existe justamente para mirar.
   { to: '/perfil',            label: 'Perfil',       permisos: ['ver'] },
-  { to: '/administradores',   label: 'Administradores', permisos: ['miembros'] },
+  // "Staff" y no "Administradores" (2026-09-23): ahí están TODOS los roles
+  // —coach, tesorero, editor de roster— y no solo quien administra. La ruta
+  // se queda en /administradores por lo mismo que /jugadores arriba.
+  { to: '/administradores',   label: 'Staff',        permisos: ['miembros'] },
 ];
 
 export default function TeamWorkspace({ team, children }) {

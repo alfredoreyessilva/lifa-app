@@ -7,7 +7,7 @@ import PredictionStats from '../components/PredictionStats.jsx';
 //
 // El panel de EQUIPO ya no vive aquí — se fue a pages/TeamPanel.jsx, que lo
 // convirtió en un espacio de trabajo con secciones (Resumen, Finanzas,
-// Jugadores, Con la liga, Perfil, Administradores) en vez del editor de perfil
+// Padrón, Con la liga, Perfil, Staff) en vez del editor de perfil
 // que era antes. El de liga vive en LeagueStructurePanel.jsx desde antes.
 export default function Dashboard() {
   return (
