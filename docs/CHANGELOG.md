@@ -15,6 +15,23 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El calendario se parte por jornada (2026-09-27)**. Con una sola cuadrícula
+  de dos columnas, la jornada impar dejaba su último partido junto al primero
+  de la siguiente (ONEFA trae 15 y 14 por jornada). Ahora cada tramo lleva un
+  encabezado — "Jornada 3 · 18–19 SEP · 14 partidos" — que se queda pegado bajo
+  la barra de arriba mientras se desliza por sus partidos. El porqué de cada
+  decisión está en "Flujo de la app" del README.
+
+  **Lo que salió al correrlo:** el sticky no pegaba en ninguna página pública,
+  porque `.league-header-panel` recortaba la portada con `overflow: hidden` y
+  eso lo volvía contenedor de scroll; pasó a `overflow: clip`. Y la Jornada 2
+  de ONEFA salía partida en dos tramos: su último partido y un scrimmage
+  arrancan a la misma hora exacta, y el backend ordena solo por fecha, así que
+  el empate sale como caiga. El agrupador acomoda los empates hacia la jornada
+  vecina (es el único caso en los datos). Verificado en navegador contra la
+  rama `desarrollo-local`, en escritorio y a 390 px, en ONEFA y PROFESIONAL;
+  7 pruebas nuevas en `matchDisplay.test.mjs`.
+
 - **"Mis notificaciones": una bandeja por persona, y el push en pausa
   (2026-09-24)**. El modelo está en "Notificaciones: la bandeja y el push" del
   README; aquí va lo que cambió y cómo se comprobó. **Desplegado el mismo día**

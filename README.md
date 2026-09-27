@@ -747,6 +747,13 @@ Dos recorridos de punta a punta en `backend/tests/`. **Nunca contra producción*
 2. Click en liga → página de la liga: portada, logo, nombre, descripción y pestañas (Categorías/Equipos/Sedes), todo dentro de un mismo panel.
 3. Click en categoría → calendario de partidos. Cada tarjeta de partido es un solo link hacia `/partidos/:id` (`MatchPage.jsx`), donde están todos los links de transmisión, todos los de boletos, la sede, la jornada, el botón de "avisarme de este partido" y compartir.
 
+   El calendario se parte en **tramos por jornada**, cada uno con un encabezado (jornada, fechas y cuántos partidos) que se queda pegado bajo la barra de arriba mientras se desliza (`groupByJornada` en `utils/matchDisplay.js`). Tres decisiones:
+   - **No se reordena.** Los tramos son partidos *consecutivos* de la misma jornada, en orden de fecha, que es como la afición busca qué sigue. Un partido reprogramado que cae entre otras jornadas forma su propio tramo con su etiqueta: la misma jornada puede salir dos veces, y es cierto. Reagruparlo lo pondría arriba de partidos que se juegan antes que él.
+   - **Los empates de hora se acomodan.** El backend ordena solo por `match_date`, así que dos partidos a la misma hora exacta salen como caigan. Dentro del empate va primero el de la jornada anterior y al final el de la siguiente; si no, la Jornada 2 de ONEFA salía partida por un scrimmage a la misma hora.
+   - **Solo donde aporta.** Con una sola jornada en pantalla (la vista "Jornada", o un calendario sin jornadas capturadas, que son la mayoría de las categorías chicas) no hay encabezado: no diría nada nuevo. La vista "Equipo" tampoco lo lleva, porque ahí hay un partido por jornada y cada tarjeta ya dice la suya.
+
+   Para que el encabezado se pegue, `TopBar.jsx` publica su alto real en `--topbar-h` (cambia entre escritorio y celular), y `.league-header-panel` usa `overflow: clip` en vez de `hidden`: `hidden` lo volvía contenedor de scroll y el encabezado se iba con la página.
+
 **Cualquier usuario con cuenta:**
 
 1. `/crear-cuenta` → crea su cuenta.

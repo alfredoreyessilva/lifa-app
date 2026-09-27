@@ -1955,6 +1955,76 @@ a { color: inherit; }
   padding-bottom: 64px;
 }
 
+/* ---------- Calendario partido en jornadas (CalendarViewer) ----------
+   Cada jornada es su propia cuadrícula: con una sola, el partido 15 de una
+   jornada quedaba en la misma fila que el primero de la siguiente. El
+   encabezado se pega bajo el topbar (--topbar-h lo publica TopBar.jsx) y
+   lo empuja fuera el de la jornada siguiente, así que al deslizar siempre
+   dice en qué jornada va uno. Mismo verde translúcido que el topbar: pegados,
+   se leen como una sola barra. */
+.jornada-list {
+  padding-bottom: 64px;
+}
+
+.jornada-section + .jornada-section {
+  margin-top: 32px;
+}
+
+.jornada-section .match-grid {
+  padding-bottom: 0;
+}
+
+.jornada-head {
+  position: sticky;
+  top: var(--topbar-h, 64px);
+  z-index: 5;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: rgba(47, 122, 53, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--flag);
+  border-radius: 8px;
+}
+
+.jornada-head-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  color: var(--ink);
+  text-transform: uppercase;
+}
+
+.jornada-head-meta {
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .jornada-head {
+    padding: 8px 12px;
+  }
+
+  .jornada-head-title {
+    font-size: 18px;
+  }
+
+  .jornada-head-meta {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+  }
+}
+
 .match-card-new {
   background: var(--card);
   border: 1px solid var(--line);
@@ -2755,7 +2825,13 @@ a.match-card-new {
 .league-header-panel {
   background: #000;
   border-radius: 16px;
+  /* clip y no hidden: recorta la portada igual, pero no vuelve al panel un
+     contenedor de scroll — con hidden, el encabezado de jornada del
+     calendario (.jornada-head, sticky) se pegaba al panel y no a la
+     pantalla, y se iba con el scroll. hidden queda de respaldo para los
+     navegadores sin clip (Safari < 16), donde solo se pierde lo pegado. */
   overflow: hidden;
+  overflow: clip;
   margin-top: 16px;
 }
 .league-header-panel-body {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getMatchStatus } from '../utils/matchStatus.js';
-import { getMatchParts, initials } from '../utils/matchDisplay.js';
+import { getMatchParts, initials, groupByJornada, jornadaDateRange } from '../utils/matchDisplay.js';
 import { shareLink } from '../utils/share.js';
 import MatchCard from './MatchCard.jsx';
 import CalendarRanking from './CalendarRanking.jsx';
@@ -360,7 +360,7 @@ export default function CalendarViewer({
             <>
               <button className="filter-back" onClick={clearSelection}>← Todos los equipos</button>
               <div className="filter-selected-title">{selected}</div>
-              <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} />
+              <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} byJornada={false} />
             </>
           )}
 
@@ -472,11 +472,36 @@ export default function CalendarViewer({
   );
 }
 
-function MatchGrid({ matches, nextMatchIds }) {
+// Con más de una jornada en la lista, cada tramo lleva su encabezado, que se
+// queda pegado bajo la barra de arriba mientras se desliza por sus partidos.
+// Una sola jornada (o ninguna capturada) se pinta como antes: el encabezado
+// no diría nada que la pantalla no diga ya. La vista "Equipo" lo apaga —
+// ahí hay un partido por jornada y cada tarjeta ya dice la suya.
+function MatchGrid({ matches, nextMatchIds, byJornada = true }) {
   if (matches.length === 0) return <div className="empty-state"><p>No hay partidos en esta selección.</p></div>;
+  const groups = byJornada ? groupByJornada(matches) : [];
+  if (groups.length < 2) {
+    return (
+      <div className="match-grid">
+        {matches.map((m) => <MatchCard key={m.id} match={m} isNext={!!nextMatchIds?.has(m.id)} />)}
+      </div>
+    );
+  }
   return (
-    <div className="match-grid">
-      {matches.map((m) => <MatchCard key={m.id} match={m} isNext={!!nextMatchIds?.has(m.id)} />)}
+    <div className="jornada-list">
+      {groups.map((g) => (
+        <section key={g.key} className="jornada-section">
+          <header className="jornada-head">
+            <h3 className="jornada-head-title">{g.label}</h3>
+            <span className="jornada-head-meta">
+              {jornadaDateRange(g.matches)} · {g.matches.length} partido{g.matches.length !== 1 ? 's' : ''}
+            </span>
+          </header>
+          <div className="match-grid">
+            {g.matches.map((m) => <MatchCard key={m.id} match={m} isNext={!!nextMatchIds?.has(m.id)} />)}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

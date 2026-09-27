@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
@@ -52,13 +52,33 @@ function useNotificacionesNuevas(token) {
   return enLaBandeja ? 0 : nuevas;
 }
 
+// Publica el alto real de la barra en --topbar-h, para que lo que se pega
+// debajo de ella al deslizar (el encabezado de jornada del calendario) sepa
+// dónde pararse. Se mide en vez de fijarse: el alto cambia entre escritorio y
+// celular, y con la marca larga partida en dos renglones.
+function useAltoDeLaBarra(ref) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const publicar = () => {
+      document.documentElement.style.setProperty('--topbar-h', `${el.offsetHeight}px`);
+    };
+    publicar();
+    const observer = new ResizeObserver(publicar);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
+}
+
 export default function TopBar() {
   const { user, token, logout } = useAuth();
   const nuevas = useNotificacionesNuevas(user ? token : null);
   const etiqueta = etiquetaDelContador(nuevas);
+  const barra = useRef(null);
+  useAltoDeLaBarra(barra);
 
   return (
-    <header className="topbar">
+    <header className="topbar" ref={barra}>
       <div className="topbar-inner">
         <Link to="/" className="brand">
           🏈 <span>CALENDARIOS DE FOOTBALL AMERICANO MEXICO</span>
