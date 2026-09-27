@@ -131,6 +131,32 @@ vuelve responsable de una decisión que no le toca. Es la regla 4 vista desde el
 otro lado — con el dato crudo guardado, cualquier criterio se puede aplicar
 después; guardado ya interpretado, no hay vuelta.
 
+**11. Un proceso que abre el agente, lo avisa y lo cierra.** Backend, `vite`,
+`vite preview`, el backend de pruebas del 4100, el navegador de Playwright: lo
+que el agente deja corriendo en segundo plano no se ve desde ninguna terminal
+del usuario. Ya costó dos veces — un `vite` fantasma contestando `200` cuatro
+horas en el 5174 (2026-09-20), y un backend en el 4000 que hizo morir con
+`EADDRINUSE` al que el usuario arrancó en su propia terminal (2026-09-26), que
+es la regla 2 sin que nadie lo decidiera.
+
+- **Si el usuario pide abrir la app en local, se le dan los comandos** para
+  su terminal. El agente no la levanta en paralelo.
+- **Antes de levantar algo, se dice** qué, en qué puerto y para qué — y se
+  revisa que no haya uno viejo: `Get-CimInstance Win32_Process` y la cadena
+  de padres, porque `netstat` no ve al que está a media reiniciada.
+- **Se cierra en cuanto termina lo que lo justificó** (la suite, la
+  verificación con `curl`), en el mismo turno. Ninguna respuesta termina con
+  un proceso vivo sin mencionarlo.
+- **La excepción es una pantalla que el usuario está viendo.** Sus servidores
+  se quedan, y la respuesta dice que siguen abiertos y en qué puerto. Se
+  cierran junto con la pantalla: al cerrar el navegador de Playwright, o
+  cuando el usuario diga que terminó. Si la conversación pasa a otra cosa y
+  siguen abiertos, se pregunta antes de seguir.
+- **Cerrar es comprobar que se cerró.** `TaskStop` no alcanza en Windows:
+  mata el `bash` de arriba y deja `node` escuchando con el padre muerto. Lo
+  que limpia todo es `taskkill /PID <bash de "npm run dev"> /T /F`, y después
+  `netstat` para confirmar que el puerto quedó libre.
+
 ---
 
 ## Convenciones de código
