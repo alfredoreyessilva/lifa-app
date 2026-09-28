@@ -44,9 +44,9 @@ npm test                                      # en cualquiera de los dos: node -
 
 Las pruebas unitarias de los dos lados corren en el CI en cada push (el número
 al día está en `docs/ESTADO.md`, no aquí, para que no se desfase).
-Las **cinco** suites de punta a punta —las dos de cobranza, la de invitaciones
-y roles, la de estadísticas por jugada y la de un equipo en varias ligas—
-**no**: necesitan Postgres vivo. Instrucciones en `backend/tests/README.md`.
+Las **seis** suites de punta a punta —las dos de cobranza, la de invitaciones
+y roles, la de estadísticas por jugada, la de un equipo en varias ligas y la de
+predicciones— **no**: necesitan Postgres vivo. Instrucciones en `backend/tests/README.md`.
 
 ---
 
@@ -198,7 +198,9 @@ lo inventaba el mismo código que se estaba probando.
 - Cambio de cobranza → las dos suites e2e de cobranza contra una rama de Neon,
   antes y después, **más `billing-multiliga.e2e.mjs`** si toca qué liga le cobra
   a quién. Cambio de permisos, invitaciones o entrega de un equipo →
-  `invites-roles.e2e.mjs`, la tercera.
+  `invites-roles.e2e.mjs`, la tercera. Cambio de puntos, ranking o avisos de
+  predicciones → `predicciones.e2e.mjs`, y comparar en solo lectura el ranking
+  de ONEFA antes y después: es el concurso en curso.
 - Cambio de UI → abrirlo en el navegador. Si no se verificó, se dice que no se verificó.
 - Cambio de esquema o de consulta → correrlo contra los datos reales dentro de
   una transacción con `ROLLBACK` y `lock_timeout`, y comprobar que las filas que

@@ -272,7 +272,7 @@ para el push; renombrarla sería una migración que no cambia nada de lo que hac
 |---|---|---|---|
 | Próximo | `notify_upcoming` | Se **calcula al leer**, con la hora del partido | Una hora antes de `match_date` |
 | En vivo | `notify_live` | Se **calcula al leer** | A la hora de `match_date` |
-| Marcador final | `notify_final` | Se **guarda** en `match_events` cuando el marcador pasa de incompleto a completo | Al guardar el marcador |
+| Marcador final | `notify_final` | Se **calcula al leer** con dos horas que sí se **guardan** en `match_events`: cuándo quedó completo el marcador y cuándo se le dio "Finalizar" | Cuando el partido **terminó y tiene marcador** (`gradable_at`, ver abajo) |
 | Cambio de fecha o sede | `notify_changes` | Se **guarda** en `match_events` al editar un partido que todavía no ocurre | Al guardar el cambio |
 
 **Por qué "próximo" y "en vivo" se calculan y no se guardan:** la bandeja se lee
@@ -281,9 +281,10 @@ de ahora. **No dependen del cron**, que es justo lo que tiene detenido al push
 (pasa cada ~4 horas, ver "Cadencia del cron"). Y si la fecha del partido cambia,
 el aviso se mueve con ella sin tocar ninguna fila — regla 4 de `CLAUDE.md`.
 
-**Por qué los otros dos sí se guardan:** importa *cuándo* pasó (el marcador se
-puede capturar dos días después del partido) y el dato de antes ya no existe
-(la fecha vieja se sobrescribió). Se guarda **un registro por partido**, no una
+**Por qué los eventos de `match_events` sí se guardan:** importa *cuándo* pasó
+(el marcador se puede capturar dos días después del partido) y el dato de antes
+ya no existe (la fecha vieja se sobrescribió; `status` no dice desde cuándo es
+`'finished'`). Se guarda **un registro por partido**, no una
 copia por seguidor: quien sigue una liga como ONEFA vería avisos de sus 133
 partidos, y con copias eso se multiplicaría por cada persona que la sigue. El
 texto se arma **al leer** con los datos de hoy: si un marcador se corrige, el
@@ -300,6 +301,107 @@ Tres reglas de armado:
   partido: los anteriores ya no son verdad.
 - Solo cuentan los seguimientos con `in_app` distinto de `FALSE`, y nunca un
   partido en borrador.
+
+### Cuándo terminó un partido: `gradable_at`
+
+Definido el 2026-09-27. **Lo que había:** "Marcador final" se guardaba en cuanto
+el marcador pasaba de incompleto a completo. Pero el organizador sube el
+marcador **parcial** mientras el partido sigue (lo dice `utils/scoring.js`), así
+que el primer 7–0 del primer cuarto ya avisaba "Marcador final". Medido en
+producción ese día: 3 de los 14 marcadores de ONEFA se capturaron durante el
+partido. Las predicciones, en cambio, nunca calificaron con eso: esperan a
+`MATCH_IS_FINAL_SQL`. Con los avisos de predicción en la misma bandeja, las dos
+cosas iban a decir cosas distintas del mismo partido.
+
+Ahora hay **una sola hora de "el partido terminó"**, y la usan el aviso de
+marcador final y el de tu predicción (`MATCH_GRADABLE_AT_SQL` en
+`utils/scoring.js`). Solo existe si el partido ya es calificable
+(`MATCH_GRADABLE_SQL`, el mismo criterio que reparte los puntos), y es la más
+tardía de dos:
+
+| Hora | De dónde sale |
+|---|---|
+| Cuándo quedó completo el marcador | El evento `final_score`. Si el partido se importó ya con marcador y no tiene evento, `matches.created_at` |
+| Cuándo terminó | Con `status = 'finished'`: el último evento `finished`, que se guarda cuando el estado **pasa** a `'finished'` (`PUT` o `PATCH …/status`). Si no hay evento —un partido viejo, o importado ya terminado—, `match_date` + la ventana de la categoría. Con auto-status: `match_date` + la ventana |
+
+El evento `final_score` se sigue guardando igual; lo que cambió es que ya no
+basta para avisar. Se agregó `finished` y no se reusó `final_score` porque son
+dos cosas que pasan a horas distintas, y la bandeja necesita las dos.
+
+### Los avisos de tus predicciones
+
+Definido el 2026-09-27. Votar no es seguir: hasta aquí, quien solo predecía —el
+único usuario que no administra nada, y la función con más uso real (36 personas
+y 1,778 predicciones en ONEFA al 2026-09-27)— no recibía nada en su bandeja.
+Tenía que ir al calendario a ver si acertó y en qué lugar iba.
+
+Es un **tercer origen**, `prediction`, junto a `organization` y `follow`. Igual que
+"próximo" y "en vivo", **se calcula al leer**: no hay tabla nueva ni una fila por
+aviso, y si un marcador se corrige, el aviso dice lo que vale ahora (regla 4).
+No hace falta seguir nada: basta con haber votado.
+
+| Tipo | Qué dice | Cuándo aparece |
+|---|---|---|
+| `prediction_result` | "✅ Acertaste · +2 pts" o "❌ No se dio", con el marcador y cuánta gente votó como tú | Por cada partido que votaste, en su `gradable_at`. Los amistosos no, porque no reparten puntos |
+| `prediction_round` | "Jornada 4: acertaste 9 de 14 · +9 pts · vas 4.º de 36 (↑2)", más una línea por cada quiniela tuya | Al cerrar una jornada en la que votaste |
+| `prediction_reminder` | "Te faltan 6 partidos de la Jornada 5 · el primero empieza el viernes 18:00" | 24 horas antes del primer partido de una jornada, en un calendario donde ya votaste. Se quita solo cuando votas todos o cuando ya no queda ninguno por empezar |
+
+Si sigues un partido **y** lo predijiste, llega un solo aviso: el de tu
+predicción, que ya trae el marcador. Es la misma regla de "un aviso por
+partido" de lo que sigues.
+
+**El ranking de un aviso es el del calendario.** "El ranking" no existe en la
+base: es la lista de partidos que manda el calendario que estás viendo
+(`/predictions/ranking?matchIds=`). En la práctica esa lista es **una rama**
+(`TournamentPage`) o, en el modelo viejo sin ramas, **una categoría**
+(`CalendarPage`). El aviso usa ese mismo alcance: la rama del partido, o su
+categoría si no tiene rama. ONEFA es uno solo, la rama Varonil del Colegial
+Universitario.
+
+**La jornada** es `week_label`, y si un partido no tiene, su fecha. Una jornada
+**cierra** cuando todos sus partidos ya jugados (`match_date` en el pasado) son
+calificables. Un partido pospuesto a una fecha futura no la detiene; uno jugado
+y sin marcador sí, igual que detiene la tabla de posiciones. La hora del corte
+es el `gradable_at` más tardío de la jornada; si después se juega el pospuesto,
+el corte se recorre y el resumen se actualiza.
+
+**El lugar se calcula repitiendo el ranking en cada corte** (`utils/rankingPredicciones.js`):
+los puntos de lo que ya calificaba en ese momento, las predicciones hechas
+hasta entonces y el mismo desempate de la pestaña Ranking. Tres decisiones:
+
+- **Un empate exacto comparte lugar.** El lugar es 1 más los que van
+  estrictamente arriba. Antes la lista pintaba `i + 1`, y dos personas con los
+  mismos puntos, aciertos, calificadas y total salían 3.º y 4.º en un orden que
+  la base no garantiza. Desde este cambio la lista y la imagen del ranking
+  muestran el mismo número que el aviso (`position` en la respuesta), o se
+  contradirían.
+- **Participantes** son quienes tienen al menos una predicción que cuenta en
+  ese alcance hasta ese corte, como en la lista pública. En una quiniela, sus
+  miembros, como en su ranking.
+- **Los hitos** comparan el lugar del corte anterior con el de ahora. Avisan al
+  **subir** al top 10, al top 3 o al 1.º —el mejor umbral cruzado, y solo si hay
+  más participantes que el umbral: un top 10 entre ocho personas no es nada—, y
+  cuando **te quitan el 1.º**, aunque no hayas votado esa jornada. Bajar del
+  top 10 o del top 3 no se avisa. El hito es el título del resumen; el del
+  calendario va antes que el de una quiniela.
+
+**Por qué el recordatorio no se manda a todos:** solo sale en un calendario
+donde ya votaste. Quien nunca predijo no lo pidió, y el recordatorio le
+llegaría cada semana por cada liga que sigue.
+
+**Cuánto cuesta calcularlo al leer.** El balón pregunta en cada cambio de
+página, así que esto corre seguido. Tus alcances son los calendarios donde
+votaste algún partido de los últimos 60 días, y de ellos se traen todos los
+partidos y todas las predicciones, porque tu lugar depende de los demás.
+Medido contra ONEFA el 2026-09-27, desde una computadora en México: 133
+partidos en ~220 ms y 1,778 predicciones en ~140 ms. Todo lo demás (el
+ranking repetido en cinco cortes para 36 personas) es JavaScript sobre esas
+filas. Si una liga llegara a decenas de miles de predicciones por rama, lo
+primero sería dejar de repasarlo en `/mine/unread` y contar solo lo nuevo.
+
+**Al desplegar** no se inventa un punto de partida: quien votó la jornada 4 de
+ONEFA (25 y 26 de septiembre) y no ha abierto su bandeja verá esos resultados
+como nuevos. Es exactamente lo que se quiere que vea.
 
 ### Lo nuevo y el numerito del balón
 
@@ -393,6 +495,18 @@ Se retiran `GET /notifications/league/:id`, `GET /notifications/team/:id`,
   el WhatsApp que manda el tesorero.
 - Marcar leído aviso por aviso, o borrar avisos.
 - Correo.
+- **Apagar los avisos de predicción.** Salen de algo que hiciste tú (votar), y
+  no hay dónde poner la casilla: no son un seguimiento. Si estorban, la
+  salida es una preferencia por persona, no por partido.
+- Otras ideas que se evaluaron el 2026-09-27 con datos que ya existen, y que
+  quedaron para después: rachas ("llevas 5 aciertos seguidos"); "alguien se
+  unió a tu quiniela" (`pool_members.joined_at`); "este partido se transmite
+  por X" a quien lo sigue (`match_broadcasts`, hoy solo le llega a la liga); el
+  récord en el marcador final ("ganó y va 5–1"); un resumen de jornada para
+  quien sigue una liga entera en vez de un aviso por partido; campeón o
+  clasificado (sin datos mientras ONEFA no tenga competencia configurada,
+  PD-14); y, para la liga, la actividad de su afición ("Jornada 5: 312
+  predicciones de 36 aficionados") y sus hitos de seguidores.
 
 ## Respaldos
 
@@ -560,7 +674,15 @@ lifa-app/
                               quién aparece en la lista de un partido y cómo se
                               cuenta el acumulado. También puro; su consulta es
                               la MISMA para el público y para el pase de lista,
-                              y lo único que cambia son las columnas que salen)
+                              y lo único que cambia son las columnas que salen),
+                              scoring.js (los PUNTOS de una predicción y cuándo
+                              terminó un partido, `gradable_at`: fragmentos SQL),
+                              rankingPredicciones.js (el ORDEN del ranking, el
+                              lugar compartido en un empate y el ranking
+                              repetido jornada por jornada. Puro),
+                              bandeja.js (las reglas puras de "Mis
+                              notificaciones": quién lee qué, y los avisos de lo
+                              que sigues y de tus predicciones)
       seed.js                Datos de ejemplo para desarrollo local
     scripts/                 Scripts de diagnóstico y limpieza de un solo uso.
                               Los de SOLO LECTURA usan `pg` directo y sin
@@ -2885,6 +3007,20 @@ Desde el modelo de competencia (sección anterior), los 2 puntos de fase final
 salen de la **fase resuelta** y no de la etiqueta de jornada escrita a mano. Eso
 arregló un caso real: una liga que le llama "Liguilla" a su fase final antes no
 repartía los 2 puntos, porque esa etiqueta no estaba en una lista hardcodeada.
+
+Lo mismo quedó para **qué es un amistoso** el 2026-09-27: el ranking del
+calendario y "mis estadísticas" todavía preguntaban por la etiqueta
+(`week_label = 'SCRIMMAGE'`) y el de la quiniela por la fase
+(`MATCH_IS_EXHIBITION_SQL`). Medido en producción antes de cambiarlo: de 1,778
+predicciones, las dos preguntas coincidían en todas (6 en amistoso), así que
+unificarlo no movió a nadie del concurso. Ahora los tres preguntan a la fase.
+
+**El orden también vive en un solo lugar** desde ese día
+(`utils/rankingPredicciones.js`): puntos → aciertos → calificadas → total, y un
+empate exacto **comparte lugar** (`position` en la respuesta). Lo usan los dos
+rankings y los avisos de "Mis notificaciones" —ver "Los avisos de tus
+predicciones"—, que avisan si acertaste y en qué lugar vas al cerrar cada
+jornada.
 
 ### Dos alcances: el calendario y tu grupo
 

@@ -9,9 +9,13 @@ import { runMonthlyChargeGeneration } from '../utils/monthlyCharges.js';
 import { runOncePerDay, registrarLlamada, podarBitacora } from '../utils/cronSchedule.js';
 import { pushEncendido } from '../utils/pushNotifier.js';
 import {
-  filtrosDeBandeja, avisosDeSeguimiento, contarNuevos, juntarBandeja, esNuevo,
+  filtrosDeBandeja, avisosDeSeguimiento, avisosDePrediccion, sinMarcadorRepetido,
+  contarNuevos, juntarBandeja, esNuevo,
   DIAS_DE_BANDEJA, LIMITE_DE_BANDEJA,
 } from '../utils/bandeja.js';
+import {
+  MATCH_GRADABLE_AT_SQL, MATCH_IS_EXHIBITION_SQL, PREDICTION_CORRECT_SQL, PREDICTION_POINTS_SQL,
+} from '../utils/scoring.js';
 
 const router = express.Router();
 
@@ -683,7 +687,8 @@ async function avisosDeLoQueSigue(userId, ahora) {
   const partidos = await db.prepare(`
     SELECT m.id, m.match_date, m.timezone, m.home_team, m.away_team,
            m.home_score, m.away_score, m.category_id,
-           c.league_id, l.name AS league_name
+           c.league_id, l.name AS league_name,
+           ${MATCH_GRADABLE_AT_SQL} AS gradable_at
     FROM matches m
     JOIN categories c   ON c.id = m.category_id
     LEFT JOIN leagues l ON l.id = c.league_id
@@ -719,6 +724,101 @@ async function avisosDeLoQueSigue(userId, ahora) {
   }));
 }
 
+// Los avisos de tus predicciones (README, "Los avisos de tus predicciones"):
+// el resultado de cada partido que votaste, tu lugar al cerrar cada jornada
+// —en el calendario y en tus quinielas— y lo que te falta votar. Qué aviso
+// sale lo decide avisosDePrediccion(), que es pura; aquí solo se traen los
+// datos, con los puntos calificados por utils/scoring.js, que es el único
+// lugar donde viven.
+//
+// Tus alcances son los calendarios (rama, o categoría sin rama) donde votaste
+// algún partido de los últimos 60 días: una temporada que ya terminó no se
+// vuelve a repasar en cada cambio de página. De esos alcances se traen TODOS
+// los partidos y TODAS las predicciones, porque tu lugar depende de los demás.
+// En ONEFA son ~130 partidos y ~1,800 predicciones.
+async function avisosDePredicciones(userId, ahora) {
+  const partidos = await db.prepare(`
+    WITH mis_alcances AS (
+      SELECT DISTINCT m.branch_id, m.category_id
+      FROM predictions p
+      JOIN matches m ON m.id = p.match_id
+      WHERE p.user_id = ?
+        AND m.match_date::timestamptz > NOW() - INTERVAL '60 days'
+    )
+    SELECT m.id, m.branch_id, m.category_id, c.tournament_id,
+           m.week_label, m.match_date, m.timezone,
+           m.home_team, m.away_team, m.home_score, m.away_score,
+           l.name AS league_name, c.name AS category_name, b.name AS branch_name,
+           ${MATCH_GRADABLE_AT_SQL} AS gradable_at,
+           ${MATCH_IS_EXHIBITION_SQL} AS exhibition
+    FROM matches m
+    JOIN categories c    ON c.id = m.category_id
+    LEFT JOIN leagues l  ON l.id = c.league_id
+    LEFT JOIN branches b ON b.id = m.branch_id
+    WHERE m.is_draft = FALSE
+      AND EXISTS (
+        SELECT 1 FROM mis_alcances a
+        WHERE a.branch_id = m.branch_id
+           OR (a.branch_id IS NULL AND m.branch_id IS NULL AND a.category_id = m.category_id)
+      )
+  `).all(userId);
+  if (partidos.length === 0) return [];
+
+  // `created_at` es TIMESTAMP sin zona, guardado en UTC: se convierte antes de
+  // salir, igual que en avisosDeOrganizaciones().
+  const [predicciones, filasDeQuinielas] = await Promise.all([
+    db.prepare(`
+      SELECT p.user_id, p.match_id, p.pick,
+             p.created_at AT TIME ZONE 'UTC' AS created_at,
+             ${PREDICTION_CORRECT_SQL} AS correct,
+             ${PREDICTION_POINTS_SQL} AS points
+      FROM predictions p
+      JOIN matches m    ON m.id = p.match_id
+      JOIN categories c ON c.id = m.category_id
+      WHERE p.match_id = ANY(?::int[])
+    `).all(partidos.map((p) => p.id)),
+    db.prepare(`
+      SELECT po.id, po.name, po.join_code, todos.user_id
+      FROM pool_members yo
+      JOIN pools po           ON po.id = yo.pool_id
+      JOIN pool_members todos ON todos.pool_id = po.id
+      WHERE yo.user_id = ?
+    `).all(userId),
+  ]);
+
+  const quinielas = new Map();
+  for (const f of filasDeQuinielas) {
+    if (!quinielas.has(f.id)) quinielas.set(f.id, { id: f.id, name: f.name, join_code: f.join_code, miembros: [] });
+    quinielas.get(f.id).miembros.push(f.user_id);
+  }
+
+  return avisosDePrediccion({
+    userId, partidos, predicciones, quinielas: [...quinielas.values()], ahora,
+  }).map((a) => ({
+    key: a.key,
+    origin: 'prediction',
+    type: a.type,
+    url: a.url,
+    at: a.at,
+    data: a.data,
+    match: {
+      id: a.partido.id,
+      home_team: a.partido.home_team,
+      away_team: a.partido.away_team,
+      home_score: a.partido.home_score,
+      away_score: a.partido.away_score,
+      match_date: a.partido.match_date,
+      timezone: a.partido.timezone,
+      league_name: a.partido.league_name,
+    },
+    scope: {
+      league_name: a.partido.league_name,
+      category_name: a.partido.category_name,
+      branch_name: a.partido.branch_name,
+    },
+  }));
+}
+
 // La bandeja completa de una persona y hasta dónde la vio. Con `soloNuevos`,
 // los avisos de organizaciones se piden ya filtrados desde esa marca: es lo
 // que pregunta el balón de arriba en cada cambio de página.
@@ -735,11 +835,16 @@ async function armarBandeja(userId, { soloNuevos = false } = {}) {
   const vistoHasta = usuario?.seen_at ?? ahora;
 
   const organizaciones = await organizacionesDe(userId);
-  const [deOrganizaciones, deLoQueSigue] = await Promise.all([
+  const [deOrganizaciones, deLoQueSigue, dePredicciones] = await Promise.all([
     avisosDeOrganizaciones(organizaciones, soloNuevos ? vistoHasta : null),
     avisosDeLoQueSigue(userId, ahora),
+    avisosDePredicciones(userId, ahora),
   ]);
-  const items = juntarBandeja([deOrganizaciones, deLoQueSigue]);
+  const items = juntarBandeja([
+    deOrganizaciones,
+    sinMarcadorRepetido(deLoQueSigue, dePredicciones),
+    dePredicciones,
+  ]);
   return { items, vistoHasta, ahora, unread: contarNuevos(items, vistoHasta, ahora) };
 }
 

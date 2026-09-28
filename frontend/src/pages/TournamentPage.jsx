@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import TeamCard from '../components/TeamCard.jsx';
 import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
@@ -20,8 +20,15 @@ export default function TournamentPage() {
   const [data, setData]   = useState(null);
   const [error, setError] = useState('');
 
+  // La rama puede venir en el link (`?rama=`): así llegan los avisos de "Mis
+  // notificaciones" al ranking o a la jornada de ESA rama, sin pasar por los
+  // pasos de elegir categoría y rama. Se queda en la URL mientras esté elegida,
+  // para que el link que se comparte la conserve.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const ramaDelLink = Number(searchParams.get('rama')) || null;
+
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
-  const [selectedBranchId,   setSelectedBranchId]   = useState(null);
+  const [selectedBranchId,   setSelectedBranchId]   = useState(ramaDelLink);
   const [selectedTeam,       setSelectedTeam]       = useState(null);
   const [copied, setCopied] = useState(false);
 
@@ -34,10 +41,19 @@ export default function TournamentPage() {
 
   useEffect(() => {
     setData(null); setError('');
-    setSelectedCategoryId(null); setSelectedBranchId(null); setSelectedTeam(null);
+    setSelectedCategoryId(null); setSelectedBranchId(ramaDelLink); setSelectedTeam(null);
     setView('calendar'); setStandings({}); setStandingsError('');
     api.getTournamentPublic(tournamentId).then(setData).catch((e) => setError(e.message));
-  }, [tournamentId]);
+  }, [tournamentId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (selectedBranchId) params.set('rama', String(selectedBranchId));
+      else params.delete('rama');
+      return params;
+    }, { replace: true });
+  }, [selectedBranchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function copyLink() {
     navigator.clipboard.writeText(window.location.href).then(() => {
@@ -85,6 +101,11 @@ export default function TournamentPage() {
     }
   }
 
+  // La rama del link (`?rama=`) que no es de este torneo se ignora; una que
+  // sí, deja elegida también su categoría, para saltarse los dos pasos.
+  const branchId   = branchesAll.some((b) => b.id === selectedBranchId) ? selectedBranchId : null;
+  const categoryId = selectedCategoryId ?? branchesAll.find((b) => b.id === branchId)?.category_id ?? null;
+
   // `mode` decide qué se pinta: elegir categoría, elegir rama, o ya ir
   // directo al calendario. `infoLabel` es la categoría/rama como texto
   // informativo (se muestra siempre que se conozca, aunque se haya
@@ -105,33 +126,33 @@ export default function TournamentPage() {
   } else if (categories.length === 1) {
     // Una sola categoría: la categoría es info, se elige rama directo.
     infoLabel = categories[0].name;
-    if (!selectedBranchId) {
+    if (!branchId) {
       mode = 'pick-branch';
       options = branchesAll;
     } else {
-      matchesToShow = matches.filter((m) => m.branch_id === selectedBranchId);
-      activeBranchId = selectedBranchId;
-      const b = branchesAll.find((x) => x.id === selectedBranchId);
+      matchesToShow = matches.filter((m) => m.branch_id === branchId);
+      activeBranchId = branchId;
+      const b = branchesAll.find((x) => x.id === branchId);
       infoLabel = `${categories[0].name} · ${b?.name || ''}`;
     }
-  } else if (!selectedCategoryId) {
+  } else if (!categoryId) {
     mode = 'pick-category';
     options = categories;
   } else {
-    const branchesHere = branchesAll.filter((b) => b.category_id === selectedCategoryId);
-    const cat = categories.find((c) => c.id === selectedCategoryId);
+    const branchesHere = branchesAll.filter((b) => b.category_id === categoryId);
+    const cat = categories.find((c) => c.id === categoryId);
     if (branchesHere.length <= 1) {
-      matchesToShow = matches.filter((m) => m.category_id === selectedCategoryId);
+      matchesToShow = matches.filter((m) => m.category_id === categoryId);
       activeBranchId = branchesHere[0]?.id || null;
       infoLabel = branchesHere[0] ? `${cat.name} · ${branchesHere[0].name}` : cat.name;
-    } else if (!selectedBranchId) {
+    } else if (!branchId) {
       mode = 'pick-branch';
       options = branchesHere;
       infoLabel = cat.name;
     } else {
-      matchesToShow = matches.filter((m) => m.branch_id === selectedBranchId);
-      activeBranchId = selectedBranchId;
-      const b = branchesHere.find((x) => x.id === selectedBranchId);
+      matchesToShow = matches.filter((m) => m.branch_id === branchId);
+      activeBranchId = branchId;
+      const b = branchesHere.find((x) => x.id === branchId);
       infoLabel = `${cat.name} · ${b?.name || ''}`;
     }
   }
@@ -149,7 +170,9 @@ export default function TournamentPage() {
     setView('calendar');
     if (categories.length === 1) {
       setSelectedBranchId(null);
-    } else if (selectedBranchId && branchesAll.filter((b) => b.category_id === selectedCategoryId).length > 1) {
+    } else if (branchId && branchesAll.filter((b) => b.category_id === categoryId).length > 1) {
+      // Vuelve a las ramas de ESA categoría, aunque haya llegado por el link.
+      setSelectedCategoryId(categoryId);
       setSelectedBranchId(null);
     } else {
       setSelectedCategoryId(null);

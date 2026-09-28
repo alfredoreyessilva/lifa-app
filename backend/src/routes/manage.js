@@ -99,6 +99,16 @@ async function avisosDeEdicionDePartido(before, after) {
     await db.prepare('UPDATE matches SET notified_final = TRUE WHERE id = ?').run(after.id);
   }
 
+  // 1b. Terminó: el estado PASÓ a 'finished'. Es la otra mitad de "cuándo
+  //     terminó el partido" (`gradable_at`, utils/scoring.js): el marcador de
+  //     arriba se captura a veces a media partida, y `status` no dice desde
+  //     cuándo es 'finished'. Solo bandeja; el push no lo usa.
+  if (after.status === 'finished' && before.status !== 'finished') {
+    await db.prepare(`
+      INSERT INTO match_events (match_id, type) VALUES (?, 'finished')
+    `).run(after.id);
+  }
+
   // 2. Arranque manual: el organizador marcó "en vivo" antes de que el cron
   //    lo detectara (o en una categoría sin auto-status). Solo es push: la
   //    bandeja calcula "en vivo" con la hora del partido.

@@ -19,19 +19,52 @@ import { MATCH_PHASE_TYPE_SQL, ELIMINATION_TYPES } from './matchPhase.js';
 // Las consultas que usen estos fragmentos deben tener en el FROM:
 //   JOIN matches m ON ...
 //   JOIN categories c ON c.id = m.category_id
+
+// El fin nominal: la hora del partido más la ventana de juego de su categoría.
+const NOMINAL_END_SQL = `(m.match_date::timestamptz + (COALESCE(c.auto_status_window_hours, 3) || ' hours')::interval)`;
+
 export const MATCH_IS_FINAL_SQL = `
   (
     m.status = 'finished'
     OR (
       m.status = 'scheduled'
       AND COALESCE(c.auto_status_enabled, FALSE) = TRUE
-      AND NOW() >= (m.match_date::timestamptz + (COALESCE(c.auto_status_window_hours, 3) || ' hours')::interval)
+      AND NOW() >= ${NOMINAL_END_SQL}
     )
   )
 `;
 
 // El partido ya se puede calificar: terminó y tiene marcador capturado.
 export const MATCH_GRADABLE_SQL = `(${MATCH_IS_FINAL_SQL} AND m.home_score IS NOT NULL AND m.away_score IS NOT NULL)`;
+
+// CUÁNDO quedó calificable (README, "Cuándo terminó un partido:
+// `gradable_at`"). Es la hora de "el partido terminó" que usan el aviso de
+// marcador final y el de tu predicción en "Mis notificaciones", para que nunca
+// digan cosas distintas del mismo partido. NULL si todavía no califica.
+//
+// Es la más tardía de dos horas:
+//   - la del marcador completo: el evento `final_score`, o la fila misma si se
+//     importó ya con marcador;
+//   - la del final: el último evento `finished` si se le dio "Finalizar" (sin
+//     evento, un partido de antes de que existiera, el fin nominal), o el fin
+//     nominal si terminó por auto-status.
+// `matches.created_at` es TIMESTAMP sin zona guardado en UTC: se convierte
+// antes de comparar contra los TIMESTAMPTZ de `match_events`.
+export const MATCH_GRADABLE_AT_SQL = `
+  CASE WHEN ${MATCH_GRADABLE_SQL} THEN GREATEST(
+    COALESCE(
+      (SELECT MIN(me.created_at) FROM match_events me WHERE me.match_id = m.id AND me.type = 'final_score'),
+      m.created_at AT TIME ZONE 'UTC'
+    ),
+    CASE WHEN m.status = 'finished'
+      THEN COALESCE(
+        (SELECT MAX(me.created_at) FROM match_events me WHERE me.match_id = m.id AND me.type = 'finished'),
+        ${NOMINAL_END_SQL}
+      )
+      ELSE ${NOMINAL_END_SQL}
+    END
+  ) END
+`;
 
 // La predicción `p` acertó (el partido ya es calificable y el pick coincide
 // con el resultado).

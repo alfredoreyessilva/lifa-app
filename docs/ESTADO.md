@@ -4,7 +4,7 @@ Una foto de qué productos hay y a qué nivel está cada uno, para no tener que
 reconstruirla leyendo el README. Lo que falta vive en
 [`PENDIENTES.md`](PENDIENTES.md), con ID y prioridad; aquí solo se nombra.
 
-**Actualizado: 2026-09-24.** Cuando un producto cambia de nivel, su renglón se
+**Actualizado: 2026-09-27.** Cuando un producto cambia de nivel, su renglón se
 mueve en el mismo commit que lo movió.
 
 ## Los niveles
@@ -45,6 +45,7 @@ respaldos se resolvieron el 2026-09-23.
 | Tabla de posiciones | 4 | Verificada contra datos reales (2026-09-16) | PD-14 |
 | Transmisiones | 4 | Sin medir | — |
 | Avisos push de partido | **En pausa** | Funcionaban de punta a punta (verificado 2026-09-23), pero con **0 dispositivos** con push y un cron que atrapa casi ninguna ventana. Apagados desde el 2026-09-24 | PD-02 |
+| Avisos de tus predicciones en Mis notificaciones (resultado, lugar al cerrar la jornada, te falta votar) | 3 | Verificado el 2026-09-27 contra `desarrollo-local` (`predicciones.e2e.mjs` y recorrido en el navegador, escritorio y celular) y contra el concurso real de ONEFA en solo lectura: la tabla que calculan los avisos coincide con el ranking público en las 36 personas | Desplegar |
 | Mis notificaciones (una bandeja por persona) y seguir partidos | 4 | Verificado el 2026-09-24 contra `desarrollo-local` (`invites-roles.e2e.mjs` y recorrido en el navegador, escritorio y celular) y desplegado ese día: `push-status` responde `enabled: false`, las rutas viejas dan 404 y la página de un partido de ONEFA dice "Seguir este partido" | — |
 | Afiliados de viaje | Vuelo 4 · Hotel 2 | Hotel no genera comisión | Siguiente alcance |
 
@@ -70,7 +71,7 @@ respaldos se resolvieron el 2026-09-23.
 | Disponibilidad | ⚠️ Render gratuito: **41.5 s** en frío (medido 2026-09-23) | PD-03 |
 | Cron | ⚠️ Una llamada cada ~4 h (GitHub). El externo de antes ya no llama. Alcanza para la cobranza, no para los avisos de partido | PD-02 (P2) |
 | Monitoreo | Sentry en frontend y backend ✅ · caída del servicio ❌ | PD-12 |
-| Pruebas | **336 unitarias** (196 backend + 140 frontend) en el CI ✅ · **5 suites e2e** que se corren a mano | PD-11, PD-25 |
+| Pruebas | **368 unitarias** (221 backend + 147 frontend) en el CI ✅ · **6 suites e2e** que se corren a mano | PD-11, PD-25 |
 | Despliegue | Push a `main` = producción, sin protección ni espera al CI | PD-11 |
 | Seguridad | JWT obligatorio, límite de intentos en login y en el estado de cuenta público, CORS con lista, SQL parametrizado, candado contra producción, invitaciones que caducan a los 7 días ✅ | PD-04, PD-20, PD-21 |
 | Páginas legales | ✅ Completas desde el 2026-09-19 | — |

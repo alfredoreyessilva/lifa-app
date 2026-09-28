@@ -200,7 +200,10 @@ export async function generateRankingCard(ranking, formatKey, header = {}) {
     }
 
     // badge de posición — top 3 en amarillo, el resto en tinta tenue
-    const isPodium = i < 3;
+    // El lugar viene del backend: un empate exacto comparte número
+    // (utils/rankingPredicciones.js), así que el podio es por lugar, no por fila.
+    const pos = r.position ?? i + 1;
+    const isPodium = pos <= 3;
     ctx.beginPath();
     ctx.arc(listX + padX + badgeR, midY, badgeR, 0, Math.PI * 2);
     ctx.fillStyle = isPodium ? theme.flag : 'rgba(255,255,255,0.12)';
@@ -209,7 +212,7 @@ export async function generateRankingCard(ranking, formatKey, header = {}) {
     ctx.font = `700 ${Math.round(badgeR * 1.05)}px ${theme.fontDisplay}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(i + 1), listX + padX + badgeR, midY + 1);
+    ctx.fillText(String(pos), listX + padX + badgeR, midY + 1);
 
     // nombre + detalle
     ctx.textAlign = 'left';

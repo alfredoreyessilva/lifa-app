@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
-import { textoDeSeguimiento, EVENTO_NOTIFICACIONES_VISTAS } from '../utils/misNotificaciones.js';
+import { textoDeSeguimiento, textoDePrediccion, EVENTO_NOTIFICACIONES_VISTAS } from '../utils/misNotificaciones.js';
 
 // "Mis notificaciones": UNA bandeja por persona (README, "Notificaciones: la
 // bandeja y el push"). Junta los avisos de las organizaciones que administras
@@ -59,6 +59,11 @@ const TYPE_META = {
   live:            { icon: '🔴', label: 'En vivo',        color: 'var(--live)',     cta: 'Ver partido →' },
   final_score:     { icon: '🏆', label: 'Marcador final', color: 'var(--paper)',    cta: 'Ver partido →' },
   schedule_change: { icon: '📅', label: 'Cambio',         color: 'var(--ink-dim)', cta: 'Ver partido →' },
+  // Tus predicciones (utils/bandeja.js › avisosDePrediccion). El del resultado
+  // cambia de ícono según acertaste, así que su texto lo trae.
+  prediction_result:   { icon: '🎯', label: 'Tu predicción', color: 'var(--paper)',   cta: 'Ver partido →' },
+  prediction_round:    { icon: '🏅', label: 'Ranking',       color: 'var(--flag)',    cta: 'Ver ranking →' },
+  prediction_reminder: { icon: '🗳️', label: 'Por votar',     color: 'var(--flag)',    cta: 'Votar →' },
 };
 
 const SIN_META = { icon: '📢', label: 'Aviso', color: 'var(--ink-dim)' };
@@ -84,14 +89,28 @@ function Origen({ item }) {
       </span>
     );
   }
+  if (item.origin === 'prediction') {
+    return (
+      <span className="notification-origin">
+        <span className="notification-origin-logo">🎯</span>
+        {item.scope?.league_name ? `Tus predicciones · ${item.scope.league_name}` : 'Tus predicciones'}
+      </span>
+    );
+  }
   return null;
+}
+
+// Los de organización traen su texto guardado; los de lo que sigues y los de
+// tus predicciones se arman al leer, con los datos de hoy.
+function textoDe(item) {
+  if (item.origin === 'follow') return textoDeSeguimiento(item);
+  if (item.origin === 'prediction') return textoDePrediccion(item);
+  return { title: item.title, body: item.body };
 }
 
 function NotificationItem({ item }) {
   const meta = TYPE_META[item.type] || SIN_META;
-  const { title, body } = item.origin === 'follow'
-    ? textoDeSeguimiento(item)
-    : { title: item.title, body: item.body };
+  const { title, body, icon } = textoDe(item);
 
   return (
     <div className={`notification-item${item.is_new ? ' notification-item--new' : ''}`}>
@@ -104,7 +123,7 @@ function NotificationItem({ item }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
-        <span style={{ fontSize: 16 }} aria-hidden="true">{meta.icon}</span>
+        <span style={{ fontSize: 16 }} aria-hidden="true">{icon || meta.icon}</span>
         <span className="notification-item-title">{title}</span>
         <span
           className="tag"
@@ -122,7 +141,7 @@ function NotificationItem({ item }) {
       </div>
 
       {body && (
-        <span className="notification-item-body" style={{ marginTop: 4, lineHeight: 1.4 }}>
+        <span className="notification-item-body" style={{ marginTop: 4, lineHeight: 1.4, whiteSpace: 'pre-line' }}>
           {body}
         </span>
       )}
@@ -189,7 +208,7 @@ export default function Notifications() {
         <div className="empty-state" style={{ padding: '36px 20px', background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 8, marginTop: 12 }}>
           <h3 style={{ marginBottom: 8 }}>Sin notificaciones todavía</h3>
           <p style={{ color: 'var(--ink-dim)', fontSize: 14, margin: 0 }}>
-            Sigue un partido o a un equipo y aquí te llegan sus avisos. Si administras una liga o un club, aquí llegan también los suyos.
+            Sigue un partido o a un equipo y aquí te llegan sus avisos. Si predices quién gana, aquí te enteras de si acertaste y en qué lugar vas. Si administras una liga o un club, aquí llegan también los suyos.
           </p>
         </div>
       )}

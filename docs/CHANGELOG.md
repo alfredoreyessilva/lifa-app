@@ -15,6 +15,51 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Los avisos de tus predicciones llegan a "Mis notificaciones"
+  (2026-09-27)**. El modelo está en "Los avisos de tus predicciones" y "Cuándo
+  terminó un partido: `gradable_at`" del README. **Subido a `main` el mismo
+  día**, a pedido de Alfredo y con los tres P0 abiertos.
+
+  **Lo que lo pidió:** quien solo predecía no recibía nada en su bandeja. Tenía
+  que ir al calendario a ver si acertó y en qué lugar iba. Ahora llegan tres
+  avisos, calculados al leer y sin tabla nueva: el resultado de cada partido
+  que votaste, con cuánta gente votó igual; tu lugar al cerrar cada jornada,
+  en el calendario y en tus quinielas, con hitos al entrar al top 10, al top 3
+  o al 1.º y al perder el 1.º; y lo que te falta votar, 24 horas antes de la
+  jornada.
+
+  **Lo que se encontró al definirlo, y se arregló:**
+  - **"Marcador final" salía a media partida.** Se guardaba con el primer
+    marcador completo, y el organizador sube el parcial durante el juego: 3 de
+    14 marcadores de ONEFA se capturaron así. Ahora sale cuando el partido
+    terminó y tiene marcador (`gradable_at`), para lo cual `match_events` guarda
+    también cuándo se le dio "Finalizar" (tipo nuevo `finished`).
+  - **El ranking del calendario y el de la quiniela no excluían lo mismo.** Uno
+    preguntaba por la etiqueta `SCRIMMAGE` y el otro por la fase. Se midió en
+    producción (coincidían en las 1,778 predicciones) y se unificó a la fase.
+    El orden, que estaba copiado en los dos, vive ahora en
+    `utils/rankingPredicciones.js`.
+  - **Un empate exacto salía como 3.º y 4.º** en un orden que la base no
+    garantiza. Ahora comparte lugar (`position`), en la lista, en la imagen del
+    ranking y en el aviso.
+
+  **Verificación:**
+  - `predicciones.e2e.mjs` (nueva, 28 comprobaciones) e `invites-roles.e2e.mjs`
+    (141, ajustada al marcador final nuevo) contra `desarrollo-local`.
+  - 25 unitarias nuevas en el backend y 7 en el frontend.
+  - En solo lectura contra el concurso real de ONEFA, las 36 personas tienen
+    los mismos puntos, aciertos, calificadas y total que en el ranking público;
+    solo cambia un lugar, un empate exacto en el 33.º.
+  - Recorrido en el navegador, a 1280 y a 390 px: la bandeja, "Ver ranking",
+    que abre la pestaña del ranking (`?tab=ranking`, y `?rama=` en un torneo), y
+    "Votar", que abre la jornada.
+
+  **Lo que salió al correrlo:**
+  - En la jornada 0 de ONEFA (un solo partido) varios quedaban empatados en el
+    1.º, y a todos les decía "¡Vas 1.º!". Ahora dice "Compartes el 1.º lugar".
+  - El cierre de la jornada quedaba debajo del resultado del partido que la
+    cerró, porque tienen la misma hora; ahora va arriba.
+
 - **El calendario se parte por jornada (2026-09-27)**. Con una sola cuadrícula
   de dos columnas, la jornada impar dejaba su último partido junto al primero
   de la siguiente (ONEFA trae 15 y 14 por jornada). Ahora cada tramo lleva un

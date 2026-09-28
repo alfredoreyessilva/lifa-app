@@ -5,6 +5,7 @@ import { authRequired } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isNonEmptyString } from '../utils/validation.js';
 import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL, PREDICTION_POINTS_SQL, MATCH_IS_EXHIBITION_SQL } from '../utils/scoring.js';
+import { conPosiciones, porcentaje } from '../utils/rankingPredicciones.js';
 
 const router = express.Router();
 
@@ -123,28 +124,23 @@ router.get('/:code/ranking', authRequired, asyncHandler(async (req, res) => {
     `).all(...matchIds, pool.id);
   }
 
-  const ranking = rows
-    .map((r) => {
-      const total   = Number(r.total);
-      const graded  = Number(r.graded);
-      const correct = Number(r.correct);
-      const points  = Number(r.points ?? 0);
-      return {
-        userId: r.user_id,
-        name: r.name,
-        total,
-        graded,
-        correct,
-        points,
-        accuracyPct: graded > 0 ? Math.round((correct / graded) * 100) : null,
-      };
-    })
-    .sort((a, b) =>
-      b.points - a.points ||
-      b.correct - a.correct ||
-      b.graded - a.graded ||
-      b.total - a.total
-    );
+  // Mismo orden y mismo lugar compartido que el ranking del calendario
+  // (utils/rankingPredicciones.js).
+  const ranking = conPosiciones(rows.map((r) => {
+    const total   = Number(r.total);
+    const graded  = Number(r.graded);
+    const correct = Number(r.correct);
+    const points  = Number(r.points ?? 0);
+    return {
+      userId: r.user_id,
+      name: r.name,
+      total,
+      graded,
+      correct,
+      points,
+      accuracyPct: porcentaje(correct, graded),
+    };
+  }));
 
   res.json({ pool: { name: pool.name, joinCode: pool.join_code }, ranking });
 }));

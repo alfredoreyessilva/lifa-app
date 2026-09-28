@@ -177,7 +177,9 @@ export default function CalendarViewer({
   // link de una sola jornada de un solo grupo (ej. Jornada 1 de 14 Grandes).
   const [subJornada, setSubJornada] = useState(initialSubJornada);
   const [now, setNow]           = useState(Date.now());
-  const [tab, setTab]           = useState('calendario');
+  // `?tab=ranking` abre directo en el ranking: es a donde lleva el aviso de
+  // "cerró la jornada" de Mis notificaciones.
+  const [tab, setTab]           = useState(searchParams.get('tab') === 'ranking' ? 'ranking' : 'calendario');
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 30_000);
@@ -185,14 +187,20 @@ export default function CalendarViewer({
   }, []);
 
   // Mantiene la URL sincronizada con el filtro activo (vista + selección +
-  // sub-jornada), así el link que se comparte siempre refleja lo que se ve.
+  // sub-jornada + pestaña), así el link que se comparte siempre refleja lo que
+  // se ve. Solo toca SUS parámetros: los del padre (la `rama` que preselecciona
+  // TournamentPage) se quedan, o el link compartido perdería la rama.
   useEffect(() => {
-    const params = {};
-    if (view !== 'completo') params.view = view;
-    if (selected) params.sel = selected;
-    if (view === 'grupo' && selected && subJornada) params.jornada = subJornada;
-    setSearchParams(params, { replace: true });
-  }, [view, selected, subJornada]); // eslint-disable-line react-hooks/exhaustive-deps
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      for (const k of ['view', 'sel', 'jornada', 'tab']) params.delete(k);
+      if (view !== 'completo') params.set('view', view);
+      if (selected) params.set('sel', selected);
+      if (view === 'grupo' && selected && subJornada) params.set('jornada', subJornada);
+      if (tab === 'ranking') params.set('tab', 'ranking');
+      return params;
+    }, { replace: true });
+  }, [view, selected, subJornada, tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function changeView(v) { setView(v); setSelected(null); setSubJornada(null); setCopied(false); }
 

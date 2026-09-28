@@ -2,7 +2,8 @@ import express from 'express';
 import db from '../config/db.js';
 import { authRequired, optionalAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL, PREDICTION_POINTS_SQL } from '../utils/scoring.js';
+import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL, PREDICTION_POINTS_SQL, MATCH_IS_EXHIBITION_SQL } from '../utils/scoring.js';
+import { conPosiciones, porcentaje } from '../utils/rankingPredicciones.js';
 
 const router = express.Router();
 
@@ -85,8 +86,11 @@ router.get('/summary', optionalAuth, asyncHandler(async (req, res) => {
 // Mis estadísticas de predicciones: cuántas lleva en total, cuántas ya se
 // pueden calificar (el partido YA TERMINÓ y tiene marcador guardado — no basta
 // con que haya marcador parcial mientras sigue en vivo, ver scoring.js) y
-// cuántas acertó. El % solo se calcula sobre las calificadas. Los partidos
-// de scrimmage no cuentan (igual que en el ranking).
+// cuántas acertó. El % solo se calcula sobre las calificadas. Los amistosos
+// no cuentan (igual que en el ranking). Desde el 2026-09-27 eso se pregunta a
+// la FASE (MATCH_IS_EXHIBITION_SQL), como el ranking de la quiniela, y no a la
+// etiqueta 'SCRIMMAGE': medido en producción, las dos coincidían en todas las
+// predicciones, así que no movió a nadie.
 router.get('/my-stats', authRequired, asyncHandler(async (req, res) => {
   const row = await db.prepare(`
     SELECT
@@ -97,7 +101,7 @@ router.get('/my-stats', authRequired, asyncHandler(async (req, res) => {
     JOIN matches m ON m.id = p.match_id
     JOIN categories c ON c.id = m.category_id
     WHERE p.user_id = ?
-      AND m.week_label IS DISTINCT FROM 'SCRIMMAGE'
+      AND NOT ${MATCH_IS_EXHIBITION_SQL}
   `).get(req.user.id);
 
   const total   = Number(row.total);
@@ -109,7 +113,7 @@ router.get('/my-stats', authRequired, asyncHandler(async (req, res) => {
     graded,
     correct,
     pending: total - graded,
-    accuracyPct: graded > 0 ? Math.round((correct / graded) * 100) : null,
+    accuracyPct: porcentaje(correct, graded),
   });
 }));
 
@@ -149,36 +153,29 @@ router.get('/ranking', asyncHandler(async (req, res) => {
     JOIN categories c ON c.id = m.category_id
     JOIN users u   ON u.id = p.user_id
     WHERE p.match_id IN (${placeholders})
-      AND m.week_label IS DISTINCT FROM 'SCRIMMAGE'
+      AND NOT ${MATCH_IS_EXHIBITION_SQL}
     GROUP BY u.id, u.name
     HAVING COUNT(*) >= ?
   `).all(...matchIds, MIN_PREDICTIONS_FOR_RANKING);
 
-  const ranking = rows
-    .map((r) => {
-      const total   = Number(r.total);
-      const graded  = Number(r.graded);
-      const correct = Number(r.correct);
-      const points  = Number(r.points);
-      return {
-        userId: r.user_id,
-        name: r.name,
-        total,
-        graded,
-        correct,
-        points,
-        accuracyPct: graded > 0 ? Math.round((correct / graded) * 100) : null,
-      };
-    })
-    // El ganador se define por PUNTOS. Los desempates finos (rachas, sorpresas,
-    // etc.) los resuelve quien organice un concurso, leyendo esta tabla — aquí
-    // solo se rompe el empate con datos que ya tenemos, para dar un orden.
-    .sort((a, b) =>
-      b.points - a.points ||
-      b.correct - a.correct ||
-      b.graded - a.graded ||
-      b.total - a.total
-    );
+  // El orden y el lugar (`position`, compartido en un empate exacto) salen de
+  // utils/rankingPredicciones.js, igual que en la quiniela y en los avisos de
+  // "Mis notificaciones": un aviso que dice "vas 4.º" da el mismo número.
+  const ranking = conPosiciones(rows.map((r) => {
+    const total   = Number(r.total);
+    const graded  = Number(r.graded);
+    const correct = Number(r.correct);
+    const points  = Number(r.points);
+    return {
+      userId: r.user_id,
+      name: r.name,
+      total,
+      graded,
+      correct,
+      points,
+      accuracyPct: porcentaje(correct, graded),
+    };
+  }));
 
   res.json(ranking);
 }));

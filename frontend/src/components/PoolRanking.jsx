@@ -110,7 +110,7 @@ function PoolRankingList({ code, matchIds, header = {} }) {
           <div className="ranking-list">
             {data.ranking.map((r, i) => (
               <div key={r.userId} className={`ranking-row${user?.id === r.userId ? ' ranking-row--me' : ''}`}>
-                <div className="ranking-pos">{i + 1}</div>
+                <div className="ranking-pos">{r.position ?? i + 1}</div>
                 <div className="ranking-name">{r.name}{user?.id === r.userId ? ' (tú)' : ''}</div>
                 <div className="ranking-detail">
                   {r.graded > 0

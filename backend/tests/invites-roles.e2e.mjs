@@ -445,10 +445,24 @@ for (let i = 0; i < 20 && finales.length === 0; i++) {
   finales = (await pool.query("SELECT id FROM match_events WHERE match_id=$1 AND type='final_score'", [MATCH])).rows;
 }
 ok(finales.length === 1, 'capturar el marcador deja UN "marcador final" en match_events', `filas=${finales.length}`);
-const delFan = (await call('/notifications/mine', { token: FAN })).data.items || [];
-const finalDelFan = delFan.find((i) => i.type === 'final_score' && i.match?.id === MATCH);
+// Pero el partido es de octubre y nadie lo ha finalizado: ese marcador puede
+// ser el parcial del primer cuarto. Desde el 2026-09-27 el aviso espera a que
+// el partido termine (README, "Cuándo terminó un partido: `gradable_at`").
+const finalDe = async () => ((await call('/notifications/mine', { token: FAN })).data.items || [])
+  .find((i) => i.type === 'final_score' && i.match?.id === MATCH);
+ok(!(await finalDe()), 'con el marcador capturado y el partido sin terminar, NO dice "marcador final"');
+
+const finalizar = await call(`/manage/matches/${MATCH}/status`, { method: 'PATCH', token: VISOR, body: { status: 'finished' } });
+ok(finalizar.status === 200, 'el VISOR le da "Finalizar"', `=${finalizar.status}`);
+let terminados = [];
+for (let i = 0; i < 20 && terminados.length === 0; i++) {
+  await new Promise((r) => setTimeout(r, 150));
+  terminados = (await pool.query("SELECT id FROM match_events WHERE match_id=$1 AND type='finished'", [MATCH])).rows;
+}
+ok(terminados.length === 1, 'finalizar deja la hora en que terminó (evento "finished")', `filas=${terminados.length}`);
+const finalDelFan = await finalDe();
 ok(!!finalDelFan && finalDelFan.match.home_score === 21 && finalDelFan.is_new === true,
-  'y le llega al aficionado a Mis notificaciones, con el marcador y como nuevo', JSON.stringify(delFan).slice(0, 200));
+  'y ahora sí le llega al aficionado a Mis notificaciones, con el marcador y como nuevo', JSON.stringify(finalDelFan).slice(0, 200));
 
 // La bandeja de la liga, por permiso. Antes el visor y el tesorero de liga no
 // veían nada: la bandeja de la liga pedía `estructura`.

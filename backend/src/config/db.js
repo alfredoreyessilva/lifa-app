@@ -2300,6 +2300,22 @@ export async function initSchema() {
     // con todos sus avisos viejos contados como nuevos.
     await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Cuándo TERMINÓ un partido (README, "Cuándo terminó un partido:
+    // `gradable_at`", 2026-09-27). `status = 'finished'` no dice desde cuándo,
+    // y el aviso de marcador final y el de predicción necesitan esa hora: el
+    // marcador parcial se captura durante el partido, así que la hora del
+    // `final_score` sola no alcanza. Se guarda cuando el estado PASA a
+    // 'finished' (routes/manage.js). Sin índice único, a diferencia de
+    // `final_score`: un partido se puede reabrir y volver a finalizar, y vale
+    // el último.
+    //
+    // El CHECK se rehace (DROP + ADD es idempotente; ADD solo, no), el patrón
+    // de organizations_type_check. Regla 6: el tipo lo escribe manage.js y lo
+    // lee utils/scoring.js; el frontend nunca lo ve.
+    await run(`ALTER TABLE match_events DROP CONSTRAINT IF EXISTS match_events_type_check`);
+    await run(`ALTER TABLE match_events ADD CONSTRAINT match_events_type_check CHECK (type IN ('final_score', 'schedule_change', 'finished'))`);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se
