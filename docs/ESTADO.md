@@ -45,7 +45,7 @@ respaldos se resolvieron el 2026-09-23.
 | Tabla de posiciones | 4 | Verificada contra datos reales (2026-09-16) | PD-14 |
 | Transmisiones | 4 | Sin medir | — |
 | Avisos push de partido | **En pausa** | Funcionaban de punta a punta (verificado 2026-09-23), pero con **0 dispositivos** con push y un cron que atrapa casi ninguna ventana. Apagados desde el 2026-09-24 | PD-02 |
-| Avisos de tus predicciones en Mis notificaciones (resultado, lugar al cerrar la jornada, te falta votar) | 3 | Verificado el 2026-09-27 contra `desarrollo-local` (`predicciones.e2e.mjs` y recorrido en el navegador, escritorio y celular) y contra el concurso real de ONEFA en solo lectura: la tabla que calculan los avisos coincide con el ranking público en las 36 personas | Desplegar |
+| Avisos de tus predicciones en Mis notificaciones (resultado, lugar al cerrar la jornada, te falta votar) | 4 | Verificado el 2026-09-27 contra `desarrollo-local` (`predicciones.e2e.mjs` y recorrido en el navegador, escritorio y celular) y contra el concurso real de ONEFA en solo lectura: la tabla que calculan los avisos coincide con el ranking público en las 36 personas. Desplegado ese día (`1d531dd`): el ranking de ONEFA en producción ya responde `position`, con un solo lugar compartido (el 33.º) | — |
 | Mis notificaciones (una bandeja por persona) y seguir partidos | 4 | Verificado el 2026-09-24 contra `desarrollo-local` (`invites-roles.e2e.mjs` y recorrido en el navegador, escritorio y celular) y desplegado ese día: `push-status` responde `enabled: false`, las rutas viejas dan 404 y la página de un partido de ONEFA dice "Seguir este partido" | — |
 | Afiliados de viaje | Vuelo 4 · Hotel 2 | Hotel no genera comisión | Siguiente alcance |
 

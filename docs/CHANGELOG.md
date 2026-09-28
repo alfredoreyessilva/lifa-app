@@ -17,8 +17,9 @@ entradas traen el post-mortem del bug que las provocó.
 
 - **Los avisos de tus predicciones llegan a "Mis notificaciones"
   (2026-09-27)**. El modelo está en "Los avisos de tus predicciones" y "Cuándo
-  terminó un partido: `gradable_at`" del README. **Subido a `main` el mismo
-  día**, a pedido de Alfredo y con los tres P0 abiertos.
+  terminó un partido: `gradable_at`" del README. **Desplegado el mismo día**
+  (`1d531dd`), a pedido de Alfredo y con los tres P0 abiertos: el CI pasó,
+  Vercel publicó y Render responde el ranking con `position`.
 
   **Lo que lo pidió:** quien solo predecía no recibía nada en su bandeja. Tenía
   que ir al calendario a ver si acertó y en qué lugar iba. Ahora llegan tres
