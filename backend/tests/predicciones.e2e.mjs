@@ -181,6 +181,33 @@ await call('/notifications/mine/seen', { method: 'POST', token: F1 });
 ok((await nuevas(F1)) === 0, 'y se pone en cero al abrir la bandeja', `=${await nuevas(F1)}`);
 ok((await nuevas(F3)) >= 2, 'solo para F1: lo visto es de cada persona', `=${await nuevas(F3)}`);
 
+console.log('\n=== 6. Un aviso que nace con hora del pasado también prende el balón ===');
+// README, "Lo nuevo y el numerito del balón". Una jornada detenida por un
+// partido jugado y sin marcador se destraba al posponerlo, y cierra con la
+// hora de su último partido calificado: ANTES de que F1 abriera su bandeja.
+// Con la marca sola, el balón lo daba por visto (el top 10 de ONEFA del
+// 2026-09-28 se perdió igual, al desplegar los avisos de predicciones).
+await moverA(M3, '-5 hours');
+await moverA(M4, '-4 hours');
+await call(`/manage/matches/${M3}`, { method: 'PUT', token: LIGA, body: { home_score: 3, away_score: 0 } });
+const finM3 = await call(`/manage/matches/${M3}/status`, { method: 'PATCH', token: LIGA, body: { status: 'finished' } });
+ok(finM3.status === 200 && (await esperarEvento(M3, 'finished')) === 1,
+  'termina el partido 3; el 4 ya se jugó y no tiene marcador');
+ok(!deTipo(await bandeja(F1), 'prediction_round').some((i) => i.data?.jornada?.week_label === '2'),
+  'la jornada 2 no cierra: la detiene el partido 4');
+const vista = await call('/notifications/mine/seen', { method: 'POST', token: F1 });
+ok((await nuevas(F1)) === 0, 'F1 abre su bandeja: el balón en cero', `=${await nuevas(F1)}`);
+
+await moverA(M4, '3 days');
+const cierre2 = deTipo(await bandeja(F1), 'prediction_round').find((i) => i.data?.jornada?.week_label === '2');
+ok(!!cierre2 && new Date(cierre2.at) < new Date(vista.data.seen_at),
+  'la liga pospone el 4: la jornada 2 cierra con una hora anterior a la marca de F1',
+  JSON.stringify({ at: cierre2?.at, seen_at: vista.data.seen_at }));
+ok(cierre2?.is_new === true, 'y la bandeja lo pinta como nuevo', JSON.stringify(cierre2).slice(0, 200));
+ok((await nuevas(F1)) === 1, 'el balón lo cuenta, y solo a él: el resultado del 3 ya estaba', `=${await nuevas(F1)}`);
+await call('/notifications/mine/seen', { method: 'POST', token: F1 });
+ok((await nuevas(F1)) === 0, 'al abrir la bandeja otra vez, vuelve a cero', `=${await nuevas(F1)}`);
+
 console.log(`\n========  ${pass} ok, ${fail} fallas  ========`);
 await pool.end();
 process.exit(fail ? 1 : 0);

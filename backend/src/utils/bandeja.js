@@ -428,14 +428,25 @@ export function sinMarcadorRepetido(deLoQueSigue, dePredicciones) {
   return deLoQueSigue.filter((a) => !(a.type === 'final_score' && predichos.has(a.match?.id)));
 }
 
-// Lo nuevo: después de hasta dónde ya viste, y nunca en el futuro.
-export function esNuevo(at, vistoHasta, ahora) {
-  const t = new Date(at).getTime();
-  return t > new Date(vistoHasta).getTime() && t <= ahora.getTime();
+// Lo nuevo (README, "Lo nuevo y el numerito del balón"). Nunca en el futuro, y
+// una de dos:
+//   - su hora es posterior a hasta dónde ya viste (`vistoHasta`), o
+//   - es un aviso CALCULADO y no estaba en la bandeja la última vez que la
+//     abriste (`vistos`, un Set de `key`). Su hora es la de lo que pasó, no la
+//     de cuándo empezó a existir: una jornada que se destraba días después
+//     nace con la hora de su cierre, y la marca sola la daba por vista.
+// Los de organización son filas que nacen a la hora que dicen, así que les
+// basta la marca. `vistos` en null: la persona no ha abierto la bandeja desde
+// que se guardan, y cuenta solo la marca.
+export function esNuevo(aviso, { vistoHasta, vistos = null }, ahora) {
+  const t = new Date(aviso.at).getTime();
+  if (t > ahora.getTime()) return false;
+  if (t > new Date(vistoHasta).getTime()) return true;
+  return aviso.origin !== 'organization' && vistos != null && !vistos.has(aviso.key);
 }
 
-export function contarNuevos(avisos, vistoHasta, ahora) {
-  return avisos.filter((a) => esNuevo(a.at, vistoHasta, ahora)).length;
+export function contarNuevos(avisos, marca, ahora) {
+  return avisos.filter((a) => esNuevo(a, marca, ahora)).length;
 }
 
 // Las dos listas en una, lo más nuevo arriba.

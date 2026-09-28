@@ -2316,6 +2316,17 @@ export async function initSchema() {
     await run(`ALTER TABLE match_events DROP CONSTRAINT IF EXISTS match_events_type_check`);
     await run(`ALTER TABLE match_events ADD CONSTRAINT match_events_type_check CHECK (type IN ('final_score', 'schedule_change', 'finished'))`);
 
+    // Qué avisos CALCULADOS había en la bandeja la última vez que la persona la
+    // abrió (README, "Lo nuevo y el numerito del balón", 2026-09-28). La marca
+    // de arriba sola no alcanza: un aviso calculado puede nacer con una hora
+    // anterior a ella —una jornada que se destraba al posponer un partido, un
+    // tipo de aviso recién desplegado— y el balón lo daba por visto.
+    //
+    // Sin DEFAULT, a propósito: NULL es "no ha abierto la bandeja desde este
+    // cambio" y cuenta solo la marca. Un `{}` contaría como nuevos todos sus
+    // avisos calculados.
+    await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_seen_keys TEXT[]`);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se

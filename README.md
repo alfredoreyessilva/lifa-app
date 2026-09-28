@@ -401,7 +401,10 @@ primero sería dejar de repasarlo en `/mine/unread` y contar solo lo nuevo.
 
 **Al desplegar** no se inventa un punto de partida: quien votó la jornada 4 de
 ONEFA (25 y 26 de septiembre) y no ha abierto su bandeja verá esos resultados
-como nuevos. Es exactamente lo que se quiere que vea.
+como nuevos. Es exactamente lo que se quiere que vea. Quien sí la había abierto
+después del cierre no los vio contar en el balón, porque la marca decía que ya
+los había visto; se arregló el 2026-09-28 (ver "Lo nuevo y el numerito del
+balón").
 
 ### Lo nuevo y el numerito del balón
 
@@ -422,6 +425,46 @@ recién llegados.
 La marca arranca **en el momento de la migración** para todos los usuarios que
 ya existen. Si arrancara vacía, cada administrador amanecería con todos sus
 avisos viejos contados como nuevos.
+
+**Un aviso calculado puede nacer con una hora del pasado, y la marca sola no lo
+ve.** Los de organización son filas que nacen a la hora que dicen. Los de lo que
+sigues y los de tus predicciones se calculan al leer, y su hora es la de **lo
+que pasó** —el fin del partido, el cierre de la jornada—, no la de cuándo
+empezaron a existir. Casi siempre coinciden. Dejan de coincidir cuando algo
+destraba un aviso después:
+
+- se pospone el partido jugado y sin marcador que detenía una jornada: la
+  jornada cierra con la hora de su último partido calificado, que puede ser de
+  hace días;
+- se corrige la fecha de un partido que ya tenía marcador, o se publica tarde
+  un borrador;
+- se despliega un tipo de aviso nuevo: todos los de los últimos 30 días
+  aparecen de golpe, cada uno con su hora de entonces.
+
+El último es el que se vio el 2026-09-28. La jornada 4 de ONEFA cerró el sábado
+26 a las 19:00 y metió a Alfredo al top 10; los avisos de predicciones se
+desplegaron el domingo en la noche. Su marca ya era posterior al cierre, así
+que el aviso nació "ya visto" y el balón no lo contó.
+
+Por eso, además de la marca, la bandeja **recuerda qué avisos calculados había
+cuando la abriste** (`users.notifications_seen_keys`, la `key` de cada uno). Un
+aviso calculado es nuevo si su hora es posterior a la marca **o** si no estaba
+entre esos. Tres detalles:
+
+- **Se guardan todos los calculados, no solo los 100 que enseña la lista.** Si
+  se guardaran solo esos, el día que uno de en medio desaparece —votaste y se
+  quitó el recordatorio— el que entra por abajo parecería nuevo sin serlo.
+- **Los de organización siguen solo con la marca.** La única forma de que uno
+  aparezca tarde es ganar un permiso —entrar a una organización, subir de
+  rol—, y eso no debe prender el balón con toda la historia de la organización.
+- **`NULL` es "no has abierto la bandeja desde este cambio"**: cuenta solo la
+  marca, como antes. Llenarla al migrar habría costado calcular la bandeja de
+  todos los usuarios, y dejarla vacía (`{}`) habría contado como nuevos todos
+  sus avisos calculados.
+
+Una `key` es un nombre: cambiar cómo se arma (`round-…`, `prediction-…`) hace
+que ese tipo cuente como nuevo una vez para todos. Lo mismo, a propósito, un
+tipo de aviso nuevo.
 
 El balón amarillo de la barra de arriba enseña **cuántos avisos nuevos hay**
 (hasta "9+"). Se actualiza al abrir la app, al cambiar de página y al volver a

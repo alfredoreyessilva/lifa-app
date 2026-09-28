@@ -15,6 +15,30 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El balón cuenta los avisos que nacen con hora del pasado (2026-09-28)**.
+  El modelo está en "Lo nuevo y el numerito del balón" del README.
+
+  **Lo que lo pidió:** Alfredo entró al top 10 de ONEFA y el balón no se
+  prendió, aunque el aviso sí estaba en su bandeja. Leído en producción, en
+  solo lectura: el aviso (`round-rama-17-J:4`, 10.º de 36) tiene la hora del
+  cierre de la jornada 4, el sábado 26 a las 19:00, pero empezó a existir al
+  desplegar los avisos de predicciones el domingo en la noche. Su marca de
+  "visto hasta" ya era posterior al cierre, así que nació "ya visto".
+
+  **La causa es general, no del despliegue:** los avisos calculados llevan la
+  hora de lo que pasó, no la de cuándo empezaron a existir, y la marca sola no
+  distingue. Pasa también cuando se pospone el partido que detenía una
+  jornada, cuando se corrige la fecha de un partido que ya tenía marcador o
+  cuando se publica tarde un borrador. Ahora abrir la bandeja guarda además
+  qué avisos calculados había (`users.notifications_seen_keys`), y uno que no
+  estaba cuenta como nuevo aunque su hora sea anterior. Los de organización
+  siguen solo con la marca.
+
+  **Verificado** contra `desarrollo-local`: `predicciones.e2e.mjs` tiene un
+  paso nuevo con el caso de la jornada que se destraba al posponer un
+  partido. Con el código anterior falla (el balón en 0); con el nuevo pasa
+  (35/35). `invites-roles.e2e.mjs` 141/141, y 224 unitarias del backend.
+
 - **Los avisos de tus predicciones llegan a "Mis notificaciones"
   (2026-09-27)**. El modelo está en "Los avisos de tus predicciones" y "Cuándo
   terminó un partido: `gradable_at`" del README. **Desplegado el mismo día**

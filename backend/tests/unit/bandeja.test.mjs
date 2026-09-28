@@ -418,12 +418,36 @@ test('el alcance es la rama; sin rama, la categoría del modelo viejo', () => {
 // ── 3. Lo nuevo ───────────────────────────────────────────────────────────
 
 test('nuevo es después de lo visto y nunca en el futuro', () => {
-  const visto = antes(2);
-  assert.equal(esNuevo(antes(1), visto, AHORA), true);
-  assert.equal(esNuevo(antes(2), visto, AHORA), false, 'justo en la marca ya se vio');
-  assert.equal(esNuevo(antes(3), visto, AHORA), false);
-  assert.equal(esNuevo(despues(1), visto, AHORA), false);
-  assert.equal(contarNuevos([{ at: antes(1) }, { at: antes(3) }, { at: antes(0.5) }], visto, AHORA), 2);
+  const marca = { vistoHasta: antes(2) };
+  const aviso = (at) => ({ key: 'x', origin: 'organization', at });
+  assert.equal(esNuevo(aviso(antes(1)), marca, AHORA), true);
+  assert.equal(esNuevo(aviso(antes(2)), marca, AHORA), false, 'justo en la marca ya se vio');
+  assert.equal(esNuevo(aviso(antes(3)), marca, AHORA), false);
+  assert.equal(esNuevo(aviso(despues(1)), marca, AHORA), false);
+  assert.equal(contarNuevos([aviso(antes(1)), aviso(antes(3)), aviso(antes(0.5))], marca, AHORA), 2);
+});
+
+// El caso del 2026-09-28: el cierre de la jornada 4 de ONEFA (top 10) nació con
+// la hora del sábado, después de que la persona ya había abierto su bandeja.
+test('un aviso calculado que nace con hora del pasado es nuevo si no estaba cuando abriste la bandeja', () => {
+  const marca = { vistoHasta: antes(2), vistos: new Set(['prediction-1']) };
+  const cierre = { key: 'round-rama-17-J:4', origin: 'prediction', at: antes(24) };
+  assert.equal(esNuevo(cierre, marca, AHORA), true);
+  assert.equal(esNuevo({ ...cierre, key: 'prediction-1' }, marca, AHORA), false, 'el que sí estaba ya se vio');
+  assert.equal(esNuevo({ ...cierre, origin: 'follow', key: 'final_score-9' }, marca, AHORA), true,
+    'igual con los de lo que sigues');
+  assert.equal(esNuevo({ ...cierre, at: despues(1) }, marca, AHORA), false, 'ni así en el futuro');
+});
+
+test('uno de organización con hora del pasado no cuenta: ganar un permiso no prende el balón con la historia', () => {
+  const marca = { vistoHasta: antes(2), vistos: new Set() };
+  assert.equal(esNuevo({ key: 'n-5', origin: 'organization', at: antes(24) }, marca, AHORA), false);
+});
+
+test('sin claves guardadas (no ha abierto la bandeja desde el cambio) cuenta solo la marca', () => {
+  const marca = { vistoHasta: antes(2), vistos: null };
+  assert.equal(esNuevo({ key: 'round-rama-17-J:4', origin: 'prediction', at: antes(24) }, marca, AHORA), false);
+  assert.equal(esNuevo({ key: 'round-rama-17-J:5', origin: 'prediction', at: antes(1) }, marca, AHORA), true);
 });
 
 test('juntarBandeja: lo más nuevo arriba, con tope', () => {

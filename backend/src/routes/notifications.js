@@ -819,44 +819,58 @@ async function avisosDePredicciones(userId, ahora) {
   }));
 }
 
-// La bandeja completa de una persona y hasta dónde la vio. Con `soloNuevos`,
-// los avisos de organizaciones se piden ya filtrados desde esa marca: es lo
-// que pregunta el balón de arriba en cada cambio de página.
+// La bandeja completa de una persona y lo que ya vio (la marca y los avisos
+// calculados que había; ver esNuevo()). Con `soloNuevos`, los avisos de
+// organizaciones se piden ya filtrados desde la marca: es lo que pregunta el
+// balón de arriba en cada cambio de página.
 async function armarBandeja(userId, { soloNuevos = false } = {}) {
   // "Ahora" es la hora de la BASE, no la del proceso: los avisos, los eventos y
   // la marca de "visto hasta" los fecha Postgres, y si el reloj de Node va
   // atrasado, lo recién creado parece del futuro y no cuenta como nuevo. No es
   // teórico: la suite e2e lo encontró con Neon tres segundos adelante de la
   // máquina local.
-  const usuario = await db.prepare(
-    'SELECT notifications_seen_at AS seen_at, NOW() AS ahora FROM users WHERE id = ?'
-  ).get(userId);
+  const usuario = await db.prepare(`
+    SELECT notifications_seen_at AS seen_at, notifications_seen_keys AS seen_keys, NOW() AS ahora
+    FROM users WHERE id = ?
+  `).get(userId);
   const ahora = usuario?.ahora ? new Date(usuario.ahora) : new Date();
-  const vistoHasta = usuario?.seen_at ?? ahora;
+  const marca = {
+    vistoHasta: usuario?.seen_at ?? ahora,
+    vistos: usuario?.seen_keys ? new Set(usuario.seen_keys) : null,
+  };
 
   const organizaciones = await organizacionesDe(userId);
-  const [deOrganizaciones, deLoQueSigue, dePredicciones] = await Promise.all([
-    avisosDeOrganizaciones(organizaciones, soloNuevos ? vistoHasta : null),
-    avisosDeLoQueSigue(userId, ahora),
-    avisosDePredicciones(userId, ahora),
+  const [deOrganizaciones, { deLoQueSigue, dePredicciones }] = await Promise.all([
+    avisosDeOrganizaciones(organizaciones, soloNuevos ? marca.vistoHasta : null),
+    avisosCalculados(userId, ahora),
   ]);
   const items = juntarBandeja([
     deOrganizaciones,
     sinMarcadorRepetido(deLoQueSigue, dePredicciones),
     dePredicciones,
   ]);
-  return { items, vistoHasta, ahora, unread: contarNuevos(items, vistoHasta, ahora) };
+  return { items, marca, ahora, unread: contarNuevos(items, marca, ahora) };
+}
+
+// Los avisos que se calculan al leer: los de lo que sigues y los de tus
+// predicciones. Los de organización no, porque son filas.
+async function avisosCalculados(userId, ahora) {
+  const [deLoQueSigue, dePredicciones] = await Promise.all([
+    avisosDeLoQueSigue(userId, ahora),
+    avisosDePredicciones(userId, ahora),
+  ]);
+  return { deLoQueSigue, dePredicciones };
 }
 
 router.get('/mine', authRequired, asyncHandler(async (req, res) => {
-  const { items, vistoHasta, ahora, unread } = await armarBandeja(req.user.id);
+  const { items, marca, ahora, unread } = await armarBandeja(req.user.id);
   res.json({
     items: items.map((a) => ({
       ...a,
       at: new Date(a.at).toISOString(),
-      is_new: esNuevo(a.at, vistoHasta, ahora),
+      is_new: esNuevo(a, marca, ahora),
     })),
-    seen_at: new Date(vistoHasta).toISOString(),
+    seen_at: new Date(marca.vistoHasta).toISOString(),
     unread,
   });
 }));
@@ -867,14 +881,23 @@ router.get('/mine/unread', authRequired, asyncHandler(async (req, res) => {
   res.json({ unread });
 }));
 
-// Abrir "Mis notificaciones" mueve la marca a ahora. Lo leído es de la
-// persona: que un administrador vea un aviso no lo marca para los demás.
+// Abrir "Mis notificaciones" mueve la marca a ahora y guarda qué avisos
+// calculados había en ese momento. Lo leído es de la persona: que un
+// administrador vea un aviso no lo marca para los demás.
+//
+// Se guardan TODOS los calculados, no solo los que caben en la lista: si
+// después desaparece uno de en medio, el que entra por abajo ya estaba aquí y
+// no se cuenta como nuevo. La marca es el mismo "ahora" con que se calcularon,
+// para que las dos digan lo mismo: lo que existía a esa hora.
 router.post('/mine/seen', authRequired, asyncHandler(async (req, res) => {
+  const { ahora } = await db.prepare('SELECT NOW() AS ahora').get();
+  const { deLoQueSigue, dePredicciones } = await avisosCalculados(req.user.id, new Date(ahora));
+  const claves = [...deLoQueSigue, ...dePredicciones].map((a) => a.key);
   const fila = await db.prepare(`
-    UPDATE users SET notifications_seen_at = NOW()
+    UPDATE users SET notifications_seen_at = ?, notifications_seen_keys = ?::text[]
     WHERE id = ?
     RETURNING notifications_seen_at AS seen_at
-  `).get(req.user.id);
+  `).get(ahora, claves, req.user.id);
   res.json({ ok: true, seen_at: fila?.seen_at ?? null });
 }));
 
