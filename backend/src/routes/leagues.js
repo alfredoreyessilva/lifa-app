@@ -99,7 +99,14 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
       l.logo_url AS league_logo_url,
       l.timezone AS league_timezone,
       th.logo_url AS home_logo_url,
-      COALESCE(ta.away_logo_url, ta.logo_url) AS away_logo_url,
+      -- El visitante se pinta con su logo de visitante si subió uno, y si no,
+      -- con el normal. El NULLIF es la mitad que importa: editar un equipo sin
+      -- logo de visitante lo guarda como cadena vacía, no como NULL (el
+      -- formulario manda '' y PUT /manage/teams/:id la deja pasar), y COALESCE
+      -- solo se salta los NULL. Sin él, ese equipo salía de visita con sus
+      -- iniciales aunque tuviera escudo. Se resuelve aquí, al leer, y no
+      -- reescribiendo las filas (regla 4).
+      COALESCE(NULLIF(ta.away_logo_url, ''), ta.logo_url) AS away_logo_url,
       CASE WHEN th.id IS NOT NULL THEN json_build_object(
         'id', th.id, 'name', th.name, 'logo_url', th.logo_url, 'cover_url', th.cover_url,
         'location', th.location, 'contact_email', th.contact_email, 'contact_phone', th.contact_phone,
@@ -110,7 +117,7 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
       ) END AS home_team_details,
       CASE WHEN ta.id IS NOT NULL THEN json_build_object(
         'id', ta.id, 'name', ta.name,
-        'logo_url', COALESCE(ta.away_logo_url, ta.logo_url), 'cover_url', ta.cover_url,
+        'logo_url', COALESCE(NULLIF(ta.away_logo_url, ''), ta.logo_url), 'cover_url', ta.cover_url,
         'location', ta.location, 'contact_email', ta.contact_email, 'contact_phone', ta.contact_phone,
         'facebook_url', ta.facebook_url, 'instagram_url', ta.instagram_url,
         'twitter_url', ta.twitter_url, 'website_url', ta.website_url,
@@ -347,7 +354,8 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
       c.auto_status_enabled      AS auto_status_enabled,
       c.auto_status_window_hours AS auto_status_window_hours,
       th.logo_url AS home_logo_url,
-      COALESCE(ta.away_logo_url, ta.logo_url) AS away_logo_url,
+      -- El NULLIF no sobra: ver GET /matches/:matchId.
+      COALESCE(NULLIF(ta.away_logo_url, ''), ta.logo_url) AS away_logo_url,
       v.name        AS venue_name,
       v.institution AS venue_institution,
       v.address     AS venue_address,
@@ -1075,7 +1083,8 @@ router.get('/tournaments/:tournamentId/public', asyncHandler(async (req, res) =>
       c.auto_status_window_hours AS auto_status_window_hours,
       b.name        AS branch_name,
       th.logo_url   AS home_logo_url,
-      COALESCE(ta.away_logo_url, ta.logo_url) AS away_logo_url,
+      -- El NULLIF no sobra: ver GET /matches/:matchId.
+      COALESCE(NULLIF(ta.away_logo_url, ''), ta.logo_url) AS away_logo_url,
       v.name        AS venue_name,
       v.institution AS venue_institution,
       v.address     AS venue_address,

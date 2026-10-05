@@ -29,7 +29,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | **P1** | Hoy no daña, pero frena el siguiente paso: la primera liga que cobre, la prueba en cancha, el siguiente cliente |
 | **P2** | Deuda y pulido. Se toma cuando hay tiempo o cuando se toca ese archivo |
 
-## Índice (2026-09-24)
+## Índice (2026-10-05)
 
 | ID | P | Qué | Tipo |
 |-|-|-|-|
@@ -44,6 +44,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-12 | P1 | Nadie avisa si el servicio deja de responder | configuración |
 | PD-13 | P1 | No existe rescate de un equipo cuyo único dueño perdió acceso | código |
 | PD-14 | P1 | ONEFA sin competencia configurada: su tabla no se ve | captura |
+| PD-34 | P1 | El Excel a nivel torneo y "Publicar todos" publican partidos sin equipos enlazados | código |
 | PD-02 | P2 | El push de partido está en pausa: casi nunca salía a tiempo, y nadie lo recibía | operación |
 | PD-15 | P2 | `PUT /manage/teams/:id` no es atómico | código |
 | PD-16 | P2 | El pie del estado de cuenta público es ilegible | decisión |
@@ -245,6 +246,50 @@ declarados, así que su página pública no muestra tabla. Se hace desde
 Estructura → rama → **⚙ competencia**. Es lo que lleva la tabla de posiciones de
 nivel 4 a nivel 5 en la única liga con uso real. Ver "Lo que queda abierto" en
 "Tabla de posiciones y modelo de competencia".
+
+### PD-34 · El Excel a nivel torneo y "Publicar todos" publican partidos sin equipos enlazados
+
+**Bajó de P0 a P1 el 2026-10-05, con datos.** Nació P0 el 2026-10-04 por ser un
+hueco que nadie sabía que existía: el README menciona el Excel sin enlazar solo
+por los logos, y cuenta con que el respaldo por nombre se los devuelva
+("Jubilar `teams.league_id`"). Se bajó porque, medido en producción en solo
+lectura, **no hay ningún partido así**: los 183 publicados (ONEFA 133, LFA 35,
+PFL 15) tienen sus dos ids, y no hay borradores. Hoy no daña; el siguiente
+calendario que entre por el Excel del torneo y se publique con "Publicar
+todos", sí.
+
+Salió al revisar por qué no salían los logos de visitante (ver el CHANGELOG).
+`POST /manage/tournaments/:tournamentId/matches/import` guarda cada partido
+solo con los nombres en texto: su `INSERT` no lleva `home_team_id` ni
+`away_team_id`, aunque ya encontró a los equipos (`findTeam`) para sugerir sus
+links. El importador por categoría sí los guarda, y `utils/matchScope.js` dice
+"por eso el importador de Excel ahora sí las guarda": es cierto solo para ese.
+
+Los partidos entran como borrador, y se enlazan si se publican uno por uno: el
+botón "Publicar" de cada fila pasa por `PUT /manage/matches/:id`, que vuelve a
+resolver los dos ids. **"Publicar todos"**
+(`PATCH /manage/tournaments/:tournamentId/publish-drafts`) no lo hace: solo
+cambia `is_draft`. Un partido que entra por ese camino queda publicado sin
+equipos, y entonces:
+
+- **No cuenta en la tabla de posiciones.** `computeStandings()` exige que los
+  dos ids estén en la rama (ver "Sacarlo del torneo también le borra el récord
+  a los demás" en el README).
+- No deriva conferencia ni grupo: `MATCH_SCOPE_COLUMNS` cuelga de los ids.
+- Sale sin ningún logo en el calendario del torneo
+  (`GET /leagues/tournaments/:tournamentId/public` une solo por id). El de la
+  categoría y la página del partido sí los encuentran, por el respaldo por
+  nombre.
+
+Mientras no se arregle, la salida a mano es abrir el partido con "Editar" y
+guardar: el `PUT` lo enlaza.
+
+Lo que hay que definir antes del código: que el importador guarde los ids con
+`resolveTeamId()`, como ya lo hacen la creación y la edición (y de paso deja
+de buscar por `teams.league_id`, que es PD-19); que "Publicar todos" resuelva
+los que falten, en la misma sentencia; y qué pasa con los que ya estén
+publicados sin ids: respaldo por nombre al leer (regla 4) o un script de una
+sola vez (regla 3).
 
 ---
 

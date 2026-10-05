@@ -11,6 +11,50 @@ entradas traen el post-mortem del bug que las provocó.
 
 ---
 
+## Octubre 2026
+
+### Cambios
+
+- **El visitante sin logo de visitante se ve con su logo normal
+  (2026-10-04)**.
+
+  **Lo que lo pidió:** Alfredo subió unos partidos y los equipos que jugaban de
+  visita salían con sus iniciales en la página del partido y en el calendario,
+  aunque tenían escudo y nunca subieron un logo de visitante.
+
+  **La causa:** el respaldo ya existía (`COALESCE(ta.away_logo_url,
+  ta.logo_url)`), pero `COALESCE` solo se salta los `NULL`. Crear un equipo
+  guarda `NULL` cuando no hay logo de visitante; **editarlo** guarda cadena
+  vacía, porque `TeamForm` manda `''` y el `toNull()` de `PUT /manage/teams/:id`
+  solo convierte `undefined`. Bastaba con editar el equipo una vez —por ejemplo,
+  para subirle el logo normal— para que de visita saliera sin nada.
+
+  **En producción** (censo de solo lectura, 2026-10-05): 18 equipos tienen esa
+  cadena vacía y 17 sí tienen logo —los seis de PFL, siete de AFC, tres de NFL
+  y GRIZZLIES—. Los 15 partidos que Alfredo subió la noche del 2026-10-04 (PFL,
+  "High Impact Football", COLLEGE) tenían a todos sus visitantes así, y eran
+  los únicos partidos publicados afectados.
+
+  **El arreglo** se resuelve al leer (regla 4): `NULLIF(ta.away_logo_url, '')`
+  en las cinco lecturas —el partido y la ficha de su visitante, el calendario
+  de la categoría, el del torneo y la pizarra—. No se reescribe ninguna fila, y
+  la cadena vacía se sigue guardando: es lo que manda "Quitar", y ahora
+  significa lo mismo que `NULL`.
+
+  **Verificado** contra `desarrollo-local`, en solo lectura, corriendo el SQL
+  exacto de las cuatro consultas en su versión de `HEAD` y en la nueva. Con los
+  datos reales devuelven exactamente lo mismo. Simulando dentro de la consulta
+  a un visitante con cadena vacía (sin escribir ninguna fila), `HEAD` devuelve
+  `''` y la nueva, su logo normal. En toda la tabla `teams` de esa rama cambian
+  justo los 11 equipos con cadena vacía y logo. Pasan las 224 unitarias del
+  backend. **No se abrió en el navegador**: el frontend no cambió, y ya pintaba
+  la imagen en cuanto le llega una URL.
+
+  **Lo que salió al revisarlo, y no se arregló aquí:** el Excel a nivel torneo
+  más "Publicar todos" publica partidos sin `home_team_id`/`away_team_id`, y
+  esos partidos no cuentan en la tabla de posiciones. Es PD-34: nació P0 y
+  bajó a P1 con el censo de producción, que no encontró ninguno.
+
 ## Septiembre 2026
 
 ### Cambios

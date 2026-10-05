@@ -4,7 +4,7 @@ Una foto de qué productos hay y a qué nivel está cada uno, para no tener que
 reconstruirla leyendo el README. Lo que falta vive en
 [`PENDIENTES.md`](PENDIENTES.md), con ID y prioridad; aquí solo se nombra.
 
-**Actualizado: 2026-09-27.** Cuando un producto cambia de nivel, su renglón se
+**Actualizado: 2026-10-05.** Cuando un producto cambia de nivel, su renglón se
 mueve en el mismo commit que lo movió.
 
 ## Los niveles
@@ -53,7 +53,7 @@ respaldos se resolvieron el 2026-09-23.
 
 | Producto | Nivel | Evidencia | Qué lo detiene |
 |-|-|-|-|
-| Estructura y panel de liga (torneo → categoría → rama → partido, importador de Excel) | 4 | Las ligas públicas las captura Alfredo | PD-26 |
+| Estructura y panel de liga (torneo → categoría → rama → partido, importador de Excel) | 4 | Las ligas públicas las captura Alfredo | PD-26, PD-34 |
 | Equipos independientes | **5** | Un caso: GRIZZLIES | PD-13 |
 | Roles, invitaciones y entrega de equipos | **5** | Un caso: GRIZZLIES tiene un administrador invitado | PD-07, PD-32 |
 | Cobranza liga → equipo (varias ligas) | 4 | **0 movimientos** en producción | PD-06; cobro en línea |
