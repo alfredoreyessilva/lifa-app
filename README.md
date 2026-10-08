@@ -4332,9 +4332,9 @@ siempre había una:
 
 ## Playbook del equipo
 
-**Construido y verificado el 2026-10-08** contra `desarrollo-local`. Se pidió
-como una primera versión simple que después se ajusta; lo que se dejó fuera
-está al final de esta sección.
+**Construido, verificado contra `desarrollo-local` y desplegado el
+2026-10-08.** Se pidió como una primera versión simple que después se ajusta;
+lo que se dejó fuera está al final de esta sección.
 
 Una pestaña del panel del club, junto a Staff, donde el cuerpo técnico sube
 imágenes de sus jugadas —fotos del pizarrón, capturas de un diagrama— y les

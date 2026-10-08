@@ -16,6 +16,9 @@ entradas traen el post-mortem del bug que las provocó.
 ### Cambios
 
 - **El panel del club tiene Playbook, junto a Staff (2026-10-08)**.
+  **Desplegado el mismo día** (`2d88ce5`), a pedido de Alfredo y con los tres
+  P0 abiertos: el CI pasó, Vercel publicó la pestaña y Render responde la ruta
+  nueva (401 sin sesión, donde una ruta que no existe da 404).
 
   **Lo que lo pidió:** una pestaña donde los miembros del equipo suban imágenes
   de jugadas, vean las de los demás, les pongan título y las abran en pantalla

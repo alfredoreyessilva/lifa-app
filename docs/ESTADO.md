@@ -56,7 +56,7 @@ respaldos se resolvieron el 2026-09-23.
 | Estructura y panel de liga (torneo → categoría → rama → partido, importador de Excel) | 4 | Las ligas públicas las captura Alfredo | PD-26, PD-34 |
 | Equipos independientes | **5** | Un caso: GRIZZLIES | PD-13 |
 | Roles, invitaciones y entrega de equipos | **5** | Un caso: GRIZZLIES tiene un administrador invitado | PD-07, PD-32 |
-| Playbook del equipo (imágenes de jugadas del cuerpo técnico) | 3 | Verificado el 2026-10-08 contra `desarrollo-local`: `invites-roles.e2e.mjs` (sección 15b, con una subida real a Cloudinary) y recorrido en el navegador, escritorio y celular. Sin desplegar | — |
+| Playbook del equipo (imágenes de jugadas del cuerpo técnico) | 4 | Verificado el 2026-10-08 contra `desarrollo-local`: `invites-roles.e2e.mjs` (sección 15b, con una subida real a Cloudinary) y recorrido en el navegador, escritorio y celular. Desplegado ese día (`2d88ce5`): Render responde `/api/playbook` (401 sin sesión) y el bundle de Vercel ya trae la pestaña | — |
 | Cobranza liga → equipo (varias ligas) | 4 | **0 movimientos** en producción | PD-06; cobro en línea |
 | Cuotas del club y estado de cuenta del papá | 4 | **0 filas de padrón** en producción | PD-16, PD-17, PD-27 |
 | Roster (Excel, foto, altas y bajas) | 4 | Sin medir | PD-05 |
