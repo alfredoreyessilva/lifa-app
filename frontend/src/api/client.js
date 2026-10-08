@@ -485,6 +485,34 @@ export const api = {
     return data;
   },
 
+  // Playbook del equipo (README, "Playbook del equipo"). La subida va en
+  // multipart como uploadImage, pero a su propia ruta: la imagen queda guardada
+  // en el playbook en el mismo viaje, con su título. El título va ANTES del
+  // archivo para que el backend lo tenga aunque el archivo sea grande.
+  getTeamPlaybook: (teamId, token) => request(`/playbook/teams/${teamId}`, { token }),
+  uploadPlaybookImage: async (teamId, file, title, token) => {
+    const formData = new FormData();
+    if (title) formData.append('title', title);
+    formData.append('file', file);
+    const res = await fetch(`${BASE}/playbook/teams/${teamId}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(data.error || 'No se pudo subir la imagen');
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  },
+  // Mandar el título vacío se lo quita.
+  renamePlaybookImage: (teamId, imageId, title, token) =>
+    request(`/playbook/teams/${teamId}/images/${imageId}`, { method: 'PATCH', body: { title }, token }),
+  deletePlaybookImage: (teamId, imageId, token) =>
+    request(`/playbook/teams/${teamId}/images/${imageId}`, { method: 'DELETE', token }),
+
   // Equipos
   getTeams: (slug) => request(`/leagues/${slug}/teams`),
   createTeam: (leagueId, payload, token) =>

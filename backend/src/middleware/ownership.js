@@ -272,6 +272,37 @@ export const teamClubRequired = asyncHandler(async (req, res, next) => {
   return res.status(403).json({ error: 'El padrón y las cuotas de este equipo solo los administra el equipo' });
 });
 
+// El PLAYBOOK del equipo: las imágenes de sus jugadas (README, "Playbook del
+// equipo"). Pasa quien tiene `playbook` en la organización del equipo —dueño,
+// administrador y coach— y nadie de la liga.
+//
+// Por eso no es `guardaDeEquipo(…, 'playbook')`: esa fábrica deja pasar a la
+// liga que administra al equipo, y aquí la liga sobra. Las jugadas son lo más
+// privado que tiene un equipo frente a sus rivales, y la liga administra
+// también a los rivales. Tiene la forma de `teamClubRequired` sin su 409: el
+// playbook no se "enciende" con la entrega; antes de ella simplemente no hay
+// nadie del equipo que lo abra.
+//
+// Tampoco hay respaldo por `owner_user_id`, por la misma razón que en el
+// padrón: el backfill de db.js da de alta como 'owner' a esa columna en cada
+// arranque, así que el respaldo no salvaría a nadie y sí sería otra puerta.
+export const teamPlaybookRequired = asyncHandler(async (req, res, next) => {
+  const teamId = Number(req.params.teamId);
+  const team = await db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId);
+  if (!team) return res.status(404).json({ error: 'Equipo no encontrado' });
+
+  const esDelEquipo = await isOrgMember(
+    req.user.id, team.organization_id, rolesConPermiso('team', 'playbook')
+  );
+  // El administrador de la PLATAFORMA pasa, igual que en todas las guardas de
+  // este archivo (ver `teamClubRequired`).
+  if (req.user.role === 'admin' || esDelEquipo) {
+    req.team = team;
+    return next();
+  }
+  return res.status(403).json({ error: 'El playbook de este equipo solo lo ven su dueño, su administrador y su coach' });
+});
+
 // Para entregarle a un equipo su perfil (y cancelar esa entrega mientras nadie
 // la reclame):
 // a propósito NO se le permite esto al representante del equipo mismo, solo

@@ -7,9 +7,10 @@ import TeamRosterSection from '../components/TeamRosterSection.jsx';
 import TeamLeagueStatementSection from '../components/TeamLeagueStatementSection.jsx';
 import TeamProfileSection from '../components/TeamProfileSection.jsx';
 import OrgAdminsPanel from '../components/OrgAdminsPanel.jsx';
+import TeamPlaybookSection from '../components/TeamPlaybookSection.jsx';
 
 // Panel de trabajo de un equipo. Una sola página que resuelve el equipo y el
-// permiso una vez, y monta la sección que pide la ruta — en vez de seis
+// permiso una vez, y monta la sección que pide la ruta — en vez de siete
 // páginas repitiendo la misma comprobación.
 //
 // Ojo: esto es solo la comprobación de la UI (no mostrarle a alguien un panel
@@ -66,6 +67,7 @@ export default function TeamPanel({ section = 'resumen' }) {
               </p>
             )
           )}
+          {section === 'playbook' && <TeamPlaybookSection team={team} token={token} />}
         </TeamWorkspace>
       </div>
     </div>

@@ -1,9 +1,10 @@
 import { v2 as cloudinary } from 'cloudinary';
 
 // Configuración y subida a Cloudinary, compartidas por routes/upload.js (la
-// subida con sesión: logos, portadas, fotos de jugador) y por el endpoint
+// subida con sesión: logos, portadas, fotos de jugador), por el endpoint
 // público de comprobantes en routes/playerBilling.js, donde el papá sube su
-// captura del SPEI sin tener cuenta y el share_token hace de credencial.
+// captura del SPEI sin tener cuenta y el share_token hace de credencial, y por
+// el playbook del equipo (routes/playbook.js).
 //
 // Vivía en línea dentro de routes/upload.js; se saca aquí en cuanto hubo un
 // segundo llamador, en vez de copiar la misma configuración en dos lugares.
@@ -33,6 +34,18 @@ export function ensureCloudinaryConfigured() {
 
   configured = true;
   return hasUrl || hasSeparateVars;
+}
+
+// Borra un archivo de Cloudinary. Hoy solo lo usa el playbook del equipo
+// (routes/playbook.js): ahí borrar una imagen es quitar una jugada, y una URL
+// sin firma seguiría abriéndola. `invalidate` vacía también la copia del CDN,
+// que si no la seguiría sirviendo un rato.
+//
+// Devuelve lo que contesta Cloudinary ('ok' o 'not found') y no lanza por un
+// archivo que ya no existe: borrar dos veces es lo mismo que borrar una.
+export async function destroyFromCloudinary(publicId) {
+  const { result } = await cloudinary.uploader.destroy(publicId, { resource_type: 'image', invalidate: true });
+  return result;
 }
 
 // `transformation` se puede pasar vacío: un comprobante de transferencia suele

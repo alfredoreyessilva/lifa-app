@@ -2327,6 +2327,36 @@ export async function initSchema() {
     // avisos calculados.
     await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_seen_keys TEXT[]`);
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // El playbook del equipo (README, "Playbook del equipo", 2026-10-08): las
+    // imágenes de jugadas que sube su cuerpo técnico. Cuelga del equipo y se va
+    // con él, como el padrón.
+    //
+    // `public_id` es la llave del archivo en Cloudinary, y existe para que
+    // borrar una imagen del playbook la borre también de allá: la URL no lleva
+    // firma, y una jugada que el equipo quitó no debería seguir viva en un link
+    // viejo. Es nulable porque no toda fila tiene por qué venir de una subida.
+    //
+    // `title` es NULL cuando no hay título, nunca cadena vacía: la ruta lo
+    // normaliza al escribir. Una cadena vacía es justo lo que `COALESCE` no se
+    // salta (el logo de visitante, 2026-10-04).
+    //
+    // `uploaded_by` sobrevive a la cuenta (SET NULL): las jugadas son del
+    // equipo, no de quien las subió.
+    await run(`
+      CREATE TABLE IF NOT EXISTS team_playbook_images (
+        id          SERIAL PRIMARY KEY,
+        team_id     INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        image_url   TEXT NOT NULL,
+        public_id   TEXT,
+        title       TEXT,
+        uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_team_playbook_images_team ON team_playbook_images(team_id, created_at DESC)`);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se

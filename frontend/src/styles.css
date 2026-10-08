@@ -3598,6 +3598,195 @@ a.match-card-new {
   margin-top: 2px;
 }
 
+/* ---------- Playbook del equipo ----------
+   Una cuadrícula de jugadas y su pantalla completa. La miniatura se recorta
+   (cover) para que la cuadrícula se lea pareja; la pantalla completa enseña la
+   imagen entera (contain), que es donde de verdad se lee la jugada.
+
+   Detrás de cada imagen va un fondo claro y no el negro del panel: un
+   diagrama exportado con fondo transparente trae líneas negras, y sobre negro
+   no se vería nada. A una foto, que es opaca, no le cambia nada. */
+.playbook-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-3);
+}
+.playbook-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--ws-surface);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.playbook-thumb {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+.playbook-thumb img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: #f2f4f5;
+  transition: opacity 0.15s ease;
+}
+.playbook-thumb:hover img { opacity: 0.88; }
+.playbook-thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.playbook-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+}
+.playbook-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ws-ink);
+  overflow-wrap: anywhere;
+}
+.playbook-card-title.is-empty { color: var(--ws-ink-faint); font-weight: 400; font-style: italic; }
+.playbook-card-meta { font-size: 11px; color: var(--ws-ink-faint); }
+/* El margen negativo alinea el texto del primer botón fantasma con el título. */
+.playbook-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: auto 0 0 -8px;
+  padding-top: var(--space-2);
+}
+.playbook-card-actions .btn { padding: 6px 8px; }
+
+/* Los modales de subir y de editar el título. La vista previa se encoge con la
+   altura de la ventana: en una laptop chica, 260 px fijos dejaban el botón de
+   Guardar abajo del borde del modal. */
+.playbook-preview {
+  display: block;
+  width: 100%;
+  max-height: min(260px, 35vh);
+  object-fit: contain;
+  background: #f2f4f5;
+  border-radius: var(--radius-sm);
+}
+.playbook-previews {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+}
+.playbook-previews img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  background: #f2f4f5;
+  border-radius: var(--radius-sm);
+}
+.playbook-note { font-size: 12px; color: var(--ink-dim); margin: 8px 0 0; }
+.playbook-rejected {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--flag);
+  overflow-wrap: anywhere;
+}
+
+/* La pantalla completa. Encima de todo, modales incluidos (z-index 50). La
+   altura se toma de la ventana y no del contenedor: un porcentaje sobre una
+   imagen dentro de un flex lo resuelve cada navegador a su manera, y `dvh`
+   descuenta la barra del navegador del celular cuando aparece. */
+.playbook-lightbox {
+  --pb-arriba: 64px;
+  --pb-abajo: 16px;
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--pb-arriba) 12px var(--pb-abajo);
+  background: rgba(0, 0, 0, 0.94);
+}
+.playbook-lightbox-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  color: var(--ws-ink);
+}
+.playbook-lightbox-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.playbook-lightbox-title.is-empty { color: var(--ws-ink-faint); font-weight: 400; font-style: italic; }
+.playbook-lightbox-count {
+  font-size: 12px;
+  color: var(--ws-ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+.playbook-lightbox-img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - var(--pb-arriba) - var(--pb-abajo));
+  max-height: calc(100dvh - var(--pb-arriba) - var(--pb-abajo));
+  object-fit: contain;
+  background: #f2f4f5;
+  border-radius: var(--radius-sm);
+}
+.playbook-lightbox-close,
+.playbook-lightbox-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--ws-line-strong);
+  border-radius: 999px;
+  background: rgba(22, 24, 26, 0.85);
+  color: var(--ws-ink);
+  cursor: pointer;
+}
+.playbook-lightbox-close { width: 40px; height: 40px; flex-shrink: 0; font-size: 18px; }
+.playbook-lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  font-size: 26px;
+  line-height: 1;
+}
+.playbook-lightbox-nav.is-prev { left: 12px; }
+.playbook-lightbox-nav.is-next { right: 12px; }
+.playbook-lightbox-close:hover,
+.playbook-lightbox-nav:hover { border-color: var(--accent); color: var(--accent); }
+
+@media (max-width: 560px) {
+  /* Dos columnas en el celular: con una sola, un playbook de treinta jugadas
+     es un pasillo, y lo que se busca de un vistazo es cuál es cuál. */
+  .playbook-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+  .playbook-card-body { padding: var(--space-2) var(--space-3) var(--space-3); }
+  /* La imagen de orilla a orilla: en un teléfono cada pixel cuenta para leer
+     la jugada, y las flechas se pueden encimar. */
+  .playbook-lightbox { --pb-arriba: 60px; --pb-abajo: 0px; padding-left: 0; padding-right: 0; }
+  .playbook-lightbox-img { border-radius: 0; }
+  .playbook-lightbox-nav { width: 38px; height: 38px; font-size: 22px; }
+  .playbook-lightbox-nav.is-prev { left: 6px; }
+  .playbook-lightbox-nav.is-next { right: 6px; }
+}
+
 /* ---------- Estado de cuenta público (lo abre el papá desde WhatsApp) ----- */
 .statement-page {
   max-width: 560px;

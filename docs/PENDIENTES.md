@@ -29,7 +29,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | **P1** | Hoy no daña, pero frena el siguiente paso: la primera liga que cobre, la prueba en cancha, el siguiente cliente |
 | **P2** | Deuda y pulido. Se toma cuando hay tiempo o cuando se toca ese archivo |
 
-## Índice (2026-10-05)
+## Índice (2026-10-08)
 
 | ID | P | Qué | Tipo |
 |-|-|-|-|
@@ -63,6 +63,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-29 | P2 | Ramas viejas en local y en el remoto | limpieza |
 | PD-32 | P2 | Un dueño no se puede retirar aunque haya otros dueños, y el README dice que sí | decisión |
 | PD-33 | P2 | Los recordatorios de cobranza esconden su error y pierden el día | código |
+| PD-35 | P2 | En el celular, el encabezado del panel ensancha la página | código |
 
 ---
 
@@ -546,6 +547,16 @@ La salida es la de la mensualidad: que el error suba a la respuesta
 (`billing_reminders_error`, como `monthly_charges_error`) y que el workflow lo
 trate como falla. P2 porque los dos libros tienen 0 movimientos; pasa a P1 el
 día que una liga cobre.
+
+### PD-35 · En el celular, el encabezado del panel ensancha la página
+
+Encontrado el 2026-10-08 al revisar el playbook en un teléfono de 375 px. Los
+botones de "Registrar liga", "Registrar equipo" y "Registrar organización" de
+la barra de organizaciones (`OrgLogoBar.jsx`, arriba de todo el panel) no
+envuelven: la página mide 503 px en una pantalla de 360, y aparece scroll
+horizontal en **todas** las pestañas del panel del club, no solo en la del
+playbook. Ya pasaba antes. Lo que está debajo (las pestañas, la cuadrícula del
+playbook) sí cabe; es solo esa fila de botones.
 
 ---
 

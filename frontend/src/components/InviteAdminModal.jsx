@@ -30,7 +30,7 @@ const QUE_HACE = {
   treasurer:     'Solo el dinero: cargos, pagos y estados de cuenta.',
   editor:        'Solo partidos que ya existen: marcador, estado, fecha, sede y links. No los crea ni los borra.',
   roster_editor: 'Solo el roster de torneo: altas, bajas, número y posición.',
-  coach:         'Solo lectura: perfil, calendario y roster.',
+  coach:         'El playbook del equipo. Lo demás, en solo lectura: perfil, calendario y roster.',
 };
 
 // Los dos roles de un equipo que NO ven el padrón del club, dicho de frente en

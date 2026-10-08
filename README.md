@@ -1704,18 +1704,20 @@ dinero y un padrón con CURP de menores. Son dos preguntas distintas y se
 responden por separado: **qué información pertenece a quién**, y **qué puede
 hacer cada persona dentro de una organización**.
 
-### Las tres fronteras
+### Las fronteras
 
 Cada dato pertenece a exactamente un dominio, y el dominio decide quién lo ve.
+Fueron tres hasta el 2026-10-08, cuando llegó el playbook.
 
 | Dominio | Qué incluye | Quién lo ve |
 |---|---|---|
 | **Torneo** | Calendario, partidos, marcadores, posiciones, transmisiones y el roster (`players` + `player_team_memberships`) | Liga y equipo. En público el roster va **recortado** — ver "Qué se publica de un roster" |
 | **Cuenta equipo ↔ liga** | `team_ledger_entries`: lo que la liga le cobra al equipo y lo que el equipo reporta | Los dos, cada quien su lado. Es compartida por definición |
 | **Club privado** | `club_members` (CURP, nacimiento, foto, tutor, `share_token`) y `club_ledger_entries` | **Solo el equipo. La liga nunca, en ningún estado** |
+| **Playbook** | `team_playbook_images`: las jugadas del equipo | **Solo su cuerpo técnico** (dueño, administrador y coach). La liga nunca — ver "Playbook del equipo" |
 
 La regla de una línea: **la liga ve competencia y lo que el equipo le debe; no
-ve gente ni dinero de adentro del club.**
+ve gente, dinero ni jugadas de adentro del club.**
 
 Por qué el roster sí y el padrón no, si los dos guardan fecha de nacimiento y
 CURP de menores: no es el dato, es el propósito. La liga necesita la edad para
@@ -1976,7 +1978,7 @@ tiene los suyos.
 | **Administrador** | `admin` | Todo menos invitar o quitar dueños |
 | **Tesorero** | `treasurer` | Padrón del club, cuotas, y la cuenta con la liga. Nada de perfil ni de roster |
 | **Editor de roster** | `roster_editor` | Roster de torneo: alta, baja, plantilla de Excel, foto, número y posición. Nada de padrón ni de dinero |
-| **Coach** | `coach` | El equipo en solo lectura: perfil, calendario y roster. Sin padrón ni contabilidad. Sin más funciones por ahora, a propósito |
+| **Coach** | `coach` | El playbook del equipo (desde el 2026-10-08, ver "Playbook del equipo"). Lo demás en solo lectura: perfil, calendario y roster. Sin padrón ni contabilidad |
 
 **Medio, tienda, clínica y marca** se quedan con `owner` y `admin`: no manejan
 dinero ni datos de menores en la plataforma, y no hay para qué inventarles
@@ -4327,6 +4329,98 @@ siempre había una:
   plataforma invita a la persona como `admin` —a `owner` no puede, ese permiso
   es solo de un dueño— y después le cede el puesto con `transfer-owner`, que
   sí lo deja pasar por encima de `duenos`.
+
+## Playbook del equipo
+
+**Construido y verificado el 2026-10-08** contra `desarrollo-local`. Se pidió
+como una primera versión simple que después se ajusta; lo que se dejó fuera
+está al final de esta sección.
+
+Una pestaña del panel del club, junto a Staff, donde el cuerpo técnico sube
+imágenes de sus jugadas —fotos del pizarrón, capturas de un diagrama— y les
+pone título. Tocar una la abre en pantalla completa, con flechas para pasar a
+la de al lado.
+
+### Quién lo ve, y por qué así
+
+| Quién | Playbook |
+|-|-|
+| Dueño · Administrador · Coach del equipo | Lo ven, suben, ponen o cambian el título y **borran cualquier imagen**, aunque la haya subido otra persona |
+| Tesorero · Editor de roster | No: ni la pestaña ni la API |
+| La liga, con cualquier rol | **Nunca**, en ningún estado del equipo |
+
+- **Un solo permiso, `playbook`, para ver y para editar.** El playbook lo arma
+  el cuerpo técnico junto, no cada quien lo suyo: si solo quien subió una
+  imagen pudiera borrarla, la jugada vieja de un coach que ya se fue se
+  quedaría para siempre. Es el primer permiso que el coach tiene y el tesorero
+  no; hasta aquí el coach solo podía mirar (ver "Los roles").
+- **La liga no entra, y no por omisión.** La guarda, `teamPlaybookRequired`, no
+  es `guardaDeEquipo`, que deja pasar a la liga que administra al equipo: las
+  jugadas son lo más privado de un equipo frente a sus rivales, y la liga
+  administra también a los rivales. Tiene la forma de la guarda del padrón sin
+  su 409: antes de la entrega simplemente no hay nadie del equipo que lo abra.
+  El administrador de la plataforma sí pasa, como en todas las guardas.
+- **Borrar es de verdad.** Además de la fila se borra el archivo en Cloudinary
+  (por su `public_id`, con `invalidate` para vaciar también la copia del CDN).
+  Las URLs de Cloudinary no llevan firma —las abre quien tenga el link—, y una
+  jugada que el equipo quitó no debe seguir viva en un link viejo. Si
+  Cloudinary falla en ese paso, la imagen ya salió del playbook y el error
+  queda en los logs.
+
+### Modelo
+
+`team_playbook_images`, una fila por imagen, colgada del equipo con `ON DELETE
+CASCADE`: eliminar un equipo se lleva su playbook, como su padrón.
+
+| Columna | Qué guarda |
+|-|-|
+| `image_url` | La URL en Cloudinary, carpeta `lifa-app/playbook` |
+| `public_id` | La llave del archivo en Cloudinary. No viaja en la API: solo sirve para borrarlo |
+| `title` | Opcional. **NULL cuando no hay**, nunca cadena vacía (`utils/playbook.js`) |
+| `uploaded_by` | Quién la subió. `SET NULL` si se borra la cuenta: la jugada es del equipo |
+
+Cada imagen se guarda hasta de 2000 px por lado y sin recorte —una jugada se
+lee completa o no sirve—, y se aceptan hasta 8 MB por archivo, porque una foto
+de pizarrón tomada con el celular pesa más que un logo. La cuadrícula no baja
+esos 2000 px: le pide a Cloudinary una versión de 640 px por la URL
+(`frontend/src/utils/imagenes.js`), que además le entrega a cada navegador un
+formato que sabe pintar, una foto HEIC de iPhone incluida.
+
+### Endpoints — `routes/playbook.js` (`/api/playbook`)
+
+| Método | Ruta | Qué hace |
+|-|-|-|
+| `GET` | `/teams/:teamId` | Las imágenes, la más nueva primero, con el nombre de quien la subió |
+| `POST` | `/teams/:teamId` | Sube una imagen (multipart: `file` y `title` opcional) y la guarda en el mismo viaje |
+| `PATCH` | `/teams/:teamId/images/:imageId` | `{ title }`. Vacío lo quita; sin `title` es 400 |
+| `DELETE` | `/teams/:teamId/images/:imageId` | Borra la fila y el archivo |
+
+`team_id` va en el `WHERE` de cada `PATCH` y `DELETE`: el permiso se revisa
+sobre el equipo de la URL, así que la imagen de otro equipo no se alcanza
+cambiando solo el id (404). Y la guarda corre **antes** de leer el archivo: a
+quien no puede se le contesta 403 sin que nada suyo llegue a Cloudinary.
+
+### Frontend
+
+`components/TeamPlaybookSection.jsx`, en `/panel/equipo/:id/playbook`. Se
+pueden elegir varias imágenes a la vez: suben de una en una, cada una entra a
+la cuadrícula en cuanto sube, y si una falla, "Reintentar" sigue desde esa sin
+duplicar las anteriores. Con una sola se le pone título de una vez; con
+varias, después, desde cada imagen.
+
+Detrás de cada imagen va un fondo claro y no el negro del panel: un diagrama
+exportado con fondo transparente trae líneas negras, y sobre negro no se
+verían.
+
+### Fuera de esta versión
+
+- Carpetas o categorías (ofensiva, defensiva, equipos especiales) y un orden
+  propio. Hoy es una sola lista, la más nueva primero.
+- Que los jugadores vean el playbook. Hoy es del cuerpo técnico; abrirlo a
+  jugadores pide decidir antes qué se comparte y con quién.
+- Video, PDF y comentarios por jugada.
+- Reducir la foto en el celular antes de subirla. Hoy viaja completa (hasta
+  8 MB) y Cloudinary la recorta al guardarla.
 
 ## Transmisiones — un medio se suma a un partido
 

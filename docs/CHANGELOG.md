@@ -15,6 +15,48 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El panel del club tiene Playbook, junto a Staff (2026-10-08)**.
+
+  **Lo que lo pidió:** una pestaña donde los miembros del equipo suban imágenes
+  de jugadas, vean las de los demás, les pongan título y las abran en pantalla
+  completa. La ven el dueño, el coach y el administrador, y los tres pueden
+  renombrar o borrar cualquier imagen, aunque no la hayan subido. Se pidió
+  como un plan simple que después se ajusta.
+
+  **Lo que se construyó:** el permiso `playbook` (dueño, administrador y coach
+  de un equipo; ningún rol de liga), la guarda `teamPlaybookRequired` —que a
+  propósito no deja pasar a la liga, porque administra también a los
+  rivales—, la tabla `team_playbook_images`, `routes/playbook.js` y
+  `TeamPlaybookSection.jsx`. Borrar una imagen borra también su archivo en
+  Cloudinary. El porqué de cada decisión está en "Playbook del equipo" del
+  README.
+
+  **Verificado** contra `desarrollo-local`. `invites-roles.e2e.mjs` creció con
+  la sección 15b —quién entra y quién no, que el coach renombre y borre lo que
+  subió el dueño, que la imagen de otro equipo no se alcance cambiando el id,
+  que el título vacío quede en NULL, y una subida **real** a Cloudinary que el
+  administrador borra después— y con la comprobación de que eliminar un equipo
+  se lleva su playbook: **173 ok, 0 fallas**. La carpeta `lifa-app/playbook`
+  de Cloudinary quedó vacía al terminar. En el navegador, con cuentas de
+  prueba sin rol de plataforma, en escritorio y en celular: subir una imagen y
+  varias a la vez, la pantalla completa, ponerle, cambiarle y quitarle el
+  título, borrar, y que el tesorero no vea la pestaña ni le pida nada a la API
+  aunque escriba la ruta a mano. Pasan 230 unitarias del backend y 152 del
+  frontend.
+
+  **Lo que encontró correrlo:** la vista previa de la imagen salía rota
+  (`ERR_FILE_NOT_FOUND`) en desarrollo. Las URLs locales se creaban en un
+  `useMemo` y se soltaban en la limpieza de un efecto; el modo estricto de
+  React desmonta y vuelve a montar cada efecto, así que la limpieza soltaba
+  las URLs que la pantalla seguía usando. Ahora se crean dentro del mismo
+  efecto que las suelta. Y una ventana baja dejaba el botón de Guardar abajo
+  del borde del modal: la vista previa se encoge con la altura.
+
+  **Lo que salió al revisarlo, y no se arregló aquí:** en un celular, el
+  encabezado del panel —los botones de registrar liga, equipo y organización—
+  ensancha la página de 360 a 503 px en todas las pestañas, no solo en esta.
+  Ya pasaba antes del playbook. Es PD-35, P2.
+
 - **El visitante sin logo de visitante se ve con su logo normal
   (2026-10-04)**.
 

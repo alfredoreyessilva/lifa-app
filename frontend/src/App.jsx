@@ -154,7 +154,7 @@ export default function App() {
               path="/panel/liga/:id/:year/torneo/:tournamentId/partidos"
               element={<ProtectedRoute><TournamentMatchesPanel /></ProtectedRoute>}
             />
-            {/* Panel de trabajo del equipo. Una página, seis secciones — ver
+            {/* Panel de trabajo del equipo. Una página, siete secciones — ver
                 pages/TeamPanel.jsx. La ruta de estado de cuenta conserva su
                 URL de siempre porque ya viaja dentro de notificaciones
                 (data.url en routes/billing.js) y en links guardados. */}
@@ -181,6 +181,10 @@ export default function App() {
             <Route
               path="/panel/equipo/:id/administradores"
               element={<ProtectedRoute><TeamPanel section="administradores" /></ProtectedRoute>}
+            />
+            <Route
+              path="/panel/equipo/:id/playbook"
+              element={<ProtectedRoute><TeamPanel section="playbook" /></ProtectedRoute>}
             />
             <Route
               path="/panel/organizacion/:id/inventario"

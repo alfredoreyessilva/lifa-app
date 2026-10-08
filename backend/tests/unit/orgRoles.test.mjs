@@ -100,6 +100,21 @@ test('el coach ve el equipo pero NO el padrón ni los libros', () => {
   assert.ok(!puede('team', 'coach', 'perfil'));
 });
 
+test('el playbook es del cuerpo técnico: dueño, administrador y coach', () => {
+  // El primer permiso que el coach tiene y el tesorero no. Si el tesorero o el
+  // editor de roster aparecieran aquí, verían las jugadas sin que nadie lo
+  // decidiera (README, "Playbook del equipo").
+  assert.deepEqual(rolesConPermiso('team', 'playbook'), ['owner', 'admin', 'coach']);
+  assert.ok(!puede('team', 'treasurer', 'playbook'));
+  assert.ok(!puede('team', 'roster_editor', 'playbook'));
+});
+
+test('ningún rol de liga alcanza el playbook de un equipo', () => {
+  // La liga administra también a los rivales. La guarda no le pregunta a la
+  // liga, y esto fija que el catálogo tampoco le dé el permiso.
+  assert.deepEqual(rolesConPermiso('league', 'playbook'), []);
+});
+
 test('el editor de roster no toca dinero', () => {
   assert.ok(puede('team', 'roster_editor', 'roster'));
   assert.ok(!puede('team', 'roster_editor', 'cuotas_club'));

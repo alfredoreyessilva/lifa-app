@@ -14,7 +14,7 @@ el README; lo histórico, en `docs/CHANGELOG.md`.
 ```
 backend/    Node 22 + Express, ESM. Postgres en Neon.
   src/config/db.js      El esquema COMPLETO (45 tablas) + migraciones al arrancar
-  src/routes/           Aquí vive todo el SQL — 19 archivos
+  src/routes/           Aquí vive todo el SQL — 20 archivos
   src/middleware/       auth (JWT) · ownership (24 guardas, por permiso) · rateLimit
   src/utils/            Funciones PURAS — lo único que se puede probar sin Postgres
     orgRoles.js         Qué puede cada rol, por tipo de organización. Fuente única
@@ -29,8 +29,8 @@ frontend/public/sw.js   Service worker: push + que la app abra SIN SEÑAL.
 Dónde buscar antes de preguntar: **README** tiene una sección por dominio
 (Cobranza · Cuotas del club · Tabla de posiciones · Predicciones y quinielas ·
 Roster · Roster público y pase de lista · Estadísticas por jugada · Capturar
-sin señal · Equipos independientes · Transmisiones · Tiendas y bot de WhatsApp ·
-Seguridad), cada una con el porqué de sus decisiones. **`docs/ESTADO.md`** dice
+sin señal · Equipos independientes · Playbook del equipo · Transmisiones ·
+Tiendas y bot de WhatsApp · Seguridad), cada una con el porqué de sus decisiones. **`docs/ESTADO.md`** dice
 qué producto está a qué nivel, y **`docs/PENDIENTES.md`** es la lista única de lo
 que falta, con prioridad.
 

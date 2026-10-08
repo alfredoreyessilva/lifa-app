@@ -39,6 +39,10 @@ const SECTIONS = [
   // —coach, tesorero, editor de roster— y no solo quien administra. La ruta
   // se queda en /administradores por lo mismo que /jugadores arriba.
   { to: '/administradores',   label: 'Staff',        permisos: ['miembros'] },
+  // Las jugadas del equipo (README, "Playbook del equipo"): dueño,
+  // administrador y coach. Va junto a Staff, y es la primera pestaña que el
+  // coach tiene para trabajar y no solo para mirar.
+  { to: '/playbook',          label: 'Playbook',     permisos: ['playbook'] },
 ];
 
 export default function TeamWorkspace({ team, children }) {

@@ -26,6 +26,7 @@ import productRoutes       from './routes/products.js';
 import botRoutes           from './routes/bot.js';
 import billingRoutes       from './routes/billing.js';
 import playerBillingRoutes from './routes/playerBilling.js';
+import playbookRoutes      from './routes/playbook.js';
 
 // Orígenes permitidos para llamar a la API desde el navegador. Se definen en
 // la variable de entorno ALLOWED_ORIGINS (separados por coma), por ejemplo:
@@ -103,6 +104,8 @@ app.use('/api/products',      productRoutes);
 app.use('/api/bot',           botRoutes);
 app.use('/api/billing',       billingRoutes);
 app.use('/api/player-billing', playerBillingRoutes);
+// El playbook cuelga del equipo, como el padrón: `/api/playbook/teams/:teamId/…`.
+app.use('/api/playbook',      playbookRoutes);
 
 // Debe ir después de todas las rutas y antes de nuestro manejador de
 // errores propio: reporta el error a Sentry y lo deja pasar (next(err))

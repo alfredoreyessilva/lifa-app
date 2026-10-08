@@ -514,6 +514,108 @@ ok((await call(rutaRoster, { method: 'POST', token: COACH2, body: { first_name: 
   'el coach NO da de alta en el roster: lo lee desde el panel, no lo edita');
 ok((await call(rutaRoster, { method: 'POST', token: TESO2, body: { first_name: 'X', last_name: 'Y' } })).status === 403,
   'y el tesorero tampoco — lleva dinero, no jugadores');
+
+
+console.log('\n=== 15b. El playbook: dueño, administrador y coach, y nadie más ===');
+// README, "Playbook del equipo". Se prueba sobre TEAM, que ya tiene a la mano
+// a todos: dueño (REP), administrador (ADMIN), coach (COACH), tesorero (TESO)
+// y la liga que lo administra (LIGA).
+const playbook = `/playbook/teams/${TEAM}`;
+ok((await call(playbook, { token: REP })).status === 200, 'el DUEÑO abre el playbook');
+ok((await call(playbook, { token: ADMIN })).status === 200, 'el ADMINISTRADOR también');
+const vistaCoach = await call(playbook, { token: COACH });
+ok(vistaCoach.status === 200 && Array.isArray(vistaCoach.data.images),
+  'y el COACH también: es su herramienta', JSON.stringify(vistaCoach.data).slice(0, 100));
+ok((await call(playbook, { token: TESO })).status === 403, 'el tesorero NO: lleva dinero, no jugadas');
+ok((await call(`/playbook/teams/${TEAM2}`, { token: ROSTER2 })).status === 403, 'el editor de roster tampoco');
+ok((await call(playbook, { token: LIGA })).status === 403, 'y la LIGA no lo ve: administra también a los rivales');
+ok((await call(playbook, { token: COACH2 })).status === 403, 'ni el coach de OTRO equipo');
+ok((await call('/playbook/teams/999999999', { token: REP })).status === 404, 'un equipo que no existe, 404');
+
+// Subir. La guarda contesta antes de leer el archivo: a quien no puede se le
+// dice 403 aunque no mande nada, y nada suyo llega a Cloudinary.
+const subirA = (token, campos = []) => {
+  const fd = new FormData();
+  // Con tres argumentos, `append` exige que el valor sea un Blob, aunque el
+  // tercero llegue vacío: el texto va con dos.
+  for (const [nombre, valor, archivo] of campos) {
+    if (archivo) fd.append(nombre, valor, archivo);
+    else fd.append(nombre, valor);
+  }
+  return fetch(`${API}${playbook}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
+};
+ok((await subirA(TESO)).status === 403, 'el tesorero no sube: 403 antes de leer el archivo');
+ok((await subirA(LIGA)).status === 403, 'la liga tampoco');
+ok((await subirA(COACH)).status === 400, 'el coach sin archivo: 400, no 500');
+const noImagen = await subirA(COACH, [['file', new Blob(['hola'], { type: 'text/plain' }), 'nota.txt']]);
+ok(noImagen.status === 400 && /imágenes/.test((await noImagen.json()).error || ''),
+  'un archivo que no es imagen: 400 con su motivo', `=${noImagen.status}`);
+
+// Una subida de verdad: un PNG de 1×1 a Cloudinary, que la sección borra al
+// final. Si el backend no tiene Cloudinary, contesta 500 con ese motivo y esta
+// parte se salta en vez de fallar.
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+const subida = await subirA(COACH, [['title', '  Spread   derecha '], ['file', new Blob([PNG], { type: 'image/png' }), 'jugada.png']]);
+const subidaData = await subida.json().catch(() => ({}));
+let IMG_REAL = null;
+if (subida.status === 500 && /no está configurado/.test(subidaData.error || '')) {
+  console.log('  SALTA la subida real: este backend no tiene Cloudinary configurado');
+} else {
+  IMG_REAL = subidaData.image ?? null;
+  ok(subida.status === 201 && /^https:\/\/res\.cloudinary\.com\//.test(IMG_REAL?.image_url || ''),
+    'el COACH sube una imagen y queda en Cloudinary', `=${subida.status} ${JSON.stringify(subidaData).slice(0, 160)}`);
+  ok(IMG_REAL?.title === 'Spread derecha', 'con su título limpio de espacios', JSON.stringify(IMG_REAL?.title));
+  ok(IMG_REAL?.uploaded_by_name === 'Coach' && !('public_id' in (IMG_REAL || {})),
+    'dice quién la subió, y la llave del archivo no viaja', JSON.stringify(IMG_REAL));
+  const { rows: [fila] } = await pool.query('SELECT team_id, public_id FROM team_playbook_images WHERE id=$1', [IMG_REAL?.id]);
+  ok(fila?.team_id === TEAM && /^lifa-app\/playbook\//.test(fila?.public_id || ''),
+    'la fila guarda la llave del archivo, en su carpeta', JSON.stringify(fila));
+}
+
+// Renombrar y borrar no necesitan Cloudinary: una fila sembrada directo, sin
+// llave de archivo, como si la hubiera subido el DUEÑO.
+const idRep = await idDe('Rep');
+const sembrar = async (teamId, titulo) => (await pool.query(
+  "INSERT INTO team_playbook_images (team_id, image_url, title, uploaded_by) VALUES ($1, 'https://example.com/jugada.png', $2, $3) RETURNING id",
+  [teamId, titulo, idRep]
+)).rows[0].id;
+const DEL_DUENO = await sembrar(TEAM, 'Cover 2');
+const listaPlaybook = await call(playbook, { token: COACH });
+ok(listaPlaybook.data.images?.some((i) => i.id === DEL_DUENO && i.uploaded_by_name === 'Rep'),
+  'el coach ve lo que subió el dueño, con su nombre');
+
+const renombrar = (id, token, title) => call(`${playbook}/images/${id}`, { method: 'PATCH', token, body: { title } });
+const ren = await renombrar(DEL_DUENO, COACH, '  Cover 2   rotada ');
+ok(ren.status === 200 && ren.data.image?.title === 'Cover 2 rotada',
+  'el COACH le cambia el título a una imagen que subió el dueño', JSON.stringify(ren.data));
+const sinTitulo = await renombrar(DEL_DUENO, ADMIN, '   ');
+ok(sinTitulo.status === 200 && sinTitulo.data.image?.title === null,
+  'mandar el título vacío lo quita: NULL, no cadena vacía', JSON.stringify(sinTitulo.data));
+ok((await call(`${playbook}/images/${DEL_DUENO}`, { method: 'PATCH', token: REP, body: {} })).status === 400,
+  'un PATCH sin título es un error, no un borrado en silencio');
+ok((await renombrar(DEL_DUENO, TESO, 'pirata')).status === 403, 'el tesorero no renombra');
+ok((await renombrar(DEL_DUENO, LIGA, 'pirata')).status === 403, 'la liga tampoco');
+
+// La frontera entre equipos: el permiso se revisa sobre el equipo de la URL,
+// así que la imagen de OTRO equipo no se alcanza cambiando solo el id.
+const DE_OTRO = await sembrar(TEAM2, 'Jugada ajena');
+ok((await renombrar(DE_OTRO, COACH, 'robada')).status === 404, 'una imagen de otro equipo, por la URL del mío: 404');
+ok((await call(`${playbook}/images/${DE_OTRO}`, { method: 'DELETE', token: REP })).status === 404, 'y tampoco se borra');
+const { rows: [ajena] } = await pool.query('SELECT title FROM team_playbook_images WHERE id=$1', [DE_OTRO]);
+ok(ajena?.title === 'Jugada ajena', 'la imagen del otro equipo sigue intacta', JSON.stringify(ajena));
+ok((await call(`${playbook}/images/abc`, { method: 'DELETE', token: REP })).status === 404, 'un id que no es número: 404, no 500');
+
+ok((await call(`${playbook}/images/${DEL_DUENO}`, { method: 'DELETE', token: TESO })).status === 403, 'el tesorero no borra');
+ok((await call(`${playbook}/images/${DEL_DUENO}`, { method: 'DELETE', token: COACH })).status === 200,
+  'el COACH borra una imagen que no subió él');
+const { rows: quedanDelDueno } = await pool.query('SELECT id FROM team_playbook_images WHERE id=$1', [DEL_DUENO]);
+ok(quedanDelDueno.length === 0, 'y la fila ya no existe');
+ok((await call(`${playbook}/images/${DEL_DUENO}`, { method: 'DELETE', token: COACH })).status === 404, 'borrarla otra vez: 404');
+
+if (IMG_REAL) {
+  const borrarReal = await call(`${playbook}/images/${IMG_REAL.id}`, { method: 'DELETE', token: ADMIN });
+  ok(borrarReal.status === 200, 'el ADMINISTRADOR borra la que subió el coach, con todo y su archivo', `=${borrarReal.status}`);
+}
 // ─────────────────────────────────────────────────────────────────────────
 // Eliminar un equipo: el candado es "¿lo administra alguien más?", NO
 // "¿ya tiene movimientos?". Ver README, "Quién puede eliminar un equipo, y
@@ -541,6 +643,9 @@ const cargo4 = await call(`/billing/leagues/${LEAGUE}/charges`, {
 ok(cargo4.status === 201, 'la liga le carga dinero', `=${cargo4.status} ${JSON.stringify(cargo4.data).slice(0, 90)}`);
 const { rows: libroAntes } = await pool.query('SELECT id FROM team_ledger_entries WHERE team_id=$1', [TEAM4]);
 ok(libroAntes.length > 0, 'y el cargo quedó en el libro liga↔equipo', `filas=${libroAntes.length}`);
+// Y una imagen en su playbook: lo que cuelga del equipo no puede trabar el
+// borrado, se va con él.
+await sembrar(TEAM4, 'Jugada de un equipo que se va');
 
 const borrar4 = await call(`/manage/teams/${TEAM4}`, { method: 'DELETE', token: LIGA });
 ok(borrar4.status === 200, 'la liga SÍ lo elimina: tener movimientos no es el candado', `=${borrar4.status}`);
@@ -550,6 +655,8 @@ const { rows: libroDespues } = await pool.query('SELECT id FROM team_ledger_entr
 ok(libroDespues.length === 0,
   'y su libro se fue con él — el único historial destruido es el de la liga, sobre su propio equipo',
   `filas=${libroDespues.length}`);
+const { rows: playbookDespues } = await pool.query('SELECT id FROM team_playbook_images WHERE team_id=$1', [TEAM4]);
+ok(playbookDespues.length === 0, 'y su playbook también', `filas=${playbookDespues.length}`);
 
 console.log('\n=== 17. Un equipo entregado NO se elimina, tenga o no movimientos ===');
 // TEAM se entregó en el paso 4 y su organización tiene miembros desde

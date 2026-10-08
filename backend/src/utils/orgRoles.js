@@ -90,6 +90,14 @@ const ETIQUETAS_POR_TIPO = {
 // y eso es justo lo que un torneo publica. La asistencia no lo es nunca. Lo
 // que no sale en ninguno de los dos es el dato personal detrás del jugador,
 // que ya está cubierto por la regla 7.
+//
+// `playbook` —las imágenes de jugadas del equipo (README, "Playbook del
+// equipo")— es el primer permiso que el COACH tiene y el tesorero no: es
+// material de entrenamiento, no dinero ni gente. Ver, subir, renombrar y
+// borrar van juntos a propósito, y borrar incluye lo que subió otro: quien
+// arma el playbook es el cuerpo técnico entero, no cada quien lo suyo. Solo
+// existe del lado del equipo; ningún rol de liga lo tiene, porque la liga
+// administra también a los rivales.
 export const PERMISOS = [
   'ver',               // leer el panel: perfil, calendario y roster
   'perfil',            // editar el perfil de la organización
@@ -104,6 +112,7 @@ export const PERMISOS = [
   'miembros',          // invitar y quitar gente que no sea dueño
   'duenos',            // invitar y quitar dueños
   'entregar_equipos',  // entregarle a un equipo su perfil (una sola vez, no se deshace)
+  'playbook',          // las imágenes de jugadas del equipo: ver, subir, renombrar y borrar
 ];
 
 // Qué permisos trae cada rol, por tipo de organización. Se escribe completo y
@@ -118,11 +127,11 @@ const PERMISOS_POR_ROL = {
     editor:    ['ver', 'marcadores', 'asistencia', 'estadisticas'],
   },
   team: {
-    owner:         ['ver', 'perfil', 'roster', 'cuotas_club', 'cobranza_liga', 'miembros', 'duenos'],
-    admin:         ['ver', 'perfil', 'roster', 'cuotas_club', 'cobranza_liga', 'miembros'],
+    owner:         ['ver', 'perfil', 'roster', 'cuotas_club', 'cobranza_liga', 'miembros', 'duenos', 'playbook'],
+    admin:         ['ver', 'perfil', 'roster', 'cuotas_club', 'cobranza_liga', 'miembros', 'playbook'],
     treasurer:     ['ver', 'cuotas_club', 'cobranza_liga'],
     roster_editor: ['ver', 'roster'],
-    coach:         ['ver'],
+    coach:         ['ver', 'playbook'],
   },
   media:  { owner: ['ver', 'perfil', 'miembros', 'duenos'], admin: ['ver', 'perfil', 'miembros'] },
   store:  { owner: ['ver', 'perfil', 'miembros', 'duenos'], admin: ['ver', 'perfil', 'miembros'] },
