@@ -2772,7 +2772,14 @@ además de inútil para quien lo configura. Los cuatro puntos de partida son:
 
 El criterio que hace posible ese orden es `h2h_wins` ("entre sí — juegos
 ganados"): si los empatados no se enfrentaron, no separa a nadie y deja pasar
-al siguiente, que es exactamente lo que pide el reglamento.
+al siguiente, que es exactamente lo que pide el reglamento. Con tres o más
+empatados esa regla se aplica par por par — ver "El entre sí con tres o más:
+nadie queda arriba de un empatado que le ganó", abajo.
+
+Por ganados, un 4-0 y un 4-2 están empatados en el primer criterio: los separa
+el juego entre ellos o, si no jugaron, la diferencia. Las derrotas no entran.
+Para ONEFA se confirmó así el 2026-10-13, aunque a media temporada, con
+semanas de descanso, eso deje a un invicto empatado con uno que ya perdió dos.
 
 El default es **por juegos ganados** porque es el orden de las ligas de esta
 app —es literalmente el reglamento de ONEFA: ganados, luego el juego entre
@@ -2793,6 +2800,76 @@ partidos. NFL lo hace al revés (elimina primero y sigue de largo), así que hay
 dos modos: `restart` y `sequential`. No es cosmético: dan órdenes distintos
 sobre los mismos partidos, y hay una prueba que lo demuestra con el mismo
 juego de datos.
+
+### El "entre sí" con tres o más: nadie queda arriba de un empatado que le ganó
+
+Es la regla de fondo para cualquier liga, decidida por Alfredo el 2026-10-13.
+
+**El problema.** La sub-clasificación de FIBA y FIFA da por hecho que los
+empatados jugaron todos contra todos —en un grupo de cuatro siempre pasa—,
+pero en una conferencia de 14 o 18 equipos con seis o siete juegos casi nunca
+pasa. Contar las victorias "entre sí" de un grupo que no se enfrentó completo
+premia al que tuvo el juego y castiga al que no: el que no jugó queda en 0,
+como si hubiera perdido. En 14 Grandes, Leones UAMN (4-2, +7) quedaba arriba
+de Borregos MTY (4-0, +125) y de Tigres (4-0, +80) solo porque le había ganado
+28-17 a Borregos GDL, el único juego entre los cuatro empatados. A MTY y a
+Tigres nunca los enfrentó.
+
+**La regla** es la de dos empatados aplicada par por par: si se enfrentaron,
+manda ese juego; si no, la diferencia de puntos. Con tres o más:
+
+- **Si jugaron todos contra todos**, el "entre sí" es una mini-liga entre
+  ellos, como en FIBA y FIFA: cuenta quién ganó más juegos entre los
+  empatados.
+- **Si no**, no hay mini-liga que calcular, pero sí quién le ganó a quién.
+  **Solo puede ir primero quien no haya perdido con ninguno de los que siguen
+  empatados**, y entre esos decide el criterio siguiente (la diferencia). Sale
+  ese, y los demás vuelven a empezar desde el primer criterio como un empate
+  nuevo.
+- Un juego que terminó empatado cuenta como enfrentados, pero no ordena a
+  nadie: entre esos dos decide la diferencia.
+
+En el ejemplo, GDL no puede ir primero porque UAMN le ganó. De los otros tres,
+MTY tiene la mejor diferencia y sale; después Tigres; y entre UAMN y GDL
+decide el 28-17.
+
+La primera versión de la regla, del mismo día, solo saltaba el "entre sí" y
+dejaba que la diferencia decidiera. Alfredo encontró el hueco en 14 Grandes,
+con 2 ganados: Borregos CCM (2-4, 0) le ganó 27-24 a Borregos CEM (2-4, +13),
+pero la diferencia sacaba a CEM de un grupo de cuatro antes de que quedara a
+solas con CCM, y CEM terminaba arriba de quien le ganó. Ahora CEM no puede ir
+primero mientras CCM siga empatado con él.
+
+**La consecuencia, aceptada a propósito: las victorias se encadenan.** Si A
+le ganó a B y B le ganó a C, A queda arriba de C aunque nunca hayan jugado y C
+tenga mejor diferencia: C no puede subir arriba de B, ni B arriba de A. Para
+que C quedara arriba de A habría que contradecir uno de los dos juegos, y el
+reglamento pone el juego entre ellos antes que la diferencia.
+
+**Lo que ninguna regla resuelve: un círculo.** Si A le ganó a B, B a C y C a
+A, todos perdieron con alguien y siempre queda contradicho al menos un juego.
+Por eso una derrota dentro de un círculo no le quita a nadie la posibilidad de
+ir primero: decide la diferencia, y en cuanto sale uno, el círculo se rompe y
+vuelven a mandar los juegos. Se contradice uno solo, el inevitable. Es lo que
+pasa en Nacional y en Bajío con Red Wolves, ULM y Cardinals.
+
+**Por qué uno a la vez.** Si la diferencia sacara a todos de golpe, dos que
+sí jugaron entre ellos quedarían ordenados por la diferencia sin que nadie
+mirara su juego. Es lo que el modo `restart` siempre dijo hacer —"al separarse
+uno, se vuelve al primer criterio"—, aunque hasta el 2026-10-13 el código
+separaba a todos de una vez y solo reiniciaba a los que seguían atados. Ese es
+el procedimiento de FIFA, y es en lo único que la app se aparta de él: en un
+grupo de fútbol, que siempre se enfrentó completo, FIFA deja el orden de la
+mini-liga aunque después dos de ellos tengan un resultado directo al revés.
+
+**El modo `sequential` solo cambia en que el "entre sí" se salta si no todos
+se enfrentaron.** Como nunca regresa a un criterio anterior, no tiene cómo
+separar uno a la vez ni aplicar quién puede ir primero.
+
+**Se descartó** decidir cada par por separado y ordenar por quién gana más
+comparaciones: no es una forma en que se escriba un reglamento, no se puede
+explicar renglón por renglón, y en el triángulo de Nacional contradice dos
+juegos en vez de uno.
 
 ### Dos criterios de "rivales en común", y por qué no es un parámetro
 

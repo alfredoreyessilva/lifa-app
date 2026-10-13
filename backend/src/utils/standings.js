@@ -53,17 +53,48 @@
 //   restart    → al separarse uno, se vuelve al primer criterio. Es el default
 //                porque es el que no usa números de un grupo que ya cambió.
 //   sequential → se sigue con el criterio siguiente.
+//
+// ── Cuando los empatados no jugaron todos contra todos ──
+//
+// La sub-clasificación de FIBA y FIFA supone un grupo que se enfrentó
+// completo. En una conferencia de 14 equipos con seis juegos casi nunca pasa,
+// y contar las victorias "entre sí" de un grupo a medias premia al que tuvo
+// el juego: el que no jugó queda en 0 como si hubiera perdido. La regla de
+// fondo para toda liga (README, "El entre sí con tres o más: nadie queda
+// arriba de un empatado que le ganó") es la de dos empatados aplicada par por
+// par — si se enfrentaron manda ese juego, si no la diferencia —, y en modo
+// restart se resuelve así:
+//
+//   · Los empatados se separan UNO A LA VEZ: sale el primero y los demás
+//     vuelven al primer criterio como empate nuevo. Es lo que 'restart'
+//     siempre dijo hacer; hasta el 2026-10-13 el código separaba a todos de
+//     una vez, que es el procedimiento de FIFA.
+//   · Si se enfrentaron todos contra todos, el "entre sí" es la mini-liga de
+//     siempre.
+//   · Si no, solo puede ir primero quien no perdió con ninguno de los que
+//     siguen empatados, y entre esos decide el criterio siguiente. Una
+//     derrota dentro de un círculo (A le ganó a B, B a C y C a A) no descarta
+//     a nadie: ahí todos perdieron con alguien.
+//
+// En modo sequential solo cambia que el "entre sí" se salta si no todos se
+// enfrentaron: como nunca regresa a un criterio anterior, no tiene cómo
+// separar uno a la vez.
 
 // ── Catálogo de criterios ────────────────────────────────────────────────
 //
 // `lower_is_better` es solo para puntos en contra: menos es mejor. Todo lo
 // demás se ordena de mayor a menor.
 //
+// `H2H_HELP` va en los cinco "entre sí" porque la regla de cuándo aplican es
+// la misma para todos, y es la que más sorprende a quien configura.
+//
 // `min_games` es para los criterios que exigen una muestra mínima: el de
 // rivales en común no aplica si los empatados no comparten al menos cuatro
 // (umbral tomado del reglamento de la NFL, que es donde está especificado).
 // Cuando no se cumple, el criterio se SALTA — no desempata ni elimina a
 // nadie — y se pasa al siguiente, que es distinto a que todos queden iguales.
+const H2H_HELP = 'Nadie queda arriba de un empatado que le ganó; si jugaron todos contra todos, cuenta como mini-liga. Con "seguir con el criterio siguiente", solo aplica si se enfrentaron todos.';
+
 export const TIEBREAKER_CATALOG = {
   // Primarios — normalmente el primero de la lista
   win_pct: {
@@ -85,23 +116,27 @@ export const TIEBREAKER_CATALOG = {
   h2h_wins: {
     metric: 'wins', universe: 'head_to_head',
     label: 'Entre sí — juegos ganados',
-    help: 'Si los empatados no se enfrentaron, no separa a nadie y pasa al criterio siguiente.',
+    help: H2H_HELP,
   },
   h2h_win_pct: {
     metric: 'win_pct', universe: 'head_to_head',
     label: 'Entre sí — % de ganados',
+    help: H2H_HELP,
   },
   h2h_points: {
     metric: 'points', universe: 'head_to_head',
     label: 'Entre sí — puntos de tabla',
+    help: H2H_HELP,
   },
   h2h_point_diff: {
     metric: 'point_diff', universe: 'head_to_head',
     label: 'Entre sí — diferencia de puntos',
+    help: H2H_HELP,
   },
   h2h_points_for: {
     metric: 'points_for', universe: 'head_to_head',
     label: 'Entre sí — puntos anotados',
+    help: H2H_HELP,
   },
 
   // Dentro del alcance de la tabla (su grupo o su conferencia)
@@ -328,6 +363,21 @@ function universeMatches(universe, teamId, tied, ctx) {
   }
 }
 
+// ¿Cada par de estos equipos tiene al menos un juego entre sí que cuente para
+// la tabla? Un juego empatado cuenta: se enfrentaron, aunque no se separen.
+function pairKey(a, b) {
+  return a < b ? `${a}-${b}` : `${b}-${a}`;
+}
+
+function allFaced(tied, ctx) {
+  for (let i = 0; i < tied.length; i++) {
+    for (let j = i + 1; j < tied.length; j++) {
+      if (!ctx.facedPairs.has(pairKey(tied[i].team_id, tied[j].team_id))) return false;
+    }
+  }
+  return true;
+}
+
 // Evalúa un criterio sobre los equipos empatados. Devuelve null cuando el
 // criterio no aplica (ej. rivales en común con menos de 4 juegos), que es
 // distinto de "aplicó y todos quedaron iguales": null salta al siguiente
@@ -335,6 +385,9 @@ function universeMatches(universe, teamId, tied, ctx) {
 function evaluateCriterion(key, tied, ctx) {
   const def = TIEBREAKER_CATALOG[key];
   if (!def) return null;
+  // "Entre sí" con un juego faltante no mide nada: el que no jugó quedaría
+  // en 0 como si hubiera perdido. Ver el encabezado de este archivo.
+  if (def.universe === 'head_to_head' && !allFaced(tied, ctx)) return null;
 
   const values = new Map();
   for (const t of tied) {
@@ -345,16 +398,21 @@ function evaluateCriterion(key, tied, ctx) {
   return { def, values };
 }
 
-// El ordenador recursivo. Devuelve los equipos ordenados y anota en cada uno
-// `resolved_by`: con qué criterio se separó del resto. Eso es lo que después
-// permite explicar la tabla en pantalla ("2º por diferencia de puntos") en
-// vez de mostrar un orden que nadie puede auditar.
+// El ordenador de un empate. Devuelve los equipos ordenados y anota en cada
+// uno `resolved_by`: con qué criterio se separó del resto. Eso es lo que
+// después permite explicar la tabla en pantalla ("2º por diferencia de
+// puntos") en vez de mostrar un orden que nadie puede auditar.
+//
+// En modo restart el trabajo lo hace rankOneAtATime; lo que sigue aquí abajo
+// es el modo sequential, que separa a todos de una vez.
 function rankTied(tied, criteriaIndex, ctx, depth = 0) {
-  // Guarda de profundidad: con listas de criterios mal configuradas (todo
-  // 'restart' y ningún criterio que separe) la recursión podría no avanzar.
-  // No debería pasar — solo se reinicia cuando alguien SÍ se separó — pero
-  // un tope barato vale más que un servidor colgado.
-  if (tied.length <= 1 || depth > 40) return tied;
+  // Guarda de profundidad: con listas de criterios mal configuradas la
+  // recursión podría no avanzar. No debería pasar — cada llamada avanza un
+  // criterio o achica el grupo — pero un tope barato vale más que un
+  // servidor colgado. El tope sale de ese mismo argumento (equipos ×
+  // criterios) y no de un número fijo.
+  if (tied.length <= 1 || depth > ctx.maxDepth) return tied;
+  if (ctx.config.multi_team_mode !== 'sequential') return rankOneAtATime(tied, ctx);
 
   const criteria = ctx.config.tiebreakers;
   if (criteriaIndex >= criteria.length) {
@@ -382,21 +440,132 @@ function rankTied(tied, criteriaIndex, ctx, depth = 0) {
 
   const orderedValues = [...buckets.keys()].sort((a, b) => (b - a) * sign);
 
-  // Al separarse alguien, el sub-empate se reevalúa. En modo 'restart'
-  // (FIBA/FIFA) vuelve al criterio 0 porque el universo "entre sí" cambió;
-  // en 'sequential' (NFL) continúa con el criterio siguiente.
-  const nextIndex = ctx.config.multi_team_mode === 'sequential' ? criteriaIndex + 1 : 0;
+  // Al separarse alguien, cada sub-empate sigue con el criterio siguiente:
+  // es lo que define al modo sequential (NFL).
+  const place = (bucket) => (bucket.length === 1
+    ? [{ ...bucket[0], resolved_by: criteriaIndex === 0 ? null : criteria[criteriaIndex] }]
+    : rankTied(bucket, criteriaIndex + 1, ctx, depth + 1));
 
+  return orderedValues.flatMap((v) => place(buckets.get(v)));
+}
+
+// Modo restart: un empate se resuelve uno a la vez. Sale el primero y los que
+// quedan vuelven a empezar desde el primer criterio, como un empate nuevo. Si
+// se separaran todos de una vez, dos que sí jugaron entre ellos quedarían
+// ordenados por la diferencia sin que nadie mirara su juego.
+function rankOneAtATime(tied, ctx) {
   const out = [];
-  for (const v of orderedValues) {
-    const bucket = buckets.get(v);
-    if (bucket.length === 1) {
-      out.push({ ...bucket[0], resolved_by: criteriaIndex === 0 ? null : criteria[criteriaIndex] });
-    } else {
-      out.push(...rankTied(bucket, nextIndex, ctx, depth + 1));
+  let rest = tied;
+  while (rest.length > 1) {
+    const first = pickFirst(rest, 0, ctx, 0);
+    // No debería pasar —pickFirst siempre devuelve a alguien—, pero un valor
+    // que no fuera número dejaría el ciclo sin avanzar, y un servidor colgado
+    // es peor que una tabla en el orden en que llegó.
+    if (!first.teams.length) break;
+    const ids = new Set(first.teams.map((t) => t.team_id));
+    for (const t of first.teams) {
+      // Un bloque que el reglamento ya no alcanza a separar no se ordena por
+      // ningún lado: queda marcado para que la liga lo resuelva como diga su
+      // reglamento (sorteo, moneda) y la tabla lo muestre con honestidad.
+      out.push(first.unresolved ? { ...t, unresolved_tie: true } : { ...t, resolved_by: first.by });
+    }
+    rest = rest.filter((t) => !ids.has(t.team_id));
+    if (rest.length === 1) {
+      // El último queda ahí por lo mismo que separó al de arriba.
+      out.push({ ...rest[0], resolved_by: first.by });
+      rest = [];
     }
   }
-  return out;
+  return [...out, ...rest];
+}
+
+// Quién va primero en un empate, y con qué criterio se separó de los demás.
+// Devuelve un equipo, o el bloque que el reglamento ya no alcanza a separar.
+function pickFirst(group, criteriaIndex, ctx, depth) {
+  const criteria = ctx.config.tiebreakers;
+  if (depth > ctx.maxDepth) return { teams: group, by: null };
+  if (criteriaIndex >= criteria.length) return { teams: group, by: null, unresolved: true };
+
+  const key = criteria[criteriaIndex];
+  const def = TIEBREAKER_CATALOG[key];
+  const by = criteriaIndex === 0 ? null : key;
+  const next = () => pickFirst(group, criteriaIndex + 1, ctx, depth + 1);
+  // Entre un subgrupo, desde el criterio que se indique. Si de ahí sale un
+  // bloque que nadie separa, se anota el criterio que lo dejó arriba.
+  const among = (subset, fromIndex) => {
+    if (subset.length === 1) return { teams: subset, by };
+    const found = pickFirst(subset, fromIndex, ctx, depth + 1);
+    return { ...found, by: found.by ?? by };
+  };
+
+  if (def && def.universe === 'head_to_head' && !allFaced(group, ctx)) {
+    const candidates = canGoFirst(group, def, ctx);
+    if (candidates.length === group.length) return next();
+    // Entre los que sí pueden ir primero decide el criterio siguiente, sin
+    // volver a empezar: sin los que quedaron fuera, un círculo dejaría de
+    // verse como círculo y una derrota dentro de él volvería a descartar.
+    return among(candidates, criteriaIndex + 1);
+  }
+
+  const evaluated = evaluateCriterion(key, group, ctx);
+  if (!evaluated) return next();
+  const sign = def.lower_is_better ? -1 : 1;
+  const best = Math.max(...group.map((t) => evaluated.values.get(t.team_id) * sign));
+  const top = group.filter((t) => evaluated.values.get(t.team_id) * sign === best);
+  // Los que este criterio deja arriba, empatados entre ellos, vuelven a
+  // empezar: es el reinicio de siempre del modo restart.
+  return top.length === group.length ? next() : among(top, 0);
+}
+
+// "Entre sí" en un grupo que no se enfrentó completo: no hay mini-liga que
+// calcular, pero sí quién le ganó a quién. Puede ir primero quien no perdió
+// con ninguno de los que siguen empatados. Una derrota dentro de un círculo
+// (A le ganó a B, B a C y C a A) no descarta a nadie: ahí todos perdieron con
+// alguien, y si contara, nadie del círculo podría ir primero nunca.
+function canGoFirst(group, def, ctx) {
+  const n = group.length;
+  const beat = group.map((a) => group.map((b) => a !== b && headToHead(a.team_id, b.team_id, def, ctx) > 0));
+  // Quién llega a quién por una cadena de victorias. Dos equipos están en el
+  // mismo círculo si cada uno llega al otro.
+  const reach = beat.map((row) => [...row]);
+  for (let k = 0; k < n; k++) {
+    for (let i = 0; i < n; i++) {
+      if (!reach[i][k]) continue;
+      for (let j = 0; j < n; j++) if (reach[k][j]) reach[i][j] = true;
+    }
+  }
+  return group.filter((_, x) => group.every((__, y) => !beat[y][x] || reach[x][y]));
+}
+
+// Positivo si `a` le ganó a `b` en los juegos entre ellos, según la métrica
+// del criterio (ganados, diferencia, anotados…); 0 si no jugaron o quedaron
+// parejos.
+function headToHead(a, b, def, ctx) {
+  const games = (ctx.matchesByTeam.get(a) || []).filter((m) =>
+    (m.home_team_id === a && m.away_team_id === b) || (m.home_team_id === b && m.away_team_id === a));
+  if (!games.length) return 0;
+  const va = metricValue(def.metric, recordOver(a, games), ctx.config);
+  const vb = metricValue(def.metric, recordOver(b, games), ctx.config);
+  return (va - vb) * (def.lower_is_better ? -1 : 1);
+}
+
+// La tabla se ordena por el primer criterio, y los que empatan en él forman
+// un empate que se resuelve aparte con el resto del reglamento. Separarlos
+// por grupo y no en una sola fila de "uno a la vez" es lo que deja anotado
+// con qué criterio quedó el último de cada empate.
+function rankTable(rows, ctx) {
+  const primary = evaluateCriterion(ctx.config.tiebreakers[0], rows, ctx);
+  if (!primary) return rankTied(rows, 0, ctx, 0);
+  const sign = primary.def.lower_is_better ? -1 : 1;
+  const buckets = new Map();
+  for (const r of rows) {
+    const v = primary.values.get(r.team_id);
+    if (!buckets.has(v)) buckets.set(v, []);
+    buckets.get(v).push(r);
+  }
+  return [...buckets.keys()]
+    .sort((a, b) => (b - a) * sign)
+    .flatMap((v) => rankTied(buckets.get(v), 0, ctx, 0));
 }
 
 /**
@@ -430,16 +599,20 @@ export function computeStandings({ teams = [], matches = [], config = {}, inScop
     countsForStandings(m) && teamIds.has(m.home_team_id) && teamIds.has(m.away_team_id));
 
   const matchesByTeam = new Map();
+  const facedPairs = new Set();
   for (const t of teams) matchesByTeam.set(t.team_id, []);
   for (const m of usable) {
     matchesByTeam.get(m.home_team_id).push(m);
     matchesByTeam.get(m.away_team_id).push(m);
+    facedPairs.add(pairKey(m.home_team_id, m.away_team_id));
   }
 
   const ctx = {
     config: cfg,
     matchesByTeam,
+    facedPairs,
     inScope: typeof inScope === 'function' ? inScope : () => true,
+    maxDepth: (teams.length + 1) * (cfg.tiebreakers.length + 1),
   };
 
   // Récord base de cada equipo, más los desgloses que la tabla muestra:
@@ -467,7 +640,7 @@ export function computeStandings({ teams = [], matches = [], config = {}, inScop
     };
   });
 
-  const ranked = rankTied(rows, 0, ctx, 0);
+  const ranked = rankTable(rows, ctx);
   return ranked.map((r, i) => ({ ...r, rank: i + 1 }));
 }
 

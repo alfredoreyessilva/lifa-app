@@ -15,6 +15,68 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Desempate de tres o más: nadie queda arriba de un empatado que le ganó, y
+  los empatados se separan uno a la vez (2026-10-13)**. Regla de fondo para
+  toda liga, decidida por Alfredo en dos pasos el mismo día. **No
+  desplegado.**
+
+  **El bug:** Alfredo sospechaba que el reglamento predeterminado se imponía
+  al que configuró para ONEFA. No era eso: en producción ONEFA tiene
+  `["wins","h2h_wins","point_diff","points_for"]` en `restart`, idéntico al
+  predeterminado, y el motor lo lee bien. El problema era el "entre sí" con
+  tres o más empatados: contaba las victorias de cada uno contra todo el grupo
+  aunque no se hubieran enfrentado todos, y el que no jugó quedaba en 0 como si
+  hubiera perdido. En 14 Grandes, Leones UAMN (4-2, +7) iba 2º por encima de
+  Borregos MTY (4-0, +125) y de Tigres (4-0, +80), a los que nunca enfrentó; en
+  Nacional, Potros ITSON (3-1, +73) iba 8º debajo de Búhos (+62) y Frailes
+  (+15). El modelo venía de FIBA y FIFA, donde los empatados de un grupo
+  siempre jugaron todos contra todos, y las pruebas solo cubrían empates de
+  dos.
+
+  **La regla**, la de dos empatados aplicada par por par: si jugaron todos
+  contra todos, el "entre sí" es la mini-liga de siempre; si no, solo puede ir
+  primero quien no perdió con ninguno de los que siguen empatados (una
+  derrota dentro de un círculo no cuenta), y entre esos decide el criterio
+  siguiente. En modo `restart` sale uno a la vez y los demás vuelven al primer
+  criterio. La primera versión de ese día solo saltaba el "entre sí" en un
+  grupo incompleto; Alfredo encontró el hueco: Borregos CCM le ganó 27-24 a
+  Borregos CEM, los dos 2-4, y la diferencia sacaba a CEM de un grupo de
+  cuatro antes de que quedara a solas con CCM. La consecuencia, aceptada a
+  propósito: las victorias se encadenan (si A le ganó a B y B a C, A va arriba
+  de C aunque no hayan jugado).
+
+  **Lo que cambió**, en `utils/standings.js`: el modo `restart` se resuelve en
+  `rankOneAtATime` → `pickFirst` → `canGoFirst`, y `rankTable` separa la tabla
+  por el primer criterio para que el último de cada empate conserve su
+  `resolved_by`. El modo `sequential` solo cambia en que el "entre sí" se salta
+  si no todos se enfrentaron. El tope de recursión pasó de 40 fijo a equipos ×
+  criterios. La ayuda de los cinco criterios "entre sí" en el panel lo
+  explica. El porqué, con las alternativas que se descartaron, está en "El
+  entre sí con tres o más: nadie queda arriba de un empatado que le ganó" del
+  README.
+
+  **Verificado:** 7 pruebas nuevas (237 en backend). Con el motor de antes
+  fallan cuatro; la de CCM y CEM en chico y la de la cadena pasaban de
+  casualidad, porque la mini-liga vieja premiaba al que había jugado, y fallan
+  con la primera versión del día, igual que la del anillo. Se comprobó con mutaciones que las pruebas
+  atrapan contar un empate como "no se enfrentaron", que una derrota de
+  alguien del círculo contra uno de fuera descarte al círculo entero, y que
+  entre los candidatos se vuelva a empezar (un círculo dejaba de verse como
+  círculo). Una prueba de la racha que no se tocó falló al pasar de 99
+  partidos en el archivo: el ayudante escribía el día a mano ("2026-01-100") y
+  ya usa fechas reales. El motor se corrió con los datos de producción, leídos
+  en una sesión de solo lectura, en las 7 tablas con partidos (ONEFA, LFA,
+  PFL). Contra lo publicado solo cambian las dos conferencias de ONEFA: en 14
+  Grandes MTY 2º, Tigres 3º y UAMN 4º; en Nacional ITSON pasa de 8º a 6º, y
+  Cardinals y Red Wolves intercambian 13º y 14º (Cardinals le ganó). Ninguna
+  tabla contradice un juego entre empatados salvo el inevitable de cada
+  triángulo (uno en Nacional y uno en Bajío). **No se abrió en el navegador**:
+  la pantalla no cambió, solo el texto de ayuda que llega del API.
+
+  En la misma revisión se confirmó para ONEFA que por ganados un 4-0 y un 4-2
+  están empatados en el primer criterio: los separa el juego entre ellos o la
+  diferencia, y las derrotas no entran.
+
 - **Cada tabla de posiciones genera su imagen para compartir (2026-10-12)**.
   **Desplegado el mismo día** (`0db87a7`), a pedido de Alfredo y con los tres
   P0 abiertos: el CI pasó, el bundle de Vercel ya trae la imagen, y en el sitio

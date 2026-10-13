@@ -5,9 +5,11 @@
 // que es donde una implementación casera se equivoca sin que nadie lo note
 // hasta que una liga reclama que su tabla está mal:
 //
-//   · que "entre sí" se calcule SOLO entre los equipos empatados,
+//   · que "entre sí" se calcule SOLO entre los equipos empatados: como
+//     mini-liga si se enfrentaron todos contra todos, y si no, sin dejar a
+//     nadie arriba de un empatado que le ganó,
 //   · que un empate de tres reinicie el reglamento cuando uno se separa
-//     (FIBA/FIFA) en vez de seguir de corrido,
+//     (FIBA/FIFA) en vez de seguir de corrido, uno a la vez,
 //   · que un criterio que no aplica (rivales en común con pocos juegos) se
 //     salte sin desempatar a nadie,
 //   · y que cuando el reglamento se agota, la tabla LO DIGA en vez de
@@ -41,7 +43,10 @@ function game(home, away, homeScore, awayScore, extra = {}) {
     // regla que los rankings de predicciones), no el motor — ver el comentario
     // de countsForStandings. Aquí se simula ya resuelto.
     is_final: true,
-    match_date: `2026-01-${String(matchSeq).padStart(2, '0')} 12:00`,
+    // Una hora después del anterior, como fecha real: el día escrito a mano
+    // ("2026-01-100") dejaba de ordenarse bien en cuanto el archivo pasó de
+    // 99 partidos, y la racha se lee ordenando por fecha.
+    match_date: new Date(Date.UTC(2026, 0, 1) + matchSeq * 3_600_000).toISOString(),
     ...extra,
   };
 }
@@ -312,6 +317,173 @@ test('ONEFA: empatados en ganados que NO se enfrentaron — manda la diferencia'
 
   assert.deepEqual(order(rows), [1, 2, 4, 3]);
   assert.equal(rows[0].resolved_by, 'point_diff');
+});
+
+// ── Empatados que no jugaron todos contra todos ──────────────────────────
+
+test('cuatro empatados con un solo juego entre ellos: nadie brinca a quien no enfrentó, y ese juego decide su par', () => {
+  // El caso de 14 Grandes (2026-10-13) en chico. A, B, C y D quedan con 2
+  // ganados; el único juego entre ellos es A sobre D. Antes, "entre sí" le
+  // daba a A una victoria y a los demás cero, y A quedaba primero sin haber
+  // enfrentado a B ni a C. Ahora el grupo no se enfrentó completo, así que el
+  // "entre sí" se salta y la diferencia saca uno a la vez: B, luego C, y entre
+  // A y D —que sí jugaron— manda ese juego, aunque D tenga mejor diferencia.
+  // Separando a todos de golpe por diferencia, D quedaría arriba de A.
+  const rows = computeStandings({
+    teams: [1, 2, 3, 4, 5, 6, 7, 8].map((id) => team(id)),
+    matches: [
+      game(1, 4, 3, 0),    // A le gana a D: el único juego entre empatados
+      game(1, 5, 1, 0),
+      game(6, 1, 1, 0),    // A: 2-1, diferencia +3
+      game(4, 7, 15, 0),
+      game(4, 8, 18, 0),   // D: 2-1, diferencia +30
+      game(2, 5, 40, 0),
+      game(2, 6, 40, 0),   // B: 2-0, diferencia +80
+      game(3, 7, 20, 0),
+      game(3, 8, 20, 0),   // C: 2-0, diferencia +40
+    ],
+    config: TIEBREAKER_PRESETS.ganados,
+  });
+
+  assert.deepEqual(order(rows).slice(0, 4), [2, 3, 1, 4]);
+  assert.equal(rows[0].resolved_by, 'point_diff');
+  assert.equal(rows[1].resolved_by, 'point_diff');
+  assert.equal(rows[2].resolved_by, 'h2h_wins');
+});
+
+test('triángulo que sí se enfrentó: la diferencia saca al mejor y el par que queda lo decide su juego', () => {
+  // A le ganó a C, C a B y B a A, los tres por 7: "entre sí" los deja 1-1 y
+  // empatados en todo. La diferencia general es A +30, B +20, C +10. Separar
+  // a los tres de una vez daría A, B, C y contradiría dos juegos (C le ganó a
+  // B, B le ganó a A). Uno a la vez: sale A, y entre B y C manda que C ganó.
+  // Así solo queda contradicho uno, que en un triángulo es inevitable.
+  const rows = computeStandings({
+    teams: [1, 2, 3, 4, 5, 6].map((id) => team(id)),
+    matches: [
+      game(1, 3, 7, 0),    // A le gana a C
+      game(3, 2, 7, 0),    // C le gana a B
+      game(2, 1, 7, 0),    // B le gana a A
+      game(1, 4, 30, 0),
+      game(2, 5, 20, 0),
+      game(3, 6, 10, 0),
+    ],
+    config: TIEBREAKER_PRESETS.ganados,
+  });
+
+  assert.deepEqual(order(rows).slice(0, 3), [1, 3, 2]);
+  assert.equal(rows[0].resolved_by, 'point_diff');
+  assert.equal(rows[1].resolved_by, 'h2h_wins');
+});
+
+test('un juego empatado entre ellos cuenta como enfrentados', () => {
+  // A empató con B, y los dos le ganaron a C: los tres se enfrentaron, así
+  // que el "entre sí" aplica y C, sin victorias en ese universo, va al fondo
+  // aunque tenga la mejor diferencia general. Entre A y B el juego no separa
+  // (fue empate) y decide la diferencia. Si el empate no contara como juego,
+  // el grupo quedaría incompleto y C saldría primero por diferencia.
+  const rows = computeStandings({
+    teams: [team(1), team(2), team(3), team(4)],
+    matches: [
+      game(1, 2, 7, 7),    // A y B empatan
+      game(1, 3, 10, 7),   // A le gana a C   -> A 1-0-1, +3
+      game(2, 3, 20, 7),   // B le gana a C   -> B 1-0-1, +13
+      game(3, 4, 60, 0),   // C le gana a D   -> C 1-2,   +44
+    ],
+    config: TIEBREAKER_PRESETS.ganados,
+  });
+
+  assert.deepEqual(order(rows), [2, 1, 3, 4]);
+  assert.equal(rows[0].resolved_by, 'point_diff');
+  assert.equal(rows[2].resolved_by, 'h2h_wins');
+});
+
+test('nadie queda arriba de un empatado que le ganó, aunque la diferencia lo saque antes', () => {
+  // El caso de CCM y CEM en 14 Grandes (2026-10-13), en chico. Q, R y S
+  // quedan 1-1; Q le ganó a R 27-24, y S no jugó con ninguno de los dos. R
+  // tiene la mejor diferencia, así que separándolos uno a la vez por
+  // diferencia saldría primero... arriba de Q, que le ganó. R no puede ir
+  // primero mientras Q siga empatado con él: entre Q y S, que sí pueden,
+  // decide la diferencia, y después R va arriba de S por la suya.
+  const rows = computeStandings({
+    teams: [1, 2, 3, 4, 5, 6, 7].map((id) => team(id)),
+    matches: [
+      game(1, 2, 27, 24),  // Q le gana a R
+      game(4, 1, 3, 0),    // Q: 1-1, diferencia 0
+      game(2, 5, 16, 0),   // R: 1-1, diferencia +13
+      game(3, 6, 1, 0),
+      game(7, 3, 16, 0),   // S: 1-1, diferencia -15
+      game(4, 5, 1, 0),    // 4 y 7 se van a 2-0 y 5 y 6 a 0-2,
+      game(7, 6, 1, 0),    // para que el empate sea solo de Q, R y S
+    ],
+    config: TIEBREAKER_PRESETS.ganados,
+  });
+
+  assert.deepEqual(order(rows).slice(2, 5), [1, 2, 3]);
+});
+
+test('las victorias se encadenan: A le ganó a B y B a C, así que A va arriba de C', () => {
+  // A y C nunca jugaron y C tiene por mucho la mejor diferencia. Pero C no
+  // puede quedar arriba de B (le ganó) ni B arriba de A (le ganó): para que C
+  // quedara arriba de A habría que contradecir uno de los dos juegos, y el
+  // reglamento pone el juego entre ellos antes que la diferencia. Es la
+  // consecuencia que Alfredo aceptó al adoptar la regla.
+  const rows = computeStandings({
+    teams: [1, 2, 3, 4, 5, 6].map((id) => team(id)),
+    matches: [
+      game(1, 2, 3, 0),    // A le gana a B
+      game(2, 3, 3, 0),    // B le gana a C
+      game(4, 1, 1, 0),    // A: 1-1, diferencia +2
+      game(3, 5, 60, 0),   // C: 1-1, diferencia +57;  B: 1-1, diferencia 0
+      game(4, 6, 1, 0),    // 4 se va a 2-0
+    ],
+    config: TIEBREAKER_PRESETS.ganados,
+  });
+
+  assert.deepEqual(order(rows), [4, 1, 2, 3, 6, 5]);
+  assert.equal(rows[1].resolved_by, 'h2h_wins');
+});
+
+test('una derrota dentro de un círculo no le quita a nadie ir primero', () => {
+  // B, C y D forman un círculo (B le ganó a C, C a D y D a B), y además A le
+  // ganó a B. A no jugó con C ni con D. B no puede ir primero (A le ganó, y A
+  // no está en su círculo), pero C y D sí: su única derrota es dentro del
+  // círculo. D tiene la mejor diferencia y sale primero, arriba de A, con
+  // quien nunca jugó. Si la derrota dentro del círculo contara, solo A podría
+  // ir primero y quedaría arriba de D por una cadena que pasa por el círculo.
+  const rows = computeStandings({
+    teams: [team(1), team(2), team(3), team(4)],
+    matches: [
+      game(1, 2, 7, 0),    // A le gana a B
+      game(2, 3, 7, 0),    // B le gana a C
+      game(3, 4, 7, 0),    // C le gana a D
+      game(4, 2, 40, 0),   // D le gana a B   -> A +7, B -40, C 0, D +33
+    ],
+    config: TIEBREAKER_PRESETS.ganados,
+  });
+
+  assert.deepEqual(order(rows), [4, 1, 2, 3]);
+  assert.equal(rows[0].resolved_by, 'point_diff');
+});
+
+test('un anillo de 18 se rompe una sola vez y desde ahí mandan los juegos', () => {
+  // 18 equipos en anillo (cada uno le gana al siguiente): todos 1-1, nadie
+  // jugó contra todos, y todos perdieron con alguien, porque el anillo entero
+  // es un círculo. Decide la diferencia: sale el 18. En cuanto sale, el 1 ya
+  // no perdió con nadie de los que quedan, y desde ahí manda la cadena: 1, 2,
+  // 3… hasta el 17, aunque el 1 tenga la peor diferencia de todos. El único
+  // juego contradicho es el 17 sobre el 18, el que rompe el círculo.
+  const ids = Array.from({ length: 18 }, (_, i) => i + 1);
+  const rows = computeStandings({
+    teams: ids.map((id) => team(id)),
+    // El margen de cada juego es i², así que cada diferencia es distinta.
+    matches: ids.map((i) => game(i, (i % 18) + 1, i * i, 0)),
+    config: TIEBREAKER_PRESETS.ganados,
+  });
+
+  assert.deepEqual(order(rows), [18, ...ids.slice(0, 17)]);
+  assert.ok(rows.every((r) => !r.unresolved_tie));
+  assert.equal(rows[0].resolved_by, 'point_diff');
+  assert.equal(rows[1].resolved_by, 'h2h_wins');
 });
 
 // ── Sistema de puntos ────────────────────────────────────────────────────
