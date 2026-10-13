@@ -10,25 +10,29 @@
 //   · Un empate que el reglamento no resolvió se MARCA. La alternativa
 //     (dejar el orden que salió) haría pasar por resuelto algo que no lo
 //     está, y es justo el caso en el que la liga necesita intervenir.
+//
+// Cómo se escribe cada cifra vive en utils/standingsFormat.js, compartido con
+// la imagen para compartir: la tabla y la imagen no pueden decir cosas
+// distintas. `action` es lo que va a la derecha del nombre de la tabla (hoy,
+// el botón de generar su imagen).
 
-const pct = (v) => (v === 1 ? '1.000' : v.toFixed(3).replace(/^0/, ''));
-
-function recordLabel(rec) {
-  if (!rec) return '—';
-  const base = `${rec.wins}-${rec.losses}`;
-  return rec.ties ? `${base}-${rec.ties}` : base;
-}
+import { pct, recordLabel, rowQualifies } from '../utils/standingsFormat.js';
 
 const SCOPE_HEADER = { conference: 'EN CONF.', group: 'EN GRUPO' };
 
-export default function StandingsTable({ table, usesPoints, qualifyingCount = 0 }) {
+export default function StandingsTable({ table, usesPoints, qualifyingCount = 0, action = null }) {
   const { level, scope_name, rows } = table;
   const showScope = level !== 'branch';
   const anyTies = rows.some((r) => r.ties > 0);
 
   return (
     <div className="standings-block">
-      {scope_name && <div className="standings-scope-name">{scope_name}</div>}
+      {(scope_name || action) && (
+        <div className="standings-block-head">
+          {scope_name && <div className="standings-scope-name">{scope_name}</div>}
+          {action && <div className="standings-block-action">{action}</div>}
+        </div>
+      )}
 
       <div className="table-wrap">
         <table className="data-table standings-table">
@@ -55,8 +59,7 @@ export default function StandingsTable({ table, usesPoints, qualifyingCount = 0 
               <tr
                 key={r.team_id}
                 className={[
-                  (qualifyingCount && r.rank <= qualifyingCount) || r.qualified_as === 'wildcard'
-                    ? 'standings-qualifies' : '',
+                  rowQualifies(r, qualifyingCount) ? 'standings-qualifies' : '',
                   r.played === 0 ? 'row-muted' : '',
                 ].filter(Boolean).join(' ')}
               >

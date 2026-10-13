@@ -29,7 +29,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | **P1** | Hoy no daña, pero frena el siguiente paso: la primera liga que cobre, la prueba en cancha, el siguiente cliente |
 | **P2** | Deuda y pulido. Se toma cuando hay tiempo o cuando se toca ese archivo |
 
-## Índice (2026-10-08)
+## Índice (2026-10-12)
 
 | ID | P | Qué | Tipo |
 |-|-|-|-|
@@ -64,6 +64,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-32 | P2 | Un dueño no se puede retirar aunque haya otros dueños, y el README dice que sí | decisión |
 | PD-33 | P2 | Los recordatorios de cobranza esconden su error y pierden el día | código |
 | PD-35 | P2 | En el celular, el encabezado del panel ensancha la página | código |
+| PD-36 | P2 | En el celular, la tabla de posiciones se desliza de lado, y el README dice que cabe | código |
 
 ---
 
@@ -557,6 +558,26 @@ envuelven: la página mide 503 px en una pantalla de 360, y aparece scroll
 horizontal en **todas** las pestañas del panel del club, no solo en la del
 playbook. Ya pasaba antes. Lo que está debajo (las pestañas, la cuadrícula del
 playbook) sí cabe; es solo esa fila de botones.
+
+### PD-36 · En el celular, la tabla de posiciones se desliza de lado, y el README dice que cabe
+
+Encontrado el 2026-10-12 al revisar en un teléfono la imagen para compartir de
+la tabla; ya pasaba antes y no lo toca ese cambio. "Tabla de posiciones y
+modelo de competencia" del README dice que en el teléfono la tabla **cabe sin
+deslizar**, y medido en la página pública del torneo no es así:
+
+| Tabla | 360 px | 390 px | 412 px |
+|-|-|-|-|
+| General (LFA, 8 columnas) | 301 de 271 · desliza | 301 de 301 · cabe | cabe |
+| De conferencia (ONEFA, 9 columnas) | 365 de 271 · desliza | 365 de 301 · desliza | 365 de 323 · desliza |
+
+La general se pasa por 30 px en los teléfonos chicos; la de conferencia lleva
+además "EN CONF." y desliza en todos, así que en la única liga con uso real DIF
+y racha quedan escondidas detrás de un deslizamiento. La salida obvia para la
+de conferencia es esconder en el teléfono la columna de récord dentro del
+alcance, con la misma clase `standings-hide-sm` que ya esconde PF y PC; para
+los 30 px de la general falta medir de dónde salen. Al cerrarlo, corregir la
+frase del README.
 
 ---
 

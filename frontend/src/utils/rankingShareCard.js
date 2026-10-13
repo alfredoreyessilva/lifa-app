@@ -11,37 +11,10 @@
 
 import {
   FORMATS, readTheme, ensureFonts, loadImage, drawBallIcon, drawBackground,
-  fitText, roundRect,
+  fitText, roundRect, drawImageContain, ellipsize, BRAND_LOGO_SRC, BRAND_LOGO_RATIO,
 } from './shareCardCommon.js';
 
 const MAX_ROWS = 10;
-
-// Logo de la marca (mismo archivo que el footer del sitio en App.jsx).
-// El JPG ya trae el fondo verde de la cancha, así que se integra sin
-// recuadro. Relación de aspecto real del archivo (1376 x 768).
-const BRAND_LOGO_SRC = '/cfbamx.jpg';
-const BRAND_LOGO_RATIO = 1376 / 768;
-
-// Dibuja una imagen "contain" (respeta proporción, centrada) dentro de un
-// recuadro. Si no hay imagen, no hace nada.
-function drawImageContain(ctx, img, boxX, boxY, boxW, boxH) {
-  if (!img) return;
-  const scale = Math.min(boxW / img.width, boxH / img.height);
-  const dw = img.width * scale;
-  const dh = img.height * scale;
-  ctx.drawImage(img, boxX + (boxW - dw) / 2, boxY + (boxH - dh) / 2, dw, dh);
-}
-
-// Recorta un texto con "…" para que quepa en maxWidth con la fuente que
-// ya esté puesta en el contexto.
-function ellipsize(ctx, text, maxWidth) {
-  if (ctx.measureText(text).width <= maxWidth) return text;
-  let t = text;
-  while (t.length > 1 && ctx.measureText(`${t}…`).width > maxWidth) {
-    t = t.slice(0, -1);
-  }
-  return `${t.trimEnd()}…`;
-}
 
 // Línea de detalle bajo cada nombre — mismo criterio que CalendarRanking.jsx.
 function detailLine(r) {

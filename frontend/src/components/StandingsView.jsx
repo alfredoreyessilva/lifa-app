@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import StandingsTable from './StandingsTable.jsx';
+import StandingsImageButton from './StandingsImageButton.jsx';
 
 // La vista completa de posiciones de una rama: los campeones arriba, y
 // abajo las tablas del nivel que se esté viendo.
@@ -12,6 +13,11 @@ import StandingsTable from './StandingsTable.jsx';
 //
 // Si la liga configuró un solo nivel (el caso más común), no hay pestañas:
 // se ve la tabla y ya.
+//
+// `shareImage` enciende el botón "Generar imagen" en cada tabla, y trae lo que
+// la imagen necesita y la tabla no sabe: { tournament, context, leagueLogo }.
+// Lo pasa la página pública del torneo; la vista previa del panel de la liga
+// no, porque ahí la tabla todavía se está configurando.
 
 const LEVEL_LABEL = { branch: 'General', conference: 'Por conferencia', group: 'Por grupo' };
 
@@ -23,7 +29,7 @@ const SOURCE_LABEL = {
   override: 'definido por la liga',
 };
 
-export default function StandingsView({ data, emptyText }) {
+export default function StandingsView({ data, emptyText, shareImage = null }) {
   const levels = [...new Set((data?.tables || []).map((t) => t.level))];
   const [level, setLevel] = useState(null);
 
@@ -93,6 +99,9 @@ export default function StandingsView({ data, emptyText }) {
           table={t}
           usesPoints={usesPoints}
           qualifyingCount={t.qualifying_count || 0}
+          action={shareImage && (
+            <StandingsImageButton table={t} usesPoints={usesPoints} header={shareImage} />
+          )}
         />
       ))}
 

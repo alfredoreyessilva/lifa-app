@@ -3865,6 +3865,19 @@ a.match-card-new {
   margin: 0 0 8px;
 }
 
+/* El nombre de la tabla y, a su derecha, el botón de su imagen. Cada tabla
+   lleva el suyo: en una rama por conferencias cada conferencia es una imagen.
+   La tabla general no tiene nombre, y el botón se queda igual a la derecha. */
+.standings-block-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+.standings-block-head .standings-scope-name { margin: 0; }
+.standings-block-action { margin-left: auto; max-width: 100%; }
+
 .standings-table .standings-pos {
   width: 34px;
   text-align: center;

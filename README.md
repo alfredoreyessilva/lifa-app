@@ -2895,7 +2895,12 @@ backend/scripts/verify-standings.mjs  Verificación de SOLO LECTURA contra la ba
 frontend/src/components/
   StandingsTable.jsx                  Una tabla.
   StandingsView.jsx                   Campeones + pestañas por nivel + tablas.
+  StandingsImageButton.jsx            "Generar imagen" de una tabla (publicación / historia).
   CompetitionModelModal.jsx           El panel: Fases · Formato · Títulos · Vista previa.
+frontend/src/utils/
+  standingsFormat.js                  Cómo se escribe cada cifra y qué columnas lleva la
+                                      imagen. PURO: lo comparten la tabla y la imagen.
+  standingsShareCard.js               El dibujo de la imagen (canvas 2D, en el navegador).
 ```
 
 ### Endpoints
@@ -3015,6 +3020,71 @@ mismo código que se estaba probando:
   mismo nivel, pero el orden de esa comparación usa criterios generales fijos
   (% de ganados → diferencia → anotados) y todavía no es configurable como sí
   lo es el desempate normal.
+
+### La imagen para compartir (2026-10-12)
+
+Cada tabla de la página pública del torneo tiene su botón **Generar imagen**:
+la dibuja en el navegador con canvas 2D —igual que las imágenes del partido,
+del jugador y del ranking de predicciones—, en publicación (1080×1350) y en
+historia (1080×1920), y la comparte o la descarga. No toca el backend: dibuja
+el mismo `GET /leagues/branches/:id/standings` que pinta la pestaña, sin
+recalcular nada.
+
+- **Una imagen por tabla, no una por rama.** En una rama por conferencias cada
+  conferencia lleva su botón: las dos de ONEFA juntas son 32 renglones, que en
+  un celular no se leen. Y es como las publican las ligas.
+- **Lleva todas las columnas de la tabla en pantalla**, en el mismo orden: JJ,
+  G, P, E si hubo empates, PTS o %, el récord dentro de la conferencia o el
+  grupo, PF, PC, DIF y racha. Ninguna se suelta para darle aire al nombre. La
+  primera versión quitaba PF y PC en las tablas de conferencia, como hace el
+  teléfono, y no hacía falta: en 1080 de ancho el nombre más largo de hoy
+  (PUMAS FES ACATLÁN UNAM) cabe completo con todas, también en la historia.
+  Cuando falta espacio es el nombre el que baja su letra, hasta el 60 % de la
+  del renglón, y solo el que ni así cabe se recorta con "…". La regla es
+  `imageColumns()`, con sus pruebas.
+- **Lo que la tabla marca, la imagen también**: la barra de los que clasifican,
+  la pill de comodín, el asterisco del empate que el reglamento no resolvió y el
+  renglón atenuado del que no ha jugado. Callarlo haría pasar por resuelto un
+  empate que no lo está —la misma razón por la que la tabla lo marca—, y la
+  imagen circula sin la página al lado. La leyenda explica solo las marcas que
+  aparecen.
+- **Lleva la fecha de corte** ("Al 12 de octubre de 2026"): una tabla sin fecha
+  que circula por WhatsApp no dice de qué jornada es.
+- **Nombra la tabla completa**: "Conferencia NACIONAL", "Grupo CENTRO". En la
+  página basta "NACIONAL" porque la pestaña de arriba dice "Por conferencia";
+  la imagen viaja sin esa pestaña.
+- **Los escudos se piden a Cloudinary al tamaño en que se pintan**
+  (`imagenAjustada`), y el que no llega en 8 s sale con iniciales: una imagen
+  con un logo de menos es mejor que un botón atorado en "Generando imagen…".
+- **Solo en la página pública.** La vista previa del panel de la liga no lleva
+  el botón: ahí la tabla todavía se está configurando.
+- Cómo se escribe cada cifra (`.750`, `3-1-1`, `+12`) salió de
+  `StandingsTable.jsx` a `utils/standingsFormat.js`, para que la tabla y la
+  imagen no puedan decir cosas distintas.
+
+Lo que encontró verla en el navegador, contra `desarrollo-local`, y no veía
+ninguna prueba:
+
+1. Con el panel translúcido del ranking, las rayas de yarda del fondo cruzaban
+   la tabla y se leían como separadores que no coincidían con ningún renglón.
+   El panel de esta imagen es opaco.
+2. La fecha, fuera del panel, caía en la historia justo sobre una raya y se veía
+   tachada. Va en el pie del panel.
+3. En la historia, con renglones altos, las cifras crecían hasta pegar DIF con
+   la racha. La letra crece con el renglón, con tope.
+4. En una prueba con todas las marcas a la vez, la pill de comodín de un equipo
+   le quitaba ancho al nombre de todos y recortaba PUMAS FES ACATLÁN UNAM. Cada
+   renglón descuenta solo lo suyo.
+
+**Fuera de esta versión:**
+
+- **El campeón.** La página lo pone arriba de las tablas; la imagen es solo la
+  tabla. Si se agrega, va aparte: el primer lugar no siempre es el campeón.
+- **Todas las tablas de un nivel en una sola imagen** (los tres grupos de ONEFA
+  juntos).
+- El botón **Compartir** no se ejercitó en Playwright, porque abre el panel
+  nativo del sistema. Es el mismo código que el del ranking, que ya está en
+  producción.
 
 ## Predicciones y quinielas
 

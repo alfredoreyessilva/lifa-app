@@ -8,6 +8,33 @@ export const FORMATS = {
   story: { width: 1080, height: 1920, label: 'Historia' },
 };
 
+// Logo de la marca (mismo archivo que el footer del sitio en App.jsx).
+// El JPG ya trae el fondo verde de la cancha, así que se integra sin
+// recuadro. Relación de aspecto real del archivo (1376 x 768).
+export const BRAND_LOGO_SRC = '/cfbamx.jpg';
+export const BRAND_LOGO_RATIO = 1376 / 768;
+
+// Dibuja una imagen "contain" (respeta proporción, centrada) dentro de un
+// recuadro. Si no hay imagen, no hace nada.
+export function drawImageContain(ctx, img, boxX, boxY, boxW, boxH) {
+  if (!img) return;
+  const scale = Math.min(boxW / img.width, boxH / img.height);
+  const dw = img.width * scale;
+  const dh = img.height * scale;
+  ctx.drawImage(img, boxX + (boxW - dw) / 2, boxY + (boxH - dh) / 2, dw, dh);
+}
+
+// Recorta un texto con "…" para que quepa en maxWidth con la fuente que
+// ya esté puesta en el contexto.
+export function ellipsize(ctx, text, maxWidth) {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(`${t}…`).width > maxWidth) {
+    t = t.slice(0, -1);
+  }
+  return `${t.trimEnd()}…`;
+}
+
 // Lee los colores/fuentes reales de styles.css (custom properties) para que
 // la imagen generada nunca se desalinee del branding de la app si cambia.
 export function readTheme() {

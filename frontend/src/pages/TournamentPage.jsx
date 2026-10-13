@@ -275,6 +275,11 @@ export default function TournamentPage() {
                   <StandingsView
                     data={standings[activeBranchId]}
                     emptyText="Esta rama todavía no tiene tabla de posiciones publicada."
+                    shareImage={{
+                      tournament: tournament.name,
+                      context: infoLabel || null,
+                      leagueLogo: tournament.league_logo_url || null,
+                    }}
                   />
                 ) : (
                   <Loading />

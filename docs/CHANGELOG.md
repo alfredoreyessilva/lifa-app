@@ -15,6 +15,51 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Cada tabla de posiciones genera su imagen para compartir (2026-10-12)**.
+  **Sin desplegar.** Pedido por Alfredo con los tres P0 abiertos.
+
+  **Lo que se construyó:** un botón "Generar imagen" junto a cada tabla de la
+  pestaña Posiciones de la página pública del torneo —una imagen por
+  conferencia o grupo, no una por rama—, en publicación y en historia, con
+  Compartir y Descargar. Canvas 2D en el navegador, como las imágenes del
+  partido, del jugador y del ranking; no toca el backend.
+  `utils/standingsFormat.js` decide qué columnas lleva —todas las de la tabla
+  en pantalla— y cómo se escribe cada cifra, y lo comparten la tabla y la
+  imagen;
+  `standingsShareCard.js` dibuja y `StandingsImageButton.jsx` es el botón.
+  `drawImageContain` y `ellipsize` pasaron del ranking a `shareCardCommon.js`
+  para no copiarlos una tercera vez. El porqué de cada decisión está en "La
+  imagen para compartir" del README.
+
+  **Verificado** en el navegador contra `desarrollo-local`, con las tablas
+  reales: las dos conferencias de ONEFA (14 y 18 equipos), sus tres grupos y la
+  general de LFA, en los dos formatos, en escritorio y en un teléfono de 375
+  px; las marcas que los datos reales no traen (clasifica, comodín, empate sin
+  resolver, empates, equipo sin logo, equipo sin jugar) con una copia alterada
+  en la memoria del navegador, sin escribir en la base. La imagen del ranking
+  de predicciones se sigue generando igual después de mover sus dos funciones.
+  Pasan 230 unitarias del backend y 165 del frontend (13 nuevas). El botón
+  Compartir no se ejercitó: abre el panel nativo del sistema.
+
+  **Corregido el mismo día, a pedido de Alfredo:** la primera versión soltaba
+  PF y PC en las tablas de conferencia para darle aire al nombre, como el
+  teléfono. Al ver la imagen de la conferencia NACIONAL, Alfredo notó que el
+  espacio sobraba, y era cierto: PUMAS FES ACATLÁN UNAM ocupaba unos 230 de
+  los 360 px que tenía. Ahora la imagen lleva todas las columnas y el nombre ajusta su
+  letra; se volvió a verificar en los dos formatos, con las dos conferencias y
+  con el peor caso (empates, puntos, grupo y comodín a la vez), sin que se
+  recorte ningún nombre real.
+
+  **Lo que encontró correrlo:** las rayas de yarda del fondo se transparentaban
+  por la tabla y parecían separadores de renglón; la fecha caía sobre una raya y
+  se veía tachada; en la historia las cifras crecían hasta pegarse; y la pill de
+  comodín de un equipo le quitaba ancho al nombre de todos. Los cuatro, con su
+  arreglo, en el README.
+
+  **Lo que salió al revisarlo, y no se arregló aquí:** en el celular la tabla
+  de posiciones se desliza de lado, y la de conferencia en todos los anchos de
+  teléfono, aunque el README dice que cabe (PD-36).
+
 - **El panel del club tiene Playbook, junto a Staff (2026-10-08)**.
   **Desplegado el mismo día** (`2d88ce5`), a pedido de Alfredo y con los tres
   P0 abiertos: el CI pasó, Vercel publicó la pestaña y Render responde la ruta

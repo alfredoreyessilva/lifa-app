@@ -4,7 +4,7 @@ Una foto de qué productos hay y a qué nivel está cada uno, para no tener que
 reconstruirla leyendo el README. Lo que falta vive en
 [`PENDIENTES.md`](PENDIENTES.md), con ID y prioridad; aquí solo se nombra.
 
-**Actualizado: 2026-10-08.** Cuando un producto cambia de nivel, su renglón se
+**Actualizado: 2026-10-12.** Cuando un producto cambia de nivel, su renglón se
 mueve en el mismo commit que lo movió.
 
 ## Los niveles
@@ -42,7 +42,8 @@ respaldos se resolvieron el 2026-09-23.
 |-|-|-|-|
 | Calendario, resultados y páginas públicas | **5** | 4 ligas públicas, 92 equipos, 168 partidos | PD-03 |
 | Predicciones y quinielas | **5** | 1,663 predicciones en el concurso de ONEFA (2026-09-23) | — |
-| Tabla de posiciones | 4 | Verificada contra datos reales (2026-09-16) | PD-14 |
+| Tabla de posiciones | 4 | Verificada contra datos reales (2026-09-16) | PD-14, PD-36 |
+| Imagen de la tabla para compartir (publicación e historia) | 3 | Verificada el 2026-10-12 en el navegador contra `desarrollo-local`, con las tablas reales de ONEFA y LFA, en escritorio y celular. **Sin desplegar** | — |
 | Transmisiones | 4 | Sin medir | — |
 | Avisos push de partido | **En pausa** | Funcionaban de punta a punta (verificado 2026-09-23), pero con **0 dispositivos** con push y un cron que atrapa casi ninguna ventana. Apagados desde el 2026-09-24 | PD-02 |
 | Avisos de tus predicciones en Mis notificaciones (resultado, lugar al cerrar la jornada, te falta votar) | 4 | Verificado el 2026-09-27 contra `desarrollo-local` (`predicciones.e2e.mjs` y recorrido en el navegador, escritorio y celular) y contra el concurso real de ONEFA en solo lectura: la tabla que calculan los avisos coincide con el ranking público en las 36 personas. Desplegado ese día (`1d531dd`): el ranking de ONEFA en producción ya responde `position`, con un solo lugar compartido (el 33.º) | — |
@@ -72,7 +73,7 @@ respaldos se resolvieron el 2026-09-23.
 | Disponibilidad | ⚠️ Render gratuito: **41.5 s** en frío (medido 2026-09-23) | PD-03 |
 | Cron | ⚠️ Una llamada cada ~4 h (GitHub). El externo de antes ya no llama. Alcanza para la cobranza, no para los avisos de partido | PD-02 (P2) |
 | Monitoreo | Sentry en frontend y backend ✅ · caída del servicio ❌ | PD-12 |
-| Pruebas | **382 unitarias** (230 backend + 152 frontend) en el CI ✅ · **6 suites e2e** que se corren a mano | PD-11, PD-25 |
+| Pruebas | **395 unitarias** (230 backend + 165 frontend) en el CI ✅ · **6 suites e2e** que se corren a mano | PD-11, PD-25 |
 | Despliegue | Push a `main` = producción, sin protección ni espera al CI | PD-11 |
 | Seguridad | JWT obligatorio, límite de intentos en login y en el estado de cuenta público, CORS con lista, SQL parametrizado, candado contra producción, invitaciones que caducan a los 7 días ✅ | PD-04, PD-20, PD-21 |
 | Páginas legales | ✅ Completas desde el 2026-09-19 | — |
