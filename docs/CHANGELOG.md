@@ -17,8 +17,10 @@ entradas traen el post-mortem del bug que las provocó.
 
 - **Desempate de tres o más: nadie queda arriba de un empatado que le ganó, y
   los empatados se separan uno a la vez (2026-10-13)**. Regla de fondo para
-  toda liga, decidida por Alfredo en dos pasos el mismo día. **No
-  desplegado.**
+  toda liga, decidida por Alfredo en dos pasos el mismo día. **Desplegado el
+  mismo día** (`91958ef`): el CI pasó, y las 7 tablas publicadas con partidos
+  (las cinco de ONEFA, LFA y PFL) salen en producción idénticas, renglón por
+  renglón, a lo que calcula el motor con los datos reales, solo leyendo.
 
   **El bug:** Alfredo sospechaba que el reglamento predeterminado se imponía
   al que configuró para ONEFA. No era eso: en producción ONEFA tiene
