@@ -16,7 +16,10 @@ entradas traen el post-mortem del bug que las provocó.
 ### Cambios
 
 - **Cada tabla de posiciones genera su imagen para compartir (2026-10-12)**.
-  **Sin desplegar.** Pedido por Alfredo con los tres P0 abiertos.
+  **Desplegado el mismo día** (`0db87a7`), a pedido de Alfredo y con los tres
+  P0 abiertos: el CI pasó, el bundle de Vercel ya trae la imagen, y en el sitio
+  público se generó la de la conferencia NACIONAL con los datos de producción
+  (6 jornadas, cifras de tres dígitos en PF, PC y DIF), solo leyendo.
 
   **Lo que se construyó:** un botón "Generar imagen" junto a cada tabla de la
   pestaña Posiciones de la página pública del torneo —una imagen por

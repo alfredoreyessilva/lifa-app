@@ -43,7 +43,7 @@ respaldos se resolvieron el 2026-09-23.
 | Calendario, resultados y páginas públicas | **5** | 4 ligas públicas, 92 equipos, 168 partidos | PD-03 |
 | Predicciones y quinielas | **5** | 1,663 predicciones en el concurso de ONEFA (2026-09-23) | — |
 | Tabla de posiciones | 4 | Verificada contra datos reales (2026-09-16) | PD-14, PD-36 |
-| Imagen de la tabla para compartir (publicación e historia) | 3 | Verificada el 2026-10-12 en el navegador contra `desarrollo-local`, con las tablas reales de ONEFA y LFA, en escritorio y celular. **Sin desplegar** | — |
+| Imagen de la tabla para compartir (publicación e historia) | 4 | Verificada el 2026-10-12 en el navegador contra `desarrollo-local`, con las tablas reales de ONEFA y LFA, en escritorio y celular. Desplegada ese día (`0db87a7`): en el sitio público se generó la de la conferencia NACIONAL con los datos de producción | — |
 | Transmisiones | 4 | Sin medir | — |
 | Avisos push de partido | **En pausa** | Funcionaban de punta a punta (verificado 2026-09-23), pero con **0 dispositivos** con push y un cron que atrapa casi ninguna ventana. Apagados desde el 2026-09-24 | PD-02 |
 | Avisos de tus predicciones en Mis notificaciones (resultado, lugar al cerrar la jornada, te falta votar) | 4 | Verificado el 2026-09-27 contra `desarrollo-local` (`predicciones.e2e.mjs` y recorrido en el navegador, escritorio y celular) y contra el concurso real de ONEFA en solo lectura: la tabla que calculan los avisos coincide con el ranking público en las 36 personas. Desplegado ese día (`1d531dd`): el ranking de ONEFA en producción ya responde `position`, con un solo lugar compartido (el 33.º) | — |
