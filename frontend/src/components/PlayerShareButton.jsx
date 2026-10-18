@@ -3,7 +3,7 @@ import { generatePlayerCard, SHARE_CARD_FORMATS } from '../utils/playerShareCard
 
 // Mismo patrón que ShareImageButton.jsx (partidos), adaptado a jugador.
 // v1 a propósito NO tiene: selector de plantilla, subida de foto, ni IA.
-export default function PlayerShareButton({ player, currentTeam, stats }) {
+export default function PlayerShareButton({ player, team, stats }) {
   const [status, setStatus] = useState('idle'); // idle | generating | ready | error
   const [previewUrl, setPreviewUrl] = useState(null);
   const [blobByFormat, setBlobByFormat] = useState({});
@@ -13,8 +13,8 @@ export default function PlayerShareButton({ player, currentTeam, stats }) {
     setStatus('generating');
     try {
       const [postBlob, storyBlob] = await Promise.all([
-        generatePlayerCard(player, currentTeam, stats, 'post'),
-        generatePlayerCard(player, currentTeam, stats, 'story'),
+        generatePlayerCard(player, team, stats, 'post'),
+        generatePlayerCard(player, team, stats, 'story'),
       ]);
       const blobs = { post: postBlob, story: storyBlob };
       setBlobByFormat(blobs);

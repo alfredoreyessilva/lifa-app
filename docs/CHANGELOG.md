@@ -15,6 +15,94 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Ya se puede recuperar la contraseña, y cambiarla cierra las sesiones
+  abiertas (2026-10-17)**. Cierra el `PD-04`, uno de los tres P0. Hasta ese día
+  un admin de liga que olvidaba su contraseña se quedaba fuera, y con él su
+  organización. **Sin desplegar.**
+
+  **Lo que decidió Alfredo:** un código de 6 dígitos por correo y no un link,
+  porque se teclea en el mismo aparato donde está la app (en el celular, un
+  link abre el navegador y no la app instalada), y que al cambiarla se cierren
+  **todas** las sesiones abiertas. El resto salió de copiar la verificación de
+  correo: 10 minutos, 5 intentos y solo cuenta el código más reciente. Lo nuevo
+  es un tope de 5 códigos por hora por cuenta, porque un código adivinado ya no
+  confirma un correo, entrega la cuenta entera. El modelo completo, con su
+  porqué, está en "Recuperar la contraseña" del README.
+
+  **Lo que cambió:** dos rutas sin sesión,
+  `POST /auth/password-reset/request` y `/confirm`; una tabla nueva,
+  `password_reset_codes`, y `users.password_changed_at`. El intento se gasta
+  **antes** de comparar, en el mismo `UPDATE … WHERE attempts < 5` que revisa
+  vigencia, y el cambio entero —contraseña, hora, correo verificado y códigos
+  borrados— va en una sola sentencia. `authRequired` y `optionalAuth` rechazan
+  el token firmado antes del cambio (regla pura en `utils/sesiones.js`, con
+  caché en memoria de 60 s que el propio cambio actualiza). En el frontend,
+  `PasswordResetForm` vive dentro de la tarjeta de "Iniciar sesión" y del modal
+  de login que abre el concurso de predicciones, como la verificación.
+
+  **Tres cosas que se arreglaron de paso**, porque estaban en el camino:
+
+  1. `/notifications/check` y `/unsubscribe` verificaban el JWT a mano, sin
+     pasar por el middleware: habrían aceptado un token revocado. Ahora usan
+     `optionalAuth`.
+  2. El código de verificación salía de `Math.random()`. Ahora sale de
+     `crypto.randomInt`, igual que el de recuperación: es la misma función.
+  3. El nombre del saludo de los correos no se escapaba. Cualquiera puede
+     registrarse con el correo de otra persona, así que un `<a href=…>` en el
+     nombre llegaba como link a una bandeja ajena, firmado por CFBAMX.
+
+  **Verificado contra `desarrollo-local`:** una suite nueva,
+  `recuperar-contrasena.e2e.mjs`, 38 OK y 0 fallas a la primera, con el
+  backend en `EMAIL_TRANSPORT=log` (el backend cree que manda correos y no
+  manda ninguno; la suite lee el código de la base). La prueba que importa:
+  **veinte intentos simultáneos desde veinte IP consiguen exactamente cinco
+  comparaciones** y la base registra cinco intentos, no veinte. También que el
+  token entregado al cambiarla, firmado en el mismo segundo, no nazca
+  revocado, y que un cambio escrito directo en la base saque el token sin
+  pasar por la caché. Como `authRequired` está en todas las rutas con sesión,
+  se corrieron también las otras seis: `invites-roles` 173, `predicciones` 35,
+  `plays` 68, `billing-player` 40, `billing-league` 21 y `billing-multiliga`
+  26, todas sin fallas. 8 pruebas unitarias nuevas (245 en backend). En el
+  navegador, en escritorio y en celular: el flujo completo desde "Iniciar
+  sesión" (código equivocado → "Te quedan 4 intentos", el bueno → entra al
+  panel) y el modal de votar hasta el paso del código. Ahí no se canjeó porque
+  al entrar emite el voto pendiente, y habría escrito un voto sobre un partido
+  copiado de ONEFA.
+
+  **En producción, al desplegar:** las dos migraciones son aditivas (tabla
+  nueva, columna nula sin default) y ninguna sesión de hoy se cae, porque
+  `password_changed_at` nace nulo. Según el `PD-04` (2026-09-23), Resend ya
+  estaba configurado en Render, así que la función debería quedar prendida
+  sola. Si no lo está, la pantalla contesta que por ahora no puede mandar el
+  código (503) en vez de pedir uno que nunca llega.
+
+- **La tarjeta pública del jugador ya no publica su historial de equipos
+  (2026-10-17)**. Cierra el `PD-05`, que iba contra la regla 7: la tarjeta es
+  de una temporada, no de una carrera. **Sin desplegar.**
+
+  `GET /players/:id/card` ya no responde `trajectory`, sino `team`: el equipo
+  con el que juega hoy (su membresía activa más reciente), o `null` si se le
+  dio de baja de su último roster. De la base sale una sola fila, no el
+  historial. La pantalla perdió la sección "Trayectoria" y su CSS, y la imagen
+  para compartir recibe `team` en vez de `currentTeam`. El 404 de quien nunca
+  estuvo en un roster de torneo sigue igual.
+
+  **Verificado:** el SQL de HEAD contra el del árbol, sacado de los archivos y
+  corrido en solo lectura sobre `desarrollo-local`, da el mismo equipo y el
+  mismo 404 en los 72 casos reales (68 con tarjeta, 2 sin membresía y 2 ids que
+  no existen). Ninguno tenía más de un equipo, así que el cambio es preventivo.
+  Con un CTE que tapa `player_team_memberships` se simularon los casos que la
+  base no trae (movido de equipo, dado de baja, dos rosters activos, baja y
+  vuelta al mismo equipo): el equipo que se muestra no cambia, y la base
+  entrega una fila en vez de dos. En el navegador, la tarjeta de un jugador de
+  ONEFA, la imagen descargada con su equipo, y la de uno dado de baja, sin
+  equipo.
+
+  **Lo que salió al revisarla, y quedó abierto como `PD-37` (P0):** la tarjeta
+  no mira `roster_public`. La de un jugador de una categoría con el roster
+  privado —como nacen todas— es pública igual, y los ids son consecutivos.
+  Alfredo la dejó para después, por ser un cambio estructural más grande.
+
 - **Desempate de tres o más: nadie queda arriba de un empatado que le ganó, y
   los empatados se separan uno a la vez (2026-10-13)**. Regla de fondo para
   toda liga, decidida por Alfredo en dos pasos el mismo día. **Desplegado el

@@ -29,13 +29,12 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | **P1** | Hoy no daña, pero frena el siguiente paso: la primera liga que cobre, la prueba en cancha, el siguiente cliente |
 | **P2** | Deuda y pulido. Se toma cuando hay tiempo o cuando se toca ese archivo |
 
-## Índice (2026-10-12)
+## Índice (2026-10-17)
 
 | ID | P | Qué | Tipo |
 |-|-|-|-|
 | PD-03 | P0 | La API tarda ~40 s en despertar | dinero |
-| PD-04 | P0 | No existe "olvidé mi contraseña" | código |
-| PD-05 | P0 | La tarjeta pública del jugador publica su historial de equipos | código |
+| PD-37 | P0 | La tarjeta pública del jugador no mira si su roster es público | decisión |
 | PD-06 | P1 | `DELETE /admin/leagues/:id` borra el libro liga↔equipo | decisión |
 | PD-07 | P1 | `teams.league_id` todavía da permisos | decisión |
 | PD-09 | P1 | El día del partido no se ha probado en una cancha | verificación |
@@ -90,35 +89,41 @@ Salidas:
   instancia al mes incluye el plan gratuito de Render: un servicio despierto 24/7
   son ~744 h.
 
-### PD-04 · No existe "olvidé mi contraseña"
+### PD-37 · La tarjeta pública del jugador no mira si su roster es público
 
-Verificado el 2026-09-23: `routes/auth.js` tiene `register`, `login`,
-`verify-email`, `resend-code`, `google` y `me`, y ni el backend ni el frontend
-tienen ninguna forma de recuperar una contraseña. No estaba anotado en ningún
-lado.
+**Nació P0 el 2026-10-17** por ser un hueco que nadie sabía que existía. Salió
+al cerrar PD-05: el CHANGELOG del 2026-09-20 decía que la tarjeta no decía
+"quién está en un roster", y sí lo dice.
 
-Un admin de liga que se registró con correo y contraseña y la olvida **se queda
-fuera**. Y como tampoco existe el rescate de un equipo (PD-13), se queda fuera
-también su organización.
+`GET /players/:id/card` responde a cualquiera que haya estado alguna vez en el
+roster de un torneo, sin mirar `categories.roster_public` ni
+`leagues.is_public`. Un jugador de una categoría con el roster privado —como
+nacen todas, y como CFBAMX le recomienda dejar una categoría de menores— tiene
+su tarjeta pública igual: nombre, número, posición y el equipo con el que juega.
+Los ids son consecutivos, así que recorrerlos arma el roster de cualquier
+equipo. Y es justo lo que `BranchRosterModal` le promete a la liga que no pasa:
+*"Roster privado. … nada de lo que captures aquí sale en público"*, en la misma
+pantalla que enlaza el nombre de cada jugador a su tarjeta.
 
-Lo que ya existe y abarata: `RESEND_API_KEY` y `EMAIL_FROM` están configurados
-y se usan para los códigos de verificación, así que el correo no pide cuenta
-nueva. Falta decidir el modelo antes del código: código por correo (como la
-verificación) o link con token, cuánto dura, y qué pasa con las sesiones
-abiertas. Un JWT de 7 días no se puede revocar hoy.
+La foto sí respeta el interruptor (`fotoSePublicaSql` exige `roster_public`);
+el resto de la tarjeta, no.
 
-### PD-05 · La tarjeta pública del jugador publica su historial de equipos
+Medido en `desarrollo-local` en solo lectura (la copia del 2026-09-19 más lo que
+dejan las suites): 55 de las 67 tarjetas con roster activo son de categorías
+privadas, casi todas de las suites. **En producción no se ha medido.** Si un
+censo de solo lectura no encuentra ninguna tarjeta así, puede bajar a P1 con
+datos, como PD-34.
 
-Es lo que queda de recortar la tarjeta pública, y va contra la regla 7 de
-`CLAUDE.md` en una población con muchos menores. `GET /players/:id/card`
-devuelve `trajectory` (`routes/players.js`), que es de una **tarjeta
-histórica** y no de la de temporada. La tarjeta describe la participación de
-**una** temporada; juntar una carrera en un solo lugar es otra función (que el
-jugador "recolecte" su tarjeta) que no existe y no está diseñada. Ver "Qué se
-publica de un roster, y qué no" en el README.
+Alfredo lo dejó para después el 2026-10-17, por ser un cambio estructural más
+grande. Lo que hay que decidir antes del código:
 
-La otra mitad se cerró el 2026-09-20: la foto ya sale solo si la categoría la
-permite y el equipo no la vetó.
+- Si la tarjeta de un roster privado responde 404 en público, igual que el
+  roster público, o si la siguen viendo la liga y su equipo con sesión (hoy la
+  tarjeta no lee sesión).
+- Qué pasa con la imagen para compartir de esos jugadores y con el link de cada
+  nombre en el panel del roster.
+- Si cuenta solo la membresía activa, o también la de quien estaba en el roster
+  de un partido ya jugado.
 
 ---
 
@@ -238,8 +243,9 @@ Desde el 2026-09-20 un equipo puede tener varios dueños, así que perder una
 cuenta deja de ser fatal **si** alguien invitó a un segundo. Si no, no hay flujo
 para reclamarlo. La salida existe pero no está en ninguna pantalla: un admin de
 la plataforma invita a la persona como `admin` y después le cede el puesto con
-`transfer-owner`. Ver "Equipos independientes" en el README. PD-04 lo vuelve
-más probable.
+`transfer-owner`. Ver "Equipos independientes" en el README. Desde el
+2026-10-17 se puede recuperar la contraseña con un código por correo (era
+PD-04), así que el caso que queda es el de quien perdió el acceso a su correo.
 
 ### PD-14 · ONEFA sin competencia configurada: su tabla no se ve
 

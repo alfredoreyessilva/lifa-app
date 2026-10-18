@@ -95,6 +95,9 @@ export const api = {
   verifyEmail: (code, token) => request('/auth/verify-email', { method: 'POST', body: { code }, token }),
   resendVerificationCode: (token) => request('/auth/resend-code', { method: 'POST', token }),
   googleAuth: (credential) => request('/auth/google', { method: 'POST', body: { credential } }),
+  // Recuperar la contraseña, sin sesión. `confirm` responde lo mismo que login.
+  requestPasswordReset: (email) => request('/auth/password-reset/request', { method: 'POST', body: { email } }),
+  confirmPasswordReset: (payload) => request('/auth/password-reset/confirm', { method: 'POST', body: payload }),
 
   // Ligas públicas
   getLeagues: () => request('/leagues'),

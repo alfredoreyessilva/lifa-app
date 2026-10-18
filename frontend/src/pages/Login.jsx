@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { required, validEmail, runValidations } from '../utils/validation.js';
 import GoogleAuthButton from '../components/GoogleAuthButton.jsx';
 import EmailVerificationForm from '../components/EmailVerificationForm.jsx';
+import PasswordResetForm from '../components/PasswordResetForm.jsx';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -15,6 +16,9 @@ export default function Login() {
   // verificado su correo — se ofrece el mismo paso de código, sin obligar
   // a nadie: se puede seguir usando la app de todos modos.
   const [needsVerification, setNeedsVerification] = useState(false);
+  // "¿Olvidaste tu contraseña?" se resuelve en esta misma tarjeta, igual que
+  // la verificación: ver PasswordResetForm.
+  const [resetting, setResetting] = useState(false);
   const { login, token, updateUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -82,6 +86,24 @@ export default function Login() {
     );
   }
 
+  if (resetting) {
+    return (
+      <div className="container">
+        <div className="form-card">
+          <h2>Recupera tu contraseña</h2>
+          <PasswordResetForm
+            initialEmail={email.trim()}
+            onSuccess={(newToken, newUser) => {
+              login(newToken, newUser);
+              navigate(location.state?.from || '/panel');
+            }}
+            onCancel={() => setResetting(false)}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container">
       <div className="form-card">
@@ -102,6 +124,11 @@ export default function Login() {
             {loading ? 'Entrando…' : 'Entrar'}
           </button>
         </form>
+        <div className="form-foot">
+          <button type="button" className="btn-link" onClick={() => { setError(''); setResetting(true); }}>
+            ¿Olvidaste tu contraseña?
+          </button>
+        </div>
         <div className="form-foot">
           ¿No tienes cuenta? <Link to="/crear-cuenta">Créala aquí</Link>
         </div>

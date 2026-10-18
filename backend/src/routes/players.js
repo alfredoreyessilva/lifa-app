@@ -498,12 +498,15 @@ router.patch('/branches/:branchId/teams/:teamId/roster/:playerId', authRequired,
 //   Por default (baja): cierra la membresía (`end_date = HOY_MX`,
 //     `status = 'ended'`), igual que hace "mover". El jugador desaparece del
 //     roster —todas las consultas filtran `end_date IS NULL`— pero el paso por
-//     este equipo queda asentado en su trayectoria (`GET /:id/card`). Esto es
-//     lo correcto cuando de verdad jugó aquí y ya no.
+//     este equipo queda asentado en el registro del equipo: el roster del
+//     partido sigue diciendo quién estaba ese día, y el acumulado de asistencia
+//     lo sigue contando. Esto es lo correcto cuando de verdad jugó aquí y ya
+//     no. En público no se nota: la tarjeta (`GET /:id/card`) solo dice con
+//     quién juega hoy, y no lleva historial.
 //
 //   Con `?hard=true` (me equivoqué): borra la fila de la membresía. Es para el
 //     alta mal hecha —un nombre repetido, el equipo equivocado— que no debería
-//     dejar rastro en la trayectoria de nadie. Además, si al jugador no le
+//     dejar rastro en el registro de nadie. Además, si al jugador no le
 //     queda NINGUNA otra referencia, se borra también su fila en `players`:
 //     si no, quedaría un jugador sin ninguna membresía, invisible en la app y
 //     sin forma de llegar a él (justo lo que dejó el botón "Roster" viejo del
@@ -833,11 +836,17 @@ router.get('/branches/:branchId/teams/:teamId/attendance', authRequired, branchT
   });
 }));
 
-// Tarjeta del jugador: identidad + trayectoria + estadísticas acumuladas +
-// (si el jugador ya reclamó su perfil, es decir tiene user_id) sus stats de
-// predicciones y participación en quinielas. Público, sin authRequired —
-// una tarjeta de jugador debe poder verse igual que cualquier partido o
-// liga hoy, no solo por quien administra su equipo.
+// Tarjeta del jugador: identidad + el equipo con el que juega hoy +
+// estadísticas acumuladas + (si el jugador ya reclamó su perfil, es decir
+// tiene user_id) sus stats de predicciones y participación en quinielas.
+// Público, sin authRequired — una tarjeta de jugador debe poder verse igual
+// que cualquier partido o liga hoy, no solo por quien administra su equipo.
+//
+// La tarjeta es de UNA temporada, no de una carrera (regla 7 de CLAUDE.md;
+// README, "Qué se publica de un roster, y qué no"): dice con quién juega hoy y
+// nada más. Su historial de equipos no sale. Juntar una carrera en un solo
+// lugar es otra función —la "tarjeta histórica", que el jugador recolectaría
+// en su propia cuenta— y esa no existe ni está diseñada.
 router.get('/:id/card', asyncHandler(async (req, res) => {
   const playerId = Number(req.params.id);
 
@@ -851,15 +860,18 @@ router.get('/:id/card', asyncHandler(async (req, res) => {
   `).get(playerId);
   if (!row) return res.status(404).json({ error: 'Jugador no encontrado' });
 
-  const trajectory = await db.prepare(`
-    SELECT ptm.id AS membership_id, ptm.season, ptm.position, ptm.jersey_number,
-           ptm.start_date, ptm.end_date,
+  // De todas sus membresías se lee UNA: la activa más reciente, o si ya no le
+  // queda ninguna activa, la última que tuvo. El resto del historial no sale
+  // de la base: lo que el backend no manda no se puede pintar ni compartir.
+  const membresia = await db.prepare(`
+    SELECT ptm.end_date IS NULL AS activa,
            t.id AS team_id, t.name AS team_name, t.logo_url AS team_logo_url
     FROM player_team_memberships ptm
     JOIN teams t ON t.id = ptm.team_id
     WHERE ptm.player_id = ?
-    ORDER BY ptm.start_date DESC
-  `).all(playerId);
+    ORDER BY (ptm.end_date IS NULL) DESC, ptm.start_date DESC, ptm.id DESC
+    LIMIT 1
+  `).get(playerId);
 
   // Una tarjeta pública existe SOLO para quien ha estado en el roster de algún
   // torneo. Sin este corte, cualquier fila de `players` era consultable
@@ -867,7 +879,14 @@ router.get('/:id/card', asyncHandler(async (req, res) => {
   // capturan para cobrarles y no para publicarlos, y que en buena parte son
   // menores de edad. Se responde 404 y no 403 a propósito: desde afuera no se
   // debe poder distinguir "existe pero no te lo muestro" de "no existe".
-  if (trajectory.length === 0) return res.status(404).json({ error: 'Jugador no encontrado' });
+  if (!membresia) return res.status(404).json({ error: 'Jugador no encontrado' });
+
+  // A quien se le dio de baja de su último roster le queda la tarjeta, pero sin
+  // equipo: el equipo del que salió ya no es con quién juega hoy, y ponerlo
+  // sería publicar justo el historial que esta tarjeta no lleva.
+  const team = membresia.activa
+    ? { id: membresia.team_id, name: membresia.team_name, logo_url: membresia.team_logo_url }
+    : null;
 
   // ── ¿Sale la foto? ──
   //
@@ -956,7 +975,7 @@ router.get('/:id/card', asyncHandler(async (req, res) => {
 
   res.json({
     player,
-    trajectory,
+    team,
     stats: {
       gamesPlayed: Number(statsRow.games_played),
       passCompletions: Number(statsRow.pass_completions),

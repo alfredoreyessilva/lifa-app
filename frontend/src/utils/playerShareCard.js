@@ -26,12 +26,13 @@ function pickHeadline(stats) {
 /**
  * Genera la imagen de la tarjeta del jugador.
  * @param {object} player - player de GET /players/:id/card
- * @param {object|null} currentTeam - elemento de trajectory sin end_date (o null)
+ * @param {object|null} team - team de GET /players/:id/card: el equipo con el
+ *   que juega hoy ({ id, name, logo_url }), o null si ya no está en ningún roster
  * @param {object} stats - stats de GET /players/:id/card (camelCase)
  * @param {'post'|'story'} formatKey
  * @returns {Promise<Blob>}
  */
-export async function generatePlayerCard(player, currentTeam, stats, formatKey) {
+export async function generatePlayerCard(player, team, stats, formatKey) {
   const format = FORMATS[formatKey] || FORMATS.post;
   const theme = readTheme();
   const { width: w, height: h } = format;
@@ -44,7 +45,7 @@ export async function generatePlayerCard(player, currentTeam, stats, formatKey) 
   await ensureFonts();
   const [photoImg, teamImg] = await Promise.all([
     loadImage(player.photo_url),
-    loadImage(currentTeam?.team_logo_url),
+    loadImage(team?.logo_url),
   ]);
 
   drawBackground(ctx, w, h, theme);
@@ -90,16 +91,16 @@ export async function generatePlayerCard(player, currentTeam, stats, formatKey) 
   }
 
   // --- Equipo actual ---
-  if (currentTeam) {
+  if (team) {
     const teamY = y + 30;
     const badgeR = 26;
     if (teamImg) {
-      drawCircleBadge(ctx, teamImg, currentTeam.team_name, cx - 90, teamY, badgeR, theme);
+      drawCircleBadge(ctx, teamImg, team.name, cx - 90, teamY, badgeR, theme);
     }
     ctx.fillStyle = theme.inkDim;
     ctx.font = `500 28px ${theme.fontBody}`;
     ctx.textAlign = 'left';
-    ctx.fillText(currentTeam.team_name, cx - 90 + badgeR + 14, teamY + 10);
+    ctx.fillText(team.name, cx - 90 + badgeR + 14, teamY + 10);
     ctx.textAlign = 'center';
     y = teamY + badgeR + 40;
   } else {

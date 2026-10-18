@@ -649,11 +649,14 @@ lifa-app/
     src/
       config/db.js          Conexión a Postgres + creación/migración del esquema al arrancar
       middleware/
-        auth.js              JWT: firmar y verificar tokens (authRequired)
+        auth.js              JWT: firmar y verificar tokens (authRequired), y rechazar el
+                              que se firmó antes de un cambio de contraseña
         ownership.js         Verifica que el usuario sea dueño de la liga/equipo que intenta editar
         rateLimit.js         Límite de intentos en login/registro (fuerza bruta)
       routes/
         auth.js              Registro, login, /me (incluye las ligas y equipos que administra el usuario)
+                              y recuperar la contraseña con un código por correo — ver
+                              "Recuperar la contraseña"
         leagues.js           Lectura pública: ligas, categorías, calendario, partidos
         manage.js            CRUD protegido: ligas, categorías, grupos, equipos (con o sin
                               liga, ver "Equipos independientes"), partidos, sedes
@@ -725,7 +728,11 @@ lifa-app/
                               repetido jornada por jornada. Puro),
                               bandeja.js (las reglas puras de "Mis
                               notificaciones": quién lee qué, y los avisos de lo
-                              que sigues y de tus predicciones)
+                              que sigues y de tus predicciones),
+                              sesiones.js (cuándo deja de servir un token
+                              después de cambiar la contraseña. Puro),
+                              email.js (los dos correos con código, por Resend;
+                              EMAIL_TRANSPORT=log para el backend de pruebas)
       seed.js                Datos de ejemplo para desarrollo local
     scripts/                 Scripts de diagnóstico y limpieza de un solo uso.
                               Los de SOLO LECTURA usan `pg` directo y sin
@@ -747,13 +754,14 @@ lifa-app/
     tests/
       unit/                  Pruebas puras, corren en el CI sin base de datos:
                               validation, timezones, standings, orgRoles,
-                              prodGuard, rosterVisibility y attendance. Las
-                              cuatro últimas cuidan algo que se rompe en
-                              silencio: el reglamento de desempates, quién puede
-                              qué, si la cara de un menor sale en una página
-                              abierta, y que "sin pasar lista" no se convierta
-                              en "faltó".
-      (resto)                Recorridos de punta a punta de cobranza (NO corren en
+                              prodGuard, rosterVisibility, attendance y
+                              sesiones, entre otras. Varias cuidan algo que se
+                              rompe en silencio: el reglamento de desempates,
+                              quién puede qué, si la cara de un menor sale en
+                              una página abierta, que "sin pasar lista" no se
+                              convierta en "faltó", y que cambiar la contraseña
+                              de verdad saque a quien tenía la sesión abierta.
+      (resto)                Los siete recorridos de punta a punta (NO corren en
                               el CI: necesitan un backend vivo apuntado a una rama
                               de Neon). Ver backend/tests/README.md
       server.js              Arranque de Express: CORS, rate limiting, rutas, manejo de errores
@@ -1787,12 +1795,26 @@ publicar la trayectoria no resuelve nada y sí expone de más.
 > techo de la categoría, que esta tabla todavía no contaba: la foto sale solo
 > si `categories.roster_photos` **y** `COALESCE(branch_teams.show_photos, TRUE)`
 > están de acuerdo. Ver "Roster público y pase de lista", que es donde vive el
-> modelo completo. Lo que falta de esta línea es **sacar la trayectoria** de
-> `GET /players/:id/card`. Ojo con las
-> **estadísticas acumuladas** de esa misma tarjeta: hoy suman todos los
-> partidos de todas las temporadas, que es comportamiento de tarjeta histórica
-> y no de tarjeta de temporada. Se resuelve cuando se diseñe "recolectar
-> tarjeta", no antes.
+> modelo completo.
+>
+> **La trayectoria salió de la tarjeta el 2026-10-17** (`PD-05`).
+> `GET /players/:id/card` ya no responde `trajectory` sino `team`: el equipo
+> con el que juega **hoy** —su membresía activa más reciente— o `null` si se le
+> dio de baja de su último roster. De la base sale una sola fila, no el
+> historial: lo que el backend no manda no se puede pintar ni meter en la
+> imagen para compartir. Quien ya no está en ningún roster conserva su
+> tarjeta, pero sin equipo: el equipo del que salió no es con quién juega hoy.
+> El 404 de quien nunca estuvo en un roster de torneo sigue igual.
+>
+> Ojo con las **estadísticas acumuladas** de esa misma tarjeta: hoy suman todos
+> los partidos de todas las temporadas, que es comportamiento de tarjeta
+> histórica y no de tarjeta de temporada. Se resuelve cuando se diseñe
+> "recolectar tarjeta", no antes.
+>
+> **Lo que sigue abierto (`PD-37`)**: la tarjeta no mira `roster_public`. Un
+> jugador de una categoría con el roster privado —como nacen todas— tiene su
+> tarjeta pública igual, con nombre, número, posición y equipo, y los ids son
+> consecutivos. Es justo lo que el panel le promete a la liga que no pasa.
 
 ### Administrarse solo y participar son dos preguntas distintas
 
@@ -3365,8 +3387,10 @@ en el alta manual, botón de foto por jugador. `api/client.js`:
   (septiembre 2026)**: `DELETE /api/players/branches/:branchId/teams/:teamId/roster/:playerId`,
   con botón "Quitar" en `BranchRosterModal`. Tiene dos comportamientos porque
   confundirlos ensucia el historial del jugador: por default **da de baja**
-  (cierra la membresía, y el paso por el equipo se sigue viendo en su
-  trayectoria, `GET /players/:id/card`), y con `?hard=true` **borra sin dejar
+  (cierra la membresía, y el paso por el equipo queda en el registro del
+  equipo: el roster del partido sigue diciendo quién estaba ese día. En
+  público no se nota, porque la tarjeta ya no lleva historial —ver "Qué se
+  publica de un roster, y qué no"—), y con `?hard=true` **borra sin dejar
   rastro**, para el alta mal capturada — ese es el caso que la casilla "Fue un
   error de captura" prende en el diálogo. En el modo `hard`, si al jugador no le
   queda ninguna otra referencia se borra también su fila en `players`, para no
@@ -4711,7 +4735,7 @@ bot.
 
 - **CORS con whitelist**: solo los orígenes listados en `ALLOWED_ORIGINS` pueden llamar a la API desde un navegador. En local, `localhost:5173` siempre está permitido.
 - **JWT_SECRET obligatorio**: el servidor no arranca si falta esta variable (antes tenía un valor por defecto inseguro escrito en el código — ya no).
-- **Rate limiting en login/registro**: máximo 20 intentos cada 15 minutos por IP (`middleware/rateLimit.js`), para frenar fuerza bruta de contraseñas.
+- **Rate limiting en login/registro**: máximo 20 intentos cada 15 minutos por IP (`middleware/rateLimit.js`), para frenar fuerza bruta de contraseñas. Lo comparten los dos pasos de recuperar la contraseña (ver abajo).
 - **`xlsx` (SheetJS) instalado desde `cdn.sheetjs.com`, no desde el registro de npm — en backend y frontend**: la versión publicada en npm tiene una vulnerabilidad alta (prototype pollution / ReDoS) sin parche ahí; SheetJS solo publica la versión corregida en su propio CDN. Se usa exactamente igual (mismo nombre, misma API) — solo cambia de dónde se instala.
 - El backend corre detrás del proxy de Render, por eso `server.js` tiene `app.set('trust proxy', 1)` — necesario para que el rate limiting identifique bien la IP de cada visitante.
 - **Candado (advisory lock) en las migraciones de `db.js`**: si algún día corren varias instancias del servidor a la vez, la segunda espera a que la primera termine de migrar el esquema, en vez de correr las mismas instrucciones al mismo tiempo.
@@ -4721,6 +4745,105 @@ bot.
   - **La salida de emergencia es `ALLOW_PROD_DB` con la fecha de hoy**, no un `1`: `$env:ALLOW_PROD_DB="2026-09-19"; npm run dev`. Un `1` olvidado en el `.env` dejaría el candado muerto para siempre; una fecha caduca sola.
 
   **Lo que no cubre, a propósito**: `npm start` en local y los scripts de `backend/scripts/`, que usan `pg` directo por la regla 3 y simulan por default. Cubre el accidente real, que es `npm run dev` — y de paso el de la regla 2, porque un segundo backend contra producción ahora muere antes de correr `initSchema()`.
+
+### Recuperar la contraseña (decidido y construido el 2026-10-17)
+
+Hasta ese día no existía. Un admin de liga que se registró con correo y
+contraseña y la olvidaba **se quedaba fuera**, y con él su organización, porque
+tampoco hay rescate de un equipo (`PD-13`). Era el `PD-04`, y no estaba anotado
+en ninguna lista hasta la revisión del 2026-09-23.
+
+**Un código de 6 dígitos por correo, no un link.** Lo decidió Alfredo. El
+código se teclea en el mismo aparato donde está la app aunque el correo se abra
+en otro, y en el celular un link abre el navegador, no la app instalada. Además
+reusa lo que ya había: Resend, el remitente y la forma de la verificación de
+correo. Por eso vive **dentro** de la tarjeta de "Iniciar sesión" y del modal de
+login —el que abre el concurso de predicciones—, igual que la verificación, y
+no en una ruta aparte: quien se atoró votando no pierde la pantalla en la que
+estaba.
+
+| Candado | Valor |
+|-|-|
+| Vigencia de un código | 10 minutos, igual que la verificación |
+| Intentos | 5 por código, y solo cuenta el más reciente |
+| Códigos por cuenta | 5 por hora |
+| Por IP | El limitador de `/auth`: 20 cada 15 minutos |
+
+Por qué un tope por cuenta si ya hay uno por IP: un código adivinado no es un
+correo confirmado, es **la cuenta entera**. Con 5 códigos por hora y 5 intentos
+cada uno, quien no tiene el correo atina 25 veces de un millón por hora, venga
+de las IP que venga. Y de paso nadie puede usar el formulario para llenarle el
+buzón a otra persona. El intento se **gasta antes de comparar**, en la misma
+sentencia que revisa vigencia y tope (`UPDATE … WHERE attempts < 5 RETURNING`):
+veinte peticiones al mismo tiempo no consiguen veinte comparaciones.
+
+El código sale de `crypto.randomInt`. El de la verificación salía de
+`Math.random()`, que no sirve para secretos, y se cambió de paso porque es la
+misma función. También de paso, el nombre del saludo de los dos correos ahora
+se escapa: lo escribe quien se registra, cualquiera puede registrarse con el
+correo de otra persona, y sin escapar un `<a href=…>` llegaba como link a una
+bandeja ajena, firmado por CFBAMX.
+
+**La respuesta es la misma exista o no la cuenta**, por higiene y no como
+promesa: `/register` ya dice con un 409 si un correo está registrado, así que
+esconderlo aquí no protegería nada. Lo que sí cambia la respuesta es que **sin
+Resend configurado contesta 503**, por la misma razón que la verificación no
+muestra su pantalla: no se le pide a nadie un código que no le puede llegar.
+
+**Al cambiarla**, en una sola sentencia (regla de las transacciones de
+`CLAUDE.md`):
+
+- Se guarda la contraseña nueva (mínimo 6 caracteres, igual que el registro) y
+  `users.password_changed_at`.
+- El correo queda verificado: el código probó lo mismo que la verificación.
+- Se borran los códigos pendientes, de recuperación y de verificación.
+- La persona entra directo, con un token nuevo.
+
+Una cuenta que se creó con Google también puede ponerse contraseña por aquí.
+El código prueba que el correo es suyo, que es lo mismo que prueba Google, y
+así no hace falta un camino aparte.
+
+**Las sesiones abiertas se cierran todas**, también por decisión de Alfredo. Es
+lo que protege el caso en que alguien cambió la contraseña porque otra persona
+entró a su cuenta. El token sigue durando 7 días y sigue sin guardarse en
+ningún lado. Lo que cambió es que `authRequired` y `optionalAuth` rechazan el
+que se firmó **antes** de `password_changed_at` (401, *"Tu contraseña cambió"*),
+y el frontend ya cerraba la sesión cuando `/auth/me` contesta que el token no
+sirve —no cuando no hay señal—. Las dos rutas de `notifications.js` que
+verificaban el JWT a mano ahora usan `optionalAuth`, para que no quede una
+puerta lateral que acepte un token revocado.
+
+Tres detalles que parecen menores y no lo son:
+
+- **Se compara al segundo.** El `iat` del JWT viene en segundos, y el token
+  nuevo se firma en el mismo segundo del cambio: comparado al milisegundo, el
+  token recién entregado nacería revocado.
+- **La hora del cambio la pone el reloj del servidor, no `NOW()` de la base.**
+  Es el mismo reloj que firma los tokens. El de la PC de desarrollo va ~3 s
+  detrás de Neon, y mezclar los dos relojes produciría el mismo error de
+  arriba por otra causa. (La vigencia del código, en cambio, vive entera en el
+  reloj de la base: se escribe y se compara con `NOW()`.)
+- **Cuesta una consulta por petición con sesión**, y por eso va con una caché
+  en memoria de 60 s que el propio cambio de contraseña actualiza. Con una sola
+  instancia, que es lo que corre hoy en Render, la revocación es inmediata. Con
+  varias, la instancia que no hizo el cambio puede aceptar el token viejo hasta
+  un minuto.
+
+**Las capturas sin señal no se pierden.** La cola (`offlineOutbox.js`) nunca
+borra lo que no pudo subir y lee el token al momento de reintentar, así que lo
+que se capturó con la sesión vieja se sube en cuanto la persona vuelve a entrar.
+
+Endpoints, los dos sin sesión y con `authLimiter`:
+
+| Método | Ruta | Cuerpo | Responde |
+|-|-|-|-|
+| `POST` | `/auth/password-reset/request` | `{ email }` | `{ ok: true }` siempre; 503 sin Resend |
+| `POST` | `/auth/password-reset/confirm` | `{ email, code, password }` | Lo mismo que `/login` |
+
+Para las pruebas, `EMAIL_TRANSPORT=log` hace que el backend crea que puede
+mandar correos sin mandar ninguno: anota en la consola a quién iba, sin el
+código, y la suite lo lee de la base. Es solo para el backend de pruebas del
+4100; en Render no se define.
 
 ### Vulnerabilidades de `npm audit` — evaluadas y aceptadas conscientemente
 

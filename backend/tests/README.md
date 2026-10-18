@@ -27,6 +27,7 @@ entorno, así que el CI las corre en cada push (ver `.github/workflows/ci.yml`).
 | `unit/bandeja.test.mjs` | "Mis notificaciones": quién lee cada aviso de una organización (el coach ningún aviso de dinero, el tesorero de la liga el pago que le toca confirmar, lo no clasificado solo los dueños), y cuándo salen los avisos de lo que sigues — "próximo" una hora antes, nada de antes de que empezaras a seguir, un aviso por partido aunque lo sigas dos veces, "marcador final" solo cuando el partido terminó. Y los de tus predicciones: el resultado, el cierre de jornada (jornada que no cierra con un partido sin marcador, perder el 1.º sin haber votado, la quiniela) y el recordatorio de votar. Y qué cuenta el balón: un aviso calculado que nace con hora del pasado es nuevo si no estaba cuando abriste la bandeja; uno de organización, no |
 | `unit/rankingPredicciones.test.mjs` | El orden del ranking de predicciones (el mismo que tenía el concurso), que un empate exacto comparta lugar, la tabla tal como estaba en cada corte de jornada, y los hitos: el mejor umbral cruzado y solo con más participantes que el umbral |
 | `unit/plays.test.mjs` | La aritmética de acreditación de la **NCAA**: que una captura no sea intento de pase, que se parta entre los taqueadores, que los dos puntos no entren en los totales individuales, y que un partido en `scoring` no derive box score |
+| `unit/sesiones.test.mjs` | Cuándo deja de servir una sesión después de cambiar la contraseña: que el token de antes no pase, que el que se entrega al cambiarla no nazca revocado (se compara al segundo, no al milisegundo), que quien nunca la cambió no pierda nada, y que un `iat` raro falle cerrado |
 
 Por qué estas y no otras: son las funciones que **se pueden** probar sin
 levantar nada. Todo lo demás en `src/` toca Postgres en la primera línea, y
@@ -40,10 +41,11 @@ mostrar no se separen.
 
 ## Las de punta a punta
 
-No son unitarias y no corren en el CI: son seis scripts que ejercitan contra
+No son unitarias y no corren en el CI: son siete scripts que ejercitan contra
 un backend vivo lo único que de verdad no se puede revisar leyendo el código —
-que el saldo cuadre después de cancelar, rechazar y retirar, y que un lote
-reenviado no duplique nada.
+que el saldo cuadre después de cancelar, rechazar y retirar, que un lote
+reenviado no duplique nada, y que veinte intentos simultáneos contra un código
+no consigan veinte comparaciones.
 
 | Script | Qué cubre |
 |---|---|
@@ -52,6 +54,7 @@ reenviado no duplique nada.
 | `invites-roles.e2e.mjs` | los dos tipos de link, cada uno con sus reglas: la **entrega** de un equipo (una sola viva, generar otra mata la anterior, se entrega una vez) y la **invitación con rol** (varias vivas a la vez, lista de pendientes, cancelar una sin tocar a las otras, el link de dueño que un admin no ve, 409 sin gastar el link a quien ya es miembro, cambiar un rol con `PATCH`). Las dos caducan a los 7 días (se envejece `created_at` en la base para probarlo). También quién queda de alta en `organization_members`, a quién le toca 409, 403 o 200, y desde el 2026-09-21 el candado de **eliminar un equipo**: que uno sin entregar sí se borre aunque deba dinero, y que uno entregado no se borre aunque no deba nada. Desde el 2026-09-24, "Mis notificaciones": qué aviso lee cada rol, que el balón cuente por persona y no por organización, que ajustar las casillas de "Seguir" no reinicie la fecha del seguimiento, y que capturar un marcador le llegue a quien sigue el partido — desde el 2026-09-27, solo cuando el partido terminó. Desde el 2026-10-08, el **playbook**: que lo abran dueño, administrador y coach y nadie más (ni el tesorero, ni el editor de roster, ni la liga), que el coach renombre y borre lo que subió otro, que la imagen de otro equipo no se alcance cambiando el id, y una subida **real** a Cloudinary que la misma suite borra (se salta sola si el backend no tiene Cloudinary). Ojo: el `.env` local usa la **misma cuenta de Cloudinary que producción** (medido el 2026-10-08); la suite borra lo que sube, pero si se cae a la mitad deja un PNG de 1×1 en `lifa-app/playbook` |
 | `plays.e2e.mjs` | estadísticas por jugada: que reenviar el mismo lote sea gratis, que la cascada dé un solo box score, que dos capturistas no se pisen y que las reglas de la NCAA sobrevivan el viaje por la base |
 | `billing-multiliga.e2e.mjs` | un equipo en DOS ligas: que los dos libros no se mezclen, que no se adivine de cuál liga es un pago, y que sacarlo de un roster no le esconda la deuda |
+| `recuperar-contrasena.e2e.mjs` | "¿Olvidaste tu contraseña?": la misma respuesta exista o no la cuenta, un código equivocado que gasta un intento y dice cuántos quedan, que solo cuente el código más reciente, que ni el correcto sirva agotado o vencido, **veinte intentos simultáneos desde veinte IP que consiguen cinco comparaciones**, el tope de cinco códigos por hora, y al canjearlo: la contraseña nueva, el correo verificado, los códigos borrados, el token de antes rechazado —también por `optionalAuth`— y el que se entrega aceptado. Además, que un cambio escrito directo en la base (como lo haría otra instancia) saque el token sin pasar por la caché, y que una cuenta de Google se pueda poner contraseña. **Necesita el backend con `EMAIL_TRANSPORT=log`** |
 | `predicciones.e2e.mjs` | los avisos de tus predicciones en "Mis notificaciones": que el marcador parcial no califique a nadie, que "Finalizar" deje la hora en que terminó, el resultado de cada voto con cuánta gente votó igual, un solo aviso si además sigues el partido, tu lugar al cerrar la jornada (el mismo número que la pestaña Ranking) y el de tu quiniela, el recordatorio de votar que se quita solo al votar, y que una jornada que se destraba después de que abriste la bandeja —se pospone el partido que la detenía— prenda el balón aunque cierre con una hora anterior |
 
 Las dos de cobranza **no** cubren nada de roles ni de fronteras: las dos usan
@@ -74,13 +77,21 @@ es una copia copy-on-write instantánea, y apunta ahí:
 cd backend
 $env:DATABASE_URL = "<cadena de la rama>"
 $env:PORT = 4100
+$env:EMAIL_TRANSPORT = "log"   # solo lo pide recuperar-contrasena; a las demás no les estorba
 node src/server.js          # en una terminal
 node tests/billing-player.e2e.mjs   # en otra, con las mismas variables
 node tests/billing-league.e2e.mjs
 node tests/invites-roles.e2e.mjs
 node tests/plays.e2e.mjs
 node tests/billing-multiliga.e2e.mjs
+node tests/predicciones.e2e.mjs
+node tests/recuperar-contrasena.e2e.mjs
 ```
+
+`EMAIL_TRANSPORT=log` hace que el backend se comporte como si pudiera mandar
+correos sin mandar ninguno: anota en la consola a quién iba, sin el código, y la
+suite lo lee de la base. Sin esa variable, `recuperar-contrasena` recibe 503 en
+su primer paso y lo dice. En Render no se define nunca.
 
 `DATABASE_URL` hay que ponerla **en las dos** terminales: los scripts abren su
 propio pool para mirar la base por debajo y **no** leen el `.env` (no importan
@@ -99,6 +110,13 @@ que un `npm test` por accidente nunca va a intentar hablarle a una base de datos
 jugador gasta 4 por corrida: a la tercera seguida se activa. Es el limitador
 funcionando, no un fallo. El conteo vive en memoria del backend — reinícialo y
 vuelve a correr.
+
+Lo mismo con `authLimiter` (20 cada 15 minutos, compartido por registro, login
+y recuperar la contraseña): dos suites seguidas registran cuentas suficientes
+para que la tercera reciba 429 en `/auth/register`. El 2026-10-17 alcanzó con
+reiniciar el backend cada dos suites. `recuperar-contrasena` no cuenta: manda
+su propio `X-Forwarded-For` (el backend confía en un proxy) y no se gasta el
+cupo de las demás.
 
 ## Qué encontraron estas pruebas
 

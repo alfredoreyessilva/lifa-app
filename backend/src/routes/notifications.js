@@ -1,9 +1,8 @@
 import express from 'express';
 import webpush from 'web-push';
-import jwt from 'jsonwebtoken';
 import db from '../config/db.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { authRequired } from '../middleware/auth.js';
+import { authRequired, optionalAuth } from '../middleware/auth.js';
 import { runBillingReminders, runPlayerBillingReminders } from '../utils/billingReminders.js';
 import { runMonthlyChargeGeneration } from '../utils/monthlyCharges.js';
 import { runOncePerDay, registrarLlamada, podarBitacora } from '../utils/cronSchedule.js';
@@ -155,18 +154,15 @@ router.post('/subscribe', authRequired, asyncHandler(async (req, res) => {
   });
 }));
 
-// Verificar si ya está suscrito y devolver preferencias actuales
-router.post('/check', asyncHandler(async (req, res) => {
+// Verificar si ya está suscrito y devolver preferencias actuales.
+//
+// La sesión es opcional y la lee `optionalAuth`, no un `jwt.verify` a mano como
+// antes: ese camino aceptaba un token que un cambio de contraseña ya había
+// cerrado (README, "Recuperar la contraseña").
+router.post('/check', optionalAuth, asyncHandler(async (req, res) => {
   const { endpoint, league_id, match_id, team_name } = req.body;
 
-  let userId = null;
-  const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith('Bearer ')) {
-    try {
-      const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET);
-      userId = decoded.id;
-    } catch {}
-  }
+  const userId = req.user?.id ?? null;
 
   let sub = null;
   if (userId) {
@@ -202,18 +198,11 @@ router.post('/check', asyncHandler(async (req, res) => {
   });
 }));
 
-// Cancelar suscripción general
-router.post('/unsubscribe', asyncHandler(async (req, res) => {
+// Cancelar suscripción general. La sesión, opcional, igual que en /check.
+router.post('/unsubscribe', optionalAuth, asyncHandler(async (req, res) => {
   const { subscription, league_id, match_id, team_name } = req.body;
 
-  let userId = null;
-  const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith('Bearer ')) {
-    try {
-      const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET);
-      userId = decoded.id;
-    } catch {}
-  }
+  const userId = req.user?.id ?? null;
 
   if (userId) {
     await db.prepare(`

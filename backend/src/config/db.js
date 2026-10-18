@@ -2357,6 +2357,35 @@ export async function initSchema() {
     `);
     await run(`CREATE INDEX IF NOT EXISTS idx_team_playbook_images_team ON team_playbook_images(team_id, created_at DESC)`);
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Recuperar la contraseña (README, "Recuperar la contraseña", 2026-10-17).
+    //
+    // Tabla aparte de `email_verification_codes`, aunque se parezcan: un código
+    // de verificación confirma un correo, uno de recuperación entrega la cuenta
+    // entera. Compartir tabla dejaría a un solo `WHERE` olvidado de distancia
+    // canjear el uno por el otro.
+    //
+    // TIMESTAMPTZ y no TIMESTAMP como la de verificación: la vigencia se escribe
+    // y se compara con NOW() de la base, en su reloj, y sin zona esa
+    // comparación depende de cómo se escribió cada fila.
+    await run(`
+      CREATE TABLE IF NOT EXISTS password_reset_codes (
+        id         SERIAL PRIMARY KEY,
+        user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        code       TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        attempts   INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_password_reset_codes_user ON password_reset_codes(user_id, created_at DESC)`);
+
+    // Cuándo cambió la contraseña por última vez. Es lo que cierra las
+    // sesiones abiertas: un token firmado antes de esta hora ya no sirve
+    // (middleware/auth.js). Sin DEFAULT, a propósito: NULL es "nunca la ha
+    // cambiado", y ninguna sesión de hoy se cae por esta migración.
+    await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ`);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se

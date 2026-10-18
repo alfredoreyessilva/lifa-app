@@ -86,8 +86,10 @@ export default function PlayerCardPage() {
 
   if (!card) return <Loading />;
 
-  const { player, trajectory, stats, predictions, pools } = card;
-  const currentTeam = trajectory.find((t) => !t.end_date);
+  // `team` es el equipo con el que juega hoy, o null si ya no está en ningún
+  // roster. La tarjeta no trae su historial de equipos a propósito: es de una
+  // temporada, no de una carrera (regla 7 de CLAUDE.md).
+  const { player, team, stats, predictions, pools } = card;
   const visibleGroups = STAT_GROUPS.filter((g) => groupHasData(stats, g));
 
   return (
@@ -104,39 +106,17 @@ export default function PlayerCardPage() {
             {player.position ? ` · ${player.position}` : ''}
           </div>
           <h1 className="player-hero-name">{player.first_name} {player.last_name}</h1>
-          {currentTeam && (
+          {team && (
             <div className="player-hero-team">
-              {currentTeam.team_logo_url && <img src={currentTeam.team_logo_url} alt={currentTeam.team_name} />}
-              <span>{currentTeam.team_name}</span>
+              {team.logo_url && <img src={team.logo_url} alt={team.name} />}
+              <span>{team.name}</span>
             </div>
           )}
           <div style={{ marginTop: 10 }}>
-            <PlayerShareButton player={player} currentTeam={currentTeam} stats={stats} />
+            <PlayerShareButton player={player} team={team} stats={stats} />
           </div>
         </div>
       </div>
-
-      <section className="player-section">
-        <h2>Trayectoria</h2>
-        {trajectory.length === 0 ? (
-          <p className="player-empty-note">Todavía no hay historial de equipos registrado.</p>
-        ) : (
-          <div className="player-trajectory">
-            {trajectory.map((t) => (
-              <div key={t.membership_id} className="player-trajectory-row">
-                <div className="player-trajectory-team">
-                  {t.team_logo_url && <img src={t.team_logo_url} alt={t.team_name} />}
-                  <span>{t.team_name}</span>
-                </div>
-                <div className="player-trajectory-meta">
-                  {t.season ? `Temporada ${t.season}` : ''}
-                  {!t.end_date && <span className="player-badge-active">Activo</span>}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
 
       <section className="player-section">
         <h2>Estadísticas {stats.gamesPlayed > 0 && <span className="player-games">· {stats.gamesPlayed} partido{stats.gamesPlayed === 1 ? '' : 's'}</span>}</h2>

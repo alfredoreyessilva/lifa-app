@@ -1,12 +1,13 @@
 import express from 'express';
+import { randomInt } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
 import db from '../config/db.js';
-import { signToken, authRequired } from '../middleware/auth.js';
+import { signToken, authRequired, rememberPasswordChange } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { authLimiter } from '../middleware/rateLimit.js';
 import { isValidEmail } from '../utils/validation.js';
-import { sendVerificationEmail } from '../utils/email.js';
+import { emailAvailable, sendVerificationEmail, sendPasswordResetEmail } from '../utils/email.js';
 import { permisosDeRol, etiquetaDeRol } from '../utils/orgRoles.js';
 
 const router = express.Router();
@@ -14,8 +15,16 @@ const router = express.Router();
 const VERIFICATION_CODE_TTL_MINUTES = 10;
 const MAX_VERIFICATION_ATTEMPTS = 5;
 
+// Recuperar la contraseña (README, "Recuperar la contraseña", 2026-10-17).
+const RESET_CODE_TTL_MINUTES = 10;
+const MAX_RESET_ATTEMPTS = 5;
+const MAX_RESET_CODES_PER_HOUR = 5;
+
+// Seis dígitos, de 100000 a 999999. Sale de `crypto` y no de `Math.random()`,
+// que no sirve para secretos: el mismo código que confirma un correo es el
+// que, en la recuperación, entrega la cuenta entera.
 function generateVerificationCode() {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(randomInt(100000, 1000000));
 }
 
 // Crea un código nuevo para el usuario y lo manda por correo. Se usa tanto
@@ -35,9 +44,10 @@ async function issueVerificationCode(userId, email, name) {
 // frontend NO le muestra a nadie la pantalla de "revisa tu código" — sería
 // engañoso pedirle un código a alguien si el correo nunca puede llegarle.
 // En cuanto agregues RESEND_API_KEY y EMAIL_FROM en el backend, esto se
-// activa solo, sin tocar código de nuevo.
+// activa solo, sin tocar código de nuevo. (El backend de pruebas lo prende
+// con EMAIL_TRANSPORT=log, ver utils/email.js.)
 function emailVerificationAvailable() {
-  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+  return emailAvailable();
 }
 
 // Sin valor por defecto a propósito, igual que JWT_SECRET — mejor que el
@@ -176,6 +186,161 @@ router.post('/resend-code', authRequired, authLimiter, asyncHandler(async (req, 
 
   await issueVerificationCode(user.id, user.email, user.name);
   res.json({ ok: true });
+}));
+
+// ── Recuperar la contraseña ─────────────────────────────────────────────
+//
+// README, "Recuperar la contraseña" (2026-10-17). Un código de 6 dígitos por
+// correo —no un link: se teclea en el mismo aparato donde está la app—, que
+// dura 10 minutos y aguanta 5 intentos. Hasta 5 códigos por hora por cuenta,
+// además del limitador por IP. Y al cambiarla se cierran todas las sesiones
+// abiertas (middleware/auth.js).
+
+// Pide un código. Responde lo mismo exista o no la cuenta, por higiene y no
+// como promesa: /register ya dice con un 409 si un correo está registrado, así
+// que esconderlo aquí no protegería nada.
+router.post('/password-reset/request', authLimiter, asyncHandler(async (req, res) => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: 'Ese correo no tiene un formato válido' });
+  }
+  // No se le pide a nadie un código que no le puede llegar: mismo criterio que
+  // la verificación, que sin Resend ni siquiera muestra su pantalla.
+  if (!emailVerificationAvailable()) {
+    return res.status(503).json({ error: 'Por ahora no podemos mandar el código por correo. Intenta más tarde.' });
+  }
+
+  const user = await db.prepare('SELECT id, name, email FROM users WHERE email = ?').get(email);
+  if (user) {
+    const code = generateVerificationCode();
+    // El tope por cuenta va en la misma sentencia que el INSERT, para que dos
+    // peticiones juntas no lo crucen contando cada una por su lado. De paso se
+    // barre lo de hace más de una hora, que ya venció y ya no cuenta para el
+    // tope. La vigencia se escribe con NOW(): se compara con NOW() al canjear,
+    // y así vive entera en el reloj de la base.
+    const nuevo = await db.prepare(`
+      WITH vencidos AS (
+        DELETE FROM password_reset_codes
+        WHERE user_id = ? AND created_at < NOW() - INTERVAL '1 hour'
+      )
+      INSERT INTO password_reset_codes (user_id, code, expires_at)
+      SELECT ?, ?, NOW() + ?::int * INTERVAL '1 minute'
+      WHERE (
+        SELECT COUNT(*) FROM password_reset_codes
+        WHERE user_id = ? AND created_at >= NOW() - INTERVAL '1 hour'
+      ) < ?::int
+      RETURNING id
+    `).get(user.id, user.id, code, RESET_CODE_TTL_MINUTES, user.id, MAX_RESET_CODES_PER_HOUR);
+
+    // Si el envío falla (Resend caído en ese momento), la respuesta no cambia:
+    // la persona pide otro con "Reenviar código", igual que en el registro.
+    if (nuevo) {
+      try {
+        await sendPasswordResetEmail(user.email, user.name, code);
+      } catch (err) {
+        console.error('No se pudo enviar el código para recuperar la contraseña:', err.message);
+      }
+    }
+  }
+
+  res.json({ ok: true });
+}));
+
+// Canjea el código por una contraseña nueva. Responde lo mismo que /login: la
+// persona entra directo, con un token firmado DESPUÉS del cambio.
+router.post('/password-reset/confirm', authLimiter, asyncHandler(async (req, res) => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+  const code = String(req.body?.code ?? '').trim();
+  const password = req.body?.password;
+  if (!email || !code || !password) {
+    return res.status(400).json({ error: 'Faltan campos: correo, código y contraseña nueva' });
+  }
+  if (typeof password !== 'string' || password.length < 6) {
+    return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+  }
+
+  // Sin cuenta, la misma respuesta que una cuenta sin código pendiente.
+  const sinCodigo = { error: 'No hay ningún código pendiente para ese correo. Pide uno nuevo.' };
+  const user = await db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  if (!user) return res.status(400).json(sinCodigo);
+
+  // El intento se GASTA antes de comparar, en la misma sentencia que revisa
+  // que el código sea el más reciente, que siga vigente y que le queden
+  // intentos. Leer y luego sumar dejaría que veinte peticiones al mismo tiempo
+  // leyeran "0 intentos" y consiguieran veinte comparaciones contra un código
+  // que entrega la cuenta entera.
+  const intento = await db.prepare(`
+    UPDATE password_reset_codes SET attempts = attempts + 1
+    WHERE id = (
+      SELECT id FROM password_reset_codes
+      WHERE user_id = ?
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1
+    )
+      AND expires_at > NOW()
+      AND attempts < ?
+    RETURNING code, attempts
+  `).get(user.id, MAX_RESET_ATTEMPTS);
+
+  if (!intento) {
+    // No hubo intento: falta decirle por qué. Se pregunta en el reloj de la
+    // base, el mismo que escribió la vigencia.
+    const ultimo = await db.prepare(`
+      SELECT expires_at <= NOW() AS vencido, attempts >= ? AS agotado
+      FROM password_reset_codes
+      WHERE user_id = ?
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1
+    `).get(MAX_RESET_ATTEMPTS, user.id);
+    if (!ultimo) return res.status(400).json(sinCodigo);
+    if (ultimo.agotado) return res.status(429).json({ error: 'Demasiados intentos con ese código. Pide uno nuevo.' });
+    return res.status(400).json({ error: 'Ese código ya venció. Pide uno nuevo.' });
+  }
+
+  if (intento.code !== code) {
+    const quedan = MAX_RESET_ATTEMPTS - intento.attempts;
+    return res.status(400).json({
+      error: quedan === 0 ? 'Código incorrecto. Ya no le quedan intentos: pide uno nuevo.'
+        : quedan === 1 ? 'Código incorrecto. Te queda 1 intento.'
+        : `Código incorrecto. Te quedan ${quedan} intentos.`,
+    });
+  }
+
+  // La hora del cambio la pone ESTE reloj y no NOW(): es el mismo que firma el
+  // token de abajo, y el `iat` del token se compara contra ella (ver
+  // utils/sesiones.js). Con relojes distintos, el token recién entregado
+  // podría nacer revocado.
+  //
+  // Todo en una sola sentencia: la contraseña, la hora, el correo ya
+  // verificado —el código probó lo mismo que la verificación— y los códigos
+  // pendientes de los dos tipos. Repartido en varias llamadas, cada una va por
+  // su conexión del pool y no hay transacción que las junte.
+  const changedAt = new Date();
+  const hash = bcrypt.hashSync(password, 10);
+  const updated = await db.prepare(`
+    WITH codigos AS (
+      DELETE FROM password_reset_codes WHERE user_id = ?
+    ), verificacion AS (
+      DELETE FROM email_verification_codes WHERE user_id = ?
+    )
+    UPDATE users
+    SET password_hash = ?, password_changed_at = ?, email_verified = TRUE
+    WHERE id = ?
+    RETURNING id, name, email, role, email_verified
+  `).get(user.id, user.id, hash, changedAt.toISOString(), user.id);
+
+  // Este proceso deja de aceptar los tokens viejos desde ya, sin esperar a que
+  // venza su caché.
+  rememberPasswordChange(updated.id, changedAt);
+
+  const safeUser = {
+    id: updated.id,
+    name: updated.name,
+    email: updated.email,
+    role: updated.role,
+    email_verified: updated.email_verified,
+  };
+  res.json({ token: signToken(safeUser), user: safeUser, emailVerificationAvailable: emailVerificationAvailable() });
 }));
 
 // Login/registro con Google. El frontend manda el "credential" (un ID

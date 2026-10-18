@@ -3,6 +3,7 @@ import Modal from './Modal.jsx';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { required, minLength, validEmail, runValidations } from '../utils/validation.js';
+import PasswordResetForm from './PasswordResetForm.jsx';
 
 // Modal de Inicia sesión / Crea tu cuenta, pensado para flujos donde el
 // usuario está haciendo algo (ej. suscribirse a notificaciones) y no
@@ -11,15 +12,29 @@ import { required, minLength, validEmail, runValidations } from '../utils/valida
 // con el token nuevo, para que quien abrió el modal pueda continuar de
 // inmediato lo que estaba haciendo.
 export default function AuthModal({ onClose, onSuccess, title }) {
-  const [mode, setMode] = useState('login'); // 'login' | 'register'
+  const [mode, setMode] = useState('login'); // 'login' | 'register' | 'reset'
+  // El correo que ya se tecleó en el login, para no pedirlo dos veces al
+  // pasar a "¿Olvidaste tu contraseña?".
+  const [resetEmail, setResetEmail] = useState('');
   const { login } = useAuth();
 
+  const modalTitle = mode === 'login' ? (title || 'Inicia sesión')
+    : mode === 'reset' ? 'Recupera tu contraseña'
+    : 'Crea tu cuenta';
+
   return (
-    <Modal title={mode === 'login' ? (title || 'Inicia sesión') : 'Crea tu cuenta'} onClose={onClose}>
+    <Modal title={modalTitle} onClose={onClose}>
       {mode === 'login' ? (
         <LoginForm
           onSuccess={(token, user) => { login(token, user); onSuccess?.(token); }}
           onSwitchToRegister={() => setMode('register')}
+          onForgotPassword={(email) => { setResetEmail(email); setMode('reset'); }}
+        />
+      ) : mode === 'reset' ? (
+        <PasswordResetForm
+          initialEmail={resetEmail}
+          onSuccess={(token, user) => { login(token, user); onSuccess?.(token); }}
+          onCancel={() => setMode('login')}
         />
       ) : (
         <RegisterForm
@@ -31,7 +46,7 @@ export default function AuthModal({ onClose, onSuccess, title }) {
   );
 }
 
-function LoginForm({ onSuccess, onSwitchToRegister }) {
+function LoginForm({ onSuccess, onSwitchToRegister, onForgotPassword }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -73,6 +88,11 @@ function LoginForm({ onSuccess, onSwitchToRegister }) {
       <button className="btn btn-flag btn-block" disabled={loading}>
         {loading ? 'Entrando…' : 'Entrar'}
       </button>
+      <div className="form-foot">
+        <button type="button" className="btn-link" onClick={() => onForgotPassword(email.trim())}>
+          ¿Olvidaste tu contraseña?
+        </button>
+      </div>
       <div className="form-foot">
         ¿No tienes cuenta?{' '}
         <button type="button" className="btn-link" onClick={onSwitchToRegister}>
