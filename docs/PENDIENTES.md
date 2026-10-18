@@ -35,6 +35,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 |-|-|-|-|
 | PD-03 | P0 | La API tarda ~40 s en despertar | dinero |
 | PD-37 | P0 | La tarjeta pública del jugador no mira si su roster es público | decisión |
+| PD-38 | P0 | Producción no puede mandar correos: recuperar la contraseña está apagado | configuración |
 | PD-06 | P1 | `DELETE /admin/leagues/:id` borra el libro liga↔equipo | decisión |
 | PD-07 | P1 | `teams.league_id` todavía da permisos | decisión |
 | PD-09 | P1 | El día del partido no se ha probado en una cancha | verificación |
@@ -124,6 +125,30 @@ grande. Lo que hay que decidir antes del código:
   nombre en el panel del roster.
 - Si cuenta solo la membresía activa, o también la de quien estaba en el roster
   de un partido ya jugado.
+
+### PD-38 · Producción no puede mandar correos: recuperar la contraseña está apagado
+
+**Nació P0 el 2026-10-17**, al desplegar el cierre de PD-04, y hereda su razón:
+en producción, quien olvida su contraseña se sigue quedando fuera. El código
+está desplegado (`ff73a8b`), pero `POST /auth/password-reset/request` contesta
+**503** en Render: le falta al menos una de las dos variables de Resend
+(`RESEND_API_KEY`, `EMAIL_FROM`). PD-04, el README y ESTADO decían que ya
+estaban configuradas, y no lo están. Por el mismo interruptor, **la verificación
+de correo al registrarse tampoco ha corrido nunca en producción**.
+
+Nada se rompe: la pantalla contesta "Por ahora no podemos mandar el código por
+correo" en vez de pedir un código que no llega, y el registro no pide
+verificar. Es la regla de `emailAvailable()` funcionando.
+
+Lo que hace falta, sin tocar código:
+
+- Un dominio propio verificado en Resend (unos registros DNS). El remitente de
+  prueba de Resend solo le entrega al correo de la propia cuenta de Resend, así
+  que no sirve para usuarios reales. Hoy el sitio vive en
+  `calendariosfbamx.vercel.app`, sin dominio propio.
+- `RESEND_API_KEY` y `EMAIL_FROM` en las variables de entorno de Render. Al
+  reiniciar, recuperar la contraseña y la verificación se prenden solas.
+- Probarlo una vez con una cuenta real: pedir el código y canjearlo.
 
 ---
 

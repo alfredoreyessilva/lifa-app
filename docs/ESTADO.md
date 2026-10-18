@@ -60,7 +60,7 @@ respaldos se resolvieron el 2026-09-23.
 | Playbook del equipo (imágenes de jugadas del cuerpo técnico) | 4 | Verificado el 2026-10-08 contra `desarrollo-local`: `invites-roles.e2e.mjs` (sección 15b, con una subida real a Cloudinary) y recorrido en el navegador, escritorio y celular. Desplegado ese día (`2d88ce5`): Render responde `/api/playbook` (401 sin sesión) y el bundle de Vercel ya trae la pestaña | — |
 | Cobranza liga → equipo (varias ligas) | 4 | **0 movimientos** en producción | PD-06; cobro en línea |
 | Cuotas del club y estado de cuenta del papá | 4 | **0 filas de padrón** en producción | PD-16, PD-17, PD-27 |
-| Roster (Excel, foto, altas y bajas) | 4 | Sin medir. La tarjeta pública ya no lleva el historial de equipos (2026-10-17, verificado contra `desarrollo-local`; sin desplegar) | PD-37 |
+| Roster (Excel, foto, altas y bajas) | 4 | Sin medir. La tarjeta pública ya no lleva el historial de equipos: desplegado el 2026-10-17 (`ff73a8b`), y en producción `GET /players/:id/card` responde `team` y no `trajectory` | PD-37 |
 | Roster público y pase de lista | 4 | Sin medir | PD-25 |
 | Estadísticas por jugada y captura sin señal | 4, **sin validar en cancha** | Solo Chromium con red apagada | PD-09, PD-10 |
 | Tienda y bot de WhatsApp | 2 | Código completo, sin conectar | Siguiente alcance |
@@ -75,7 +75,7 @@ respaldos se resolvieron el 2026-09-23.
 | Monitoreo | Sentry en frontend y backend ✅ · caída del servicio ❌ | PD-12 |
 | Pruebas | **410 unitarias** (245 backend + 165 frontend) en el CI ✅ · **7 suites e2e** que se corren a mano | PD-11, PD-25 |
 | Despliegue | Push a `main` = producción, sin protección ni espera al CI | PD-11 |
-| Seguridad | JWT obligatorio, límite de intentos en login y en el estado de cuenta público, CORS con lista, SQL parametrizado, candado contra producción, invitaciones que caducan a los 7 días ✅ · Recuperar la contraseña con un código por correo, que cierra las sesiones abiertas: verificado el 2026-10-17 contra `desarrollo-local` (`recuperar-contrasena.e2e.mjs` y navegador), **sin desplegar** | PD-20, PD-21 |
+| Seguridad | JWT obligatorio, límite de intentos en login y en el estado de cuenta público, CORS con lista, SQL parametrizado, candado contra producción, invitaciones que caducan a los 7 días ✅ · Recuperar la contraseña con un código por correo, que cierra las sesiones abiertas: verificado el 2026-10-17 contra `desarrollo-local` (`recuperar-contrasena.e2e.mjs` y navegador) y desplegado ese día (`ff73a8b`), pero **apagado en producción**: Render no tiene Resend y la ruta contesta 503 | PD-38, PD-20, PD-21 |
 | Páginas legales | ✅ Completas desde el 2026-09-19 | — |
 
 ## Qué hay en juego en producción
@@ -97,5 +97,5 @@ El detalle de cada fase está en "Roadmap de negocio" del README.
 | 1 — Fundación de confiabilidad | En curso | PD-03, PD-21 (el respaldo se cerró el 2026-09-23) |
 | 2 — Automatizar el cobro | **Sin empezar** | Una pasarela. Es el punto de no retorno: una liga que cobra por la plataforma no se va |
 | 3 — Red de seguridad técnica | En curso | PD-11, PD-12, y las e2e dentro del CI |
-| 4 — Ciclo de vida del cliente | Sin empezar | Correos de onboarding; Resend ya está configurado |
+| 4 — Ciclo de vida del cliente | Sin empezar | Correos de onboarding. Resend todavía no está configurado en Render (medido el 2026-10-17, PD-38) |
 | 5 — Crecimiento | Sin empezar | Página de precios, analítica de conversión, SEO |

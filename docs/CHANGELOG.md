@@ -15,10 +15,12 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
-- **Ya se puede recuperar la contraseña, y cambiarla cierra las sesiones
-  abiertas (2026-10-17)**. Cierra el `PD-04`, uno de los tres P0. Hasta ese día
-  un admin de liga que olvidaba su contraseña se quedaba fuera, y con él su
-  organización. **Sin desplegar.**
+- **Recuperar la contraseña con un código por correo, y cambiarla cierra las
+  sesiones abiertas (2026-10-17)**. Cierra el `PD-04`, uno de los tres P0, del
+  lado del código: hasta ese día un admin de liga que olvidaba su contraseña se
+  quedaba fuera, y con él su organización. **Desplegado el mismo día**
+  (`ff73a8b`), pero apagado en producción porque Render no tiene Resend (ver
+  abajo y `PD-38`).
 
   **Lo que decidió Alfredo:** un código de 6 dígitos por correo y no un link,
   porque se teclea en el mismo aparato donde está la app (en el celular, un
@@ -69,16 +71,23 @@ entradas traen el post-mortem del bug que las provocó.
   al entrar emite el voto pendiente, y habría escrito un voto sobre un partido
   copiado de ONEFA.
 
-  **En producción, al desplegar:** las dos migraciones son aditivas (tabla
-  nueva, columna nula sin default) y ninguna sesión de hoy se cae, porque
-  `password_changed_at` nace nulo. Según el `PD-04` (2026-09-23), Resend ya
-  estaba configurado en Render, así que la función debería quedar prendida
-  sola. Si no lo está, la pantalla contesta que por ahora no puede mandar el
-  código (503) en vez de pedir uno que nunca llega.
+  **Desplegado:** el CI pasó, y a los tres minutos Render ya respondía la ruta
+  nueva. Eso dice además que las dos migraciones (tabla nueva, columna nula sin
+  default) entraron, porque el backend solo escucha después de `initSchema()`.
+  Ninguna sesión de hoy se cayó: `password_changed_at` nace nulo. Pero la ruta
+  contesta **503**, porque a Render le falta al menos una de las dos variables
+  de Resend. El `PD-04`, el README y ESTADO decían que ya estaban configuradas;
+  y como la verificación de correo al registrarse usa el mismo interruptor,
+  nunca corrió en producción. La pantalla lo dice tal cual en vez de pedir un
+  código que no llega, y prenderlo es configuración, no código (`PD-38`).
+  Vercel también desplegó: el bundle de producción trae "¿Olvidaste tu
+  contraseña?".
 
 - **La tarjeta pública del jugador ya no publica su historial de equipos
   (2026-10-17)**. Cierra el `PD-05`, que iba contra la regla 7: la tarjeta es
-  de una temporada, no de una carrera. **Sin desplegar.**
+  de una temporada, no de una carrera. **Desplegado el mismo día**
+  (`ff73a8b`): en producción `GET /players/:id/card` ya responde `team` y no
+  `trajectory`.
 
   `GET /players/:id/card` ya no responde `trajectory`, sino `team`: el equipo
   con el que juega hoy (su membresía activa más reciente), o `null` si se le

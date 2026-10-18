@@ -4845,6 +4845,12 @@ mandar correos sin mandar ninguno: anota en la consola a quién iba, sin el
 código, y la suite lo lee de la base. Es solo para el backend de pruebas del
 4100; en Render no se define.
 
+**En producción está apagado** desde que se desplegó, el 2026-10-17
+(`ff73a8b`): Render no tiene Resend configurado y la ruta contesta 503, aunque
+hasta ese día los documentos decían que sí. La pantalla lo dice tal cual en
+vez de pedir un código que no llega. Lo que falta es configuración, no código:
+`PD-38`.
+
 ### Vulnerabilidades de `npm audit` — evaluadas y aceptadas conscientemente
 
 Estas dos siguen apareciendo en `npm audit` del frontend. No es que se nos olvidó, ya se revisaron y no aplican a como está construido este proyecto hoy:
@@ -4917,7 +4923,7 @@ Lo que falta de esta fase:
   jobs `frontend-build` y `backend-syntax-check`) (`PD-11`).
 
 **Fase 4 — Automatizar el ciclo de vida del cliente**
-No iniciado, salvo el rechazo de solicitud de publicación (ya hecho, ver `docs/CHANGELOG.md`). Falta: onboarding automático por correo para organizaciones nuevas — `RESEND_API_KEY`/`EMAIL_FROM` ya están configurados para los códigos de verificación, así que no hace falta cuenta nueva, solo construir los correos. Los tipos de organización pendientes ya se habilitaron (los cuatro se registran).
+No iniciado, salvo el rechazo de solicitud de publicación (ya hecho, ver `docs/CHANGELOG.md`). Falta: onboarding automático por correo para organizaciones nuevas. Ojo: aquí decía que `RESEND_API_KEY`/`EMAIL_FROM` ya estaban configurados, y en Render **no lo están** (medido el 2026-10-17 al desplegar la recuperación de contraseña, ver `PD-38`): antes de construir los correos hace falta el dominio y las dos variables. Los tipos de organización pendientes ya se habilitaron (los cuatro se registran).
 
 **Fase 5 — Crecimiento sin esfuerzo manual**
 No iniciado. Página de precios pública para el plan "pro", analítica de conversión (hoy `track.js` solo cuenta vistas/clicks de sponsors), SEO/contenido más allá del sitemap actual.
