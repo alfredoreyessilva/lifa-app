@@ -102,17 +102,33 @@ export const PERMISOS = [
   'ver',               // leer el panel: perfil, calendario y roster
   'perfil',            // editar el perfil de la organización
   'estructura',        // categorías, ramas, grupos, fases, títulos, sedes, equipos, transmisiones
-  'partidos',          // crear, borrar e importar partidos
+  'partidos',          // crear, borrar e importar partidos, y lo que los define (equipos, categoría, jornada…)
   'marcadores',        // editar un partido que YA existe: marcador, estado, fecha, hora, sede, links
   'cobranza_liga',     // el libro liga ↔ equipo, de los dos lados
   'cuotas_club',       // el padrón del club y su libro
   'roster',            // el roster de torneo
   'asistencia',        // pasar lista en un partido
-  'estadisticas',      // capturar las jugadas de un partido
+  'estadisticas',      // capturar las jugadas de un partido y teclear sus totales a mano
   'miembros',          // invitar y quitar gente que no sea dueño
   'duenos',            // invitar y quitar dueños
   'entregar_equipos',  // entregarle a un equipo su perfil (una sola vez, no se deshace)
   'playbook',          // las imágenes de jugadas del equipo: ver, subir, renombrar y borrar
+];
+
+// Lo que `marcadores` deja cambiar de un partido que ya existe, campo por campo
+// del cuerpo de `PUT /manage/matches/:id`. Es la línea entre el visor —que
+// tiene `marcadores` y no `partidos`— y quien puede crear el partido: el visor
+// mueve lo del día del partido, y lo que lo define (equipos, categoría, rama,
+// jornada, grupo, conferencia, fase y publicarlo) se queda con `partidos`.
+//
+// Es una lista de lo permitido y no de lo prohibido, a propósito: un campo
+// nuevo en esa ruta nace cerrado para el visor hasta que alguien decida
+// agregarlo aquí. Al revés, se le abriría solo.
+export const CAMPOS_DE_MARCADORES = [
+  'home_score', 'away_score', 'status',
+  'match_date_local', 'timezone',
+  'venue_id',
+  'stream_links', 'ticket_links',
 ];
 
 // Qué permisos trae cada rol, por tipo de organización. Se escribe completo y

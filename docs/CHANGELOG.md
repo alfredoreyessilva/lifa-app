@@ -15,6 +15,86 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El visor ya trabaja desde la página de cada partido: cambia el marcador y
+  teclea los totales a mano; el tesorero deja de ver "Editar partido"
+  (2026-10-19)**. Cierra `PD-39`, que nació y se cerró ese mismo día. Empezó
+  por el tesorero de la liga, que tenía "✎ Editar partido" en la página del
+  partido porque bastaba con ser de la liga, y al abrirlo solo le salía "No
+  tienes permiso sobre esta liga". Al revisarlo salió que **al visor le pasaba
+  lo mismo, y en todas partes**: el servidor lo dejaba guardar un marcador,
+  pero las tres pantallas que editan un partido (esa ventana, el panel de la
+  liga y los partidos del torneo) cargaban antes la estructura de la liga, que
+  pide `estructura`. Nació P0, por ser un hueco que nadie sabía que existía.
+
+  **Lo que decidió Alfredo**, en una tanda de tres preguntas: el visor cambia
+  marcador, estado, fecha, hora, sede y links, como dice su rol, y nada de lo
+  que define al partido; teclea los totales a mano en la página Estadísticas
+  del partido, junto a su captura por jugada ("es quien principalmente anotará
+  las estadísticas de una liga"); y su panel de la liga le dice dónde está lo
+  suyo en vez del error. El porqué está en "Los roles" y en "Estadísticas por
+  jugada" del README.
+
+  **Lo que cambió:**
+
+  - `PUT /manage/matches/:id` rechaza entera, con 403, la petición de quien
+    tiene `marcadores` sin `partidos` si trae un campo fuera de
+    `CAMPOS_DE_MARCADORES` (`utils/orgRoles.js`, una lista de lo permitido).
+    Hasta ese día el visor podía cambiar cualquier campo por la API.
+    `ligaPuedePermiso` se exporta de `ownership.js` para esa pregunta.
+  - `GET /manage/matches/:id/venues`, con `marcadores`: las sedes para la
+    ventana del visor, sin leer la estructura de la liga.
+  - Los totales a mano (`/players/matches/:matchId/stats`) piden
+    `estadisticas` en vez de `marcadores`. Hoy los dos los tienen los mismos
+    tres roles: nadie ganó ni perdió acceso.
+  - `MatchForm` tiene un modo `limitToMarcadores` que enseña solo esos campos y
+    manda solo esos. La página del partido le enseña "Editar partido" a quien
+    tiene `marcadores`, y la ventana completa solo a quien además tiene
+    `estructura` y `partidos`.
+  - `MatchStatsModal` acepta los rosters de quien lo abre: la página
+    Estadísticas le pasa los que bajó para la captura (nombre y número), porque
+    el roster de la rama pide `estructura` del lado de la liga.
+  - El panel de la liga ya no le pide el árbol a quien no administra la
+    estructura: al visor le dice que lo suyo está en cada partido y al
+    tesorero que es la cobranza. De paso, "Ver mi página" les apuntaba a
+    `/ligas/`.
+
+  **Verificado contra `desarrollo-local`.** `invites-roles.e2e.mjs` con 12
+  comprobaciones nuevas —el visor cambia fecha, hora, sede y links; no cambia
+  jornada, equipo ni publicar, y el 403 no guarda nada a medias; lee las sedes
+  y teclea totales, y el tesorero no—: 185 OK y 0 fallas. `plays.e2e.mjs`: 76
+  OK y 0 fallas. En el navegador, en un partido de esa suite: el visor abre
+  "Editar partido" con solo sus campos y guarda un marcador (21 → 24); en
+  Estadísticas teclea los totales de un jugador y el box score se actualiza
+  solo; su panel enseña el aviso. El tesorero no ve "Editar partido" y su
+  panel le señala la cobranza; el dueño conserva la ventana completa, y sin
+  cuenta no se ofrecen los totales.
+
+- **El botón Estadísticas del partido ya no se le enseña al público mientras
+  no haya nada que ver (2026-10-19)**. Lo pidió Alfredo: salía en todo partido
+  con rama y sus dos equipos, y quien llegaba de fuera abría una página que
+  decía "Todavía no hay estadísticas de este partido". Ahora
+  `GET /leagues/matches/:matchId` trae `has_box_score`: la misma cascada del
+  box score dicha en SQL (`HAY_BOX_SCORE_SQL` en `utils/plays.js`, con los
+  niveles sacados de `derivaBoxScore`). La vista pública pinta el botón si eso
+  es verdadero **o** si quien mira puede capturar —el admin de la plataforma o
+  un rol de la liga con `estadisticas`, la misma pregunta que
+  `matchStatsRequired`—, porque el visor tiene que poder entrar antes del
+  partido a presionar "Preparar partido". El porqué está en "Estadísticas por
+  jugada" del README.
+
+  **Verificado contra `desarrollo-local`.** En solo lectura, la consulta de
+  HEAD y la nueva sobre los 219 partidos publicados: las 219 filas idénticas
+  salvo la columna nueva, `has_box_score` igual a lo que da la cascada real
+  (`fuenteDelBoxScore` + `boxScoreDerivado` / `boxScoreDeTotales`) en los 219
+  —15 con datos—, y ~1 ms más por consulta. `plays.e2e.mjs` suma 8
+  comprobaciones, una por estado de la cascada (sin nada, sesión reclamada y
+  vacía, jugadas en `offense`, sesión buena nueva y vacía, devuelta a la
+  primera, solo anotaciones, jugadas de una sesión que no es la buena,
+  totales tecleados): 76 OK y 0 fallas. En el navegador: sin cuenta, el botón
+  no sale en un partido sin datos y sí en uno con datos; el visor (`editor`)
+  lo ve en el partido sin datos y llega al panel de captura; el tesorero de la
+  misma liga no lo ve.
+
 - **Recuperar la contraseña con un código por correo, y cambiarla cierra las
   sesiones abiertas (2026-10-17)**. Cierra el `PD-04`, uno de los tres P0, del
   lado del código: hasta ese día un admin de liga que olvidaba su contraseña se

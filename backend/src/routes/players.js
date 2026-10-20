@@ -5,7 +5,7 @@ import ExcelJS from 'exceljs';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
 import {
-  teamViewRequired, matchScoreRequired, branchTeamOwnerRequired, branchTeamPhotoRequired,
+  teamViewRequired, matchStatsRequired, branchTeamOwnerRequired, branchTeamPhotoRequired,
   matchAttendanceViewRequired, matchAttendanceRequired, branchTeamAttendanceRequired,
 } from '../middleware/ownership.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -568,9 +568,15 @@ const STAT_FIELDS = [
   'field_goals_made', 'extra_points_made',
 ];
 
+// Los totales a mano son estadísticas, no el marcador: los pide `estadisticas`,
+// el mismo permiso de la captura por jugada, porque el visor los teclea en la
+// misma página Estadísticas del partido (README, "Estadísticas por jugada").
+// Hasta el 2026-10-19 pedían `marcadores`; hoy los dos permisos los tienen los
+// mismos tres roles, así que el cambio no movió el acceso de nadie.
+
 // Todas las estadísticas capturadas de un partido, para mostrar la tabla
 // completa (ambos equipos) de una sola vez.
-router.get('/matches/:id/stats', authRequired, matchScoreRequired, asyncHandler(async (req, res) => {
+router.get('/matches/:matchId/stats', authRequired, matchStatsRequired, asyncHandler(async (req, res) => {
   const stats = await db.prepare(`
     SELECT s.*, p.first_name, p.last_name
     FROM player_match_stats s
@@ -587,7 +593,7 @@ router.get('/matches/:id/stats', authRequired, matchScoreRequired, asyncHandler(
 // conectado con sus equipos, se pide sincronizar primero (botón "Conectar
 // equipos con sus partidos" en el panel de la liga) en vez de dejar
 // capturar estadísticas de un equipo sin confirmar que de verdad jugó ahí.
-router.put('/matches/:id/stats/:playerId', authRequired, matchScoreRequired, asyncHandler(async (req, res) => {
+router.put('/matches/:matchId/stats/:playerId', authRequired, matchStatsRequired, asyncHandler(async (req, res) => {
   const match = req.match;
   const playerId = Number(req.params.playerId);
   const { team_id } = req.body;

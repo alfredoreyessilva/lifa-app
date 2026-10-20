@@ -21,6 +21,7 @@ import {
   ROLES,
   TODOS_LOS_ROLES,
   PERMISOS,
+  CAMPOS_DE_MARCADORES,
   rolesDeTipo,
   esRolValido,
   etiquetaDeRol,
@@ -134,6 +135,18 @@ test('el visor mueve el marcador, pasa lista y captura jugadas, y nada más', ()
   assert.ok(puede('league', 'editor', 'estadisticas'), 'y es quien se queda a capturar las jugadas');
   for (const prohibido of ['partidos', 'estructura', 'roster', 'cobranza_liga', 'perfil', 'miembros', 'duenos']) {
     assert.ok(!puede('league', 'editor', prohibido), `el visor no debería poder "${prohibido}"`);
+  }
+});
+
+test('el visor cambia lo del día del partido y nada de lo que lo define', () => {
+  // Es la lista que `PUT /manage/matches/:id` le aplica a quien tiene
+  // `marcadores` sin `partidos`. Si un campo que define al partido se colara
+  // aquí, el visor podría cambiar quién juega o publicar un borrador.
+  for (const campo of ['home_score', 'away_score', 'status', 'match_date_local', 'timezone', 'venue_id', 'stream_links', 'ticket_links']) {
+    assert.ok(CAMPOS_DE_MARCADORES.includes(campo), `el visor debería poder cambiar "${campo}"`);
+  }
+  for (const campo of ['home_team', 'away_team', 'category_id', 'branch_id', 'week_label', 'phase_id', 'is_draft', 'group_id', 'group_id_2', 'conference_id', 'conference_override_id']) {
+    assert.ok(!CAMPOS_DE_MARCADORES.includes(campo), `el visor no debería poder cambiar "${campo}"`);
   }
 });
 

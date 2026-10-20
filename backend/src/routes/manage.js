@@ -3,7 +3,8 @@ import multer from 'multer';
 import * as XLSX from 'xlsx';
 import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
-import { categoryOwnerRequired, matchOwnerRequired, matchScoreRequired, leagueOwnerRequired, teamOwnerRequired, venueOwnerRequired, groupOwnerRequired, branchOwnerRequired, conferenceOwnerRequired, tournamentOwnerRequired, phaseOwnerRequired, titleOwnerRequired } from '../middleware/ownership.js';
+import { categoryOwnerRequired, matchOwnerRequired, matchScoreRequired, leagueOwnerRequired, teamOwnerRequired, venueOwnerRequired, groupOwnerRequired, branchOwnerRequired, conferenceOwnerRequired, tournamentOwnerRequired, phaseOwnerRequired, titleOwnerRequired, ligaPuedePermiso } from '../middleware/ownership.js';
+import { CAMPOS_DE_MARCADORES } from '../utils/orgRoles.js';
 import { isValidEmail, isValidUrl, isValidGoogleMapsUrl, isNonEmptyString } from '../utils/validation.js';
 import {
   isValidTimezone,
@@ -1346,11 +1347,35 @@ router.post(
   })
 );
 
+// Las sedes a las que se puede mover un partido, para la ventana del visor.
+// No salen de `GET /manage/leagues/:leagueId/manage`: esa trae la estructura
+// entera de la liga y pide `estructura`, y de la liga esta ventana solo
+// necesita la lista de sedes (README, "Los roles").
+router.get('/matches/:id/venues', authRequired, matchScoreRequired, asyncHandler(async (req, res) => {
+  const venues = await db.prepare(
+    'SELECT id, name FROM venues WHERE league_id = ? ORDER BY sort_order ASC, name ASC'
+  ).all(req.league.id);
+  res.json(venues);
+}));
+
 router.put('/matches/:id', authRequired, matchScoreRequired, asyncHandler(async (req, res) => {
   // match_date_local: igual que en creación, el string crudo del input
   // <datetime-local> (o ausente, si esta edición no toca la fecha/hora).
   const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, conference_id, conference_override_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, branch_id, category_id, is_draft, phase_id } = req.body;
   const m = req.match;
+
+  // El visor tiene `marcadores` y no `partidos`: cambia lo del día del partido
+  // y nada más (`CAMPOS_DE_MARCADORES`). Lo que define al partido —equipos,
+  // categoría, rama, jornada, grupo, conferencia, fase y publicarlo— es de
+  // quien lo puede crear (README, "Los roles"). Se rechaza la petición entera
+  // en vez de ignorar lo que sobra: guardar a medias y contestar 200 haría
+  // creer que se cambió todo.
+  if (!await ligaPuedePermiso(req, req.league, 'partidos')) {
+    const ajenos = Object.keys(req.body || {}).filter((campo) => !CAMPOS_DE_MARCADORES.includes(campo));
+    if (ajenos.length) {
+      return res.status(403).json({ error: 'Tu rol solo cambia el marcador, el estado, la fecha, la hora, la sede y los links del partido' });
+    }
+  }
 
   const effectiveCategoryId = category_id || m.category_id;
   const effectiveCategory   = await db.prepare('SELECT * FROM categories WHERE id = ?').get(effectiveCategoryId);

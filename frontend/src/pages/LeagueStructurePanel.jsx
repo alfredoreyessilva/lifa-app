@@ -18,7 +18,7 @@ import MatchStatsModal from '../components/MatchStatsModal.jsx';
 import CompetitionModelModal from '../components/CompetitionModelModal.jsx';
 import { getTimezoneLabel } from '../utils/timezones.js';
 import { scopeName, matchScopeLabel } from '../utils/matchScope.js';
-import { puede } from '../utils/permisos.js';
+import { puede, puedeAlguno } from '../utils/permisos.js';
 
 // Panel unificado de una liga: TODO en una sola página, sin salir a ninguna
 // otra pantalla. Acordeón Torneo → Categoría → Rama → (Conferencia) → Grupo
@@ -35,6 +35,11 @@ export default function LeagueStructurePanel() {
   const { id } = useParams();
   const { token, leagues, refreshLeagues } = useAuth();
   const sidebarLeague = leagues.find((lg) => String(lg.id) === id);
+  // El árbol de la liga es de quien la administra. Al visor y al tesorero de
+  // liga no se les pide: el servidor les contestaría "No tienes permiso sobre
+  // esta liga" —que es lo que veían— y lo suyo está en otro lado. Se les dice
+  // dónde (README, "Los roles").
+  const administraLaLiga = puede(sidebarLeague, 'estructura');
 
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -48,8 +53,8 @@ export default function LeagueStructurePanel() {
   }
 
   useEffect(() => {
-    if (token) refresh();
-  }, [id, token]);
+    if (token && administraLaLiga) refresh();
+  }, [id, token, administraLaLiga]);
 
   useEffect(() => {
     saveExpanded(id, expanded);
@@ -122,7 +127,7 @@ export default function LeagueStructurePanel() {
               marcador de un partido, no la estructura. Esconder no es
               proteger: el backend vuelve a decidir en cada petición. */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <Link to={`/ligas/${league?.slug || ''}`} className="btn btn-outline btn-sm">Ver mi página</Link>
+            <Link to={`/ligas/${league?.slug || sidebarLeague.slug || ''}`} className="btn btn-outline btn-sm">Ver mi página</Link>
             {puede(sidebarLeague, 'cobranza_liga') && (
               <Link to={`/panel/liga/${id}/cobranza`} className="btn btn-outline btn-sm">💵 Cobranza</Link>
             )}
@@ -136,6 +141,25 @@ export default function LeagueStructurePanel() {
         </div>
 
         {error && <div className="form-error">{error}</div>}
+
+        {!administraLaLiga && (
+          <div className="empty-state">
+            <h3>Lo tuyo en esta liga</h3>
+            {puedeAlguno(sidebarLeague, 'marcadores', 'estadisticas') && (
+              <p>
+                Está en la página de cada partido: ahí cambias el marcador, el estado, la fecha,
+                la hora, la sede y los links con "✎ Editar partido", y anotas las estadísticas en
+                "Estadísticas". Los avisos de "Falta capturar un marcador" te llevan directo.
+              </p>
+            )}
+            {puede(sidebarLeague, 'cobranza_liga') && (
+              <p>La cobranza de la liga está en "💵 Cobranza", aquí arriba.</p>
+            )}
+            <Link to={`/ligas/${sidebarLeague.slug}`} className="btn btn-outline" style={{ marginTop: 16 }}>
+              Ver el calendario de la liga
+            </Link>
+          </div>
+        )}
 
         {league && (
           <div
@@ -183,18 +207,20 @@ export default function LeagueStructurePanel() {
           <OrgAdminsPanel organizationId={league.organization_id} organizationName={sidebarLeague.name} organizationType="league" entidad={sidebarLeague} token={token} />
         )}
 
-        <div className="tree-toolbar">
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar torneo, categoría, rama, grupo, equipo…"
-          />
-          <button className="btn btn-outline btn-sm" onClick={() => setExpanded(Object.fromEntries(allKeys.map((k) => [k, true])))}>Expandir todo</button>
-          <button className="btn btn-outline btn-sm" onClick={() => setExpanded({})}>Colapsar todo</button>
-        </div>
+        {administraLaLiga && (
+          <div className="tree-toolbar">
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar torneo, categoría, rama, grupo, equipo…"
+            />
+            <button className="btn btn-outline btn-sm" onClick={() => setExpanded(Object.fromEntries(allKeys.map((k) => [k, true])))}>Expandir todo</button>
+            <button className="btn btn-outline btn-sm" onClick={() => setExpanded({})}>Colapsar todo</button>
+          </div>
+        )}
 
-        {data === null && <p>Cargando…</p>}
+        {administraLaLiga && data === null && <p>Cargando…</p>}
 
         {data && (
           <div className="tree">

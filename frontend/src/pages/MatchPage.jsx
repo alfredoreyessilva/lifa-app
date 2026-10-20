@@ -15,6 +15,7 @@ import MatchBroadcasters from '../components/MatchBroadcasters.jsx';
 import MediaBroadcastControl from '../components/MediaBroadcastControl.jsx';
 import { buildHotelSearchUrl } from '../utils/matchServices.js';
 import { matchScopeLabel } from '../utils/matchScope.js';
+import { puede } from '../utils/permisos.js';
 import FlightSearchWidget from '../components/FlightSearchWidget.jsx';
 import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
 import VenueInfoPanel from '../components/VenueInfoPanel.jsx';
@@ -32,7 +33,7 @@ function linkHost(url) {
 export default function MatchPage() {
   const { matchId } = useParams();
   const navigate = useNavigate();
-  const { leagues, token } = useAuth();
+  const { leagues, token, user } = useAuth();
   const [match, setMatch]         = useState(null);
   const [error, setError]         = useState('');
   const [shareState, setShareState] = useState('idle');
@@ -109,14 +110,18 @@ export default function MatchPage() {
     }
   }
 
-  // Carga los datos de gestión de la liga (equipos, sedes, grupos) solo
-  // cuando el dueño de la liga abre el modal de edición — así el partido
-  // se puede editar sin salir de la vista pública, en vez de mandarlo al
-  // panel (que reemplazaba de fondo esta pantalla por "Mi panel").
+  // Carga lo que necesita la ventana de edición solo cuando se abre — así el
+  // partido se puede editar sin salir de la vista pública, en vez de mandarlo
+  // al panel (que reemplazaba de fondo esta pantalla por "Mi panel"). Quien
+  // define el partido carga la estructura de la liga (equipos, sedes, grupos);
+  // el visor no la lee —pide `estructura`—, y a su ventana le basta la lista de
+  // sedes, que pide con su mismo permiso.
   async function loadManageData() {
     setManageError('');
     try {
-      const data = await api.getManageLeague(match.league_id, token);
+      const data = editsWholeMatch
+        ? await api.getManageLeague(match.league_id, token)
+        : { venues: await api.getMatchVenues(match.id, token) };
       setManageData(data);
     } catch (e) {
       setManageError(e.message);
@@ -153,10 +158,29 @@ export default function MatchPage() {
   // manda ya resuelta (ver backend/src/utils/matchScope.js).
   const scopeLabel     = matchScopeLabel(match);
   const hotelUrl       = buildHotelSearchUrl(match);
-  // El usuario ve "Editar" solo si es dueño de la liga de este partido —
-  // "leagues" en AuthContext ya viene filtrado a las ligas de las que es
-  // owner_user_id (ver /auth/me), así que basta con buscar el id ahí.
-  const isLeagueOwner  = leagues.some((lg) => lg.id === match.league_id);
+  // Lo que quien mira puede hacer en la liga de este partido. `leagues` trae
+  // TODAS las ligas donde tiene un rol —dueño, admin, tesorero o visor—, así
+  // que estar ahí no alcanza: se pregunta por el permiso. El admin de la
+  // plataforma pasa todas las guardas del backend.
+  const myLeague        = leagues.find((lg) => lg.id === match.league_id);
+  const isPlatformAdmin = user?.role === 'admin';
+  // "Editar partido" lo ve quien puede guardar: `marcadores`, que tienen el
+  // dueño, el administrador y el visor (`matchScoreRequired`). Antes bastaba
+  // con ser de la liga, y al tesorero le salía un botón que solo abría "No
+  // tienes permiso sobre esta liga".
+  const canEditMatch = isPlatformAdmin || puede(myLeague, 'marcadores');
+  // La ventana completa —equipos, jornada, grupo, fase— es de quien define el
+  // partido, y carga la estructura de la liga. El visor abre la misma ventana
+  // con solo lo del día del partido (README, "Los roles").
+  const editsWholeMatch = isPlatformAdmin
+    || (puede(myLeague, 'estructura') && puede(myLeague, 'partidos'));
+  // Quién captura las estadísticas de este partido: la misma pregunta que hace
+  // `matchStatsRequired` en el backend, el permiso `estadisticas`.
+  const canCaptureStats = isPlatformAdmin || puede(myLeague, 'estadisticas');
+  // `has_box_score` en undefined es el backend viejo durante un despliegue
+  // (Vercel termina antes que Render), y se lee como antes: se pinta. Es el
+  // mismo criterio de `puede()` — ver utils/permisos.js.
+  const showStatsButton = canCaptureStats || match.has_box_score !== false;
 
   return (
     <div className="container">
@@ -286,12 +310,15 @@ export default function MatchPage() {
             publica— y quien tiene `estadisticas` ve además el panel de
             captura.
 
-            Se pinta aunque el partido no se haya jugado, y a propósito: el
-            visor tiene que poder entrar ANTES para presionar "Preparar
-            partido" y llevárselo a una cancha sin señal. Lo que sí hace falta
-            son la rama y los dos equipos — sin eso no hay roster al que
-            colgarle una jugada, que es la misma condición del pase de lista. */}
-        {match.branch_id && match.home_team_id && match.away_team_id && (
+            Al público se le pinta solo cuando ya hay algo que ver
+            (`has_box_score`): antes, el botón llevaba a una página que decía
+            "Todavía no hay estadísticas". A quien captura se le pinta
+            siempre, aunque el partido no se haya jugado, y a propósito: tiene
+            que poder entrar ANTES para presionar "Preparar partido" y
+            llevárselo a una cancha sin señal. A los dos les hacen falta la
+            rama y los dos equipos — sin eso no hay roster al que colgarle una
+            jugada, que es la misma condición del pase de lista. */}
+        {match.branch_id && match.home_team_id && match.away_team_id && showStatsButton && (
           <div className="match-card-actions" style={{ marginTop: 16 }}>
             <Link to={`/partidos/${match.id}/estadisticas`} className="btn btn-outline btn-sm">
               Estadísticas
@@ -300,7 +327,7 @@ export default function MatchPage() {
         )}
 
         <div className="match-card-actions" style={{ marginTop: 16 }}>
-          {isLeagueOwner && (
+          {canEditMatch && (
             <button type="button" className="btn btn-flag btn-sm" onClick={openEdit}>
               ✎ Editar partido
             </button>
@@ -444,10 +471,11 @@ export default function MatchPage() {
             <MatchForm
               initial={match}
               submitLabel="Guardar cambios"
+              limitToMarcadores={!editsWholeMatch}
               teams={manageData.teams}
               venues={manageData.venues}
-              groups={manageData.categories.find((c) => c.id === match.category_id)?.groups || []}
-              leagueTimezone={manageData.league?.timezone}
+              groups={manageData.categories?.find((c) => c.id === match.category_id)?.groups || []}
+              leagueTimezone={manageData.league?.timezone || match.league_timezone}
               token={token}
               leagueId={match.league_id}
               categoryId={match.category_id}

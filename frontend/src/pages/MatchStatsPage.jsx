@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import Loading from '../components/Loading.jsx';
+import MatchStatsModal from '../components/MatchStatsModal.jsx';
 import { getMatchParts } from '../utils/matchDisplay.js';
 import { guardarPartido, leerPartido, hayAlmacenLocal } from '../utils/offlineDb.js';
 import { agregarPendiente, reemplazar, suscribir, reintentarTodo } from '../utils/offlineOutbox.js';
@@ -77,6 +78,7 @@ export default function MatchStatsPage() {
   const [serie, setSerie] = useState(null);
   const [borrador, setBorrador] = useState(null);
   const [editando, setEditando] = useState(null);
+  const [totalesAbiertos, setTotalesAbiertos] = useState(false);
 
   // ── Cargar ──
   useEffect(() => {
@@ -330,6 +332,9 @@ export default function MatchStatsPage() {
 
   const cuando = partido?.match_date ? getMatchParts(partido.match_date) : null;
   const sinSubir = textoDeJugadasSinSubir(cola, matchId);
+  // El formulario de los totales a mano necesita los nombres de los equipos,
+  // que el panel trae junto a cada roster y no en `panel.match`.
+  const nombreDeEquipo = (teamId) => equipos.find((t) => t.team_id === teamId)?.name || '';
 
   return (
     <div className="container match-stats-page">
@@ -531,6 +536,41 @@ export default function MatchStatsPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Los totales a mano ──
+          La otra forma de anotar el partido: jugador por jugador, sus números,
+          con el mismo formulario del botón "Stats" del panel de la liga y los
+          rosters que esta pantalla ya bajó. Necesita señal —va directo al
+          servidor, no a la cola—, así que sin conexión no aparece. Y si el
+          partido se captura por jugada a un nivel que deriva, el box score sale
+          de las jugadas: se dice antes de que alguien teclee números que no se
+          van a ver (README, "Estadísticas por jugada"). */}
+      {puedeCapturar && !deLoLocal && (
+        <div className="attendance-prepare">
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setTotalesAbiertos(true)}>
+            Teclear totales a mano
+          </button>
+          <span className="attendance-prepare-note">
+            {box?.source === 'plays'
+              ? 'Este partido se captura por jugada, así que sus estadísticas salen de las jugadas: los totales a mano no se van a ver mientras sea así.'
+              : 'Jugador por jugador, sus números del partido. Necesita señal.'}
+          </span>
+        </div>
+      )}
+
+      {totalesAbiertos && panel?.match && (
+        <MatchStatsModal
+          match={{
+            ...panel.match,
+            home_team: nombreDeEquipo(panel.match.home_team_id),
+            away_team: nombreDeEquipo(panel.match.away_team_id),
+          }}
+          token={token}
+          rosters={Object.fromEntries(equipos.map((t) => [t.team_id, t.roster]))}
+          onSaved={refrescarSiHaySenal}
+          onClose={() => setTotalesAbiertos(false)}
+        />
       )}
 
       {/* ── El box score, para cualquiera ── */}

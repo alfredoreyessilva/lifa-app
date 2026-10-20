@@ -27,7 +27,14 @@ const emptyForm = STAT_FIELDS.reduce((acc, f) => ({ ...acc, [f.key]: '' }), {});
 // así se pidió expresamente: "elijo jugador y cargo sus números, uno por
 // uno". Muestra abajo la lista de quiénes ya tienen estadísticas
 // capturadas en este partido, para llevar control de a quién falta.
-export default function MatchStatsModal({ match, token, onClose }) {
+//
+// Se abre desde el panel de la liga y desde la página Estadísticas del
+// partido, que es donde trabaja el visor. Esa página ya bajó los dos rosters
+// para la captura por jugada y los pasa en `rosters` (por id de equipo); sin
+// ellos se piden aquí, con el roster de la rama, que del lado de la liga pide
+// `estructura` y el visor no tiene. `onSaved` avisa para que quien la abrió
+// vuelva a leer lo que enseña.
+export default function MatchStatsModal({ match, token, onClose, rosters, onSaved }) {
   const [homeRoster, setHomeRoster] = useState(null);
   const [awayRoster, setAwayRoster] = useState(null);
   const [captured, setCaptured] = useState(null);
@@ -42,8 +49,13 @@ export default function MatchStatsModal({ match, token, onClose }) {
 
   useEffect(() => {
     if (notLinked || noBranch) return;
-    if (match.home_team_id) api.getBranchTeamRoster(match.branch_id, match.home_team_id, token).then((d) => setHomeRoster(d.roster)).catch(() => setHomeRoster([]));
-    if (match.away_team_id) api.getBranchTeamRoster(match.branch_id, match.away_team_id, token).then((d) => setAwayRoster(d.roster)).catch(() => setAwayRoster([]));
+    if (rosters) {
+      setHomeRoster(rosters[match.home_team_id] || []);
+      setAwayRoster(rosters[match.away_team_id] || []);
+    } else {
+      if (match.home_team_id) api.getBranchTeamRoster(match.branch_id, match.home_team_id, token).then((d) => setHomeRoster(d.roster)).catch(() => setHomeRoster([]));
+      if (match.away_team_id) api.getBranchTeamRoster(match.branch_id, match.away_team_id, token).then((d) => setAwayRoster(d.roster)).catch(() => setAwayRoster([]));
+    }
     loadCaptured();
   }, [match.id]);
 
@@ -91,6 +103,7 @@ export default function MatchStatsModal({ match, token, onClose }) {
       await loadCaptured();
       setSelectedPlayerId('');
       setForm(emptyForm);
+      if (onSaved) onSaved();
     } catch (e) {
       setError(e.message);
     } finally {

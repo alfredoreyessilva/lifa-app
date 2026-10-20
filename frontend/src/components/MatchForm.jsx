@@ -96,6 +96,12 @@ export default function MatchForm({
   // category_id y branch_id viajan DENTRO del payload que recibe onSubmit
   // (en vez de que el componente padre ya los conozca de antemano).
   tournamentId, pickCategoryAndBranch,
+  // La ventana del visor, que tiene `marcadores` y no `partidos`: enseña solo
+  // lo del día del partido —marcador, estado, fecha, hora, sede y links— y
+  // manda solo eso. Lo que define al partido (equipos, grupo, jornada, fase) y
+  // los botones de crear se quedan fuera; el servidor rechaza la petición
+  // entera si llega algo más (CAMPOS_DE_MARCADORES, README "Los roles").
+  limitToMarcadores = false,
 }) {
   const defaultTimezone = initial?.timezone || leagueTimezone || 'America/Mexico_City';
 
@@ -375,19 +381,24 @@ export default function MatchForm({
         conference_id: _c, conference_override_id: _co,
         group_id: _g, group_id_2: _g2, ...rest
       } = form;
-      await onSubmit({
-        ...rest,
-        ...scopeFields,
-        home_team:   form.home_team.trim(),
-        away_team:   form.away_team.trim(),
+      // Lo del día del partido: lo único que manda la ventana del visor, y la
+      // parte que comparten las dos.
+      const matchDayFields = {
         venue_id:    form.venue_id || null,
         stream_links: (form.stream_links || []).filter((u) => u && u.trim()),
         ticket_links: (form.ticket_links || []).filter((u) => u && u.trim()),
-        week_label:  form.week_label.trim(),
         match_date_local: form.match_date,
         home_score:  form.home_score === '' ? null : Number(form.home_score),
         away_score:  form.away_score === '' ? null : Number(form.away_score),
         timezone:    form.timezone,
+      };
+      await onSubmit(limitToMarcadores ? matchDayFields : {
+        ...rest,
+        ...scopeFields,
+        home_team:   form.home_team.trim(),
+        away_team:   form.away_team.trim(),
+        week_label:  form.week_label.trim(),
+        ...matchDayFields,
         ...(pickCategoryAndBranch ? { category_id: pickedCategoryId, branch_id: pickedBranchId } : {}),
       });
     } catch (e) {
@@ -459,32 +470,42 @@ export default function MatchForm({
         </div>
       )}
 
-      <div className="field-row">
-        <TeamSelect
-          label="Equipo local"
-          value={form.home_team}
-          onChange={(v) => update('home_team', v)}
-          teams={localTeams}
-          onCreateNew={() => setCreatingTeamFor('home')}
-        />
-        <TeamSelect
-          label="Equipo visitante"
-          value={form.away_team}
-          onChange={(v) => update('away_team', v)}
-          teams={localTeams}
-          onCreateNew={() => setCreatingTeamFor('away')}
-        />
-      </div>
-      {teamError && <div className="form-error">{teamError}</div>}
-      {initial?.home_team && !localTeams.some((t) => t.name.toLowerCase() === initial.home_team.toLowerCase()) && (
-        <small style={{ color: 'var(--flag)', display: 'block', marginTop: -8, marginBottom: 12 }}>
-          El equipo local “{initial.home_team}” ya no coincide con ningún equipo registrado. Selecciónalo de nuevo arriba (o créalo).
-        </small>
-      )}
-      {initial?.away_team && !localTeams.some((t) => t.name.toLowerCase() === initial.away_team.toLowerCase()) && (
-        <small style={{ color: 'var(--flag)', display: 'block', marginTop: -8, marginBottom: 12 }}>
-          El equipo visitante “{initial.away_team}” ya no coincide con ningún equipo registrado. Selecciónalo de nuevo arriba (o créalo).
-        </small>
+      {limitToMarcadores ? (
+        // El visor no cambia quién juega: lo ve, para saber qué partido edita.
+        <div className="field">
+          <label>Partido</label>
+          <div style={{ fontSize: 15 }}>{form.home_team} vs {form.away_team}</div>
+        </div>
+      ) : (
+        <>
+          <div className="field-row">
+            <TeamSelect
+              label="Equipo local"
+              value={form.home_team}
+              onChange={(v) => update('home_team', v)}
+              teams={localTeams}
+              onCreateNew={() => setCreatingTeamFor('home')}
+            />
+            <TeamSelect
+              label="Equipo visitante"
+              value={form.away_team}
+              onChange={(v) => update('away_team', v)}
+              teams={localTeams}
+              onCreateNew={() => setCreatingTeamFor('away')}
+            />
+          </div>
+          {teamError && <div className="form-error">{teamError}</div>}
+          {initial?.home_team && !localTeams.some((t) => t.name.toLowerCase() === initial.home_team.toLowerCase()) && (
+            <small style={{ color: 'var(--flag)', display: 'block', marginTop: -8, marginBottom: 12 }}>
+              El equipo local “{initial.home_team}” ya no coincide con ningún equipo registrado. Selecciónalo de nuevo arriba (o créalo).
+            </small>
+          )}
+          {initial?.away_team && !localTeams.some((t) => t.name.toLowerCase() === initial.away_team.toLowerCase()) && (
+            <small style={{ color: 'var(--flag)', display: 'block', marginTop: -8, marginBottom: 12 }}>
+              El equipo visitante “{initial.away_team}” ya no coincide con ningún equipo registrado. Selecciónalo de nuevo arriba (o créalo).
+            </small>
+          )}
+        </>
       )}
 
       <div className="field">
@@ -519,9 +540,11 @@ export default function MatchForm({
               <option key={v.id} value={v.id}>{v.name}</option>
             ))}
           </select>
-          <button type="button" className="btn btn-outline btn-sm" onClick={() => setShowVenueModal(true)}>
-            + Crear sede
-          </button>
+          {!limitToMarcadores && (
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => setShowVenueModal(true)}>
+              + Crear sede
+            </button>
+          )}
         </div>
         {initial?.venue && !form.venue_id && (
           <small style={{ color: 'var(--flag)', display: 'block', marginTop: 4 }}>
@@ -530,7 +553,7 @@ export default function MatchForm({
         )}
       </div>
 
-      {conferencesModeEnabled ? (
+      {limitToMarcadores ? null : conferencesModeEnabled ? (
         usingConferences && (
         <div className="field">
           <label>Conferencia</label>
@@ -623,7 +646,7 @@ export default function MatchForm({
           conferencias, un cruce se detecta solo: si el local y el visitante son
           de conferencias distintas, el partido queda en las dos sin que nadie
           lo marque. */}
-      {!conferencesModeEnabled && form.group_id && allGroupsFlat.length > 1 && (
+      {!limitToMarcadores && !conferencesModeEnabled && form.group_id && allGroupsFlat.length > 1 && (
         <div className="field">
           <label>Segundo grupo (opcional — solo para partidos interconferencia)</label>
           <select
@@ -641,6 +664,7 @@ export default function MatchForm({
         </div>
       )}
 
+      {!limitToMarcadores && (
       <div className="field">
         <label>Jornada (opcional)</label>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -661,10 +685,11 @@ export default function MatchForm({
           </select>
         </div>
       </div>
+      )}
 
       {/* La fase solo se pregunta si la rama tiene fases creadas. Sin ellas se
           deduce de la jornada de arriba, que es como funcionó siempre. */}
-      {(phases || []).length > 0 && (
+      {!limitToMarcadores && (phases || []).length > 0 && (
         <div className="field">
           <label>Fase (opcional)</label>
           <select value={form.phase_id} onChange={(e) => update('phase_id', e.target.value)}>
@@ -682,7 +707,7 @@ export default function MatchForm({
         label="Links de transmisión (opcional)"
         links={form.stream_links}
         onChange={(v) => update('stream_links', v)}
-        hint="Se sugieren solos según los equipos elegidos arriba — puedes agregar, quitar o editar los que quieras para este partido en específico."
+        hint={limitToMarcadores ? undefined : 'Se sugieren solos según los equipos elegidos arriba — puedes agregar, quitar o editar los que quieras para este partido en específico.'}
       />
 
       <LinkListField

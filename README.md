@@ -1992,6 +1992,35 @@ tiene los suyos.
 | **Tesorero de liga** | `treasurer` | Solo cobranza liga→equipos: cargos, confirmar y rechazar pagos, ajustes y configuración. Nada de estructura, partidos ni rosters |
 | **Editor de partidos (Visor)** | `editor` | Solo partidos que ya existen, en toda la liga: marcador, estado, fecha, hora, sede y links. No los crea ni los borra. Nada de rosters ni de dinero |
 
+**El visor trabaja desde la página de cada partido** (decidido por Alfredo el
+2026-10-19; cierra `PD-39`). Es quien anota los marcadores y las estadísticas
+de una liga, y hasta ese día no tenía cómo hacer lo primero: el servidor lo
+dejaba guardar un marcador, pero las tres pantallas que editan un partido
+cargaban antes la estructura de la liga, que pide `estructura`, y le
+contestaban "No tienes permiso sobre esta liga". Quedó así:
+
+- **"✎ Editar partido"** le abre la misma ventana que al dueño, con solo sus
+  campos: marcador, estado, fecha, hora, sede y links. Lo que define al
+  partido —equipos, categoría, rama, jornada, grupo, conferencia, fase y
+  publicarlo— es de `partidos`, que tienen el dueño y el administrador.
+  **El servidor también lo frena**: hasta ese día `PUT /manage/matches/:id` le
+  dejaba cambiar cualquier campo a quien tuviera `marcadores`. Lo que sí puede
+  está en `CAMPOS_DE_MARCADORES` (`utils/orgRoles.js`), una lista de lo
+  permitido y no de lo prohibido: un campo nuevo en esa ruta nace cerrado para
+  el visor. Las sedes las lee con su mismo permiso
+  (`GET /manage/matches/:id/venues`), no con la estructura de la liga.
+- **"Estadísticas"** le abre la captura por jugada, que ya le funcionaba, y
+  ahora también los totales a mano (ver "Estadísticas por jugada").
+- **Su panel de la liga** ya no le contesta con el error: le dice que lo suyo
+  está en la página de cada partido —adonde lo llevan también los avisos de
+  "Falta capturar un marcador"— y le da el calendario de la liga. Al tesorero
+  de liga, que tampoco administra la estructura, le dice que lo suyo es la
+  cobranza.
+
+La página del partido le enseña "Editar partido" a quien tiene `marcadores`
+—dueño, administrador y visor— y no al tesorero, que antes lo veía y solo le
+abría el error de permiso.
+
 **Equipo**
 
 | Rol | Valor | Alcance |
@@ -3722,6 +3751,35 @@ lista y el tercer botón de la vista pública del partido: **Estadísticas** le
 muestra el box score a cualquiera, y a quien tiene el permiso `estadisticas` le
 abre el panel de captura. Lo que cambia es el modelo, y aquí sí había estándar
 que no valía la pena reinventar.
+
+**Al público, el botón le aparece solo cuando hay algo que ver** (desde el
+2026-10-19). Antes salía en todo partido con rama y sus dos equipos, y quien
+llegaba de fuera abría una página que decía "Todavía no hay estadísticas de
+este partido". Ahora el partido trae `has_box_score` —la misma cascada del box
+score, resuelta al leer dentro de `GET /leagues/matches/:matchId`— y el botón
+sale cuando el box score tiene al menos un renglón. No cuentan una sesión
+reclamada y vacía, ni las jugadas de una sesión que no es la buena, ni las de
+solo anotaciones sin totales tecleados: en los tres casos la página seguiría
+vacía. Quien tiene el permiso `estadisticas` lo sigue viendo siempre, porque
+tiene que poder entrar **antes** del partido a presionar "Preparar partido", que
+es justo cuando todavía no hay nada capturado.
+
+**Los totales a mano también se teclean aquí** (decidido por Alfredo el
+2026-10-19). Quien puede capturar ve "Teclear totales a mano": el mismo
+formulario del botón "Stats" del panel de la liga —equipo, jugador y sus
+números— con los rosters que la pantalla ya bajó para la captura, nombre y
+número y nada más. Así el visor, que es quien anota las estadísticas de una
+liga, tiene las dos formas en su pantalla; antes ese formulario solo se abría
+desde el panel, que a él le decía "No tienes permiso". Los totales pasaron a
+pedir `estadisticas` en vez de `marcadores`: son estadísticas, no el marcador,
+y hoy los dos permisos los tienen los mismos tres roles, así que nadie ganó ni
+perdió acceso. Dos cosas que conviene saber:
+
+- Se ven en el box score solo cuando el partido no tiene una captura por
+  jugada que derive (la cascada de abajo). Si la tiene, la pantalla lo dice
+  junto al botón, antes de que alguien teclee números que no se van a ver.
+- Necesitan señal: van directo al servidor, no a la cola sin señal. Sin
+  conexión el botón no aparece.
 
 Corre completo: las tres tablas, el permiso, los seis endpoints, la derivación
 del down, el box score en cascada, el panel del visor en

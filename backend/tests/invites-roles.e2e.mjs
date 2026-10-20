@@ -485,6 +485,30 @@ ok((await call(`/billing/leagues/${LEAGUE}/overview`, { token: VISOR })).status 
 ok((await call(`/leagues/${LEAGUE}/categories`, { method: 'POST', token: VISOR, body: { name: 'Pirata' } })).status === 403,
   'ni crear estructura');
 
+// Qué cambia el visor de un partido (README, "Los roles"): lo del día del
+// partido sí; lo que lo define —equipos, jornada, publicarlo— no, y el
+// servidor lo frena aunque la pantalla no se lo enseñe. Hasta el 2026-10-19,
+// `marcadores` dejaba cambiar cualquier campo.
+const delDia = await call(`/manage/matches/${MATCH}`, {
+  method: 'PUT', token: VISOR,
+  body: { match_date_local: '2026-10-01T19:30', timezone: 'America/Mexico_City', venue_id: null, stream_links: ['https://youtube.com/watch?v=e2e'], ticket_links: [] },
+});
+ok(delDia.status === 200, 'el VISOR cambia fecha, hora, sede y links', `=${delDia.status} ${JSON.stringify(delDia.data).slice(0, 120)}`);
+const loQueLoDefine = async () => (await pool.query('SELECT week_label, home_team, is_draft FROM matches WHERE id=$1', [MATCH])).rows[0];
+const antesDelIntento = await loQueLoDefine();
+for (const [campo, valor] of [['week_label', '9'], ['home_team', `Equipo Sin Entregar ${stamp}`], ['is_draft', true]]) {
+  const intento = await call(`/manage/matches/${MATCH}`, { method: 'PUT', token: VISOR, body: { home_score: 21, [campo]: valor } });
+  ok(intento.status === 403, `pero NO "${campo}": eso define al partido, y es de quien lo crea`, `=${intento.status}`);
+}
+ok(JSON.stringify(await loQueLoDefine()) === JSON.stringify(antesDelIntento), 'y el 403 no guardó nada a medias',
+  JSON.stringify(await loQueLoDefine()));
+const sedesDelVisor = await call(`/manage/matches/${MATCH}/venues`, { token: VISOR });
+ok(sedesDelVisor.status === 200 && Array.isArray(sedesDelVisor.data),
+  'el VISOR lee las sedes de la liga, para cambiar la del partido', `=${sedesDelVisor.status}`);
+ok((await call(`/manage/matches/${MATCH}/venues`, { token: TESOLIGA })).status === 403, 'el TESORERO DE LIGA no');
+ok((await call(`/manage/matches/${MATCH}`, { method: 'PUT', token: LIGA, body: { week_label: '3' } })).status === 200,
+  'y la LIGA sí cambia la jornada: tiene `partidos`');
+
 ok((await call(`/billing/leagues/${LEAGUE}/overview`, { token: TESOLIGA })).status === 200,
   'el TESORERO DE LIGA sí lleva la cobranza');
 ok((await call(`/manage/matches/${MATCH}`, { method: 'PUT', token: TESOLIGA, body: { home_score: 7 } })).status === 403,
@@ -514,6 +538,22 @@ ok((await call(rutaRoster, { method: 'POST', token: COACH2, body: { first_name: 
   'el coach NO da de alta en el roster: lo lee desde el panel, no lo edita');
 ok((await call(rutaRoster, { method: 'POST', token: TESO2, body: { first_name: 'X', last_name: 'Y' } })).status === 403,
   'y el tesorero tampoco — lleva dinero, no jugadores');
+
+// Los totales a mano son estadísticas, y los teclea el visor en la página
+// Estadísticas del partido (README, "Estadísticas por jugada"). Juan juega en
+// el visitante del partido de la sección 14.
+const JUAN = altaJugador.data.player?.id;
+const totalesDe = (token) => call(`/players/matches/${MATCH}/stats/${JUAN}`, {
+  method: 'PUT', token, body: { team_id: TEAM2, rush_attempts: 3, rush_yards: 12 },
+});
+const totalesDelVisor = await totalesDe(VISOR);
+ok(totalesDelVisor.status === 200, 'el VISOR teclea los totales a mano de un jugador',
+  `=${totalesDelVisor.status} ${JSON.stringify(totalesDelVisor.data).slice(0, 100)}`);
+const totalesLeidos = await call(`/players/matches/${MATCH}/stats`, { token: VISOR });
+ok(totalesLeidos.status === 200 && totalesLeidos.data.stats?.some((s) => s.player_id === JUAN && s.rush_yards === 12),
+  'y los lee de vuelta', JSON.stringify(totalesLeidos.data).slice(0, 120));
+ok((await totalesDe(TESOLIGA)).status === 403, 'el TESORERO DE LIGA no teclea estadísticas');
+ok((await totalesDe(ROSTER2)).status === 403, 'ni el editor de roster de un equipo: capturar es de la liga');
 
 
 console.log('\n=== 15b. El playbook: dueño, administrador y coach, y nadie más ===');

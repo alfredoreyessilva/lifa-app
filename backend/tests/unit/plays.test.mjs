@@ -31,6 +31,7 @@ import {
   boxScoreDerivado,
   boxScoreDeTotales,
   fuenteDelBoxScore,
+  HAY_BOX_SCORE_SQL,
   EQUIVALENCIAS_SPORTSML,
   CONTEOS,
   EXTRAS,
@@ -91,6 +92,17 @@ test('la cascada elige las jugadas solo cuando el nivel deriva', () => {
   // Sin nada capturado, también los totales.
   assert.equal(fuenteDelBoxScore([]).source, 'totals');
   assert.equal(fuenteDelBoxScore(undefined).source, 'totals');
+});
+
+// Lo que la consulta contesta se prueba contra Postgres (plays.e2e.mjs). Aquí,
+// lo que el CI sí alcanza: que pregunte por los mismos niveles que la cascada,
+// y que no traiga un signo de interrogación. `sqlPlaceholders.test.mjs` revisa
+// las plantillas de `db.prepare`, no lo que se les interpola, y ahí uno se
+// vuelve un parámetro fantasma y tumba la página del partido.
+test('el botón público pregunta por los mismos niveles que la cascada', () => {
+  const niveles = [...HAY_BOX_SCORE_SQL.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+  assert.deepEqual(niveles, NIVELES_DE_CAPTURA.filter(derivaBoxScore));
+  assert.equal(HAY_BOX_SCORE_SQL.includes('?'), false);
 });
 
 // ── 2. La jugada mínima ───────────────────────────────────────────────────

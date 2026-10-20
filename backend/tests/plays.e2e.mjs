@@ -14,6 +14,10 @@
 //     que el primero capturó.
 //   · Que las reglas de la NCAA sobrevivan el viaje completo por la base, no
 //     solo dentro de la función pura.
+//   · Que el botón Estadísticas de la vista pública del partido aparezca
+//     justo cuando el box score tiene algo. `has_box_score` es la misma
+//     cascada escrita otra vez, en SQL, y solo contra la base se puede
+//     comparar con la primera.
 //
 // Se crea sus propios datos y se puede correr varias veces. Instrucciones en
 // tests/README.md (backend en :4100 con la DATABASE_URL de una rama de Neon).
@@ -41,6 +45,12 @@ const alta = async (quien) => (await call('/auth/register', {
 })).data.token;
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: true } });
+
+// Con esto decide la vista pública del partido si le enseña el botón
+// Estadísticas a quien llega de fuera. Tiene que decir lo mismo que el box
+// score en cada estado de la cascada: un "sí" con el box score vacío lleva a
+// una página sin nada, y un "no" con datos los esconde.
+const botonPublico = async (matchId) => (await call(`/leagues/matches/${matchId}`)).data.has_box_score;
 
 // ── Montaje ───────────────────────────────────────────────────────────────
 
@@ -124,6 +134,7 @@ const sinSesion = await call(`/plays/matches/${MATCH}/box-score`);
 ok(sinSesion.status === 200, 'el box score se lee SIN cuenta: es el resultado deportivo', `=${sinSesion.status}`);
 ok(sinSesion.data.source === 'totals', 'sin jugadas, la cascada cae en los totales', `=${sinSesion.data.source}`);
 ok(sinSesion.data.players.length === 0, 'y no hay nada capturado todavía');
+ok(await botonPublico(MATCH) === false, 'así que la vista pública del partido no enseña el botón Estadísticas');
 
 const delVisor = await call(`/plays/matches/${MATCH}/capture`, { token: VISOR });
 ok(delVisor.status === 200, 'el visor sí abre el panel', `=${delVisor.status}`);
@@ -139,6 +150,7 @@ ok(malNivel.status === 400, 'un nivel que no existe se rechaza: el nivel no es u
 const reclamo = await call(`/plays/matches/${MATCH}/sessions`, { method: 'POST', token: VISOR, body: { capture_level: 'offense' } });
 const SESION = reclamo.data.session?.id;
 ok(reclamo.status === 201 && !!SESION, 'el visor reclama el partido', JSON.stringify(reclamo.data).slice(0, 140));
+ok(await botonPublico(MATCH) === false, 'reclamar no es capturar: con la sesión vacía el botón sigue escondido');
 
 const reentra = await call(`/plays/matches/${MATCH}/sessions`, { method: 'POST', token: VISOR, body: { capture_level: 'offense' } });
 ok(reentra.data.reanudada === true && reentra.data.session.id === SESION,
@@ -224,6 +236,7 @@ console.log('\n=== 4. El box score sale de las jugadas, con las reglas de la NCA
 const box = await call(`/plays/matches/${MATCH}/box-score`);
 ok(box.data.source === 'plays', 'con una sesión `offense`, la cascada deriva de las jugadas', `=${box.data.source}`);
 ok(box.data.capture_level === 'offense', 'y dice con qué nivel se capturó', `=${box.data.capture_level}`);
+ok(await botonPublico(MATCH) === true, 'con jugadas capturadas, el botón ya se le enseña a cualquiera');
 
 const de = (id) => box.data.players.find((p) => p.player_id === id) || {};
 const qb = de(QB);
@@ -315,6 +328,7 @@ ok(conDos.data.session_id === SESION2, 'y la nueva es la buena', `=${conDos.data
 const vacio = await call(`/plays/matches/${MATCH}/box-score`);
 ok(vacio.data.players.length === 0,
   'el box score ahora sale de la sesión nueva, que está vacía — no se mezclan nunca', `=${vacio.data.players.length}`);
+ok(await botonPublico(MATCH) === false, 'y el botón se esconde con él: la página que abriría está vacía');
 
 // Y se puede devolver la buena a la primera, que es para lo que existe.
 const devuelta = await call(`/plays/matches/${MATCH}/sessions/${SESION}/authoritative`, { method: 'PUT', token: VISOR });
@@ -322,6 +336,7 @@ ok(devuelta.status === 200, 'una persona elige cuál captura es la buena', `=${d
 const recuperado = await call(`/plays/matches/${MATCH}/box-score`);
 ok(recuperado.data.players.length > 0 && recuperado.data.session_id === SESION,
   'y el box score vuelve a salir de la primera', JSON.stringify([recuperado.data.players.length, recuperado.data.session_id]));
+ok(await botonPublico(MATCH) === true, 'y el botón vuelve con él');
 
 // ── 8. El nivel `scoring` no deriva ───────────────────────────────────────
 
@@ -352,6 +367,7 @@ ok(boxScoring.data.source === 'totals',
 ok(boxScoring.data.capture_level === 'scoring',
   'y se dice el nivel, para que la pantalla pueda explicar por qué', `=${boxScoring.data.capture_level}`);
 ok(boxScoring.data.players.length === 0, 'sin totales tecleados, no hay box score — y eso es lo correcto');
+ok(await botonPublico(MATCH2) === false, 'ni botón: con jugadas de solo anotaciones la página seguiría vacía');
 
 // ── 9. Capturar sin haber reclamado ───────────────────────────────────────
 
@@ -381,6 +397,8 @@ const sesionInventada = await call(`/plays/matches/${MATCH2}/plays`, {
 });
 ok(sesionInventada.status === 201 && sesionInventada.data.guardadas === 1,
   'un session_id que ya no existe tampoco pierde la captura', JSON.stringify(sesionInventada.data));
+ok(await botonPublico(MATCH2) === false,
+  'lo que subió quien no reclamó no enciende el botón: su sesión no es la buena, y el box score tampoco lo lee');
 
 // ── 10. La otra rama de la cascada ────────────────────────────────────────
 
@@ -391,6 +409,7 @@ await call(`/players/matches/${MATCH2}/stats/${QB}`, {
 });
 const porTotales = await call(`/plays/matches/${MATCH2}/box-score`);
 ok(porTotales.data.source === 'totals', 'el partido en `scoring` lee sus totales', `=${porTotales.data.source}`);
+ok(await botonPublico(MATCH2) === true, 'y con totales tecleados a mano el botón aparece, aunque ninguna jugada derive');
 const qbTotales = porTotales.data.players.find((p) => p.player_id === QB) || {};
 ok(qbTotales['passes-yards'] === 145 && qbTotales['passes-completions'] === 10,
   'con los MISMOS nombres que la rama derivada (SportsML)', JSON.stringify(qbTotales).slice(0, 120));

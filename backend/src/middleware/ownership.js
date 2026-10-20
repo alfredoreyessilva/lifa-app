@@ -497,8 +497,11 @@ async function resolverPartido(req, res) {
 }
 
 // Las dos pantallas del visor en la cancha preguntan lo mismo con permisos
-// distintos, así que la pregunta se escribe una vez.
-async function ligaPuedePermiso(req, league, permiso) {
+// distintos, así que la pregunta se escribe una vez. Se exporta para la ruta
+// que, ya dentro, necesita saber si quien edita puede ALGO MÁS que lo que la
+// dejó entrar: `PUT /manage/matches/:id` deja pasar `marcadores` y pregunta
+// por `partidos` antes de tocar lo que define al partido.
+export async function ligaPuedePermiso(req, league, permiso) {
   if (req.user.role === 'admin') return true;
   if (league.owner_user_id === req.user.id) return true;
   return isOrgMember(req.user.id, league.organization_id, rolesConPermiso('league', permiso));
@@ -563,15 +566,16 @@ export const matchAttendanceRequired = asyncHandler(async (req, res, next) => {
   return next();
 });
 
-// Capturar las jugadas de un partido. Es la otra pantalla del visor en la
-// cancha y se resuelve igual que el pase de lista: capturar es un acto de la
-// liga en su partido, y el equipo no entra por ningún lado.
+// Capturar las jugadas de un partido, o teclear sus totales a mano. Es la otra
+// pantalla del visor en la cancha y se resuelve igual que el pase de lista:
+// capturar es un acto de la liga en su partido, y el equipo no entra por
+// ningún lado.
 //
-// **No hay guarda para LEER**, y esa es la diferencia con la asistencia: el box
-// score es público, porque es el resultado deportivo y eso es justo lo que un
-// torneo publica. La asistencia no lo es nunca — son faltas de gente que en
-// buena parte es menor de edad. Lo único que esta guarda protege es la captura
-// y el panel que la enseña.
+// **No hay guarda para LEER el box score**, y esa es la diferencia con la
+// asistencia: el box score es público, porque es el resultado deportivo y eso
+// es justo lo que un torneo publica. La asistencia no lo es nunca — son faltas
+// de gente que en buena parte es menor de edad. Lo único que esta guarda
+// protege es la captura —por jugada y a mano— y el panel que la enseña.
 export const matchStatsRequired = asyncHandler(async (req, res, next) => {
   const ctx = await resolverPartido(req, res);
   if (!ctx) return;

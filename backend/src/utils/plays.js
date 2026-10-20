@@ -596,3 +596,42 @@ export function fuenteDelBoxScore(sesiones) {
     capture_level: autoritativa?.capture_level ?? null,
   };
 }
+
+// ── ¿Hay algo que enseñar? ────────────────────────────────────────────────
+//
+// La misma cascada, dicha en SQL para que viaje con el partido
+// (`GET /leagues/matches/:matchId`, columna `has_box_score`): con ella la vista
+// pública decide si le pinta el botón Estadísticas a quien llega de fuera.
+// Pedir el box score entero para decidir si se pinta un botón sería cargar la
+// pantalla dos veces, que es la razón por la que `roster_public` viaja ahí.
+//
+// Contesta lo mismo que `players.length > 0` en el box score:
+//
+//   · Si hay sesión buena con un nivel que deriva, que alguna de sus jugadas
+//     tenga a alguien: cada participante es un renglón del box score derivado.
+//     Una sesión recién reclamada y vacía —el visor que presionó "Preparar
+//     partido" antes del juego— todavía no enseña nada.
+//   · Si no la hay, que existan totales tecleados a mano. Un partido en
+//     `scoring` cae aquí aunque tenga jugadas, igual que en la cascada.
+//
+// La subconsulta devuelve TRUE o FALSE cuando hay sesión buena que deriva, y
+// ninguna fila —NULL— cuando no la hay, y entonces el COALESCE cae a los
+// totales. Entre dos buenas gana la reclamada primero, que es la que elige
+// `fuenteDelBoxScore` con el orden de `sesionesDe` (routes/plays.js).
+//
+// Los niveles salen de `derivaBoxScore` y no se escriben a mano. Asume que la
+// tabla de partidos es `m`, como `MATCH_SCOPE_JOINS`.
+export const HAY_BOX_SCORE_SQL = `
+  COALESCE(
+    (SELECT EXISTS (
+              SELECT 1 FROM match_plays p
+                JOIN play_participants pp ON pp.play_id = p.id
+               WHERE p.session_id = s.id
+            )
+       FROM match_capture_sessions s
+      WHERE s.match_id = m.id AND s.is_authoritative
+        AND s.capture_level IN (${NIVELES_DE_CAPTURA.filter(derivaBoxScore).map((n) => `'${n}'`).join(', ')})
+      ORDER BY s.claimed_at
+      LIMIT 1),
+    EXISTS (SELECT 1 FROM player_match_stats t WHERE t.match_id = m.id)
+  )`;

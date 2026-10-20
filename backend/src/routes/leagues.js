@@ -10,6 +10,7 @@ import { MATCH_SCOPE_JOINS, MATCH_SCOPE_COLUMNS } from '../utils/matchScope.js';
 import { buildBranchStandings } from '../utils/branchStandings.js';
 import { interruptoresDeCategoria, rosterEsPublico, fotoSePublica } from '../utils/rosterVisibility.js';
 import { rosterDelPartidoSql } from '../utils/attendance.js';
+import { HAY_BOX_SCORE_SQL } from '../utils/plays.js';
 
 const router = express.Router();
 
@@ -93,6 +94,10 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
       -- por separado obligaría a cargar la pantalla dos veces para decidir si
       -- se pinta un botón.
       c.roster_public AS roster_public,
+      -- Si el box score ya tiene algo que enseñar. Sin eso el botón
+      -- Estadísticas no se le pinta a quien llega de fuera, y viaja aquí por
+      -- la misma razón que el de arriba (utils/plays.js, HAY_BOX_SCORE_SQL).
+      ${HAY_BOX_SCORE_SQL} AS has_box_score,
       l.id      AS league_id,
       l.name    AS league_name,
       l.slug    AS league_slug,

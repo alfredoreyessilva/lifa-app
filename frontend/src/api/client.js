@@ -440,6 +440,10 @@ export const api = {
     request(`/manage/categories/${categoryId}/matches`, { method: 'POST', body: payload, token }),
   updateMatch: (matchId, payload, token) =>
     request(`/manage/matches/${matchId}`, { method: 'PUT', body: payload, token }),
+  // Las sedes de la liga para la ventana del visor, con su mismo permiso
+  // (`marcadores`): la estructura entera de la liga no la lee.
+  getMatchVenues: (matchId, token) =>
+    request(`/manage/matches/${matchId}/venues`, { token }),
   deleteMatch: (matchId, token) =>
     request(`/manage/matches/${matchId}`, { method: 'DELETE', token }),
 
