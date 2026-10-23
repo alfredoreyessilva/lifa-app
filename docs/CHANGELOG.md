@@ -15,6 +15,14 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Los botones "Registrar liga / equipo / organización" ya no se salen del
+  panel en un teléfono (2026-10-22)**. Iban en el mismo renglón que el título
+  "Organizaciones administradas" y no tenían cómo bajar: a 390 px se salían
+  del panel negro y la página se podía mover de lado. Ahora bajan debajo del
+  título cuando no caben. Como es `OrgLogoBar`, aplica también arriba de los
+  paneles de liga, de torneo y de equipo. Verificado en el navegador a 390,
+  700 y 1034 px: sin scroll lateral, y en escritorio queda igual que antes.
+
 - **En Mi panel, tu % de aciertos va debajo del título "Mi cartelera"
   (2026-10-22)**, y no arriba, donde parecía suelto. `MiCartelera` lo
   recibe como hijo y lo pinta debajo de su título. Por eso ahora aparece

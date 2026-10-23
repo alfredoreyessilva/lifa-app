@@ -2451,6 +2451,20 @@ a.match-card-new {
   margin-bottom: 32px;
 }
 
+/* El título y los tres botones de "Registrar…" no caben en un renglón en un
+   teléfono. Sin wrap, los botones se salían del panel negro y la página se
+   podía mover de lado: ahora bajan debajo del título, y entre ellos también
+   se acomodan en renglones. */
+.org-logo-bar-head {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.org-logo-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .org-logo-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
