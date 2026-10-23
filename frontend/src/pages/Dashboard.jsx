@@ -14,8 +14,9 @@ export default function Dashboard() {
     <div className="container">
       <div className="dashboard-panel">
         <OrgLogoBar />
-        <PredictionStats />
-        <MiCartelera />
+        <MiCartelera>
+          <PredictionStats />
+        </MiCartelera>
       </div>
     </div>
   );

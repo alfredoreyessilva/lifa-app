@@ -15,6 +15,12 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **En Mi panel, tu % de aciertos va debajo del título "Mi cartelera"
+  (2026-10-22)**, y no arriba, donde parecía suelto. `MiCartelera` lo
+  recibe como hijo y lo pinta debajo de su título. Por eso ahora aparece
+  cuando carga la cartelera, y si la cartelera no carga tampoco se ve, cosa
+  que antes no pasaba. Verificado en el navegador con la API simulada.
+
 - **Mis notificaciones va dentro del panel negro (2026-10-22)**, como Mi
   panel, las invitaciones y los paneles de liga y equipo. Antes era la única
   pantalla con sesión suelta sobre la cancha. Las tarjetas siguen en verde,

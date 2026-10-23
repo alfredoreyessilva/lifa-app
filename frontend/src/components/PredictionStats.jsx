@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
-// Se coloca junto a Mi Cartelera, en Dashboard.jsx. Solo se muestra si la
+// Va debajo del título de Mi Cartelera (Dashboard.jsx se lo pasa como hijo,
+// y MiCartelera.jsx lo pinta ahí). Solo se muestra si la
 // persona ya tiene al menos una predicción hecha — si nunca ha votado, no
 // tiene caso mostrar una tarjeta vacía en "0 de 0".
 export default function PredictionStats() {

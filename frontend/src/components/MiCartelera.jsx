@@ -18,7 +18,11 @@ const PICK_LABELS = { home: 'Local', away: 'Visitante', tie: 'Empate' };
 // Desde el 2026-09-24 es también donde se deja de seguir un partido: la
 // sección "Partidos que sigo" de Notificaciones leía lo mismo y se retiró
 // (README, "Notificaciones").
-export default function MiCartelera() {
+//
+// `children` va justo debajo del título: ahí pone Dashboard.jsx el cuadro de
+// tu % de aciertos, que antes quedaba arriba de "Mi cartelera" y parecía
+// suelto.
+export default function MiCartelera({ children }) {
   const { token } = useAuth();
   const [board, setBoard]   = useState(null);
   const [error, setError]   = useState('');
@@ -57,6 +61,7 @@ export default function MiCartelera() {
         <div className="section-head">
           <h2>Mi cartelera</h2>
         </div>
+        {children}
         <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>
           Todavía no tienes partidos aquí. Sigue un partido o a un equipo, o vota quién gana en uno próximo.
         </p>
@@ -77,6 +82,8 @@ export default function MiCartelera() {
         <h2>Mi cartelera</h2>
         <span className="count">{board.length}</span>
       </div>
+
+      {children}
 
       {aviso && <p style={{ color: 'var(--ink-dim)', fontSize: 13 }}>{aviso}</p>}
 
