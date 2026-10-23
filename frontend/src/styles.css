@@ -1836,6 +1836,29 @@ a { color: inherit; }
   letter-spacing: 0.05em;
 }
 
+/* Panel Admin en teléfono. Las seis pestañas no caben en 390 px y empujaban
+   la página de lado: la barra se desliza, como .ws-nav en el panel del
+   equipo, en vez de apilarse. Los botones de cada liga u organización, y las
+   cifras de cada patrocinador, bajan debajo del nombre. Va con .admin-panel
+   porque .tab-bar y .admin-match-row también los usan otras pantallas. */
+@media (max-width: 640px) {
+  .admin-panel .tab-bar {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .admin-panel .tab-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .admin-panel .admin-match-row {
+    grid-template-columns: 1fr;
+  }
+  .admin-panel .row-actions,
+  .admin-panel .admin-sponsor-row {
+    flex-wrap: wrap;
+  }
+}
+
 /* Botón danger */
 .btn-danger {
   background: #dc2626;

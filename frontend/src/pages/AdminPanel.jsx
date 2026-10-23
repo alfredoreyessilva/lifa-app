@@ -8,40 +8,45 @@ export default function AdminPanel() {
   const { token } = useAuth();
   const [tab, setTab] = useState('stats');
 
+  // Va dentro del panel negro, como el resto del área con sesión (Mi panel,
+  // Mis notificaciones). El título no lleva margen arriba: ese aire ya lo da
+  // el relleno del panel.
   return (
     <div className="container">
-      <div className="dash-header">
-        <div>
-          <span className="eyebrow">Administrador</span>
-          <h1>Panel de control</h1>
+      <div className="dashboard-panel admin-panel">
+        <div className="dash-header" style={{ marginTop: 0 }}>
+          <div>
+            <span className="eyebrow">Administrador</span>
+            <h1>Panel de control</h1>
+          </div>
         </div>
-      </div>
 
-      <div className="tab-bar" style={{ marginBottom: 24 }}>
-        {[
-          { key: 'stats',    label: 'Estadísticas' },
-          { key: 'cron',     label: 'Cron' },
-          { key: 'sponsors', label: 'Patrocinadores' },
-          { key: 'leagues',  label: 'Ligas' },
-          { key: 'organizations', label: 'Organizaciones' },
-          { key: 'users',    label: 'Usuarios' },
-        ].map((t) => (
-          <button
-            key={t.key}
-            className={`tab-btn ${tab === t.key ? 'active' : ''}`}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+        <div className="tab-bar" style={{ marginBottom: 24 }}>
+          {[
+            { key: 'stats',    label: 'Estadísticas' },
+            { key: 'cron',     label: 'Cron' },
+            { key: 'sponsors', label: 'Patrocinadores' },
+            { key: 'leagues',  label: 'Ligas' },
+            { key: 'organizations', label: 'Organizaciones' },
+            { key: 'users',    label: 'Usuarios' },
+          ].map((t) => (
+            <button
+              key={t.key}
+              className={`tab-btn ${tab === t.key ? 'active' : ''}`}
+              onClick={() => setTab(t.key)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
 
-      {tab === 'stats'    && <StatsTab    token={token} />}
-      {tab === 'cron'     && <CronTab     token={token} />}
-      {tab === 'sponsors' && <SponsorsTab token={token} />}
-      {tab === 'leagues'  && <LeaguesTab  token={token} />}
-      {tab === 'organizations' && <OrganizationsTab token={token} />}
-      {tab === 'users'    && <UsersTab    token={token} />}
+        {tab === 'stats'    && <StatsTab    token={token} />}
+        {tab === 'cron'     && <CronTab     token={token} />}
+        {tab === 'sponsors' && <SponsorsTab token={token} />}
+        {tab === 'leagues'  && <LeaguesTab  token={token} />}
+        {tab === 'organizations' && <OrganizationsTab token={token} />}
+        {tab === 'users'    && <UsersTab    token={token} />}
+      </div>
     </div>
   );
 }

@@ -15,6 +15,20 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El Panel Admin va dentro del panel negro y ya cabe en el teléfono
+  (2026-10-23)**, como Mi panel, Mis notificaciones y los paneles de liga y
+  equipo. Las tarjetas y gráficas siguen en verde, igual que las de Mi
+  cartelera sobre ese mismo negro. En un teléfono la página se iba de lado
+  desde antes (692 px de contenido en una pantalla de 390): las seis pestañas
+  no cabían, ni los botones de cada liga, ni las cifras de cada patrocinador.
+  Ahora la barra de pestañas se desliza, como la del panel del equipo, y los
+  botones y las cifras bajan debajo del nombre. Las reglas van con
+  `.admin-panel` porque `.tab-bar` y `.admin-match-row` también las usan
+  otras pantallas, que no se tocaron.
+  Verificado en el navegador a 1280, 390 y 360 px en las seis pestañas: el
+  ancho de la página es el de la pantalla en todas. Solo con `vite` y la API
+  simulada desde Playwright: no se abrió con datos reales.
+
 - **Cada sección del home tiene su botón de "Registrar…" (2026-10-22)**:
   Registrar liga, Registrar equipo, Registrar medio y Registrar tienda o
   proveedor. Se ven con sesión y sin ella. Sin sesión, te piden crear cuenta
