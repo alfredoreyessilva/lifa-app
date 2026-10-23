@@ -31,7 +31,7 @@ entradas traen el post-mortem del bug que las provocó.
   se probó; usa el mismo destino que el correo.
 
 - **Los botones "Registrar liga / equipo / organización" ya no se salen del
-  panel en un teléfono (2026-10-22)**. Iban en el mismo renglón que el título
+  panel en un teléfono (2026-10-22, cierra PD-35)**. Iban en el mismo renglón que el título
   "Organizaciones administradas" y no tenían cómo bajar: a 390 px se salían
   del panel negro y la página se podía mover de lado. Ahora bajan debajo del
   título cuando no caben. Como es `OrgLogoBar`, aplica también arriba de los
