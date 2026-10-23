@@ -281,6 +281,19 @@ a { color: inherit; }
   color: var(--ink-dim);
   text-transform: uppercase;
 }
+/* En el home cada sección lleva su botón de "Registrar…" junto al conteo.
+   "Medios de comunicación" con su botón no cabe en un renglón de teléfono:
+   el conteo y el botón bajan debajo del título, igual que en OrgLogoBar. */
+.home-section-head {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.home-section-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
 
 /* ---------- League grid ---------- */
 .league-grid {

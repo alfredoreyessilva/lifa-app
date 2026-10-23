@@ -929,9 +929,13 @@ Dos recorridos de punta a punta en `backend/tests/`. **Nunca contra producción*
 
 **Cualquier usuario con cuenta:**
 
-1. `/crear-cuenta` → crea su cuenta.
-2. Cae en `/panel` ("Mi panel"): si no administra ninguna organización todavía, lo ve vacío salvo la barra de logos (vacía) y el botón "Registrar Organización" en el TopBar.
-3. Desde "Registrar Organización" (`/panel/registrar-organizacion`) registra su primera liga. Queda como **pendiente de aprobación** — no aparece en el inicio hasta que un admin la apruebe desde `/admin`.
+1. Crea su cuenta en `/crear-cuenta`, o desde un botón de "Registrar…" del home. Cada sección del home (Ligas, Equipos, Medios de comunicación, Tiendas y proveedores) lleva el suyo, **visible con sesión y sin ella**, y siempre apunta a la pantalla de registro de ese tipo: `/registrar-liga`, `/registrar-equipo`, `/registrar-organizacion?tipo=media` o `?tipo=store`. Con sesión, abre el formulario y ya. Sin sesión, lo manda a **Crear cuenta** con un aviso de para qué se la pide, y en cuanto la tiene —con correo, con Google o después del código de verificación— sigue directo al formulario que quería. Si ya tenía cuenta, "Inicia sesión" conserva ese destino.
+   - **Crear cuenta y no el login**, porque quien toca "Registrar…" sin sesión casi siempre es alguien nuevo. Las demás rutas protegidas siguen mandando al login, como siempre.
+   - **Lo decide la ruta, no el home** (`ProtectedRoute` con `signupReason`, en `App.jsx`). Así cualquier enlace a esas tres pantallas se comporta igual —un link compartido, el "registra la liga" de `/registrar-equipo`—, y el home no tiene que saber si hay sesión.
+   - **El destino viaja en el historial** (`location.state.from`), no en la URL: nadie puede armar un link que, después de entrar, te mande a otro lado.
+   - `?tipo=` solo acepta un tipo que `GET /organizations/types` ofrezca y se salta la pregunta de "¿qué tipo de organización?"; cualquier otro valor cae en esa pregunta, como si no viniera nada.
+2. Sin organización todavía, `/panel` ("Mi panel") se ve vacío salvo la barra de logos, con sus botones "Registrar liga", "Registrar equipo" y "Registrar organización" (`OrgLogoBar.jsx`).
+3. Una liga registrada (`/registrar-liga`) queda como **pendiente de aprobación** — no aparece en el inicio hasta que un admin la apruebe desde `/admin`.
 4. De ahí en adelante, cada liga o equipo que administra (propio o entregado por invitación) aparece como un logo en "Mi panel". Un clic abre su panel de trabajo específico; otro clic sobre el mismo logo lo cierra.
 5. Dentro del panel de una liga: agrega categorías, grupos, equipos, sedes y partidos; define fecha, sede, jornada, link de transmisión, estado (programado/en vivo/finalizado) y marcador — todo esto funciona con normalidad aunque la liga siga pendiente de aprobación. También puede importar partidos en bloque desde un Excel (`manage.js`, endpoint `/import`).
 6. Puede generar una invitación (`invites.js`) para entregar un equipo específico a otra persona, que lo administra desde su propia cuenta — ese equipo aparece como su propio logo en el panel personal de quien lo recibe, no en el de quien registró la liga original.

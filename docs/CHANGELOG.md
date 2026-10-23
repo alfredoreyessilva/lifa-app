@@ -15,6 +15,21 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Cada sección del home tiene su botón de "Registrar…" (2026-10-22)**:
+  Registrar liga, Registrar equipo, Registrar medio y Registrar tienda o
+  proveedor. Se ven con sesión y sin ella. Sin sesión, te piden crear cuenta
+  y, al terminar, te dejan en el formulario que querías, no en Mi panel. Los
+  dos de organización llegan con el tipo ya elegido (`?tipo=`). El login ya
+  leía un `location.state.from` que nadie le pasaba; ahora se lo pasan estas
+  tres rutas, y Crear cuenta también lo lee. El porqué está en "Flujo de la
+  app" del README.
+  Verificado en el navegador a 1280 y 360 px, solo con `vite` y la API
+  simulada desde Playwright: cuenta nueva → equipo; Crear cuenta → "Inicia
+  sesión" → medio; código de verificación omitido → liga; con sesión, directo
+  al formulario; un `?tipo=` inventado cae en la pregunta de tipo; y el
+  "Iniciar sesión" de arriba sigue llevando a Mi panel. El botón de Google no
+  se probó; usa el mismo destino que el correo.
+
 - **Los botones "Registrar liga / equipo / organización" ya no se salen del
   panel en un teléfono (2026-10-22)**. Iban en el mismo renglón que el título
   "Organizaciones administradas" y no tenían cómo bajar: a 390 px se salían

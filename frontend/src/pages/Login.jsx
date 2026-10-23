@@ -108,6 +108,11 @@ export default function Login() {
     <div className="container">
       <div className="form-card">
         <h2>Iniciar sesión</h2>
+        {location.state?.reason && (
+          <p style={{ color: 'var(--ink-dim)', fontSize: 14, marginBottom: 16 }}>
+            Para {location.state.reason}, entra a tu cuenta. En cuanto entres, sigues directo con el registro.
+          </p>
+        )}
         {error && <div className="form-error">{error}</div>}
         <GoogleAuthButton onCredential={onGoogleCredential} onError={setError} />
         <div className="form-divider"><span>o con tu correo</span></div>
@@ -130,7 +135,7 @@ export default function Login() {
           </button>
         </div>
         <div className="form-foot">
-          ¿No tienes cuenta? <Link to="/crear-cuenta">Créala aquí</Link>
+          ¿No tienes cuenta? <Link to="/crear-cuenta" state={location.state}>Créala aquí</Link>
         </div>
       </div>
     </div>

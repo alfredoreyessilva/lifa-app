@@ -43,10 +43,13 @@ export default function Home() {
 
   return (
     <div className="container">
-      <div className="section-head" id="ligas">
-        <h2>Ligas</h2>
-        {leagues && <span className="count">{leagues.length} registradas</span>}
-      </div>
+      <SectionHead
+        id="ligas"
+        title="Ligas"
+        count={leagues && `${leagues.length} registradas`}
+        registerTo="/registrar-liga"
+        registerLabel="Registrar liga"
+      />
 
       {error && <div className="form-error">{error}</div>}
 
@@ -74,10 +77,14 @@ export default function Home() {
         </div>
       )}
 
-      <div className="section-head" id="equipos" style={{ marginTop: 28 }}>
-        <h2>Equipos</h2>
-        {teams && <span className="count">{teams.length} registrados</span>}
-      </div>
+      <SectionHead
+        id="equipos"
+        title="Equipos"
+        count={teams && `${teams.length} registrados`}
+        registerTo="/registrar-equipo"
+        registerLabel="Registrar equipo"
+        style={{ marginTop: 28 }}
+      />
 
       {teamsError && <div className="form-error">{teamsError}</div>}
 
@@ -120,6 +127,8 @@ export default function Home() {
         loadingMessage="Cargando medios…"
         emptyTitle="Todavía no hay medios verificados"
         emptyText="En cuanto un medio de comunicación sea verificado, va a aparecer aquí."
+        registerTo="/registrar-organizacion?tipo=media"
+        registerLabel="Registrar medio"
       />
 
       <OrganizationDirectorySection
@@ -130,6 +139,8 @@ export default function Home() {
         loadingMessage="Cargando tiendas y proveedores…"
         emptyTitle="Todavía no hay tiendas ni proveedores verificados"
         emptyText="En cuanto una tienda o proveedor sea verificado, va a aparecer aquí."
+        registerTo="/registrar-organizacion?tipo=store"
+        registerLabel="Registrar tienda o proveedor"
       />
 
       <section className="hero">
@@ -147,13 +158,17 @@ export default function Home() {
 // Reusado para cualquier tipo de organización que se muestre como
 // directorio público en el home (medios, tiendas/proveedores, y los que
 // sigan) — mismo layout, solo cambian los datos y los textos.
-function OrganizationDirectorySection({ id, title, orgs, error, loadingMessage, emptyTitle, emptyText }) {
+function OrganizationDirectorySection({ id, title, orgs, error, loadingMessage, emptyTitle, emptyText, registerTo, registerLabel }) {
   return (
     <>
-      <div className="section-head" id={id} style={{ marginTop: 28 }}>
-        <h2>{title}</h2>
-        {orgs && <span className="count">{orgs.length} verificados</span>}
-      </div>
+      <SectionHead
+        id={id}
+        title={title}
+        count={orgs && `${orgs.length} verificados`}
+        registerTo={registerTo}
+        registerLabel={registerLabel}
+        style={{ marginTop: 28 }}
+      />
 
       {error && <div className="form-error">{error}</div>}
 
@@ -187,6 +202,22 @@ function OrganizationDirectorySection({ id, title, orgs, error, loadingMessage, 
         </div>
       )}
     </>
+  );
+}
+
+// Encabezado de cada sección del home, con su botón de "Registrar…". El
+// botón se ve con sesión y sin ella y siempre lleva a la misma pantalla de
+// registro: si no hay sesión, es la ruta la que pide crear cuenta y después
+// regresa ahí (ver ProtectedRoute), así que el home no decide nada.
+function SectionHead({ id, title, count, registerTo, registerLabel, style }) {
+  return (
+    <div className="section-head home-section-head" id={id} style={style}>
+      <h2>{title}</h2>
+      <div className="home-section-actions">
+        {count && <span className="count">{count}</span>}
+        <Link to={registerTo} className="btn btn-outline btn-sm">{registerLabel}</Link>
+      </div>
+    </div>
   );
 }
 

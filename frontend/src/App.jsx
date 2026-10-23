@@ -122,17 +122,20 @@ export default function App() {
                 funcione. */}
             {LEGAL_DATA_READY && <Route path="/terminos" element={<TermsOfService />} />}
             {PRIVACY_PUBLISHED && <Route path="/privacidad" element={<PrivacyPolicy />} />}
+            {/* Los botones de "Registrar…" del home son visibles para todos:
+                sin sesión, estas tres rutas te piden crear cuenta y después
+                te regresan aquí (ver ProtectedRoute). */}
             <Route
               path="/registrar-liga"
-              element={<ProtectedRoute><RegisterLeague /></ProtectedRoute>}
+              element={<ProtectedRoute signupReason="registrar tu liga"><RegisterLeague /></ProtectedRoute>}
             />
             <Route
               path="/registrar-organizacion"
-              element={<ProtectedRoute><RegisterOrganizationPage /></ProtectedRoute>}
+              element={<ProtectedRoute signupReason="registrar tu organización"><RegisterOrganizationPage /></ProtectedRoute>}
             />
             <Route
               path="/registrar-equipo"
-              element={<ProtectedRoute><RegisterTeamPage /></ProtectedRoute>}
+              element={<ProtectedRoute signupReason="registrar tu equipo"><RegisterTeamPage /></ProtectedRoute>}
             />
             <Route
               path="/panel"

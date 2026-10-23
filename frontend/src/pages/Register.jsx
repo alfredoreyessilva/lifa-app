@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { required, minLength, validEmail, runValidations } from '../utils/validation.js';
@@ -19,6 +19,11 @@ export default function Register() {
   const [step, setStep] = useState('form');
   const { login, token, updateUser } = useAuth();
   const navigate     = useNavigate();
+  const location     = useLocation();
+  // Quien llegó desde un botón de "Registrar…" sin sesión sigue ahí en
+  // cuanto tenga su cuenta, no en /panel (ver ProtectedRoute).
+  const next   = location.state?.from || '/panel';
+  const reason = location.state?.reason;
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -42,7 +47,7 @@ export default function Register() {
       // código a nadie — sería mostrarle una pantalla de "revisa tu correo"
       // que jamás le va a llegar nada.
       if (data.user.email_verified || !data.emailVerificationAvailable) {
-        navigate('/panel');
+        navigate(next);
       } else {
         setStep('verify');
       }
@@ -59,7 +64,7 @@ export default function Register() {
     try {
       const data = await api.googleAuth(credential);
       login(data.token, data.user);
-      navigate('/panel');
+      navigate(next);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -77,9 +82,9 @@ export default function Register() {
             token={token}
             onVerified={(updatedUser) => {
               updateUser(updatedUser);
-              navigate('/panel');
+              navigate(next);
             }}
-            onSkip={() => navigate('/panel')}
+            onSkip={() => navigate(next)}
           />
         </div>
       </div>
@@ -90,6 +95,11 @@ export default function Register() {
     <div className="container">
       <div className="form-card">
         <h2>Crear cuenta</h2>
+        {reason && (
+          <p style={{ color: 'var(--ink-dim)', fontSize: 14, marginBottom: 16 }}>
+            Para {reason}, primero crea tu cuenta. En cuanto termines, sigues directo con el registro.
+          </p>
+        )}
         {error && <div className="form-error">{error}</div>}
         <GoogleAuthButton onCredential={onGoogleCredential} onError={setError} />
         <div className="form-divider"><span>o con tu correo</span></div>
@@ -153,7 +163,7 @@ export default function Register() {
           </button>
         </form>
         <div className="form-foot">
-          ¿Ya tienes cuenta? <Link to="/iniciar-sesion">Inicia sesión</Link>
+          ¿Ya tienes cuenta? <Link to="/iniciar-sesion" state={location.state}>Inicia sesión</Link>
         </div>
       </div>
     </div>

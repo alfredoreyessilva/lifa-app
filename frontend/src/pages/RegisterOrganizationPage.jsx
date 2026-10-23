@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import LogoField from '../components/LogoField.jsx';
@@ -21,9 +21,18 @@ export default function RegisterOrganizationPage() {
   const [loading, setLoading] = useState(false);
   const { token, refreshLeagues } = useAuth();
   const navigate = useNavigate();
+  // Los botones del home ("Registrar medio", "Registrar tienda o
+  // proveedor") llegan con el tipo ya elegido y se saltan el paso 1. Solo
+  // se acepta un tipo que el backend ofrezca; cualquier otro valor cae en
+  // el paso 1 como si no viniera nada.
+  const [searchParams] = useSearchParams();
+  const presetType = searchParams.get('tipo');
 
   useEffect(() => {
-    api.getOrganizationTypes().then((d) => setTypes(d.types)).catch((e) => setError(e.message));
+    api.getOrganizationTypes().then((d) => {
+      setTypes(d.types);
+      if (d.types.some((t) => t.value === presetType)) setSelectedType(presetType);
+    }).catch((e) => setError(e.message));
     api.getCountries().then((d) => setCountries(d.countries)).catch(() => setCountries([]));
   }, []);
 
@@ -59,6 +68,12 @@ export default function RegisterOrganizationPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // Con el tipo ya elegido desde el home, mientras cargan los tipos no se
+  // enseña la pregunta del paso 1 para luego quitarla.
+  if (!types && presetType && !error) {
+    return <div className="container"><div className="loading">Cargando…</div></div>;
   }
 
   // Paso 1: elegir tipo
