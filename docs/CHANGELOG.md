@@ -15,6 +15,13 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Mis notificaciones va dentro del panel negro (2026-10-22)**, como Mi
+  panel, las invitaciones y los paneles de liga y equipo. Antes era la única
+  pantalla con sesión suelta sobre la cancha. Las tarjetas siguen en verde,
+  igual que las de Mi cartelera sobre ese mismo negro. Verificado en el
+  navegador a ancho de escritorio y de teléfono, solo con `vite` y la API
+  simulada desde Playwright: no se abrió con avisos reales.
+
 - **El visor ya trabaja desde la página de cada partido: cambia el marcador y
   teclea los totales a mano; el tesorero deja de ver "Editar partido"
   (2026-10-19)**. Cierra `PD-39`, que nació y se cerró ese mismo día. Empezó

@@ -186,40 +186,45 @@ export default function Notifications() {
     return () => { vigente = false; };
   }, [token]);
 
+  // Va dentro del panel negro, como el resto del área con sesión (Mi panel,
+  // invitaciones). El título no lleva margen arriba: ese aire ya lo da el
+  // relleno del panel.
   return (
     <div className="container">
-      <div className="section-head">
-        <h2>Mis notificaciones</h2>
+      <div className="dashboard-panel">
+        <div className="section-head" style={{ marginTop: 0 }}>
+          <h2>Mis notificaciones</h2>
+        </div>
+
+        {error && (
+          <div className="empty-state" style={{ padding: '16px 20px' }}>
+            <p style={{ color: 'var(--ink-dim)', margin: 0 }}>{error}</p>
+          </div>
+        )}
+
+        {items === null && !error && (
+          <div className="empty-state">
+            <h3>Cargando…</h3>
+          </div>
+        )}
+
+        {items && items.length === 0 && !error && (
+          <div className="empty-state" style={{ padding: '36px 20px', background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 8, marginTop: 12 }}>
+            <h3 style={{ marginBottom: 8 }}>Sin notificaciones todavía</h3>
+            <p style={{ color: 'var(--ink-dim)', fontSize: 14, margin: 0 }}>
+              Sigue un partido o a un equipo y aquí te llegan sus avisos. Si predices quién gana, aquí te enteras de si acertaste y en qué lugar vas. Si administras una liga o un club, aquí llegan también los suyos.
+            </p>
+          </div>
+        )}
+
+        {items && items.length > 0 && (
+          <div className="notification-list" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+            {items.map((item) => (
+              <NotificationItem key={item.key} item={item} />
+            ))}
+          </div>
+        )}
       </div>
-
-      {error && (
-        <div className="empty-state" style={{ padding: '16px 20px' }}>
-          <p style={{ color: 'var(--ink-dim)', margin: 0 }}>{error}</p>
-        </div>
-      )}
-
-      {items === null && !error && (
-        <div className="empty-state">
-          <h3>Cargando…</h3>
-        </div>
-      )}
-
-      {items && items.length === 0 && !error && (
-        <div className="empty-state" style={{ padding: '36px 20px', background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 8, marginTop: 12 }}>
-          <h3 style={{ marginBottom: 8 }}>Sin notificaciones todavía</h3>
-          <p style={{ color: 'var(--ink-dim)', fontSize: 14, margin: 0 }}>
-            Sigue un partido o a un equipo y aquí te llegan sus avisos. Si predices quién gana, aquí te enteras de si acertaste y en qué lugar vas. Si administras una liga o un club, aquí llegan también los suyos.
-          </p>
-        </div>
-      )}
-
-      {items && items.length > 0 && (
-        <div className="notification-list" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
-          {items.map((item) => (
-            <NotificationItem key={item.key} item={item} />
-          ))}
-        </div>
-      )}
     </div>
   );
 }
