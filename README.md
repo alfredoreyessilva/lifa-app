@@ -1950,14 +1950,19 @@ No es un efecto colateral, es la regla, y está en `computeStandings()`
 
 ```js
 const usable = matches.filter((m) =>
-  countsForStandings(m) && teamIds.has(m.home_team_id) && teamIds.has(m.away_team_id));
+  countsForStandings(m)
+  && eligible.has(m.home_team_id) && eligible.has(m.away_team_id)
+  && (inTable.has(m.home_team_id) || inTable.has(m.away_team_id)));
 ```
 
-Un partido solo cuenta **si los dos equipos están en la tabla**. Saca a uno de
-la rama y sus partidos dejan de existir para el récord de todo el mundo: quien
-le ganó pierde esa victoria, quien le perdió se quita esa derrota. Es la misma
-regla que evita que un amistoso contra un invitado de fuera ensucie récords
-ajenos, y `teams` sale de `branch_teams` (`utils/branchStandings.js`).
+Un partido solo cuenta **si los dos equipos están inscritos en la rama**
+(`eligible` sale de `branch_teams`, en `utils/branchStandings.js`). Saca a uno
+de la rama y sus partidos dejan de existir para el récord de todo el mundo:
+quien le ganó pierde esa victoria, quien le perdió se quita esa derrota. Es la
+misma regla que evita que un amistoso contra un invitado de fuera ensucie
+récords ajenos. Hasta el 2026-10-25 la condición era "los dos están **en la
+tabla**", y eso dejaba fuera de la tabla de un grupo los juegos contra otros
+grupos — ver "El récord es el de toda la temporada, en cualquier tabla".
 
 #### Y eso es justo el interruptor que la liga necesita
 
@@ -3009,6 +3014,31 @@ no se enteran de que existe, porque el selector de nivel solo aparece cuando la
 rama publica más de una. Y al separar un nivel, arranca con una **copia** del
 heredado en vez de una lista vacía, para que se edite desde donde ya estaba.
 
+### El récord es el de toda la temporada, en cualquier tabla
+
+La tabla de un grupo cuenta **todos** los juegos de cada equipo, también los
+que jugó contra equipos de otros grupos, y lo mismo la de una conferencia. Lo
+decidió Alfredo el 2026-10-25, con la Nacional de ONEFA como caso: sus grupos
+Norte, Bajío y Centro juegan entre sí, y esos juegos cuentan en la tabla de
+cada grupo. Es como la NFL ordena una división: el récord general manda, y el
+de división va aparte.
+
+- **La columna Grupo / Conf.** (`scope_record`) es la que muestra el récord
+  **dentro** de esa tabla. Antes era igual al récord general, porque la tabla
+  solo veía esos juegos.
+- **Lo que no cuenta sigue sin contar**: un juego contra un equipo que no está
+  inscrito en la rama, y un amistoso. Un invitado que sí está inscrito pero no
+  tiene conferencia —Whittier, en ONEFA— cuenta como cualquiera, salvo que su
+  juego sea amistoso; el suyo está capturado como SCRIMMAGE.
+- **Los desempates miden sobre el récord completo.** "Puntos en contra" y el
+  goal average son de toda la temporada (lo que se decidió para ONEFA); "entre
+  sí" sigue siendo solo entre los empatados, "dentro del grupo/conferencia"
+  solo dentro de la tabla, y "rivales en común" ahora ve rivales de otros
+  grupos, como en la NFL.
+- `computeStandings()` recibe `eligibleTeamIds` (los inscritos en la rama).
+  Sin él, solo cuentan los equipos de la tabla, que es lo que hacía antes, y
+  así las pruebas de un grupo aislado siguen igual.
+
 ### Clasificación: quién avanza (otra cosa que el desempate)
 
 `phase_qualifications` responde "grupos de 4, pasa el primero de cada uno", el
@@ -3105,9 +3135,10 @@ trabajo que casi ninguno pidió.
   (`Number.isFinite(Number(x))`) no sirve: `Number(null)` es `0`, así que un
   partido sin capturar entraría a la tabla como un 0-0 inventado, regalándole
   un empate a los dos equipos. Lo encontró una prueba.
-- **Un juego contra alguien que no está en la tabla se ignora.** Un amistoso
-  contra un invitado de fuera no puede alterar el récord dentro de la
-  competencia. Mismo criterio que ya usaba `matchScope.js`.
+- **Un juego contra alguien que no está inscrito en la rama se ignora.** Un
+  amistoso contra un invitado de fuera no puede alterar el récord dentro de la
+  competencia. Un juego contra otro grupo de la misma rama sí cuenta (ver "El
+  récord es el de toda la temporada, en cualquier tabla").
 - **Un equipo sin partidos queda arriba del que ya perdió.** Los dos van a 0%,
   y en diferencia de puntos el que no jugó está en 0 contra el −10 del que
   perdió. Es la aplicación literal del reglamento, no un caso especial: quien

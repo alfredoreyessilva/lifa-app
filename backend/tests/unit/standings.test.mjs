@@ -621,6 +621,77 @@ test('scope_record separa el récord de conferencia del récord general', () => 
   assert.equal(a.scope_record.losses, 1);
 });
 
+// ── El récord de toda la temporada, en la tabla de un grupo ──────────────
+//
+// La tabla de un grupo cuenta TODOS los juegos de sus equipos contra
+// inscritos en la rama, también los de otros grupos. Lo que no cuenta es un
+// rival que no está inscrito. Ver README, "El récord es el de toda la
+// temporada, en cualquier tabla".
+
+test('grupo: un juego contra otro grupo cuenta en el récord, no en el del grupo', () => {
+  // Grupo Norte: 1 y 2. El 3 es de otro grupo de la misma rama.
+  const rows = computeStandings({
+    teams: [team(1), team(2)],
+    matches: [
+      game(1, 2, 21, 0),   // dentro del grupo
+      game(1, 3, 0, 14),   // 1 pierde contra otro grupo
+      game(3, 2, 7, 10),   // 2 le gana a otro grupo
+    ],
+    eligibleTeamIds: [1, 2, 3],
+  });
+
+  const a = rows.find((r) => r.team_id === 1);
+  assert.deepEqual([a.wins, a.losses, a.played], [1, 1, 2]);
+  assert.deepEqual([a.points_for, a.points_against], [21, 14]);
+  assert.deepEqual([a.scope_record.wins, a.scope_record.losses], [1, 0]);
+
+  const b = rows.find((r) => r.team_id === 2);
+  assert.deepEqual([b.wins, b.losses], [1, 1]);
+  assert.deepEqual([b.scope_record.wins, b.scope_record.losses], [0, 1]);
+  // El rival de otro grupo no aparece en la tabla.
+  assert.deepEqual(order(rows).sort(), [1, 2]);
+});
+
+test('grupo: un rival que no está inscrito en la rama no cuenta', () => {
+  const rows = computeStandings({
+    teams: [team(1), team(2)],
+    matches: [game(1, 99, 50, 0), game(1, 3, 7, 0)],
+    eligibleTeamIds: [1, 2, 3],
+  });
+  const a = rows.find((r) => r.team_id === 1);
+  assert.deepEqual([a.wins, a.points_for], [1, 7]);
+});
+
+test('sin inscritos de la rama, la tabla solo ve los juegos entre sus equipos (como antes)', () => {
+  const rows = computeStandings({
+    teams: [team(1), team(2)],
+    matches: [game(1, 2, 21, 0), game(1, 3, 0, 14)],
+  });
+  const a = rows.find((r) => r.team_id === 1);
+  assert.deepEqual([a.wins, a.losses], [1, 0]);
+});
+
+test('grupo: los puntos en contra del desempate son los de toda la temporada', () => {
+  // Grupo de 1, 2 y 3 en círculo, los tres 2-2 contando a 4 y 5, que son de
+  // otro grupo. Dentro del grupo los tres reciben 13; con la derrota 0-40 de
+  // 1 ante otro grupo, 1 recibe 53 y queda último.
+  const rows = computeStandings({
+    teams: [team(1), team(2), team(3)],
+    matches: [
+      game(1, 2, 7, 6), game(2, 3, 7, 6), game(3, 1, 7, 6),
+      game(1, 4, 1, 0), game(2, 4, 3, 0), game(3, 4, 1, 0),
+      game(5, 1, 40, 0), game(5, 2, 1, 0), game(5, 3, 1, 0),
+    ],
+    config: TIEBREAKER_PRESETS.dominante_o_en_contra,
+    eligibleTeamIds: [1, 2, 3, 4, 5],
+  });
+  // En contra: 1 → 53, 2 → 14, 3 → 14. Entre 2 y 3 decide el goal average:
+  // 2 anotó 16 (16/14) y 3 anotó 14 (14/14).
+  assert.deepEqual(order(rows), [2, 3, 1]);
+  assert.equal(rows[0].resolved_by, 'goal_average');
+  assert.equal(rows[2].resolved_by, 'points_against');
+});
+
 // ── Racha ────────────────────────────────────────────────────────────────
 
 test('la racha se lee del partido más reciente hacia atrás', () => {

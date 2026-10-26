@@ -189,6 +189,7 @@ export async function buildBranchStandings(branchId, { publicOnly = false } = {}
   ]);
 
   // Una tabla por cada (nivel configurado × alcance con equipos).
+  const branchTeamIds = teams.map((t) => t.team_id);
   const tables = [];
   for (const level of config.standings_levels) {
     for (const scope of scopesOf(level, teams)) {
@@ -219,7 +220,9 @@ export async function buildBranchStandings(branchId, { publicOnly = false } = {}
         qualifying_count: rule ? rule.top_n : 0,
         uses_own_rules: levelConfig !== config,
         tiebreakers: levelConfig.tiebreakers,
-        rows: computeStandings({ teams: scopeTeams, matches, config: levelConfig, inScope }),
+        // Todos los inscritos en la rama, no solo los de esta tabla: el récord
+        // de un equipo en su grupo incluye los juegos contra otros grupos.
+        rows: computeStandings({ teams: scopeTeams, matches, config: levelConfig, inScope, eligibleTeamIds: branchTeamIds }),
       });
     }
   }

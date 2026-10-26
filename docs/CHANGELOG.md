@@ -15,6 +15,19 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **La tabla de un grupo cuenta todos los juegos de cada equipo (2026-10-25)**,
+  también los que jugó contra otros grupos. Lo pidió Alfredo con la Nacional
+  de ONEFA: Norte, Bajío y Centro juegan entre sí, y la tabla de Norte
+  ignoraba un Norte–Bajío porque `computeStandings()` solo contaba juegos
+  entre dos equipos de la misma tabla. Ahora cuenta todo juego contra un
+  inscrito en la rama (`eligibleTeamIds`), y la columna Grupo/Conf. muestra
+  el récord dentro de la tabla, como una división de la NFL. Comparado en
+  solo lectura sobre la rama de ONEFA en `desarrollo-local`: las dos tablas de
+  conferencia salen idénticas (no hay juegos entre conferencias); en Norte y
+  Bajío cambian los equipos que jugaron contra otros grupos, y Centro no
+  cambia. Cuatro pruebas nuevas. Ver README, "El récord es el de toda la
+  temporada, en cualquier tabla".
+
 - **El desempate de ONEFA, como dice su reglamento (2026-10-25).** La app
   daba por hecho que ONEFA desempata "ganados → entre sí → diferencia de
   puntos". El reglamento 2024 (arts. 12 y 13) no usa la diferencia: con dos

@@ -667,9 +667,13 @@ function rankTable(rows, ctx) {
  * @param {object[]} matches  partidos de la rama (se filtran los que no cuentan)
  * @param {object}   config   { tiebreakers[], multi_team_mode, points_win/draw/loss }
  * @param {function} inScope  opcional: qué partido cuenta como "dentro del alcance"
- *                            de esta tabla (para el universo 'scope')
+ *                            de esta tabla (para el universo 'scope'). Por default,
+ *                            los juegos entre dos equipos de la tabla.
+ * @param {Iterable} eligibleTeamIds  opcional: los inscritos en la rama. Un juego
+ *                            cuenta si los dos lo están, aunque el rival sea de
+ *                            otro grupo. Por default, solo los de la tabla.
  */
-export function computeStandings({ teams = [], matches = [], config = {}, inScope = null } = {}) {
+export function computeStandings({ teams = [], matches = [], config = {}, inScope = null, eligibleTeamIds = null } = {}) {
   const cfg = {
     tiebreakers: Array.isArray(config.tiebreakers) && config.tiebreakers.length
       ? config.tiebreakers.filter((k) => TIEBREAKER_CATALOG[k])
@@ -682,20 +686,25 @@ export function computeStandings({ teams = [], matches = [], config = {}, inScop
   if (!cfg.tiebreakers.length) cfg.tiebreakers = DEFAULT_TIEBREAKERS;
 
   const teamIds = new Set(teams.map((t) => t.team_id));
+  const eligible = eligibleTeamIds ? new Set(eligibleTeamIds) : teamIds;
 
-  // Solo partidos jugados, con marcador, y entre dos equipos de ESTA tabla.
-  // Lo último importa: un amistoso contra un invitado de fuera no debe
-  // ensuciar el récord de nadie (es el mismo criterio que ya usa
-  // matchScope.js para no colar un juego ajeno a una conferencia).
+  // Solo partidos jugados, con marcador, entre dos equipos inscritos en la
+  // rama y de los que al menos uno está en ESTA tabla. El récord es el de
+  // toda la temporada: la tabla de un grupo cuenta también los juegos contra
+  // otros grupos (README, "El récord es el de toda la temporada, en cualquier
+  // tabla"). Lo de inscritos importa: un amistoso contra un invitado de fuera
+  // no debe ensuciar el récord de nadie.
   const usable = matches.filter((m) =>
-    countsForStandings(m) && teamIds.has(m.home_team_id) && teamIds.has(m.away_team_id));
+    countsForStandings(m)
+    && eligible.has(m.home_team_id) && eligible.has(m.away_team_id)
+    && (teamIds.has(m.home_team_id) || teamIds.has(m.away_team_id)));
 
   const matchesByTeam = new Map();
   const facedPairs = new Set();
   for (const t of teams) matchesByTeam.set(t.team_id, []);
   for (const m of usable) {
-    matchesByTeam.get(m.home_team_id).push(m);
-    matchesByTeam.get(m.away_team_id).push(m);
+    if (teamIds.has(m.home_team_id)) matchesByTeam.get(m.home_team_id).push(m);
+    if (teamIds.has(m.away_team_id)) matchesByTeam.get(m.away_team_id).push(m);
     facedPairs.add(pairKey(m.home_team_id, m.away_team_id));
   }
 
@@ -703,7 +712,9 @@ export function computeStandings({ teams = [], matches = [], config = {}, inScop
     config: cfg,
     matchesByTeam,
     facedPairs,
-    inScope: typeof inScope === 'function' ? inScope : () => true,
+    inScope: typeof inScope === 'function'
+      ? inScope
+      : (m) => teamIds.has(m.home_team_id) && teamIds.has(m.away_team_id),
     maxDepth: (teams.length + 1) * (cfg.tiebreakers.length + 1),
   };
 
