@@ -64,6 +64,8 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-32 | P2 | Un dueño no se puede retirar aunque haya otros dueños, y el README dice que sí | decisión |
 | PD-33 | P2 | Los recordatorios de cobranza esconden su error y pierden el día | código |
 | PD-36 | P2 | En el celular, la tabla de posiciones se desliza de lado, y el README dice que cabe | código |
+| PD-40 | P2 | La siembra de los playoffs de ONEFA no se calcula | código |
+| PD-41 | P2 | En el celular, las pestañas del modal de competencia se salen de lado | código |
 
 ---
 
@@ -279,9 +281,12 @@ Estructura → rama → **⚙ competencia**. Es lo que lleva la tabla de posicio
 nivel 4 a nivel 5 en la única liga con uso real. Ver "Lo que queda abierto" en
 "Tabla de posiciones y modelo de competencia".
 
-Al configurarla, el reglamento de desempates es el preconfigurado **"Le ganó a
-todos, o menos puntos en contra"** (2026-10-25): hoy la rama trae el default
-por juegos ganados, que usa la diferencia de puntos, y ONEFA no la usa.
+Desde el 2026-10-25 es **un clic**: Estructura → rama Varonil → ⚙ competencia →
+**Modo ONEFA** (README, "Modo ONEFA"). Deja las tablas por conferencia y por
+grupo, el desempate de su reglamento, las fases de playoffs, quién clasifica en
+cada conferencia y el campeón de conferencia. Solo se aplica sobre una rama sin
+fases ni títulos, que es como está ONEFA hoy. Después, al capturar cuartos,
+semifinales y final, hay que elegir su fase en el partido.
 
 ### PD-34 · El Excel a nivel torneo y "Publicar todos" publican partidos sin equipos enlazados
 
@@ -602,6 +607,28 @@ de conferencia es esconder en el teléfono la columna de récord dentro del
 alcance, con la misma clase `standings-hide-sm` que ya esconde PF y PC; para
 los 30 px de la general falta medir de dónde salen. Al cerrarlo, corregir la
 frase del README.
+
+### PD-40 · La siembra de los playoffs de ONEFA no se calcula
+
+Quedó fuera del Modo ONEFA a propósito (decidido por Alfredo el 2026-10-25).
+La app marca quién clasifica, pero no en qué lugar entra a los playoffs ni
+contra quién juega:
+
+- **Nacional**: los tres líderes de grupo son 1 a 3, ordenados por récord; los
+  tres segundos, 4 a 6; los dos mejores terceros, 7 y 8.
+- **14 Grandes**: 1 a 8 por su tabla.
+- Los cruces de cuartos, y que el local es siempre el mejor sembrado.
+
+Hoy los partidos de playoffs se capturan a mano viendo la tabla. Para hacerlo
+hace falta confirmar los cruces (1–8, 2–7…), que el formato que pasó Alfredo
+no dice.
+
+### PD-41 · En el celular, las pestañas del modal de competencia se salen de lado
+
+Encontrado el 2026-10-25 al revisar el Modo ONEFA a 390 px; ya pasaba antes y
+no lo toca ese cambio. Las cuatro pestañas (Fases, Formato, Títulos, Vista
+previa) no caben a lo ancho del modal: "Vista previa" queda fuera y el modal
+entero se desliza de lado. El panel del Modo ONEFA sí cabe.
 
 ---
 

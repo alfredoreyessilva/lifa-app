@@ -220,10 +220,17 @@ export const api = {
   deletePhase: (phaseId, token) =>
     request(`/manage/phases/${phaseId}`, { method: 'DELETE', token }),
   // Clasificación: de esta fase pasan los primeros N de cada grupo/conferencia.
+  // Una regla por conferencia (`conference_id`), o una para toda la rama (null).
   setPhaseQualification: (phaseId, payload, token) =>
     request(`/manage/phases/${phaseId}/qualification`, { method: 'PUT', body: payload, token }),
-  clearPhaseQualification: (phaseId, token) =>
-    request(`/manage/phases/${phaseId}/qualification`, { method: 'DELETE', token }),
+  clearPhaseQualification: (phaseId, conferenceId, token) =>
+    request(`/manage/phases/${phaseId}/qualification${conferenceId ? `?conference_id=${conferenceId}` : ''}`, { method: 'DELETE', token }),
+
+  // Modo ONEFA: la competencia completa de ONEFA de un clic. Solo existe en
+  // esa liga; en cualquier otra el GET contesta { available: false }.
+  getOnefaMode: (branchId, token) => request(`/manage/branches/${branchId}/onefa-mode`, { token }),
+  applyOnefaMode: (branchId, choices, token) =>
+    request(`/manage/branches/${branchId}/onefa-mode`, { method: 'POST', body: { choices }, token }),
 
   // Títulos: a qué nivel se corona campeón esta rama
   getTitles: (branchId, token) => request(`/manage/branches/${branchId}/titles`, { token }),

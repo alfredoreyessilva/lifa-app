@@ -38,6 +38,8 @@ export default function CompetitionModelModal({ branch, token, onClose }) {
   const [weekLabels, setWeekLabels] = useState([]);
   const [titles, setTitles] = useState([]);
   const [standings, setStandings] = useState(null);
+  const [onefa, setOnefa] = useState(null);
+  const [onefaOpen, setOnefaOpen] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -50,14 +52,16 @@ export default function CompetitionModelModal({ branch, token, onClose }) {
   async function reload() {
     setError('');
     try {
-      const [cat, ph, ti, st] = await Promise.all([
+      const [cat, ph, ti, st, onefaMode] = await Promise.all([
         api.getStandingsCatalog(token),
         api.getPhases(branch.id, token),
         api.getTitles(branch.id, token),
         api.getBranchStandingsAdmin(branch.id, token),
+        // El Modo ONEFA es un extra: si falla, el resto del panel sirve igual.
+        api.getOnefaMode(branch.id, token).catch(() => null),
       ]);
       setCatalog(cat); setPhases(ph.phases || []); setWeekLabels(ph.week_labels || []);
-      setTitles(ti); setStandings(st);
+      setTitles(ti); setStandings(st); setOnefa(onefaMode);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -79,12 +83,30 @@ export default function CompetitionModelModal({ branch, token, onClose }) {
         </div>
 
         {error && <div className="form-error">{error}</div>}
+
+        {!loading && onefa?.available && (
+          onefaOpen ? (
+            <OnefaModePanel
+              branch={branch} token={token} onefa={onefa}
+              onApplied={reload} onClose={() => setOnefaOpen(false)} setError={setError}
+            />
+          ) : (
+            <div className="competition-onefa-bar">
+              <button type="button" className="btn btn-flag btn-sm" onClick={() => setOnefaOpen(true)}>
+                Modo ONEFA
+              </button>
+              <span className="competition-help">Configura fases, tablas, desempate, clasificación y campeón como juega ONEFA.</span>
+            </div>
+          )
+        )}
+
         {loading ? <Loading /> : (
           <>
             {tab === 'phases' && (
               <PhasesTab
                 branch={branch} token={token} phases={phases}
-                phaseTypes={catalog.phase_types} onChanged={reload} setError={setError}
+                phaseTypes={catalog.phase_types} tiebreakers={catalog.tiebreakers}
+                onChanged={reload} setError={setError}
                 hasConferences={hasConferences} hasGroups={hasGroups}
                 weekLabels={weekLabels}
               />
@@ -122,9 +144,104 @@ export default function CompetitionModelModal({ branch, token, onClose }) {
   );
 }
 
+/* ---------- Modo ONEFA ---------- */
+
+// La competencia completa de ONEFA de un clic (README, "Modo ONEFA"). Antes de
+// aplicar enseña todo lo que va a quedar y deja elegir, por conferencia, cómo
+// clasifica. El plan lo arma el backend: aquí solo se pinta, para que lo que
+// se ve sea exactamente lo que se escribe.
+const PHASE_TYPE_LABEL = {
+  groups: 'Fase de grupos', round_robin: 'Todos contra todos', single_elimination: 'Eliminación directa',
+};
+
+function OnefaModePanel({ branch, token, onefa, onApplied, onClose, setError }) {
+  const [choices, setChoices] = useState(
+    Object.fromEntries((onefa.conferences || []).map((c) => [c.id, c.choice])));
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const plan = onefa.plan;
+
+  async function apply() {
+    setBusy(true); setError('');
+    try {
+      await api.applyOnefaMode(branch.id, choices, token);
+      setDone(true);
+      await onApplied();
+    } catch (e) { setError(e.message); }
+    setBusy(false);
+  }
+
+  if (done) {
+    return (
+      <div className="competition-onefa">
+        <div className="competition-note">✓ La rama quedó en Modo ONEFA.</div>
+        <p className="competition-help">
+          Al capturar cuartos, semifinales y final, elige su <strong>fase</strong> en el partido:
+          el campeón de cada conferencia sale del partido de la fase Final.
+        </p>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>Listo</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="competition-onefa">
+      <div className="competition-item-name">Modo ONEFA</div>
+
+      {onefa.blocked_reason ? (
+        <div className="form-error">{onefa.blocked_reason}</div>
+      ) : plan && (
+        <ul className="competition-onefa-plan">
+          <li>
+            <strong>Tablas:</strong>{' '}
+            {plan.standings.standings_levels.map((l) => LEVEL_LABEL[l].toLowerCase()).join(' y ')}, sin tabla general.
+          </li>
+          <li>
+            <strong>Desempate:</strong> ganados → entre sí → goal average; con tres o más, primero quien
+            les ganó a todos y, si nadie, menos puntos en contra.
+          </li>
+          <li>
+            <strong>Fases:</strong>{' '}
+            {plan.phases.map((p) => `${p.name} (${PHASE_TYPE_LABEL[p.type] || p.type}${p.counts_for_standings ? ', cuenta' : ''})`).join(' · ')}.
+          </li>
+          <li>
+            <strong>Quién clasifica a cuartos:</strong>
+            {(onefa.conferences || []).map((c) => (
+              <div key={c.id} className="competition-onefa-conf">
+                <span>{c.name}{c.groups.length ? ` (${c.groups.join(', ')})` : ''}</span>
+                <select
+                  value={choices[c.id]}
+                  onChange={(e) => setChoices({ ...choices, [c.id]: e.target.value })}
+                >
+                  {onefa.choices.map((o) => (
+                    <option key={o.key} value={o.key} disabled={o.key === 'groups' && !c.can_use_groups}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+            <span className="competition-help">Los mejores terceros se comparan por % de ganados y luego por goal average.</span>
+          </li>
+          <li>
+            <strong>Título:</strong> “{plan.titles[0].name}”, lo gana el ganador del partido de la Final, uno por conferencia.
+          </li>
+        </ul>
+      )}
+
+      <div className="competition-onefa-actions">
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onClose} disabled={busy}>Cancelar</button>
+        {!onefa.blocked_reason && plan && (
+          <button type="button" className="btn btn-flag btn-sm" onClick={apply} disabled={busy}>
+            {busy ? 'Aplicando…' : 'Aplicar modo ONEFA'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Fases ---------- */
 
-function PhasesTab({ branch, token, phases, phaseTypes, onChanged, setError, hasConferences, hasGroups, weekLabels }) {
+function PhasesTab({ branch, token, phases, phaseTypes, tiebreakers, onChanged, setError, hasConferences, hasGroups, weekLabels }) {
   const [name, setName] = useState('');
   const [type, setType] = useState('round_robin');
   const [adopt, setAdopt] = useState([]);
@@ -207,8 +324,9 @@ function PhasesTab({ branch, token, phases, phaseTypes, onChanged, setError, has
                   tabla: de una eliminatoria no "clasifica el primero", avanza
                   quien gana su partido. */}
               {p.counts_for_standings && (
-                <QualificationRow
+                <QualificationRules
                   phase={p} token={token} onChanged={onChanged} setError={setError}
+                  conferences={branch.conferences || []} tiebreakers={tiebreakers}
                   hasConferences={hasConferences} hasGroups={hasGroups}
                 />
               )}
@@ -263,25 +381,83 @@ function PhasesTab({ branch, token, phases, phaseTypes, onChanged, setError, has
 }
 
 // "De esta fase pasan los primeros N de cada grupo." Es OTRA cosa que el
-// desempate: el desempate ORDENA la tabla, esto dice dónde va el corte. Se
-// guarda al cambiar cualquiera de los dos controles — es una regla de dos
-// campos, un botón "guardar" aparte sería más clics que la regla misma.
-function QualificationRow({ phase, token, onChanged, setError, hasConferences, hasGroups }) {
-  const active = Boolean(phase.from_scope);
-  const [scope, setScope] = useState(phase.from_scope || 'branch');
-  const [topN, setTopN] = useState(phase.top_n || 1);
-  const [plusN, setPlusN] = useState(phase.plus_best_n || 0);
+// desempate: el desempate ORDENA la tabla, esto dice dónde va el corte.
+//
+// Una fase puede tener una regla por conferencia (README, "Clasificación:
+// quién avanza"): en ONEFA, de la misma temporada regular 14 Grandes
+// clasifica por su tabla y Nacional por grupos. La regla de una conferencia
+// manda en ella; la de "todas las conferencias" vale para las que no tienen
+// la suya.
+function QualificationRules({ phase, token, onChanged, setError, conferences, tiebreakers, hasConferences, hasGroups }) {
+  const rules = phase.qualifications || [];
   const [busy, setBusy] = useState(false);
 
+  // La primera regla es de toda la rama, que es como funcionó siempre; las
+  // siguientes van a la primera conferencia que no tenga la suya. Si ya todas
+  // tienen, no hay a quién ponerle otra.
+  const ocupadas = new Set(rules.map((r) => r.conference_id ?? null));
+  const libre = rules.length === 0 ? null
+    : (conferences.find((c) => !ocupadas.has(c.id)) || {}).id;
+
+  async function add() {
+    setBusy(true); setError('');
+    try {
+      await api.setPhaseQualification(phase.id, {
+        from_scope: libre == null ? 'branch' : 'conference', top_n: 1, conference_id: libre,
+      }, token);
+      await onChanged();
+    } catch (e) { setError(e.message); }
+    setBusy(false);
+  }
+
+  return (
+    <div className="competition-qual-list">
+      {rules.map((rule) => (
+        <QualificationRow
+          key={rule.id} phase={phase} rule={rule} token={token} onChanged={onChanged} setError={setError}
+          conferences={conferences} ocupadas={ocupadas} tiebreakers={tiebreakers}
+          hasConferences={hasConferences} hasGroups={hasGroups}
+        />
+      ))}
+      {(rules.length === 0 || libre !== undefined) && (
+        <button type="button" className="competition-qual-add" onClick={add} disabled={busy}>
+          {rules.length === 0 ? '+ definir quién clasifica' : '+ otra regla para otra conferencia'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Una regla. Se guarda al cambiar cualquiera de sus controles — es una regla
+// de pocos campos, un botón "guardar" aparte sería más clics que la regla
+// misma.
+function QualificationRow({ phase, rule, token, onChanged, setError, conferences, ocupadas, tiebreakers, hasConferences, hasGroups }) {
+  const [scope, setScope] = useState(rule.from_scope || 'branch');
+  const [topN, setTopN] = useState(rule.top_n || 1);
+  const [plusN, setPlusN] = useState(rule.plus_best_n || 0);
+  const [busy, setBusy] = useState(false);
+  const confId = rule.conference_id ?? null;
+
+  // Lo que la pantalla no edita viaja de vuelta tal cual (la fase de destino y
+  // con qué se comparan los lugares extra): el PUT reemplaza la regla entera,
+  // y sin esto editar el número borraría lo que puso el Modo ONEFA.
   async function save(next = {}) {
     const cuerpo = {
-      from_scope:  next.scope ?? scope,
-      top_n:       Number(next.topN ?? topN),
-      plus_best_n: Number(next.plusN ?? plusN),
+      conference_id:     next.conferenceId !== undefined ? next.conferenceId : confId,
+      from_scope:        next.scope ?? scope,
+      top_n:             Number(next.topN ?? topN),
+      plus_best_n:       Number(next.plusN ?? plusN),
+      target_phase_id:   rule.target_phase_id ?? null,
+      cross_tiebreakers: rule.cross_tiebreakers ?? null,
     };
     setBusy(true); setError('');
     try {
       await api.setPhaseQualification(phase.id, cuerpo, token);
+      // Cambiar de conferencia es mover la regla: se guarda la nueva y
+      // después se quita la vieja, para que un error no la deje sin ninguna.
+      if (next.conferenceId !== undefined && next.conferenceId !== confId) {
+        await api.clearPhaseQualification(phase.id, confId, token);
+      }
       await onChanged();
     } catch (e) { setError(e.message); }
     setBusy(false);
@@ -289,18 +465,12 @@ function QualificationRow({ phase, token, onChanged, setError, hasConferences, h
 
   async function clear() {
     setBusy(true); setError('');
-    try { await api.clearPhaseQualification(phase.id, token); await onChanged(); }
+    try { await api.clearPhaseQualification(phase.id, confId, token); await onChanged(); }
     catch (e) { setError(e.message); }
     setBusy(false);
   }
 
-  if (!active) {
-    return (
-      <button type="button" className="competition-qual-add" onClick={() => save()} disabled={busy}>
-        + definir quién clasifica
-      </button>
-    );
-  }
+  const labelOf = (key) => (tiebreakers.find((t) => t.key === key) || {}).label || key;
 
   return (
     <div className="competition-qual">
@@ -312,10 +482,26 @@ function QualificationRow({ phase, token, onChanged, setError, hasConferences, h
       />
       <span>de</span>
       <select value={scope} onChange={(e) => { setScope(e.target.value); save({ scope: e.target.value }); }}>
-        <option value="branch">la tabla general</option>
+        <option value="branch" disabled={confId !== null}>la tabla general</option>
         <option value="conference" disabled={!hasConferences}>cada conferencia</option>
         <option value="group" disabled={!hasGroups}>cada grupo</option>
       </select>
+
+      {hasConferences && (
+        <>
+          <span>en</span>
+          <select
+            value={confId ?? ''}
+            onChange={(e) => save({ conferenceId: e.target.value ? Number(e.target.value) : null })}
+            disabled={busy}
+          >
+            <option value="" disabled={confId !== null && ocupadas.has(null)}>todas las conferencias</option>
+            {conferences.map((c) => (
+              <option key={c.id} value={c.id} disabled={c.id !== confId && ocupadas.has(c.id)}>{c.name}</option>
+            ))}
+          </select>
+        </>
+      )}
 
       {/* Los lugares extra (wild cards, "mejores terceros"). Solo tienen
           sentido cuando hay VARIAS tablas que comparar entre sí: con una
@@ -333,6 +519,12 @@ function QualificationRow({ phase, token, onChanged, setError, hasConferences, h
       )}
 
       <button type="button" className="tree-chip-btn" onClick={clear} disabled={busy} title="Quitar la regla">✕</button>
+
+      {Number(plusN) > 0 && Array.isArray(rule.cross_tiebreakers) && rule.cross_tiebreakers.length > 0 && (
+        <p className="competition-help" style={{ flexBasis: '100%', margin: '4px 0 0' }}>
+          Los mejores del lugar {Number(topN) + 1} se comparan por: {rule.cross_tiebreakers.map(labelOf).join(' → ')}.
+        </p>
+      )}
     </div>
   );
 }

@@ -18,6 +18,7 @@ import { notifyMatchFollowers, pushEncendido } from '../utils/pushNotifier.js';
 import { PHASE_TYPES, PHASE_TYPE_KEYS } from '../utils/matchPhase.js';
 import { TIEBREAKER_CATALOG, TIEBREAKER_PRESETS, MULTI_TEAM_MODES } from '../utils/standings.js';
 import { buildBranchStandings } from '../utils/branchStandings.js';
+import { ONEFA_LEAGUE_ID, ONEFA_CHOICES, defaultChoice, blockedReason, planOnefaMode } from '../utils/onefaMode.js';
 import { interruptoresDeCategoria } from '../utils/rosterVisibility.js';
 import { orgTieneMiembros } from '../utils/orgMembers.js';
 
@@ -2038,13 +2039,26 @@ router.get('/standings-catalog', authRequired, asyncHandler(async (req, res) => 
 router.get('/branches/:branchId/phases', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
   const phases = await db.prepare(`
     SELECT p.*,
-           (SELECT COUNT(*)::int FROM matches m WHERE m.phase_id = p.id) AS match_count,
-           q.from_scope, q.top_n, q.plus_best_n, q.of_rank, q.target_phase_id
+           (SELECT COUNT(*)::int FROM matches m WHERE m.phase_id = p.id) AS match_count
     FROM phases p
-    LEFT JOIN phase_qualifications q ON q.phase_id = p.id
     WHERE p.branch_id = ?
     ORDER BY p.sort_order ASC, p.id ASC
   `).all(req.branch.id);
+
+  // Las reglas de clasificación van aparte y no en un LEFT JOIN: desde que
+  // hay una por conferencia, una fase puede tener varias, y el JOIN repetiría
+  // la fase una vez por regla.
+  const rules = await db.prepare(`
+    SELECT q.id, q.phase_id, q.conference_id, cf.name AS conference_name,
+           q.from_scope, q.top_n, q.plus_best_n, q.of_rank, q.target_phase_id,
+           q.cross_tiebreakers
+    FROM phase_qualifications q
+    JOIN phases p ON p.id = q.phase_id
+    LEFT JOIN conferences cf ON cf.id = q.conference_id
+    WHERE p.branch_id = ?
+    ORDER BY q.conference_id NULLS FIRST, q.id ASC
+  `).all(req.branch.id);
+  for (const p of phases) p.qualifications = rules.filter((r) => r.phase_id === p.id);
 
   // Las jornadas que ya existen en el calendario de esta rama, y cuántos de
   // sus partidos siguen SIN fase propia. Es lo que permite crear una fase y
@@ -2139,11 +2153,12 @@ router.delete('/phases/:phaseId', authRequired, phaseOwnerRequired, asyncHandler
 }));
 
 // Regla de clasificación de una fase: "de esta fase pasan los primeros N de
-// cada grupo / conferencia / de la tabla general". Es UNA por fase (si ya
-// había, se reemplaza) — dos reglas distintas para la misma fase no
-// describirían nada, se contradirían.
+// cada grupo / conferencia / de la tabla general". Es UNA por fase y
+// conferencia (si ya había, se reemplaza) — dos reglas para las mismas tablas
+// no describirían nada, se contradirían. `conference_id` en null es la regla
+// de toda la rama; con valor, solo vale para las tablas de esa conferencia.
 router.put('/phases/:phaseId/qualification', authRequired, phaseOwnerRequired, asyncHandler(async (req, res) => {
-  const { from_scope, top_n, plus_best_n, of_rank, target_phase_id } = req.body;
+  const { from_scope, top_n, plus_best_n, of_rank, target_phase_id, conference_id, cross_tiebreakers } = req.body;
 
   if (!['branch', 'conference', 'group'].includes(from_scope)) {
     return res.status(400).json({ error: 'El alcance debe ser rama, conferencia o grupo' });
@@ -2163,24 +2178,50 @@ router.put('/phases/:phaseId/qualification', authRequired, phaseOwnerRequired, a
     if (!target) return res.status(400).json({ error: 'La fase de destino no existe en esta rama' });
   }
 
-  await db.prepare('DELETE FROM phase_qualifications WHERE phase_id = ?').run(req.phase.id);
+  const confId = conference_id === undefined || conference_id === null || conference_id === '' ? null : Number(conference_id);
+  if (confId !== null) {
+    const conf = await db.prepare('SELECT id FROM conferences WHERE id = ? AND branch_id = ?')
+      .get(confId, req.branch.id);
+    if (!conf) return res.status(400).json({ error: 'La conferencia no es de esta rama' });
+  }
+
+  // Con qué se comparan los lugares extra. Solo criterios generales: esos
+  // equipos quizá nunca jugaron entre sí (ver computeQualification).
+  let cross = null;
+  if (cross_tiebreakers !== undefined && cross_tiebreakers !== null) {
+    if (!Array.isArray(cross_tiebreakers) || !cross_tiebreakers.length
+      || cross_tiebreakers.some((k) => TIEBREAKER_CATALOG[k]?.universe !== 'all')) {
+      return res.status(400).json({ error: 'Los lugares extra solo se comparan con criterios generales del catálogo' });
+    }
+    cross = JSON.stringify(cross_tiebreakers);
+  }
+
+  await db.prepare('DELETE FROM phase_qualifications WHERE phase_id = ? AND conference_id IS NOT DISTINCT FROM ?::int')
+    .run(req.phase.id, confId);
   await db.prepare(`
-    INSERT INTO phase_qualifications (phase_id, from_scope, top_n, plus_best_n, of_rank, target_phase_id)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO phase_qualifications
+      (phase_id, conference_id, from_scope, top_n, plus_best_n, of_rank, target_phase_id, cross_tiebreakers)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb)
   `).run(
-    req.phase.id, from_scope, topN, plusN,
+    req.phase.id, confId, from_scope, topN, plusN,
     // `of_rank` solo significa algo si hay lugares extra: es "qué lugar se
     // compara entre tablas" (3 = los mejores terceros). Sin lugares extra no
     // hay nada que comparar, así que se guarda en null.
     plusN > 0 ? (Number(of_rank) || topN + 1) : null,
     target_phase_id ? Number(target_phase_id) : null,
+    plusN > 0 ? cross : null,
   );
 
-  res.json(await db.prepare('SELECT * FROM phase_qualifications WHERE phase_id = ?').get(req.phase.id));
+  res.json(await db.prepare('SELECT * FROM phase_qualifications WHERE phase_id = ? AND conference_id IS NOT DISTINCT FROM ?::int')
+    .get(req.phase.id, confId));
 }));
 
+// Borra la regla de UNA conferencia (`?conference_id=`), o la de toda la rama
+// si no se dice ninguna. Las de las otras conferencias no se tocan.
 router.delete('/phases/:phaseId/qualification', authRequired, phaseOwnerRequired, asyncHandler(async (req, res) => {
-  await db.prepare('DELETE FROM phase_qualifications WHERE phase_id = ?').run(req.phase.id);
+  const confId = req.query.conference_id ? Number(req.query.conference_id) : null;
+  await db.prepare('DELETE FROM phase_qualifications WHERE phase_id = ? AND conference_id IS NOT DISTINCT FROM ?::int')
+    .run(req.phase.id, confId);
   res.json({ ok: true });
 }));
 
@@ -2273,6 +2314,138 @@ router.put('/branches/:branchId/standings-config', authRequired, branchOwnerRequ
   );
 
   res.json(await db.prepare('SELECT * FROM branches WHERE id = ?').get(req.branch.id));
+}));
+
+// --- Modo ONEFA ---
+//
+// La competencia completa de ONEFA de un clic (README, "Modo ONEFA"). El plan
+// sale de utils/onefaMode.js, que es puro; aquí solo se lee la estructura de
+// la rama y se escribe el plan. Solo existe para la liga ONEFA, y eso se
+// revisa también al aplicar: esconder el botón no basta.
+
+async function estructuraParaOnefa(branchId) {
+  const conferences = await db.prepare(`
+    SELECT id, name FROM conferences WHERE branch_id = ? ORDER BY sort_order ASC, id ASC
+  `).all(branchId);
+  const groups = await db.prepare(`
+    SELECT g.id, g.name, g.conference_id
+    FROM groups g
+    JOIN conferences cf ON cf.id = g.conference_id
+    WHERE cf.branch_id = ?
+    ORDER BY g.sort_order ASC, g.name ASC
+  `).all(branchId);
+  const counts = await db.prepare(`
+    SELECT (SELECT COUNT(*)::int FROM phases WHERE branch_id = ?) AS phases,
+           (SELECT COUNT(*)::int FROM titles WHERE branch_id = ?) AS titles
+  `).get(branchId, branchId);
+  return {
+    conferences: conferences.map((c) => ({ ...c, groups: groups.filter((g) => g.conference_id === c.id) })),
+    counts,
+  };
+}
+
+router.get('/branches/:branchId/onefa-mode', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  if (req.league.id !== ONEFA_LEAGUE_ID) return res.json({ available: false });
+
+  const { conferences, counts } = await estructuraParaOnefa(req.branch.id);
+  const { plan, error } = planOnefaMode({ conferences });
+  res.json({
+    available: true,
+    blocked_reason: blockedReason(counts) || error || null,
+    choices: Object.entries(ONEFA_CHOICES).map(([key, c]) => ({ key, label: c.label })),
+    conferences: conferences.map((c) => ({
+      id: c.id,
+      name: c.name,
+      groups: c.groups.map((g) => g.name),
+      choice: defaultChoice(c),
+      can_use_groups: c.groups.length >= 2,
+    })),
+    plan: plan || null,
+  });
+}));
+
+router.post('/branches/:branchId/onefa-mode', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
+  if (req.league.id !== ONEFA_LEAGUE_ID) {
+    return res.status(403).json({ error: 'El Modo ONEFA solo está disponible en la liga ONEFA' });
+  }
+
+  const { conferences, counts } = await estructuraParaOnefa(req.branch.id);
+  const bloqueo = blockedReason(counts);
+  if (bloqueo) return res.status(409).json({ error: bloqueo });
+
+  const { plan, error } = planOnefaMode({ conferences, choices: req.body?.choices || {} });
+  if (error) return res.status(400).json({ error });
+
+  // Todo en UNA sentencia: del otro lado hay un pooler en modo transacción y
+  // cada db.prepare toma su propia conexión, así que repartirlo en varias
+  // llamadas podía dejar una rama con fases y sin títulos. `guard` repite la
+  // revisión de arriba dentro de la sentencia: si entre las dos alguien creó
+  // una fase, no se escribe nada y se contesta 409.
+  //
+  // La clasificación y el título apuntan a su fase por NOMBRE, que es único
+  // dentro del plan: las fases no existen hasta que esta misma sentencia las
+  // crea, y el RETURNING de `fases` es lo único que trae sus ids.
+  const resultado = await db.prepare(`
+    WITH guard AS (
+      SELECT b.id FROM branches b
+      WHERE b.id = ?
+        AND NOT EXISTS (SELECT 1 FROM phases ph WHERE ph.branch_id = b.id)
+        AND NOT EXISTS (SELECT 1 FROM titles ti WHERE ti.branch_id = b.id)
+    ), config AS (
+      UPDATE branches SET
+        standings_levels     = ?::jsonb,
+        tiebreakers          = ?::jsonb,
+        tiebreaker_mode      = ?,
+        tiebreakers_by_level = NULL,
+        points_win           = NULL,
+        points_draw          = NULL,
+        points_loss          = NULL
+      WHERE id IN (SELECT id FROM guard)
+      RETURNING id
+    ), fases AS (
+      INSERT INTO phases (branch_id, name, type, counts_for_standings, sort_order)
+      SELECT g.id, f.name, f.type, f.counts_for_standings, f.sort_order
+      FROM guard g
+      CROSS JOIN jsonb_to_recordset(?::jsonb)
+        AS f(name TEXT, type TEXT, counts_for_standings BOOLEAN, sort_order INTEGER)
+      RETURNING id, name
+    ), reglas AS (
+      INSERT INTO phase_qualifications
+        (phase_id, conference_id, from_scope, top_n, plus_best_n, of_rank, target_phase_id, cross_tiebreakers)
+      SELECT origen.id, q.conference_id, q.from_scope, q.top_n, q.plus_best_n, q.of_rank, destino.id, q.cross_tiebreakers
+      FROM jsonb_to_recordset(?::jsonb)
+        AS q(phase TEXT, target TEXT, conference_id INTEGER, from_scope TEXT,
+             top_n INTEGER, plus_best_n INTEGER, of_rank INTEGER, cross_tiebreakers JSONB)
+      JOIN fases origen ON origen.name = q.phase
+      LEFT JOIN fases destino ON destino.name = q.target
+      RETURNING id
+    ), titulos AS (
+      INSERT INTO titles (branch_id, name, scope, decided_by, phase_id, sort_order)
+      SELECT g.id, t.name, t.scope, t.decided_by, f.id, t.sort_order
+      FROM guard g
+      CROSS JOIN jsonb_to_recordset(?::jsonb)
+        AS t(name TEXT, scope TEXT, decided_by TEXT, phase TEXT, sort_order INTEGER)
+      JOIN fases f ON f.name = t.phase
+      RETURNING id
+    )
+    SELECT (SELECT COUNT(*) FROM config)::int  AS aplicado,
+           (SELECT COUNT(*) FROM fases)::int   AS fases,
+           (SELECT COUNT(*) FROM reglas)::int  AS reglas,
+           (SELECT COUNT(*) FROM titulos)::int AS titulos
+  `).get(
+    req.branch.id,
+    JSON.stringify(plan.standings.standings_levels),
+    JSON.stringify(plan.standings.tiebreakers),
+    plan.standings.tiebreaker_mode,
+    JSON.stringify(plan.phases),
+    JSON.stringify(plan.qualifications),
+    JSON.stringify(plan.titles),
+  );
+
+  if (!resultado?.aplicado) {
+    return res.status(409).json({ error: 'Alguien acaba de crear fases o títulos en esta rama: vuelve a abrir la competencia' });
+  }
+  res.json({ ok: true, ...resultado });
 }));
 
 // --- Títulos ---

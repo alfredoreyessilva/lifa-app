@@ -18,7 +18,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { configForLevel } from '../../src/utils/branchStandings.js';
+import { configForLevel, rulesForTable, markWildcards } from '../../src/utils/branchStandings.js';
 import {
   computeStandings,
   computeQualification,
@@ -832,4 +832,68 @@ test('mejores terceros: se comparan entre grupos con criterios generales', () =>
   assert.equal(clasificados.length, 7);
   const wild = clasificados.filter((c) => c.qualified_as === 'wildcard');
   assert.deepEqual(wild.map((c) => c.team_id), [9]); // el tercero con mejor diferencia
+});
+
+test('mejores terceros con goal average: separa a dos terceros con el mismo récord', () => {
+  // El 3 y el 6 quedan 1-2. Por diferencia iría el 6 (+10 contra +5); por
+  // goal average va el 3 (15/10 contra 40/30).
+  const row = (id, wins, pf, pa) => ({
+    team_id: id, wins, losses: 3 - wins, ties: 0, points_for: pf, points_against: pa,
+  });
+  const clasificados = computeQualification({
+    tables: [
+      { key: 'A', rows: [row(1, 3, 90, 10), row(2, 2, 70, 30), row(3, 1, 15, 10)] },
+      { key: 'B', rows: [row(4, 3, 80, 20), row(5, 2, 60, 40), row(6, 1, 40, 30)] },
+    ],
+    rule: { top_n: 2, plus_best_n: 1, of_rank: 3, cross_tiebreakers: ['win_pct', 'goal_average'] },
+  });
+  const wild = clasificados.filter((c) => c.qualified_as === 'wildcard');
+  assert.deepEqual(wild.map((c) => c.team_id), [3]);
+});
+
+// ── Una regla de clasificación por conferencia (Modo ONEFA) ──────────────
+
+const R14 = { id: 1, from_scope: 'conference', conference_id: 7, top_n: 8, plus_best_n: 0 };
+const RNAC = { id: 2, from_scope: 'group', conference_id: 8, top_n: 2, plus_best_n: 2, of_rank: 3 };
+
+test('rulesForTable: cada conferencia ve solo su regla', () => {
+  const quals = [R14, RNAC];
+  assert.deepEqual(rulesForTable({ level: 'conference', conference_id: 7 }, quals), [R14]);
+  // La tabla de conferencia de Nacional no clasifica a nadie: su regla es por grupo.
+  assert.deepEqual(rulesForTable({ level: 'conference', conference_id: 8 }, quals), []);
+  assert.deepEqual(rulesForTable({ level: 'group', conference_id: 8 }, quals), [RNAC]);
+  // Unos grupos que 14 Grandes tuviera dados de alta no heredan nada.
+  assert.deepEqual(rulesForTable({ level: 'group', conference_id: 7 }, quals), []);
+});
+
+test('rulesForTable: la regla sin conferencia vale para las que no tienen la suya', () => {
+  const general = { id: 3, from_scope: 'conference', conference_id: null, top_n: 4 };
+  const quals = [general, RNAC];
+  assert.deepEqual(rulesForTable({ level: 'conference', conference_id: 7 }, quals), [general]);
+  assert.deepEqual(rulesForTable({ level: 'conference', conference_id: 8 }, quals), []);
+  assert.deepEqual(rulesForTable({ level: 'branch', conference_id: null }, [general]), []);
+  const deRama = { id: 4, from_scope: 'branch', conference_id: null, top_n: 6 };
+  assert.deepEqual(rulesForTable({ level: 'branch', conference_id: null }, [deRama, RNAC]), [deRama]);
+});
+
+test('markWildcards: los mejores terceros solo compiten dentro de su conferencia', () => {
+  const row = (id, wins) => ({
+    team_id: id, wins, losses: 3 - wins, ties: 0, points_for: 10 * wins, points_against: 10,
+  });
+  const grupo = (id, conf, ids) => ({
+    level: 'group', scope_id: id, conference_id: conf,
+    rows: ids.map(([tid, w]) => row(tid, w)),
+  });
+  // Nacional: tres grupos. Más dos grupos de 14 Grandes cuyos terceros tienen
+  // mejor récord que cualquier tercero de Nacional: no deben colarse.
+  const tables = [
+    grupo(23, 8, [[1, 3], [2, 2], [3, 1]]),
+    grupo(24, 8, [[4, 3], [5, 2], [6, 0]]),
+    grupo(25, 8, [[7, 3], [8, 2], [9, 1]]),
+    grupo(30, 7, [[10, 3], [11, 3], [12, 3]]),
+    grupo(31, 7, [[13, 3], [14, 3], [15, 3]]),
+  ];
+  markWildcards(tables, [R14, RNAC]);
+  const wild = tables.flatMap((t) => t.rows).filter((r) => r.qualified_as === 'wildcard').map((r) => r.team_id);
+  assert.deepEqual(wild.sort((a, b) => a - b), [3, 9]);
 });

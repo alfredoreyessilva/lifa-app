@@ -3045,16 +3045,73 @@ de división va aparte.
 wild card de NFL, o los mejores terceros del Mundial:
 
 ```
-phase_qualifications(phase_id, from_scope, top_n, plus_best_n, of_rank, target_phase_id)
+phase_qualifications(phase_id, conference_id, from_scope, top_n, plus_best_n, of_rank,
+                     cross_tiebreakers, target_phase_id)
 ```
 
 `top_n` sale de **cada** tabla del alcance; `plus_best_n` compara entre sí a
 los que quedaron en el **mismo lugar** de tablas distintas. Esa segunda parte
 compara equipos que quizá nunca jugaron entre sí, así que no puede usar "entre
 sí" y aplica criterios generales — que es exactamente por qué FIFA cambia de
-reglamento al rankear terceros lugares. En el panel se configura por fase
-(`top_n` + alcance); `computeQualification()` implementa además la parte de
-`plus_best_n`, con pruebas, pero esa mitad todavía no tiene control en la UI.
+reglamento al rankear terceros lugares. Esos criterios van en
+`cross_tiebreakers` (solo criterios de universo general); en NULL son % de
+ganados → diferencia → anotados. En el panel se configuran por fase el
+alcance, `top_n` y los lugares extra; `cross_tiebreakers` hoy solo lo pone el
+Modo ONEFA, y el panel lo muestra y lo conserva al editar la regla.
+
+**Una regla por conferencia (2026-10-25).** `conference_id` dice que la regla
+vale solo para las tablas de esa conferencia: la de la conferencia misma y las
+de sus grupos. El caso que lo obliga es ONEFA: de la misma temporada regular,
+14 Grandes clasifica a los 8 primeros de su tabla y Nacional a los 2 primeros
+de cada grupo más los 2 mejores terceros. Con una sola regla por fase, la de
+"8 de la conferencia" pintaba la barra también en la tabla de Nacional. La
+precedencia es la de siempre: **la regla de una conferencia manda en ella, y
+la que no tiene conferencia vale para las que no tienen la suya.** Una tabla
+general solo ve las reglas sin conferencia. Los lugares extra se reparten
+solo entre las tablas donde aplica esa regla: los terceros de Nacional no
+compiten con nadie de 14 Grandes.
+
+### Modo ONEFA
+
+Un botón en ⚙ competencia que deja la rama configurada como juega ONEFA. Lo
+pidió Alfredo el 2026-10-25, y **solo aparece en la liga ONEFA**: se reconoce
+por su id (13), no por el nombre ni el slug, que la liga puede editar. El
+backend lo vuelve a revisar al aplicar; esconder el botón no basta.
+
+**Por qué este sí lleva el nombre de una liga**, cuando los preconfigurados
+de desempate se nombran por lo que hacen: un preconfigurado es un reglamento
+suelto que cualquier liga puede usar ("Le ganó a todos, o menos puntos en
+contra"); esto es la plantilla de una competencia completa —fases, tablas,
+desempate, quién clasifica y campeón— de una liga en particular.
+
+Lo que aplica, según el formato 2026 que pasó Alfredo (Claro Sports). Ese
+formato reemplaza al art. 14 del reglamento 2024, que solo llevaba
+semifinales 1º–4º y 2º–3º:
+
+| | |
+|---|---|
+| Tablas | Por conferencia y, si la rama tiene grupos, por grupo. Sin tabla general: no hay juegos entre conferencias |
+| Desempate | "Le ganó a todos, o menos puntos en contra" (ganados → entre sí → goal average) |
+| Fases | Temporada regular (cuenta) · Cuartos de final · Semifinales · Final (eliminación directa, no cuentan) |
+| Clasificación | Por conferencia, a elegir en pantalla: **los 8 primeros de la tabla de la conferencia** (14 Grandes) o **los 2 primeros de cada grupo + los 2 mejores terceros** (Nacional). Los terceros se comparan por % de ganados y luego por goal average (decidido el 2026-10-25; el reglamento no lo dice) |
+| Título | "Campeón de conferencia": lo gana el ganador del partido de la Final, uno por conferencia |
+
+- **Por default**, una conferencia con tres grupos va a "2 por grupo + 2
+  mejores terceros" y cualquier otra a "8 de la tabla". Es la estructura que
+  tiene hoy ONEFA. Si 14 Grandes tuviera sus grupos pares y nones dados de
+  alta, se cambia en pantalla antes de aplicar.
+- **Solo se aplica sobre una rama sin fases ni títulos.** Si ya tiene, el
+  botón lo dice y no toca nada: borrar una fase le quita la fase a sus
+  partidos y borrar un título se lleva sus campeones a mano. Todo va en una
+  sola sentencia: o queda completo, o no queda nada.
+- **No le asigna fase a ningún partido.** La temporada regular sigue
+  deduciéndose de la jornada, así que el puntaje de la quiniela no se mueve.
+  Pero al capturar cuartos, semifinales y final **hay que elegir su fase** en
+  el partido: el campeón sale del partido de la fase Final, y uno que solo
+  dice "FINAL" en la jornada no tiene fase propia.
+- **Lo que no hace todavía: la siembra.** Quién es 1º a 8º en los playoffs
+  (en Nacional: líderes 1–3, segundos 4–6, terceros 7–8) y quién es local en
+  cada cruce. Está en `docs/PENDIENTES.md`.
 
 ### El candado de migración: de sesión a transacción
 
@@ -3221,12 +3278,10 @@ mismo código que se estaba probando:
 
 - **Configurar ONEFA**: su temporada está en curso y su estructura (2
   conferencias, la Nacional con grupos) todavía no tiene fases ni títulos
-  declarados. Se verificó que sus tablas salen bien; declarar sus títulos es
-  decisión de la liga, no de esta entrega.
-- `computeQualification` reparte los lugares extra comparando entre tablas del
-  mismo nivel, pero el orden de esa comparación usa criterios generales fijos
-  (% de ganados → diferencia → anotados) y todavía no es configurable como sí
-  lo es el desempate normal.
+  declarados. Desde el 2026-10-25 se hace con el botón **Modo ONEFA** (arriba).
+- El orden con que se comparan los lugares extra (`cross_tiebreakers`) ya se
+  guarda por regla, pero en el panel todavía no se puede elegir: solo lo pone
+  el Modo ONEFA, y sin él se usa % de ganados → diferencia → anotados.
 
 ### La imagen para compartir (2026-10-12)
 

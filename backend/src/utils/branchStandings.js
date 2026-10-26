@@ -132,17 +132,41 @@ async function loadMatches(branchId) {
 // tenga equipos; para 'group', cada grupo. Se derivan de los equipos
 // inscritos y no de las tablas `conferences`/`groups` a propósito — una
 // conferencia creada pero sin equipos no debe producir una tabla vacía.
+//
+// `conference_id` es la conferencia a la que pertenece la tabla: la propia en
+// el nivel conferencia, la del grupo en el nivel grupo (los equipos ya la
+// traen resuelta de loadTeams). Es lo que decide qué regla de clasificación
+// le toca — ver rulesForTable().
 function scopesOf(level, teams) {
-  if (level === 'branch') return [{ id: null, name: null }];
+  if (level === 'branch') return [{ id: null, name: null, conference_id: null }];
 
   const key  = level === 'conference' ? 'conference_id' : 'group_id';
   const name = level === 'conference' ? 'conference_name' : 'group_name';
 
   const seen = new Map();
   for (const t of teams) {
-    if (t[key] && !seen.has(t[key])) seen.set(t[key], { id: t[key], name: t[name] });
+    if (t[key] && !seen.has(t[key])) {
+      seen.set(t[key], { id: t[key], name: t[name], conference_id: t.conference_id ?? null });
+    }
   }
   return [...seen.values()];
+}
+
+// Las reglas de clasificación que le tocan a una tabla. La regla de una
+// conferencia manda en ella; la que no tiene conferencia vale para las que no
+// tienen la suya. Una tabla general (sin conferencia) solo ve las de NULL.
+// README, "Clasificación: quién avanza".
+export function rulesForTable(table, quals) {
+  const delNivel = quals.filter((q) => q.from_scope === table.level);
+  const conf = table.conference_id ?? null;
+  if (conf !== null) {
+    const propias = delNivel.filter((q) => (q.conference_id ?? null) === conf);
+    if (propias.length) return propias;
+    // Si la conferencia tiene una regla propia en OTRO nivel, la de toda la
+    // rama ya no le toca: esa conferencia dijo cómo clasifica.
+    if (quals.some((q) => (q.conference_id ?? null) === conf)) return [];
+  }
+  return delNivel.filter((q) => (q.conference_id ?? null) === null);
 }
 
 function teamsInScope(level, scopeId, teams) {
@@ -206,7 +230,7 @@ export async function buildBranchStandings(branchId, { publicOnly = false } = {}
       // Cuántos de esta tabla avanzan, si la liga lo configuró. Se marca en
       // la tabla (una barra al lado del lugar) para que el corte se vea sin
       // tener que contar renglones.
-      const rule = quals.find((q) => q.from_scope === level);
+      const [rule] = rulesForTable({ level, conference_id: scope.conference_id }, quals);
 
       // El reglamento de ESTE nivel (el propio si lo tiene, si no el de la
       // rama). `uses_own_rules` lo lleva la tabla para que el panel pueda
@@ -217,6 +241,7 @@ export async function buildBranchStandings(branchId, { publicOnly = false } = {}
         level,
         scope_id: scope.id,
         scope_name: scope.name,
+        conference_id: scope.conference_id,
         qualifying_count: rule ? rule.top_n : 0,
         uses_own_rules: levelConfig !== config,
         tiebreakers: levelConfig.tiebreakers,
@@ -251,11 +276,14 @@ export async function buildBranchStandings(branchId, { publicOnly = false } = {}
 // tabla y la tabla ya los pinta con `qualifying_count`. Los extra no se ven
 // de la posición —son el 3º de un grupo que sí pasa y el 3º de otro que no—
 // así que hay que decirlo renglón por renglón.
-function markWildcards(tables, quals) {
+//
+// Compiten solo las tablas donde aplica esa regla: los terceros de los grupos
+// de una conferencia no se comparan con los de otra que clasifica distinto.
+export function markWildcards(tables, quals) {
   for (const rule of quals) {
     if (!(rule.plus_best_n > 0)) continue;
 
-    const delNivel = tables.filter((t) => t.level === rule.from_scope);
+    const delNivel = tables.filter((t) => rulesForTable(t, quals).includes(rule));
     if (delNivel.length < 2) continue; // con una sola tabla no hay nada que comparar
 
     const clasificados = computeQualification({

@@ -15,6 +15,32 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Modo ONEFA (2026-10-25)**: un botón en ⚙ competencia, solo en la liga
+  ONEFA (id 13), que deja la rama configurada como juega ONEFA en 2026. Pone
+  tablas por conferencia y por grupo sin tabla general; el desempate de su
+  reglamento; Temporada regular, Cuartos, Semifinales y Final; quién clasifica
+  en cada conferencia (14 Grandes, los 8 primeros de su tabla; Nacional, los 2
+  primeros de cada grupo más los 2 mejores terceros, comparados por % de
+  ganados y goal average); y el campeón de cada conferencia. Lo pidió Alfredo.
+  Para que cupiera, el modelo ganó **una regla de clasificación por
+  conferencia**: dos columnas nuevas en `phase_qualifications`
+  (`conference_id`, `cross_tiebreakers`) y dos índices únicos parciales. Antes
+  la regla era una por fase, y la de "8 de la conferencia" pintaba la barra
+  también en Nacional. El botón solo se aplica sobre una rama sin fases ni
+  títulos, en una sola sentencia; no le asigna fase a ningún partido, así que
+  la quiniela no se mueve. En el panel, la clasificación de una fase es ahora
+  una lista de reglas con su conferencia. Verificado así:
+  - con ROLLBACK sobre la rama de ONEFA en `desarrollo-local`: la migración,
+    el aplicar (4 fases, 2 reglas, 1 título; la segunda vez, bloqueado) y el
+    editar y borrar reglas;
+  - las barras de clasificación (8 en 14 Grandes; ninguna en la tabla de
+    Nacional; 2 y dos terceros en sus grupos);
+  - en el navegador con respuestas simuladas, porque ninguna cuenta de prueba
+    administra ONEFA.
+
+  Trece pruebas nuevas. La siembra de playoffs quedó como PD-40. Ver README,
+  "Modo ONEFA" y "Clasificación: quién avanza".
+
 - **La tabla de un grupo cuenta todos los juegos de cada equipo (2026-10-25)**,
   también los que jugó contra otros grupos. Lo pidió Alfredo con la Nacional
   de ONEFA: Norte, Bajío y Centro juegan entre sí, y la tabla de Norte

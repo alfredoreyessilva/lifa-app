@@ -837,8 +837,11 @@ function sortByPrecomputed(rows, keys) {
   };
   return [...rows].sort((a, b) => {
     for (const key of keys) {
-      const diff = valueOf(b, key) - valueOf(a, key);
-      if (diff !== 0) return diff;
+      // Sin restar: con goal average, dos equipos sin puntos en contra valen
+      // Infinity, la resta da NaN y cortaba la comparación ahí.
+      const va = valueOf(a, key);
+      const vb = valueOf(b, key);
+      if (va !== vb) return va < vb ? 1 : -1;
     }
     return 0;
   });

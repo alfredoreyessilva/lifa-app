@@ -4170,6 +4170,52 @@ a.match-card-new {
   text-decoration: underline;
   cursor: pointer;
 }
+.competition-qual-list { display: flex; flex-direction: column; align-items: flex-start; }
+
+/* Modo ONEFA: el botón va arriba de las pestañas y abre un resumen de lo que
+   se va a aplicar. Mismo borde que la regla de clasificación. */
+.competition-onefa-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+.competition-onefa-bar .competition-help { margin: 0; }
+.competition-onefa {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-left: 2px solid var(--flag);
+  background: var(--card);
+  border-radius: 4px;
+}
+.competition-onefa-plan {
+  margin: 8px 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.competition-onefa-conf {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 4px 0;
+}
+.competition-onefa-conf select {
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  max-width: 100%;
+}
+.competition-onefa-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 
 /* Adopción de partidos por jornada al crear una fase: los chips son las
    jornadas que ya existen en el calendario y todavía no tienen fase. */

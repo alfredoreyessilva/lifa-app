@@ -2386,6 +2386,36 @@ export async function initSchema() {
     // cambiado", y ninguna sesión de hoy se cae por esta migración.
     await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ`);
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Una regla de clasificación por conferencia (README, "Clasificación: quién
+    // avanza", 2026-10-25).
+    //
+    // `conference_id` — la regla vale solo para las tablas de esa conferencia
+    //   (la suya y las de sus grupos). NULL es toda la rama, que es como
+    //   funcionaba hasta hoy. Lo obliga ONEFA: de la misma temporada regular,
+    //   14 Grandes clasifica a los 8 primeros de su tabla y Nacional a los 2
+    //   primeros de cada grupo más los 2 mejores terceros. CASCADE: una regla
+    //   de una conferencia que ya no existe no describe nada.
+    //
+    // `cross_tiebreakers` — con qué criterios se comparan los lugares extra
+    //   (los mejores terceros). computeQualification() ya lo leía de la regla;
+    //   faltaba dónde guardarlo. NULL es el default de siempre.
+    //
+    // Una regla por (fase, conferencia), con dos índices parciales por lo mismo
+    // que title_overrides: un UNIQUE normal dejaría pasar varias reglas con
+    // conference_id en NULL. Las filas de hoy caben: el PUT siempre borró la
+    // regla de la fase antes de insertar otra.
+    await run(`ALTER TABLE phase_qualifications ADD COLUMN IF NOT EXISTS conference_id INTEGER REFERENCES conferences(id) ON DELETE CASCADE`);
+    await run(`ALTER TABLE phase_qualifications ADD COLUMN IF NOT EXISTS cross_tiebreakers JSONB`);
+    await run(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_phase_qual_whole
+      ON phase_qualifications(phase_id) WHERE conference_id IS NULL
+    `);
+    await run(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_phase_qual_conference
+      ON phase_qualifications(phase_id, conference_id) WHERE conference_id IS NOT NULL
+    `);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se
