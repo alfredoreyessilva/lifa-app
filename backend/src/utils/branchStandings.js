@@ -20,7 +20,7 @@
 import db from '../config/db.js';
 import { MATCH_SCOPE_COLUMNS, MATCH_SCOPE_JOINS } from './matchScope.js';
 import { MATCH_PHASE_COLUMNS, MATCH_PHASE_JOINS } from './matchPhase.js';
-import { computeStandings, computeQualification } from './standings.js';
+import { computeStandings, computeQualification, MULTI_TEAM_MODES } from './standings.js';
 import { MATCH_IS_FINAL_SQL } from './scoring.js';
 
 const LEVELS = ['branch', 'conference', 'group'];
@@ -58,7 +58,7 @@ export function standingsConfigOf(branch) {
   return {
     standings_levels: parseJsonArray(branch.standings_levels, ['branch']).filter((l) => LEVELS.includes(l)),
     tiebreakers: parseJsonArray(branch.tiebreakers, []),
-    multi_team_mode: branch.tiebreaker_mode === 'restart' ? 'restart' : 'sequential',
+    multi_team_mode: MULTI_TEAM_MODES.includes(branch.tiebreaker_mode) ? branch.tiebreaker_mode : 'sequential',
     by_level: parseJsonObject(branch.tiebreakers_by_level, {}),
     points_win:  branch.points_win  ?? undefined,
     points_draw: branch.points_draw ?? undefined,
@@ -75,7 +75,7 @@ export function configForLevel(config, level) {
   return {
     ...config,
     tiebreakers: propio.tiebreakers,
-    multi_team_mode: propio.multi_team_mode === 'sequential' ? 'sequential' : 'restart',
+    multi_team_mode: MULTI_TEAM_MODES.includes(propio.multi_team_mode) ? propio.multi_team_mode : 'restart',
   };
 }
 

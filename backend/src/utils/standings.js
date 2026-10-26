@@ -25,7 +25,7 @@
 // expresa sin casos especiales (van como comprobación, NO como categorías
 // que la app ofrezca — un reglamento no le pertenece a un deporte):
 //
-//   ONEFA           ganados → entre sí → diferencia de puntos
+//   ONEFA           ganados → entre sí → goal average (3+: le ganó a todos o pts en contra)
 //   NFL (división)  entre sí → % división → % conferencia → rivales en común
 //   FIBA            puntos → entre sí → diferencia → anotados
 //   FIFA/UEFA       puntos → entre sí (pts, dif, goles) → diferencia general
@@ -184,7 +184,16 @@ export const TIEBREAKER_CATALOG = {
     metric: 'points_against', universe: 'all', lower_is_better: true,
     label: 'Puntos recibidos (general) — menos es mejor',
   },
+  goal_average: {
+    metric: 'goal_average', universe: 'all',
+    label: 'Goal average (anotados ÷ recibidos)',
+    help: 'Con 0 recibidos, quien anotó algo va arriba de cualquier cociente.',
+  },
 };
+
+// Qué hacer cuando empatan tres o más. Los dos primeros están explicados en
+// el encabezado; el tercero, junto a rankDominantOrPointsAgainst.
+export const MULTI_TEAM_MODES = ['restart', 'sequential', 'dominant_or_points_against'];
 
 // ── Reglamentos preconfigurados ──────────────────────────────────────────
 //
@@ -223,10 +232,16 @@ export const TIEBREAKER_PRESETS = {
     tiebreakers: ['wins', 'h2h_wins', 'h2h_point_diff', 'h2h_points_for', 'point_diff', 'points_for'],
     multi_team_mode: 'restart',
   },
+  dominante_o_en_contra: {
+    label: 'Le ganó a todos, o menos puntos en contra',
+    description: 'Dos empatados: el juego entre ellos y luego el goal average. Tres o más: va primero quien les ganó a todos los demás; si nadie, el grupo se ordena por menos puntos en contra.',
+    tiebreakers: ['wins', 'h2h_wins', 'goal_average'],
+    multi_team_mode: 'dominant_or_points_against',
+  },
 };
 
 // El default de una rama nueva. Juegos ganados es lo más común en las ligas
-// de esta app (es el reglamento de ONEFA, por ejemplo) y es el que menos
+// de esta app y es el que menos
 // sorprende: "ganó más juegos" se entiende sin explicación. Una liga que
 // necesite porcentaje —porque sus equipos no juegan el mismo número de
 // partidos— lo cambia en un clic.
@@ -292,6 +307,14 @@ function tablePoints(rec, cfg) {
   return rec.wins * w + rec.ties * d + rec.losses * l;
 }
 
+// Anotados entre recibidos. Con 0 recibidos el cociente no existe: quien
+// anotó algo vale infinito (nadie con puntos en contra lo puede alcanzar) y
+// quien no anotó ni recibió vale 0, para no devolver NaN y romper el orden.
+function goalAverage(rec) {
+  if (rec.points_against === 0) return rec.points_for > 0 ? Infinity : 0;
+  return rec.points_for / rec.points_against;
+}
+
 function metricValue(metric, rec, cfg) {
   switch (metric) {
     case 'win_pct':        return winPct(rec);
@@ -300,6 +323,7 @@ function metricValue(metric, rec, cfg) {
     case 'point_diff':     return rec.points_for - rec.points_against;
     case 'points_for':     return rec.points_for;
     case 'points_against': return rec.points_against;
+    case 'goal_average':   return goalAverage(rec);
     default:               return 0;
   }
 }
@@ -412,6 +436,9 @@ function rankTied(tied, criteriaIndex, ctx, depth = 0) {
   // servidor colgado. El tope sale de ese mismo argumento (equipos ×
   // criterios) y no de un número fijo.
   if (tied.length <= 1 || depth > ctx.maxDepth) return tied;
+  if (ctx.config.multi_team_mode === 'dominant_or_points_against' && tied.length >= 3) {
+    return rankDominantOrPointsAgainst(tied, ctx, depth);
+  }
   if (ctx.config.multi_team_mode !== 'sequential') return rankOneAtATime(tied, ctx);
 
   const criteria = ctx.config.tiebreakers;
@@ -447,6 +474,71 @@ function rankTied(tied, criteriaIndex, ctx, depth = 0) {
     : rankTied(bucket, criteriaIndex + 1, ctx, depth + 1));
 
   return orderedValues.flatMap((v) => place(buckets.get(v)));
+}
+
+// Modo dominant_or_points_against, para tres o más empatados (con dos manda
+// la lista normal: el juego entre ellos y luego lo que siga). Es el
+// reglamento de ONEFA 2024, arts. 12 y 13 — README, "Le ganó a todos o, si
+// no, menos puntos en contra":
+//
+//   · Si uno le ganó EN LA CANCHA a cada uno de los demás, va primero, y los
+//     que quedan siguen con esa misma regla, solo con el entre sí.
+//   · Si nadie, el grupo entero se ordena de una vez por menos puntos en
+//     contra de toda la temporada.
+//
+// La vía elegida se queda: lo que ya no separe se va al goal average y, si
+// tampoco, queda sin resolver. Nunca se cruza a la otra vía, que es lo que
+// el reglamento prohíbe y lo que haría el modo restart.
+const H2H = TIEBREAKER_CATALOG.h2h_wins;
+
+function rankDominantOrPointsAgainst(tied, ctx, depth) {
+  const dominant = tied.find((a) =>
+    tied.every((b) => a === b || headToHead(a.team_id, b.team_id, H2H, ctx) > 0));
+  if (!dominant) {
+    return orderByCriterion('points_against', tied, ctx, (rest) => lastResort(rest, ctx));
+  }
+  const out = [{ ...dominant, resolved_by: 'h2h_wins' }];
+  const rest = tied.filter((t) => t !== dominant);
+  return [...out, ...h2hUntilExhausted(rest, ctx, depth + 1)];
+}
+
+// Los que quedan después del que le ganó a todos: la misma pregunta con los
+// que siguen, y con dos, el juego entre ellos.
+function h2hUntilExhausted(group, ctx, depth) {
+  if (group.length === 1) return [{ ...group[0], resolved_by: 'h2h_wins' }];
+  if (depth > ctx.maxDepth) return group;
+  const dominant = group.find((a) =>
+    group.every((b) => a === b || headToHead(a.team_id, b.team_id, H2H, ctx) > 0));
+  if (!dominant) return lastResort(group, ctx);
+  const rest = group.filter((t) => t !== dominant);
+  return [{ ...dominant, resolved_by: 'h2h_wins' }, ...h2hUntilExhausted(rest, ctx, depth + 1)];
+}
+
+// Art. 13: si el empate persiste, goal average. Si ni eso, que lo resuelva la
+// liga (sorteo, moneda) y la tabla lo muestre con honestidad.
+function lastResort(group, ctx) {
+  if (group.length === 1) return group;
+  return orderByCriterion('goal_average', group, ctx,
+    (rest) => rest.map((t) => ({ ...t, unresolved_tie: true })));
+}
+
+// Ordena a todo el grupo de una vez por un criterio. A quien queda solo se le
+// anota ese criterio; cada sub-empate se le pasa a `onTie`.
+function orderByCriterion(key, group, ctx, onTie) {
+  const { def, values } = evaluateCriterion(key, group, ctx);
+  const sign = def.lower_is_better ? -1 : 1;
+  const buckets = new Map();
+  for (const t of group) {
+    const v = values.get(t.team_id);
+    if (!buckets.has(v)) buckets.set(v, []);
+    buckets.get(v).push(t);
+  }
+  // No restar: Infinity - Infinity da NaN y deja el orden a la suerte.
+  const ordered = [...buckets.keys()].sort((a, b) => (a === b ? 0 : (a < b ? 1 : -1) * sign));
+  return ordered.flatMap((v) => {
+    const bucket = buckets.get(v);
+    return bucket.length === 1 ? [{ ...bucket[0], resolved_by: key }] : onTie(bucket);
+  });
 }
 
 // Modo restart: un empate se resuelve uno a la vez. Sale el primero y los que
@@ -582,7 +674,7 @@ export function computeStandings({ teams = [], matches = [], config = {}, inScop
     tiebreakers: Array.isArray(config.tiebreakers) && config.tiebreakers.length
       ? config.tiebreakers.filter((k) => TIEBREAKER_CATALOG[k])
       : DEFAULT_TIEBREAKERS,
-    multi_team_mode: config.multi_team_mode === 'sequential' ? 'sequential' : 'restart',
+    multi_team_mode: MULTI_TEAM_MODES.includes(config.multi_team_mode) ? config.multi_team_mode : 'restart',
     points_win: config.points_win,
     points_draw: config.points_draw,
     points_loss: config.points_loss,

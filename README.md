@@ -2816,7 +2816,7 @@ head-to-head**.
 nombran por lo que hacen y no por un deporte.** ONEFA y la NFL juegan el mismo
 deporte y ordenan distinto: ONEFA por **juegos ganados**, la NFL por
 **porcentaje**. Llamarle "el de americano" a cualquiera de los dos sería falso
-además de inútil para quien lo configura. Los cuatro puntos de partida son:
+además de inútil para quien lo configura. Los cinco puntos de partida son:
 
 | Preconfigurado | Orden |
 |---|---|
@@ -2824,6 +2824,7 @@ además de inútil para quien lo configura. Los cuatro puntos de partida son:
 | **Por porcentaje de ganados** | % ganados → entre sí → dentro del grupo → rivales en común → diferencia → anotados |
 | **Por puntos de tabla** | puntos (3-1-0) → entre sí (pts, dif, anotados) → diferencia → anotados |
 | **Entre sí, hasta agotarlo** | ganados → entre sí (ganados, dif, anotados) → diferencia → anotados |
+| **Le ganó a todos, o menos puntos en contra** | ganados → entre sí → goal average, con el modo `dominant_or_points_against` (ver abajo) |
 
 El criterio que hace posible ese orden es `h2h_wins` ("entre sí — juegos
 ganados"): si los empatados no se enfrentaron, no separa a nadie y deja pasar
@@ -2836,14 +2837,18 @@ el juego entre ellos o, si no jugaron, la diferencia. Las derrotas no entran.
 Para ONEFA se confirmó así el 2026-10-13, aunque a media temporada, con
 semanas de descanso, eso deje a un invicto empatado con uno que ya perdió dos.
 
-El default es **por juegos ganados** porque es el orden de las ligas de esta
-app —es literalmente el reglamento de ONEFA: ganados, luego el juego entre
-ellos, y si no se enfrentaron, diferencia de puntos— y porque "ganó más
-juegos" se entiende sin explicación. Una liga cuyos equipos no jueguen el
-mismo número de partidos cambia a porcentaje en un clic: con 3-1 contra 2-0,
-por ganados va arriba el de 3-1 y por porcentaje el de 2-0. Hay una prueba
-que fija esa diferencia, y dos más que fijan el reglamento de ONEFA en sus
-dos casos (los empatados **se enfrentaron** / **no se enfrentaron**).
+El default es **por juegos ganados** porque es el orden más común en las
+ligas de esta app —ganados, luego el juego entre ellos, y si no se
+enfrentaron, diferencia de puntos— y porque "ganó más juegos" se entiende sin
+explicación. Una liga cuyos equipos no jueguen el mismo número de partidos
+cambia a porcentaje en un clic: con 3-1 contra 2-0, por ganados va arriba el
+de 3-1 y por porcentaje el de 2-0. Hay una prueba que fija esa diferencia.
+
+Hasta el 2026-10-25 este README decía que ese default era "literalmente el
+reglamento de ONEFA". No lo es: el reglamento 2024 (arts. 12 y 13) no usa la
+diferencia de puntos y resuelve distinto el empate de dos que el de tres o
+más. Tiene su propio preconfigurado, ver "Le ganó a todos o, si no, menos
+puntos en contra", abajo.
 
 **El empate de tres o más es donde casi toda implementación casera falla.**
 Ordenar tres empatados de corrido no da lo que dice el reglamento. Los
@@ -2925,6 +2930,45 @@ separar uno a la vez ni aplicar quién puede ir primero.
 comparaciones: no es una forma en que se escriba un reglamento, no se puede
 explicar renglón por renglón, y en el triángulo de Nacional contradice dos
 juegos en vez de uno.
+
+### Le ganó a todos o, si no, menos puntos en contra
+
+Es el reglamento de ONEFA 2024 (arts. 12 y 13), y no cabe en `restart` ni en
+`sequential`, así que es un **tercer modo de empate múltiple**:
+`dominant_or_points_against`. La lista de criterios es `ganados → entre sí →
+goal average`, y el modo decide qué pasa cuando empatan tres o más:
+
+- **Dos empatados**: manda el juego entre ellos; si no se enfrentaron o
+  quedaron parejos, el **goal average** (art. 13).
+- **Tres o más, y uno le ganó en la cancha a cada uno de los demás**: va
+  primero, y los que quedan se ordenan con la misma regla —quién le ganó a
+  todos los que siguen, y con dos, el juego entre ellos— "hasta agotar".
+- **Tres o más, y nadie le ganó a todos**: el grupo entero se ordena por
+  **menos puntos en contra de toda la temporada**, de una vez.
+- Lo que siga empatado en cualquiera de las dos vías: **goal average**; y si
+  aun así no se separan, queda marcado como empate sin resolver.
+
+**La vía elegida se queda.** El reglamento lo dice dos veces ("no podrán
+tomarse criterio distinto", "prevalece el criterio de menos puntos en
+contra"): si el grupo se ordenó por puntos en contra, dos de ellos que sí
+jugaron entre sí **no** se reordenan por ese juego. Es exactamente lo que el
+modo `restart` haría mal —al separarse uno volvería a preguntar el entre sí—,
+y por eso no se resolvió con un criterio más en la lista.
+
+**"Le ganó a todos" es en la cancha.** Si el mejor del grupo no jugó contra
+uno de los empatados, no le ganó a todos y el grupo va a puntos en contra —
+decidido por Alfredo el 2026-10-25. Es más estricto que la regla general
+("nadie queda arriba de un empatado que le ganó", abajo), que deja ir primero
+a quien no perdió con nadie aunque no haya jugado con todos.
+
+**Puntos en contra son los de toda la temporada**, no solo los de los juegos
+entre los empatados: el artículo no dice "entre sí" (2026-10-25).
+
+**Goal average** es puntos a favor ÷ puntos en contra, sobre toda la
+temporada. Con 0 en contra, quien anotó algo va por encima de cualquier
+cociente (vale infinito) y quien no anotó ni recibió vale 0. Está en el
+catálogo como criterio normal (`goal_average`), así que cualquier liga lo
+puede usar en otro orden.
 
 ### Dos criterios de "rivales en común", y por qué no es un parámetro
 

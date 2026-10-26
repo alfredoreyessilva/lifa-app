@@ -282,9 +282,9 @@ test('ganados por encima de porcentaje: 3-1 va arriba de 2-0', () => {
   assert.deepEqual(order(porPorcentaje).slice(0, 2), [2, 1]);
 });
 
-test('ONEFA: empatados en ganados que SÍ se enfrentaron — manda ese juego', () => {
-  // Primera mitad del reglamento de ONEFA: ganados, y el empate lo rompe el
-  // juego entre ellos. A y B quedan 2-1; A le ganó a B, así que A va arriba.
+test('por ganados: empatados que SÍ se enfrentaron — manda ese juego', () => {
+  // Ganados, y el empate lo rompe el juego entre ellos. A y B quedan 2-1; A
+  // le ganó a B, así que A va arriba.
   const rows = computeStandings({
     teams: [team(1), team(2), team(3), team(4)],
     matches: [
@@ -301,8 +301,8 @@ test('ONEFA: empatados en ganados que SÍ se enfrentaron — manda ese juego', (
   assert.equal(rows[0].resolved_by, 'h2h_wins');
 });
 
-test('ONEFA: empatados en ganados que NO se enfrentaron — manda la diferencia', () => {
-  // Segunda mitad, y la que se olvida al implementar: si los empatados nunca
+test('por ganados: empatados que NO se enfrentaron — manda la diferencia', () => {
+  // La mitad que se olvida al implementar: si los empatados nunca
   // jugaron entre sí, el criterio "entre sí" no puede decidir nada. Tiene que
   // SALTARSE en silencio y dejar que resuelva la diferencia de puntos — no
   // dejarlos igualados ni inventar un ganador.
@@ -317,6 +317,89 @@ test('ONEFA: empatados en ganados que NO se enfrentaron — manda la diferencia'
 
   assert.deepEqual(order(rows), [1, 2, 4, 3]);
   assert.equal(rows[0].resolved_by, 'point_diff');
+});
+
+// ── Le ganó a todos o, si no, menos puntos en contra (ONEFA 2024) ────────
+
+const DOMINANTE = TIEBREAKER_PRESETS.dominante_o_en_contra;
+
+test('dominante: dos empatados que no se enfrentaron — goal average, no diferencia', () => {
+  // A: 10-2 (+8, 5.0). B: 40-20 (+20, 2.0). Por diferencia iría B; por
+  // goal average, que es lo que dice el art. 13, va A.
+  const rows = computeStandings({
+    teams: [team(1), team(2), team(3), team(4)],
+    matches: [game(1, 3, 10, 2), game(2, 4, 40, 20)],
+    config: DOMINANTE,
+  });
+  assert.deepEqual(order(rows).slice(0, 2), [1, 2]);
+  assert.equal(rows[0].resolved_by, 'goal_average');
+});
+
+test('dominante: tres empatados y uno les ganó a todos — va primero, y los otros dos por su juego', () => {
+  // A, B y C con 2 ganados. A le ganó a B y a C; C le ganó a B. B tiene la
+  // mejor defensa (2 en contra, contra 6 de A y 7 de C), pero no importa:
+  // por la vía del entre sí no se mira.
+  const rows = computeStandings({
+    teams: [team(1), team(2), team(3), team(4)],
+    matches: [
+      game(1, 2, 1, 0), game(1, 3, 7, 6), game(3, 2, 1, 0),
+      game(3, 4, 7, 0),                         // C llega a 2 ganados
+      game(2, 4, 7, 0), game(2, 4, 7, 0),       // B llega a 2 ganados
+    ],
+    config: DOMINANTE,
+  });
+  const empatados = order(rows).filter((id) => [1, 2, 3].includes(id));
+  assert.deepEqual(empatados, [1, 3, 2]);
+});
+
+test('dominante: tres en círculo — el grupo entero por menos puntos en contra, sin volver al juego entre ellos', () => {
+  // A>B, B>C, C>A: nadie le ganó a todos.
+  const rows = computeStandings({
+    teams: [team(1), team(2), team(3)],
+    matches: [
+      game(1, 2, 14, 10),   // A>B
+      game(2, 3, 14, 6),    // B>C
+      game(3, 1, 10, 4),    // C>A
+    ],
+    config: DOMINANTE,
+  });
+  // En contra: A 10+10=20, B 14+6=20, C 14+4=18. C primero; A y B empatan en
+  // contra y van al goal average: A 18/20, B 24/20 → B arriba, aunque A le
+  // ganó. Es la regla c: prevalece la vía de puntos en contra.
+  assert.deepEqual(order(rows), [3, 2, 1]);
+  assert.equal(rows[0].resolved_by, 'points_against');
+  assert.equal(rows[1].resolved_by, 'goal_average');
+});
+
+test('dominante: el mejor no jugó con uno de los empatados — no les ganó a todos, va a puntos en contra', () => {
+  // A le ganó a B; A y C no se enfrentaron. C tiene menos en contra y va
+  // primero: "le ganó a todos" es en la cancha.
+  const rows = computeStandings({
+    teams: [team(1), team(2), team(3), team(4)],
+    matches: [
+      game(1, 2, 21, 20),   // A>B
+      game(2, 3, 21, 20),   // B>C
+      game(3, 4, 3, 0),     // C>D
+      game(4, 1, 30, 0),    // D>A
+      game(4, 2, 30, 0),    // D>B
+      game(1, 3, 0, 0),     // empate A-C: se enfrentaron, pero A no le ganó
+    ],
+    config: DOMINANTE,
+  });
+  // A, B y C con 1 ganado. Nadie le ganó a los otros dos.
+  // En contra: A 20+30+0=50, B 21+30=51, C 21+0=21 → C, A, B.
+  const empatados = order(rows).filter((id) => [1, 2, 3].includes(id));
+  assert.deepEqual(empatados, [3, 1, 2]);
+});
+
+test('dominante: si ni el goal average los separa, la tabla lo dice', () => {
+  const rows = computeStandings({
+    teams: [team(1), team(2), team(3), team(4), team(5), team(6)],
+    matches: [game(1, 4, 7, 0), game(2, 5, 7, 0), game(3, 6, 7, 0)],
+    config: DOMINANTE,
+  });
+  const empatados = rows.filter((r) => [1, 2, 3].includes(r.team_id));
+  assert.ok(empatados.every((r) => r.unresolved_tie));
 });
 
 // ── Empatados que no jugaron todos contra todos ──────────────────────────

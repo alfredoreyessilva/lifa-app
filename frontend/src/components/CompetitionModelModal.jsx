@@ -550,11 +550,15 @@ function FormatTab({ branch, token, catalog, config, hasConferences, hasGroups, 
         <select value={modeActual} disabled={heredando} onChange={(e) => setModo(e.target.value)}>
           <option value="restart">Reiniciar el reglamento con los que queden</option>
           <option value="sequential">Seguir con el criterio siguiente</option>
+          <option value="dominant_or_points_against">Primero quien les ganó a todos; si nadie, menos puntos en contra</option>
         </select>
         <p className="competition-help">
           No es lo mismo: al salir un equipo del empate, el criterio "entre sí" pasa a
           calcularse sobre otros partidos. Reiniciar vuelve a preguntarlo con los que
-          quedan; seguir de largo usa números de un grupo que ya cambió.
+          quedan; seguir de largo usa números de un grupo que ya cambió. La tercera
+          opción no sigue la lista con tres o más: va primero quien les ganó en la
+          cancha a todos los demás, y si nadie, el grupo entero se ordena por menos
+          puntos en contra; lo que siga empatado, por goal average.
         </p>
       </div>
 

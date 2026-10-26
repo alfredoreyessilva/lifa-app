@@ -15,6 +15,21 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El desempate de ONEFA, como dice su reglamento (2026-10-25).** La app
+  daba por hecho que ONEFA desempata "ganados → entre sí → diferencia de
+  puntos". El reglamento 2024 (arts. 12 y 13) no usa la diferencia: con dos
+  empatados manda el juego entre ellos y luego el goal average (anotados ÷
+  recibidos); con tres o más, va primero quien les ganó en la cancha a todos
+  los demás y, si nadie, el grupo entero se ordena por menos puntos en contra
+  de la temporada, sin regresar al entre sí. Se agregó el criterio
+  `goal_average`, un tercer modo de empate múltiple
+  (`dominant_or_points_against`) y el preconfigurado "Le ganó a todos, o
+  menos puntos en contra". Cinco pruebas nuevas; comparado en solo lectura
+  sobre los 133 partidos de ONEFA de la rama `desarrollo-local`: cambia el
+  orden en 14 Grandes y en Nacional, siempre como dice el reglamento. La rama
+  de ONEFA en producción no se tocó: se elige al configurar su competencia
+  (PD-14). Ver README, "Le ganó a todos o, si no, menos puntos en contra".
+
 - **El Panel Admin va dentro del panel negro y ya cabe en el teléfono
   (2026-10-23)**, como Mi panel, Mis notificaciones y los paneles de liga y
   equipo. Las tarjetas y gráficas siguen en verde, igual que las de Mi

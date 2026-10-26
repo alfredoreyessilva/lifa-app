@@ -16,7 +16,7 @@ import {
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { notifyMatchFollowers, pushEncendido } from '../utils/pushNotifier.js';
 import { PHASE_TYPES, PHASE_TYPE_KEYS } from '../utils/matchPhase.js';
-import { TIEBREAKER_CATALOG, TIEBREAKER_PRESETS } from '../utils/standings.js';
+import { TIEBREAKER_CATALOG, TIEBREAKER_PRESETS, MULTI_TEAM_MODES } from '../utils/standings.js';
 import { buildBranchStandings } from '../utils/branchStandings.js';
 import { interruptoresDeCategoria } from '../utils/rosterVisibility.js';
 import { orgTieneMiembros } from '../utils/orgMembers.js';
@@ -2213,8 +2213,8 @@ router.put('/branches/:branchId/standings-config', authRequired, branchOwnerRequ
     const error = listaInvalida(tiebreakers);
     if (error) return res.status(400).json({ error });
   }
-  if (tiebreaker_mode !== undefined && !['restart', 'sequential'].includes(tiebreaker_mode)) {
-    return res.status(400).json({ error: 'El modo de empate múltiple debe ser restart o sequential' });
+  if (tiebreaker_mode !== undefined && !MULTI_TEAM_MODES.includes(tiebreaker_mode)) {
+    return res.status(400).json({ error: `El modo de empate múltiple debe ser uno de: ${MULTI_TEAM_MODES.join(', ')}` });
   }
 
   // Reglamento propio por nivel. Se manda el mapa COMPLETO: lo que no venga
@@ -2231,8 +2231,8 @@ router.put('/branches/:branchId/standings-config', authRequired, branchOwnerRequ
       }
       const error = listaInvalida(cfg?.tiebreakers);
       if (error) return res.status(400).json({ error: `${error} (en el nivel ${nivel})` });
-      if (cfg.multi_team_mode !== undefined && !['restart', 'sequential'].includes(cfg.multi_team_mode)) {
-        return res.status(400).json({ error: `El modo de empate múltiple del nivel ${nivel} debe ser restart o sequential` });
+      if (cfg.multi_team_mode !== undefined && !MULTI_TEAM_MODES.includes(cfg.multi_team_mode)) {
+        return res.status(400).json({ error: `El modo de empate múltiple del nivel ${nivel} debe ser uno de: ${MULTI_TEAM_MODES.join(', ')}` });
       }
     }
   }

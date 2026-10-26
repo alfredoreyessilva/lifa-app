@@ -279,6 +279,10 @@ Estructura → rama → **⚙ competencia**. Es lo que lleva la tabla de posicio
 nivel 4 a nivel 5 en la única liga con uso real. Ver "Lo que queda abierto" en
 "Tabla de posiciones y modelo de competencia".
 
+Al configurarla, el reglamento de desempates es el preconfigurado **"Le ganó a
+todos, o menos puntos en contra"** (2026-10-25): hoy la rama trae el default
+por juegos ganados, que usa la diferencia de puntos, y ONEFA no la usa.
+
 ### PD-34 · El Excel a nivel torneo y "Publicar todos" publican partidos sin equipos enlazados
 
 **Bajó de P0 a P1 el 2026-10-05, con datos.** Nació P0 el 2026-10-04 por ser un
