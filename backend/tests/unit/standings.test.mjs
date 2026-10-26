@@ -621,6 +621,21 @@ test('scope_record separa el récord de conferencia del récord general', () => 
   assert.equal(a.scope_record.losses, 1);
 });
 
+test('cada renglón trae su goal average, y null cuando no hay puntos en contra', () => {
+  const rows = computeStandings({
+    teams: [team(1), team(2), team(3), team(4)],
+    matches: [game(1, 2, 21, 7), game(3, 1, 7, 14)],
+  });
+  const de = (id) => rows.find((r) => r.team_id === id).goal_average;
+  assert.equal(de(1), 35 / 14);
+  assert.equal(de(2), 7 / 21);
+  assert.equal(de(4), null);   // no ha jugado: 0 y 0
+  // JSON no lleva infinito: con 0 en contra va en null y la pantalla pone "∞".
+  const invicto = computeStandings({ teams: [team(1), team(2)], matches: [game(1, 2, 7, 0)] });
+  assert.equal(invicto.find((r) => r.team_id === 1).goal_average, null);
+  assert.equal(JSON.parse(JSON.stringify(invicto))[0].goal_average, null);
+});
+
 // ── El récord de toda la temporada, en la tabla de un grupo ──────────────
 //
 // La tabla de un grupo cuenta TODOS los juegos de sus equipos contra

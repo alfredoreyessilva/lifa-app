@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 
 import {
   pct, recordLabel, rowQualifies, scopeLabel, cutoffLabel,
-  imageColumns, cellText, tableMarks,
+  imageColumns, cellText, tableMarks, goalAverageLabel, showsGoalAverage,
 } from '../../src/utils/standingsFormat.js';
 
 const fila = (extra = {}) => ({
@@ -30,6 +30,31 @@ test('el porcentaje se escribe como en las tablas deportivas', () => {
   assert.equal(pct(0.75), '.750');
   assert.equal(pct(0.5), '.500');
   assert.equal(pct(0), '.000');
+});
+
+test('el goal average se escribe con tres decimales, y ∞ o — cuando no hay cociente', () => {
+  assert.equal(goalAverageLabel(fila({ goal_average: 145 / 14 })), '10.357');
+  assert.equal(goalAverageLabel(fila({ goal_average: 1.5 })), '1.500');
+  assert.equal(goalAverageLabel(fila({ goal_average: 7 / 68 })), '0.103');
+  // El backend lo manda en null con 0 en contra (JSON no lleva infinito).
+  assert.equal(goalAverageLabel(fila({ goal_average: null, points_for: 21, points_against: 0 })), '∞');
+  assert.equal(goalAverageLabel(fila({ goal_average: null, points_for: 0, points_against: 0 })), '—');
+});
+
+test('AVG solo aparece si el reglamento de la tabla usa el goal average', () => {
+  const onefa = ['wins', 'h2h_wins', 'goal_average'];
+  assert.equal(showsGoalAverage({ tiebreakers: onefa }), true);
+  assert.equal(showsGoalAverage({ tiebreakers: ['wins', 'h2h_wins', 'point_diff', 'points_for'] }), false);
+  assert.equal(showsGoalAverage({}), false);
+  assert.equal(showsGoalAverage(null), false);
+
+  // En la imagen va entre DIF y la racha, como en pantalla.
+  const columns = imageColumns({ level: 'group', rows: [fila({ goal_average: 1.5 })], tiebreakers: onefa }, false);
+  assert.deepEqual(ids(columns), ['played', 'wins', 'losses', 'pct', 'scope', 'pf', 'pc', 'diff', 'avg', 'streak']);
+  assert.equal(columns.find((c) => c.id === 'avg').label, 'AVG');
+  assert.equal(cellText('avg', fila({ goal_average: 1.5 })), '1.500');
+  const sinAvg = imageColumns({ level: 'group', rows: [fila()], tiebreakers: ['wins', 'point_diff'] }, false);
+  assert.ok(!ids(sinAvg).includes('avg'));
 });
 
 test('el récord lleva empates solo si los hubo', () => {

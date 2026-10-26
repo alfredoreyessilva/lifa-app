@@ -608,6 +608,19 @@ alcance, con la misma clase `standings-hide-sm` que ya esconde PF y PC; para
 los 30 px de la general falta medir de dónde salen. Al cerrarlo, corregir la
 frase del README.
 
+**Remedido el 2026-10-25 con la columna AVG**, que aparece en cuanto ONEFA usa
+su reglamento (README, "La columna AVG"). Igual en los tres anchos, porque la
+tabla no se encoge:
+
+| Tabla de ONEFA | Sin AVG | Con AVG | Pantalla |
+|-|-|-|-|
+| 14 Grandes | 365 | 412 | 271 · 301 · 323 |
+| Nacional | 393 | 447 | 271 · 301 · 323 |
+| Grupos (Centro, Bajío, Norte) | 351 · 391 · 373 | 398 · 445 · 427 | 271 · 301 · 323 |
+
+AVG se queda en el teléfono porque es la cifra que decide el empate en ONEFA;
+lo que se esconda para cerrar este pendiente tiene que ser otra columna.
+
 ### PD-40 · La siembra de los playoffs de ONEFA no se calcula
 
 Quedó fuera del Modo ONEFA a propósito (decidido por Alfredo el 2026-10-25).

@@ -2975,6 +2975,37 @@ cociente (vale infinito) y quien no anotó ni recibió vale 0. Está en el
 catálogo como criterio normal (`goal_average`), así que cualquier liga lo
 puede usar en otro orden.
 
+**La columna AVG (2026-10-25).** Una tabla cuyo reglamento usa el goal average
+lo enseña, en pantalla y en la imagen para compartir, entre DIF y la racha. Lo
+pidió Alfredo: si el average decide un empate, quien lee la tabla tiene que
+poder verlo. En una tabla cuyo reglamento no lo usa no aparece, por lo mismo
+que "EN CONF." no aparece en la tabla general: una columna que no ordena nada
+es ruido, y en el teléfono cada columna cuesta.
+
+- **Cuándo**: si la lista de criterios de **esa tabla** (la de la rama, o la
+  propia de su nivel) incluye `goal_average`. En ONEFA aparece en cuanto se
+  aplica el Modo ONEFA.
+- **Cómo se escribe**: con tres decimales, como el porcentaje: `2.345`,
+  `0.103`, `10.357`. Con 0 en contra y algo a favor se escribe `∞`, que es como
+  lo ordena el reglamento (arriba de cualquier cociente); sin puntos a favor ni
+  en contra, `—`.
+- **De dónde sale**: cada renglón de la tabla trae `goal_average` desde el
+  backend, como trae `win_pct`. Va en `null` cuando el cociente no existe
+  (0 en contra), porque JSON no lleva infinito; el `∞` lo pone quien la pinta.
+- **En el teléfono se ve**, a diferencia de PF y PC: es la cifra que decide.
+  Cuesta unos 50 px: medido con los datos de ONEFA, sus tablas de conferencia
+  y de grupo ya se deslizaban de lado sin AVG (351 a 393 px en pantallas de
+  271 a 323), y con AVG llegan a 398–447. Ese problema es PD-36, no de esta
+  columna.
+- **En la imagen para compartir cabe sin recortar a nadie**, pero para eso PF,
+  PC y DIF se angostaron 6 px cada una. Con AVG a 96 px, "PUMAS FES ACATLÁN
+  UNAM" salía recortado en el grupo Centro: a la letra mínima de su renglón
+  mide 218 px y le quedaban 194. Medido en Oswald a 30 px, "108" ocupa 43 de
+  sus 62 y "+131" 51 de sus 72; AVG quedó en 80 para su "10.357" de 76.
+  Revisado con los datos de ONEFA en publicación y en historia: grupo Centro,
+  conferencia Nacional (18 renglones, con "10.357" y "11.000") y 14 Grandes,
+  todos con el nombre completo.
+
 ### Dos criterios de "rivales en común", y por qué no es un parámetro
 
 El umbral de muestra mínima **no es una propiedad del criterio, sino del
@@ -3297,7 +3328,8 @@ recalcular nada.
   un celular no se leen. Y es como las publican las ligas.
 - **Lleva todas las columnas de la tabla en pantalla**, en el mismo orden: JJ,
   G, P, E si hubo empates, PTS o %, el récord dentro de la conferencia o el
-  grupo, PF, PC, DIF y racha. Ninguna se suelta para darle aire al nombre. La
+  grupo, PF, PC, DIF, AVG si el reglamento de la tabla usa el goal average, y
+  racha. Ninguna se suelta para darle aire al nombre. La
   primera versión quitaba PF y PC en las tablas de conferencia, como hace el
   teléfono, y no hacía falta: en 1080 de ancho el nombre más largo de hoy
   (PUMAS FES ACATLÁN UNAM) cabe completo con todas, también en la historia.

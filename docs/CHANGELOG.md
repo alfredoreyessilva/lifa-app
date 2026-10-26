@@ -15,6 +15,20 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **La columna AVG en las tablas (2026-10-25)**: una tabla cuyo reglamento
+  usa el goal average lo enseña entre DIF y la racha, en pantalla y en la
+  imagen para compartir, con tres decimales (`10.357`). Con 0 en contra va
+  `∞`; sin puntos, `—`. Lo pidió Alfredo; en ONEFA aparece en cuanto se aplica
+  el Modo ONEFA. Cada renglón trae `goal_average` del backend, en `null`
+  cuando el cociente no existe, porque JSON no lleva infinito. Para que la
+  imagen no recortara a PUMAS FES ACATLÁN UNAM, PF, PC y DIF se angostaron
+  6 px cada una. Verificado en el navegador con los datos de ONEFA de
+  `desarrollo-local`: el reglamento de cada tabla iba simulado, porque ahí
+  ONEFA todavía tiene el viejo. Se revisaron la tabla en escritorio y a 360,
+  390 y 412 px, y la imagen de Centro, Nacional y 14 Grandes en publicación y
+  en historia. En el teléfono la columna suma unos 50 px a tablas que ya se
+  deslizaban (PD-36, remedido). Tres pruebas nuevas.
+
 - **Modo ONEFA (2026-10-25)**: un botón en ⚙ competencia, solo en la liga
   ONEFA (id 13), que deja la rama configurada como juega ONEFA en 2026. Pone
   tablas por conferencia y por grupo sin tabla general; el desempate de su

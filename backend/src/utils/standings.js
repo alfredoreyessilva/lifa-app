@@ -733,6 +733,10 @@ export function computeStandings({ teams = [], matches = [], config = {}, inScop
       played: overall.wins + overall.losses + overall.ties,
       win_pct: winPct(overall),
       point_diff: overall.points_for - overall.points_against,
+      // La columna AVG. En null cuando el cociente no existe (0 en contra):
+      // JSON no lleva infinito, y quien la pinta escribe "∞" o "—" según haya
+      // puntos a favor (README, "La columna AVG").
+      goal_average: overall.points_against === 0 ? null : overall.points_for / overall.points_against,
       table_points: tablePoints(overall, cfg),
       scope_record: scoped,
       home_record: home,

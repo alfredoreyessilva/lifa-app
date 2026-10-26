@@ -15,6 +15,23 @@ export function recordLabel(rec) {
   return rec.ties ? `${base}-${rec.ties}` : base;
 }
 
+// La columna AVG: puntos a favor ÷ en contra, con tres decimales como el
+// porcentaje. El backend la manda en null cuando no hay puntos en contra
+// (JSON no lleva infinito): con algo a favor es "∞", que es como la ordena el
+// reglamento; sin nada a favor ni en contra, "—". README, "La columna AVG".
+export function goalAverageLabel(row) {
+  if (row.goal_average === null || row.goal_average === undefined) {
+    return row.points_for > 0 ? '∞' : '—';
+  }
+  return row.goal_average.toFixed(3);
+}
+
+// Una tabla enseña AVG solo si su reglamento lo usa: en las demás no ordena
+// nada y es una columna más que no cabe en el teléfono.
+export function showsGoalAverage(table) {
+  return Array.isArray(table?.tiebreakers) && table.tiebreakers.includes('goal_average');
+}
+
 // Quién lleva la barra de "clasifica": los primeros `qualifyingCount` de la
 // tabla, más el que pasa por lugar extra (comodín) aunque su lugar no alcance.
 export function rowQualifies(row, qualifyingCount = 0) {
@@ -46,9 +63,14 @@ export function cutoffLabel(date) {
 
 // Las columnas que puede llevar la imagen, en el orden de la tabla en
 // pantalla. `width` es en pixeles de la imagen (1080 de ancho): lo justo para
-// la cifra más ancha con la letra más grande —"1.000", "+131", el encabezado
-// "EN CONF."—, para que al nombre del equipo le toque todo lo demás.
+// la cifra más ancha con la letra más grande —"1.000", "+131", "10.357", el
+// encabezado "EN CONF."—, para que al nombre del equipo le toque todo lo demás.
 // `highlight` es la cifra que ordena la tabla, la que va resaltada.
+//
+// PF, PC y DIF eran 62, 62 y 72: con AVG (2026-10-25) recortaban a PUMAS FES
+// ACATLÁN UNAM, que a la letra mínima de su renglón mide 218. Medido en Oswald
+// a 30 px, "108" ocupa 43 y "+131" 51, así que se angostaron 6 cada una y AVG
+// quedó en 80 para su "10.357" de 76. README, "La columna AVG".
 export const IMAGE_COLUMNS = {
   played: { label: 'JJ', width: 48 },
   wins:   { label: 'G', width: 48 },
@@ -57,20 +79,22 @@ export const IMAGE_COLUMNS = {
   points: { label: 'PTS', width: 80, highlight: true },
   pct:    { label: '%', width: 80, highlight: true },
   scope:  { label: '', width: 92 },
-  pf:     { label: 'PF', width: 62 },
-  pc:     { label: 'PC', width: 62 },
-  diff:   { label: 'DIF', width: 72 },
+  pf:     { label: 'PF', width: 56 },
+  pc:     { label: 'PC', width: 56 },
+  diff:   { label: 'DIF', width: 66 },
+  avg:    { label: 'AVG', width: 80 },
   streak: { label: 'RACHA', width: 70 },
 };
 
-const ORDER = ['played', 'wins', 'losses', 'ties', 'points', 'pct', 'scope', 'pf', 'pc', 'diff', 'streak'];
+const ORDER = ['played', 'wins', 'losses', 'ties', 'points', 'pct', 'scope', 'pf', 'pc', 'diff', 'avg', 'streak'];
 
 const SCOPE_HEADER = { conference: 'EN CONF.', group: 'EN GRUPO' };
 
 /**
  * Las columnas que lleva la imagen de UNA tabla: las mismas que la tabla en
- * pantalla, en el mismo orden. La E solo si hubo empates y el récord dentro
- * del alcance solo en tablas de conferencia o grupo, igual que en pantalla.
+ * pantalla, en el mismo orden. La E solo si hubo empates, el récord dentro
+ * del alcance solo en tablas de conferencia o grupo, y AVG solo si el
+ * reglamento de la tabla usa el goal average, igual que en pantalla.
  *
  * Ninguna se suelta para darle aire al nombre. La primera versión soltaba PF
  * y PC en las tablas de conferencia, como el teléfono, y no hacía falta: en
@@ -88,6 +112,7 @@ export function imageColumns(table, usesPoints) {
     points: usesPoints,
     pct: !usesPoints,
     scope: table.level !== 'branch',
+    avg: showsGoalAverage(table),
   };
   return ORDER
     .filter((id) => applies[id] ?? true)
@@ -112,6 +137,7 @@ export function cellText(id, row) {
     case 'pf':     return String(row.points_for);
     case 'pc':     return String(row.points_against);
     case 'diff':   return row.point_diff > 0 ? `+${row.point_diff}` : String(row.point_diff);
+    case 'avg':    return goalAverageLabel(row);
     case 'streak': return row.streak || '—';
     default:       return '';
   }

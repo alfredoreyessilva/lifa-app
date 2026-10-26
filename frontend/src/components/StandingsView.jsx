@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import StandingsTable from './StandingsTable.jsx';
 import StandingsImageButton from './StandingsImageButton.jsx';
+import { showsGoalAverage } from '../utils/standingsFormat.js';
 
 // La vista completa de posiciones de una rama: los campeones arriba, y
 // abajo las tablas del nivel que se esté viendo.
@@ -107,7 +108,7 @@ export default function StandingsView({ data, emptyText, shareImage = null }) {
 
       <p className="standings-legend">
         JJ jugados · G ganados · P perdidos{usesPoints ? ' · PTS puntos de tabla' : ' · % de ganados (el empate vale medio juego)'} ·
-        PF puntos a favor · PC en contra · DIF diferencia.
+        PF puntos a favor · PC en contra · DIF diferencia{tables.some(showsGoalAverage) && ' · AVG goal average (PF ÷ PC)'}.
         {' '}Solo cuentan los partidos de fases de temporada regular con marcador final.
         {tables.some((t) => t.qualifying_count > 0) && ' La barra amarilla marca a los que clasifican.'}
       </p>

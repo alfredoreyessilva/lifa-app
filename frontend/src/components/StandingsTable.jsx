@@ -10,19 +10,23 @@
 //   · Un empate que el reglamento no resolvió se MARCA. La alternativa
 //     (dejar el orden que salió) haría pasar por resuelto algo que no lo
 //     está, y es justo el caso en el que la liga necesita intervenir.
+//   · AVG (goal average) solo aparece si el reglamento de la tabla lo usa, y
+//     en el teléfono se queda aunque PF y PC se escondan: es la cifra que
+//     decide el empate.
 //
 // Cómo se escribe cada cifra vive en utils/standingsFormat.js, compartido con
 // la imagen para compartir: la tabla y la imagen no pueden decir cosas
 // distintas. `action` es lo que va a la derecha del nombre de la tabla (hoy,
 // el botón de generar su imagen).
 
-import { pct, recordLabel, rowQualifies } from '../utils/standingsFormat.js';
+import { pct, recordLabel, rowQualifies, goalAverageLabel, showsGoalAverage } from '../utils/standingsFormat.js';
 
 const SCOPE_HEADER = { conference: 'EN CONF.', group: 'EN GRUPO' };
 
 export default function StandingsTable({ table, usesPoints, qualifyingCount = 0, action = null }) {
   const { level, scope_name, rows } = table;
   const showScope = level !== 'branch';
+  const showAvg = showsGoalAverage(table);
   const anyTies = rows.some((r) => r.ties > 0);
 
   return (
@@ -51,6 +55,7 @@ export default function StandingsTable({ table, usesPoints, qualifyingCount = 0,
               <th className="col-num standings-hide-sm" title="Puntos a favor">PF</th>
               <th className="col-num standings-hide-sm" title="Puntos en contra">PC</th>
               <th className="col-num" title="Diferencia de puntos">DIF</th>
+              {showAvg && <th className="col-num" title="Goal average: puntos a favor ÷ puntos en contra">AVG</th>}
               <th className="col-num">Racha</th>
             </tr>
           </thead>
@@ -99,6 +104,7 @@ export default function StandingsTable({ table, usesPoints, qualifyingCount = 0,
                 <td className={`col-num ${r.point_diff > 0 ? 'standings-pos-diff' : r.point_diff < 0 ? 'standings-neg-diff' : ''}`}>
                   {r.point_diff > 0 ? `+${r.point_diff}` : r.point_diff}
                 </td>
+                {showAvg && <td className="col-num">{goalAverageLabel(r)}</td>}
                 <td className="col-num">{r.streak || '—'}</td>
               </tr>
             ))}
