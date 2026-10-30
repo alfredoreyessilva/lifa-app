@@ -97,7 +97,7 @@ test('una liga o un equipo nunca son privados por organizations.is_public', () =
 test('la ficha trae portada, redes y contacto, además de descripción y sitio web', () => {
   assert.deepEqual([...CAMPOS_DE_FICHA].sort(), [
     'contact_email', 'contact_phone', 'cover_url', 'description',
-    'facebook_url', 'instagram_url', 'tiktok_url', 'website_url',
+    'facebook_url', 'instagram_url', 'tiktok_url', 'website_url', 'youtube_url',
   ]);
 });
 

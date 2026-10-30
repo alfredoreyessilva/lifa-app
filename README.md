@@ -4871,11 +4871,13 @@ formulario.
 
 **Desde el 2026-10-30**, además de logo, nombre, palomita, país, descripción y
 sitio web, una organización puede poner **foto de portada, Facebook, Instagram,
-TikTok, correo y número de contacto**. Lo pidió Alfredo para los medios: un
-medio vive de que lo sigan en sus redes, y la ficha era un callejón sin salida
-con un solo botón. Son columnas de `organizations` con los mismos nombres que
-en `teams` y `leagues` (`cover_url`, `facebook_url`, `instagram_url`,
-`tiktok_url`, `contact_email`, `contact_phone`).
+YouTube, TikTok, correo y número de contacto**. Lo pidió Alfredo para los
+medios: un medio vive de que lo sigan en sus redes, y la ficha era un callejón
+sin salida con un solo botón. Son columnas de `organizations` con los mismos
+nombres que en `teams` y `leagues` (`cover_url`, `facebook_url`,
+`instagram_url`, `youtube_url`, `tiktok_url`, `contact_email`,
+`contact_phone`). YouTube llegó el mismo día en una migración aparte, porque la
+primera tanda ya estaba en `main`.
 
 - **Valen para los cuatro tipos**, no solo para el medio: tienda, clínica y
   marca comparten página y formulario, y a una tienda le sirve igual que la
@@ -4888,7 +4890,7 @@ en `teams` y `leagues` (`cover_url`, `facebook_url`, `instagram_url`,
 - **Una sola lista** (`CAMPOS_DE_FICHA`, en `utils/orgVisibility.js`) para las
   dos lecturas públicas que arman la ficha: el directorio (`GET
   /organizations`) y "También transmiten" (`GET /broadcasts/match/:id`). Antes
-  cada una nombraba sus columnas a mano; con ocho, la que se quedara atrás
+  cada una nombraba sus columnas a mano; con nueve, la que se quedara atrás
   dejaría la ficha a medias según desde dónde se abriera. Lo que es solo para
   administrarla (el plan, el número del bot, `is_public`) no está en la lista.
 - **La portada se recorta a banner** (3:1 en la página de una tienda, la

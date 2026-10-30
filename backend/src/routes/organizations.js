@@ -151,7 +151,7 @@ router.put('/:id', authRequired, asyncHandler(async (req, res) => {
 
   const {
     name, country_id, logo_url, description, website_url,
-    cover_url, facebook_url, instagram_url, tiktok_url, contact_email, contact_phone,
+    cover_url, facebook_url, instagram_url, youtube_url, tiktok_url, contact_email, contact_phone,
   } = req.body;
   if (name !== undefined && !isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre no puede estar vacío' });
   if (logo_url && !isValidUrl(logo_url)) return res.status(400).json({ error: 'El logo no es una dirección web válida' });
@@ -159,13 +159,14 @@ router.put('/:id', authRequired, asyncHandler(async (req, res) => {
   if (cover_url && !isValidUrl(cover_url)) return res.status(400).json({ error: 'La foto de portada no es una dirección web válida' });
   if (facebook_url && !isValidUrl(facebook_url)) return res.status(400).json({ error: 'El enlace de Facebook no es una dirección web válida' });
   if (instagram_url && !isValidUrl(instagram_url)) return res.status(400).json({ error: 'El enlace de Instagram no es una dirección web válida' });
+  if (youtube_url && !isValidUrl(youtube_url)) return res.status(400).json({ error: 'El enlace de YouTube no es una dirección web válida' });
   if (tiktok_url && !isValidUrl(tiktok_url)) return res.status(400).json({ error: 'El enlace de TikTok no es una dirección web válida' });
   if (contact_email && !isValidEmail(contact_email)) return res.status(400).json({ error: 'El correo de contacto no tiene un formato válido' });
 
   const updated = await db.prepare(`
     UPDATE organizations SET
       name = ?, country_id = ?, logo_url = ?, description = ?, website_url = ?,
-      cover_url = ?, facebook_url = ?, instagram_url = ?, tiktok_url = ?,
+      cover_url = ?, facebook_url = ?, instagram_url = ?, youtube_url = ?, tiktok_url = ?,
       contact_email = ?, contact_phone = ?
     WHERE id = ?
     RETURNING *
@@ -178,6 +179,7 @@ router.put('/:id', authRequired, asyncHandler(async (req, res) => {
     cover_url !== undefined ? cover_url : org.cover_url,
     facebook_url !== undefined ? facebook_url : org.facebook_url,
     instagram_url !== undefined ? instagram_url : org.instagram_url,
+    youtube_url !== undefined ? youtube_url : org.youtube_url,
     tiktok_url !== undefined ? tiktok_url : org.tiktok_url,
     contact_email !== undefined ? contact_email : org.contact_email,
     contact_phone !== undefined ? contact_phone : org.contact_phone,

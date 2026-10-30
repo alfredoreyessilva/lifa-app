@@ -15,6 +15,20 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **YouTube en la ficha de un medio (2026-10-30).** Lo pidió Alfredo, después
+  de la portada y las demás redes: para un medio es donde viven sus
+  transmisiones. `organizations.youtube_url` —el nombre de `leagues`—, en una
+  migración nueva al final de `db.js` porque la tanda anterior ya estaba en
+  `main`; entra a `CAMPOS_DE_FICHA`, al `PUT /organizations/:id` con su
+  validación, al formulario y a la ficha, entre Instagram y TikTok como en la
+  de una liga.
+
+  Verificado contra el backend de pruebas: el `PUT` guarda el enlace, contesta
+  400 a uno sin `https://` y no lo borra cuando solo se manda el nombre; el
+  directorio y "También transmiten" traen la columna; en el navegador, el
+  formulario enseña el campo con lo guardado y la ficha el botón, que abre en
+  una pestaña nueva. 283 unitarias del backend, 167 del frontend y el build.
+
 - **La ficha sustituye a la vista pública de la página de un medio
   (2026-10-30).** Lo pidió Alfredo: con el home y "También transmiten" abriendo
   la ficha, a esa vista ya no llegaba nadie. Se borró para medio, clínica y

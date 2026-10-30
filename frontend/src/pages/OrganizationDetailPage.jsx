@@ -66,6 +66,7 @@ export default function OrganizationDetailPage() {
         cover_url: data.cover_url || '',
         facebook_url: data.facebook_url || '',
         instagram_url: data.instagram_url || '',
+        youtube_url: data.youtube_url || '',
         tiktok_url: data.tiktok_url || '',
         contact_email: data.contact_email || '',
         contact_phone: data.contact_phone || '',
@@ -88,6 +89,7 @@ export default function OrganizationDetailPage() {
       () => validEmail(form.contact_email),
       () => validUrl(form.facebook_url, 'El enlace de Facebook'),
       () => validUrl(form.instagram_url, 'El enlace de Instagram'),
+      () => validUrl(form.youtube_url, 'El enlace de YouTube'),
       () => validUrl(form.tiktok_url, 'El enlace de TikTok'),
       () => validUrl(form.website_url, 'El sitio web'),
     ]);
@@ -105,6 +107,7 @@ export default function OrganizationDetailPage() {
         cover_url: form.cover_url.trim() || null,
         facebook_url: form.facebook_url.trim() || null,
         instagram_url: form.instagram_url.trim() || null,
+        youtube_url: form.youtube_url.trim() || null,
         tiktok_url: form.tiktok_url.trim() || null,
         contact_email: form.contact_email.trim() || null,
         contact_phone: form.contact_phone.trim() || null,
@@ -336,6 +339,11 @@ export default function OrganizationDetailPage() {
         <div className="field">
           <label>Instagram</label>
           <input value={form.instagram_url} onChange={(e) => update('instagram_url', e.target.value)} placeholder="https://instagram.com/…" />
+        </div>
+
+        <div className="field">
+          <label>YouTube</label>
+          <input value={form.youtube_url} onChange={(e) => update('youtube_url', e.target.value)} placeholder="https://youtube.com/@…" />
         </div>
 
         <div className="field">

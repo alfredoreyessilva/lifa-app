@@ -128,6 +128,7 @@ export function redesDeOrganizacion(org) {
   return [
     { key: 'facebook_url',  label: 'Facebook',  href: org.facebook_url },
     { key: 'instagram_url', label: 'Instagram', href: org.instagram_url },
+    { key: 'youtube_url',   label: 'YouTube',   href: org.youtube_url },
     { key: 'tiktok_url',    label: 'TikTok',    href: org.tiktok_url },
     { key: 'website_url',   label: 'Sitio web', href: org.website_url },
   ].filter((r) => r.href);

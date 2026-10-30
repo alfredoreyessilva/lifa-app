@@ -51,7 +51,7 @@ export function puedeTransmitirSql(aliasOrganizacion = 'o') {
 // se queda atrás deja la ficha a medias sin que nadie lo note.
 export const CAMPOS_DE_FICHA = [
   'description', 'website_url', 'cover_url',
-  'facebook_url', 'instagram_url', 'tiktok_url',
+  'facebook_url', 'instagram_url', 'youtube_url', 'tiktok_url',
   'contact_email', 'contact_phone',
 ];
 

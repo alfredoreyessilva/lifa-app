@@ -2463,6 +2463,10 @@ export async function initSchema() {
     await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS contact_email TEXT`);
     await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS contact_phone TEXT`);
 
+    // YouTube, que faltó en la tanda de arriba (2026-10-30): para un medio es
+    // donde viven sus transmisiones. Mismo nombre que `leagues.youtube_url`.
+    await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS youtube_url TEXT`);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se
