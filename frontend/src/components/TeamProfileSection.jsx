@@ -92,7 +92,7 @@ export default function TeamProfileSection({ team, token, onChange }) {
 // antes de entrar a editar. Reutiliza las mismas clases del preview de
 // TeamForm para que se vea igual de un lado y del otro.
 function TeamProfileView({ team, onEdit }) {
-  const hasContact = team.location || team.contact_email || team.contact_phone;
+  const hasContact = team.city || team.institution || team.maps_url || team.contact_email || team.contact_phone;
   const hasLinks = team.facebook_url || team.instagram_url || team.twitter_url || team.website_url;
   const sectionLabelStyle = {
     fontSize: 11, letterSpacing: '0.15em', color: 'var(--accent)',
@@ -124,7 +124,13 @@ function TeamProfileView({ team, onEdit }) {
           {hasContact && (
             <div className="team-profile-section" style={{ textAlign: 'left', marginBottom: 16 }}>
               <div style={sectionLabelStyle}>Información de contacto</div>
-              {team.location && <div className="team-info-row">📍 {team.location}</div>}
+              {team.institution && <div className="team-info-row">🏫 {team.institution}</div>}
+              {team.city && <div className="team-info-row">🌎 {team.city}</div>}
+              {team.maps_url && (
+                <div className="team-info-row">
+                  📍 <a href={team.maps_url} target="_blank" rel="noopener noreferrer">Ver en Google Maps</a>
+                </div>
+              )}
               {team.contact_email && <div className="team-info-row">✉️ {team.contact_email}</div>}
               {team.contact_phone && <div className="team-info-row">📞 {team.contact_phone}</div>}
             </div>

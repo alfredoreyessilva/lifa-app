@@ -4651,6 +4651,38 @@ mata la pestaña, no se queda sin batería y no tiene el administrador de memori
 de Android decidiendo cerrar la app a media captura. Eso es exactamente lo que
 `manifest.webmanifest` existe para mitigar, y no está verificado en hardware.
 
+## La ficha de un equipo
+
+Lo que el equipo (o su liga) llena en "Editar equipo" (`TeamForm.jsx`) y lo que
+enseña su ficha pública (`TeamInfoPanel.jsx`): portada, logo, nombre, contacto,
+redes y links predeterminados. Todo lo de la ficha es público; el color del
+club no, solo pinta su panel de trabajo.
+
+### Ciudad, institución y mapa, en vez de "Ubicación" (2026-10-30)
+
+Lo pidió Alfredo: el campo libre "Ubicación" se cambió por tres —**Ciudad**,
+**Institución** y **Link de Google Maps**—, las tres opcionales. Son columnas
+nuevas de `teams` (`city`, `institution`, `maps_url`), con los nombres que ya
+usan las sedes para lo mismo (`venues.city`, `venues.institution`).
+
+- **Columnas nuevas, no `location` con otra etiqueta.** Al censarla, 37 de los
+  63 equipos que la habían llenado tenían su universidad ("UNIVERSIDAD AUTÓNOMA
+  DE NUEVO LEÓN", "ITESM CAMPUS MONTERREY") o un estado ("ARIZONA"), no una
+  ciudad. Cambiarle solo el nombre habría puesto esas universidades dentro de
+  "Ciudad". Alfredo decidió que Ciudad e Institución arranquen vacías y que cada
+  equipo las llene al editar.
+- **`location` se queda como respaldo** (regla 4): ya nadie la escribe ni la
+  muestra, pero lo que tenía sigue en la base. Mientras un equipo no llene
+  ciudad ni institución, su ficha ya no enseña ese dato.
+- **El link de Maps se valida igual que el de una sede**
+  (`isValidGoogleMapsUrl` en el backend, `validGoogleMapsUrl` en el
+  formulario): solo `google.com/maps…`, `maps.app.goo.gl` y `goo.gl/maps`. La
+  ficha lo enseña como "Ver en Google Maps" con un enlace, así que no puede
+  servir para mandar a la afición a cualquier sitio.
+- **El link no se pasa a mayúsculas**, a diferencia de ciudad e institución: el
+  corto del botón "Compartir" (`maps.app.goo.gl/…`) distingue mayúsculas y
+  dejaría de abrir.
+
 ## Equipos independientes (sin liga)
 
 Hasta ahora un equipo solo podía existir colgado de una liga (`teams.league_id

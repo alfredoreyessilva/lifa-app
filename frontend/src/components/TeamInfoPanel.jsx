@@ -11,7 +11,7 @@ export default function TeamInfoPanel({ team, leagueId, onClose, inline = false,
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose, inline]);
 
-  const hasContact = team.location || team.contact_email || team.contact_phone;
+  const hasContact = team.city || team.institution || team.maps_url || team.contact_email || team.contact_phone;
   const hasLinks   = team.facebook_url || team.instagram_url || team.twitter_url || team.website_url;
 
   const card = (
@@ -58,8 +58,18 @@ export default function TeamInfoPanel({ team, leagueId, onClose, inline = false,
 
         {hasContact && (
           <div className="team-profile-section">
-            {team.location && (
-              <div className="team-info-row">📍 {team.location}</div>
+            {team.institution && (
+              <div className="team-info-row">🏫 {team.institution}</div>
+            )}
+            {team.city && (
+              <div className="team-info-row">🌎 {team.city}</div>
+            )}
+            {/* El backend solo acepta links de Google Maps aquí
+                (isValidGoogleMapsUrl), así que no puede ser cualquier sitio. */}
+            {team.maps_url && (
+              <div className="team-info-row">
+                📍 <a href={team.maps_url} target="_blank" rel="noopener noreferrer">Ver en Google Maps</a>
+              </div>
             )}
             {team.contact_email && (
               <div className="team-info-row">

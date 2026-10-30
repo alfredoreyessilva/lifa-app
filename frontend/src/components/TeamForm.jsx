@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import { required, maxLength, validEmail, validUrl, runValidations } from '../utils/validation.js';
+import { required, maxLength, validEmail, validUrl, validGoogleMapsUrl, runValidations } from '../utils/validation.js';
 import CharField from './CharField.jsx';
 import LinkListField from './LinkListField.jsx';
 
@@ -69,7 +69,12 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel, ind
     logo_url:      initial?.logo_url      || '',
     away_logo_url: initial?.away_logo_url || '',
     cover_url:     initial?.cover_url     || '',
-    location:      initial?.location      || '',
+    // "Ubicación" (`location`) ya no se edita: se partió en ciudad,
+    // institución y link de Google Maps, y la columna vieja se quedó como
+    // respaldo (README, "La ficha de un equipo").
+    city:          initial?.city          || '',
+    institution:   initial?.institution   || '',
+    maps_url:      initial?.maps_url      || '',
     contact_email: initial?.contact_email || '',
     contact_phone: initial?.contact_phone || '',
     facebook_url:  initial?.facebook_url  || '',
@@ -100,6 +105,7 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel, ind
       () => required(form.name,          'El nombre del equipo'),
       () => maxLength(form.name, 80,     'El nombre del equipo'),
       () => validEmail(form.contact_email),
+      () => validGoogleMapsUrl(form.maps_url, 'El link de la ubicación'),
       () => validUrl(form.facebook_url,  'El enlace de Facebook'),
       () => validUrl(form.instagram_url, 'El enlace de Instagram'),
       () => validUrl(form.twitter_url,   'El enlace de X / Twitter'),
@@ -119,7 +125,9 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel, ind
       await onSubmit({
         ...resto,
         name:          form.name.trim(),
-        location:      form.location.trim(),
+        city:          form.city.trim(),
+        institution:   form.institution.trim(),
+        maps_url:      form.maps_url.trim(),
         contact_email: form.contact_email.trim(),
         contact_phone: form.contact_phone.trim(),
         facebook_url:  form.facebook_url.trim(),
@@ -141,7 +149,7 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel, ind
     }
   }
 
-  const hasContact = form.location || form.contact_email || form.contact_phone;
+  const hasContact = form.city || form.institution || form.maps_url || form.contact_email || form.contact_phone;
   const hasLinks   = form.facebook_url || form.instagram_url || form.twitter_url || form.website_url;
 
   return (
@@ -258,9 +266,21 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel, ind
               Información de contacto
             </div>
 
-            <div className="field">
-              <label>📍 Ubicación</label>
-              <input value={form.location} onChange={(e) => update('location', e.target.value.toUpperCase())} placeholder="Ej. Ciudad de México" />
+            <div className="field-row">
+              <div className="field">
+                <label>🌎 Ciudad</label>
+                <CharField max={80} uppercase value={form.city} onChange={(e) => update('city', e.target.value)} placeholder="Ej. Monterrey" />
+              </div>
+              <div className="field">
+                <label>🏫 Institución</label>
+                <CharField max={80} uppercase value={form.institution} onChange={(e) => update('institution', e.target.value)} placeholder="Ej. UANL" />
+              </div>
+            </div>
+            {/* Sin mayúsculas: el link corto de "Compartir" distingue
+                mayúsculas y dejaría de abrir. */}
+            <div className="field" style={{ marginTop: 8 }}>
+              <label>📍 Link de Google Maps</label>
+              <input inputMode="url" value={form.maps_url} onChange={(e) => update('maps_url', e.target.value)} placeholder="https://maps.app.goo.gl/…" />
             </div>
             <div className="field-row" style={{ marginTop: 8 }}>
               <div className="field">
@@ -415,7 +435,9 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel, ind
 
           {hasContact && (
             <div className="team-profile-section" style={{ pointerEvents: 'none', opacity: 0.7 }}>
-              {form.location      && <div className="team-info-row">📍 {form.location}</div>}
+              {form.institution   && <div className="team-info-row">🏫 {form.institution}</div>}
+              {form.city          && <div className="team-info-row">🌎 {form.city}</div>}
+              {form.maps_url      && <div className="team-info-row">📍 Ver en Google Maps</div>}
               {form.contact_email && <div className="team-info-row">✉️ {form.contact_email}</div>}
               {form.contact_phone && <div className="team-info-row">📞 {form.contact_phone}</div>}
             </div>

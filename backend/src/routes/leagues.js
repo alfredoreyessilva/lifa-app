@@ -114,7 +114,8 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
       COALESCE(NULLIF(ta.away_logo_url, ''), ta.logo_url) AS away_logo_url,
       CASE WHEN th.id IS NOT NULL THEN json_build_object(
         'id', th.id, 'name', th.name, 'logo_url', th.logo_url, 'cover_url', th.cover_url,
-        'location', th.location, 'contact_email', th.contact_email, 'contact_phone', th.contact_phone,
+        'city', th.city, 'institution', th.institution, 'maps_url', th.maps_url,
+        'contact_email', th.contact_email, 'contact_phone', th.contact_phone,
         'facebook_url', th.facebook_url, 'instagram_url', th.instagram_url,
         'twitter_url', th.twitter_url, 'website_url', th.website_url,
         'is_verified', COALESCE(tho.is_verified, FALSE),
@@ -123,7 +124,8 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
       CASE WHEN ta.id IS NOT NULL THEN json_build_object(
         'id', ta.id, 'name', ta.name,
         'logo_url', COALESCE(NULLIF(ta.away_logo_url, ''), ta.logo_url), 'cover_url', ta.cover_url,
-        'location', ta.location, 'contact_email', ta.contact_email, 'contact_phone', ta.contact_phone,
+        'city', ta.city, 'institution', ta.institution, 'maps_url', ta.maps_url,
+        'contact_email', ta.contact_email, 'contact_phone', ta.contact_phone,
         'facebook_url', ta.facebook_url, 'instagram_url', ta.instagram_url,
         'twitter_url', ta.twitter_url, 'website_url', ta.website_url,
         'is_verified', COALESCE(tao.is_verified, FALSE),
@@ -205,7 +207,7 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
 router.get('/all-teams', asyncHandler(async (req, res) => {
   const teams = await db.prepare(`
     SELECT DISTINCT ON (t.id)
-      t.id, t.name, t.logo_url, t.cover_url, t.location, t.contact_email, t.contact_phone,
+      t.id, t.name, t.logo_url, t.cover_url, t.city, t.institution, t.maps_url, t.contact_email, t.contact_phone,
       t.facebook_url, t.instagram_url, t.twitter_url, t.website_url,
       o.is_verified AS is_verified,
       l.id AS league_id
@@ -269,7 +271,7 @@ router.get('/:slug/teams', asyncHandler(async (req, res) => {
   // (ese es el modelo viejo, y un equipo puede ser miembro de varias
   // ligas a la vez con el modelo nuevo).
   const teams = await db.prepare(`
-    SELECT t.id, t.name, t.logo_url, t.cover_url, t.location, t.contact_email, t.contact_phone,
+    SELECT t.id, t.name, t.logo_url, t.cover_url, t.city, t.institution, t.maps_url, t.contact_email, t.contact_phone,
            t.facebook_url, t.instagram_url, t.twitter_url, t.website_url,
            o.is_verified AS is_verified
     FROM league_teams lt

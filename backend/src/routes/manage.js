@@ -1538,8 +1538,9 @@ router.delete('/matches/:id', authRequired, matchOwnerRequired, asyncHandler(asy
 
 /* ===================== EQUIPOS ===================== */
 
-function validateTeamFields({ contact_email, facebook_url, instagram_url, twitter_url, website_url, logo_url, away_logo_url, cover_url, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links }) {
+function validateTeamFields({ contact_email, maps_url, facebook_url, instagram_url, twitter_url, website_url, logo_url, away_logo_url, cover_url, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links }) {
   if (contact_email && !isValidEmail(contact_email)) return 'El correo de contacto no tiene un formato válido';
+  if (maps_url      && !isValidGoogleMapsUrl(maps_url)) return 'El link de Google Maps no es válido (debe ser un link como https://maps.app.goo.gl/… o https://www.google.com/maps/…)';
   if (facebook_url  && !isValidUrl(facebook_url))    return 'El enlace de Facebook no es una dirección web válida';
   if (instagram_url && !isValidUrl(instagram_url))   return 'El enlace de Instagram no es una dirección web válida';
   if (twitter_url   && !isValidUrl(twitter_url))     return 'El enlace de X / Twitter no es una dirección web válida';
@@ -1615,25 +1616,29 @@ router.get('/teams/search', authRequired, asyncHandler(async (req, res) => {
 
 router.post('/leagues/:leagueId/teams', authRequired, leagueOwnerRequired, asyncHandler(async (req, res) => {
   const {
-    name, logo_url, away_logo_url, cover_url, location, contact_email, contact_phone,
+    name, logo_url, away_logo_url, cover_url, city, institution, maps_url, contact_email, contact_phone,
     facebook_url, instagram_url, twitter_url, website_url, sort_order,
     home_stream_links, away_stream_links, home_ticket_links, away_ticket_links,
   } = req.body;
 
   if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre del equipo es obligatorio' });
 
-  const validationError = validateTeamFields({ contact_email, facebook_url, instagram_url, twitter_url, website_url, logo_url, away_logo_url, cover_url, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links });
+  const validationError = validateTeamFields({ contact_email, maps_url, facebook_url, instagram_url, twitter_url, website_url, logo_url, away_logo_url, cover_url, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links });
   if (validationError) return res.status(400).json({ error: validationError });
 
   const result = await db.prepare(`
-    INSERT INTO teams (league_id, name, logo_url, away_logo_url, cover_url, location, contact_email, contact_phone, facebook_url, instagram_url, twitter_url, website_url, sort_order, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO teams (league_id, name, logo_url, away_logo_url, cover_url, city, institution, maps_url, contact_email, contact_phone, facebook_url, instagram_url, twitter_url, website_url, sort_order, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     req.league.id, name.trim().toUpperCase(),
     logo_url      || null,
     away_logo_url || null,
     cover_url     || null,
-    location      ? location.trim().toUpperCase()      : null,
+    city          ? city.trim().toUpperCase()          : null,
+    institution   ? institution.trim().toUpperCase()   : null,
+    // El link no se pasa a mayúsculas: el corto de "Compartir"
+    // (maps.app.goo.gl/…) distingue mayúsculas y dejaría de abrir.
+    maps_url      ? maps_url.trim()                    : null,
     contact_email || null,
     contact_phone ? contact_phone.trim().toUpperCase() : null,
     facebook_url  || null,
@@ -1680,7 +1685,7 @@ router.post('/leagues/:leagueId/teams', authRequired, leagueOwnerRequired, async
 // alguien reclama una invitación (ver routes/invites.js).
 router.post('/teams', authRequired, asyncHandler(async (req, res) => {
   const {
-    name, logo_url, away_logo_url, cover_url, location, contact_email, contact_phone,
+    name, logo_url, away_logo_url, cover_url, city, institution, maps_url, contact_email, contact_phone,
     facebook_url, instagram_url, twitter_url, website_url, sort_order,
     home_stream_links, away_stream_links, home_ticket_links, away_ticket_links,
     country_id, description, show_on_platform,
@@ -1688,7 +1693,7 @@ router.post('/teams', authRequired, asyncHandler(async (req, res) => {
 
   if (!isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre del equipo es obligatorio' });
 
-  const validationError = validateTeamFields({ contact_email, facebook_url, instagram_url, twitter_url, website_url, logo_url, away_logo_url, cover_url, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links });
+  const validationError = validateTeamFields({ contact_email, maps_url, facebook_url, instagram_url, twitter_url, website_url, logo_url, away_logo_url, cover_url, home_stream_links, away_stream_links, home_ticket_links, away_ticket_links });
   if (validationError) return res.status(400).json({ error: validationError });
 
   if (country_id) {
@@ -1701,17 +1706,19 @@ router.post('/teams', authRequired, asyncHandler(async (req, res) => {
 
   const result = await db.prepare(`
     INSERT INTO teams (
-      league_id, organization_id, owner_user_id, name, logo_url, away_logo_url, cover_url, location,
+      league_id, organization_id, owner_user_id, name, logo_url, away_logo_url, cover_url, city, institution, maps_url,
       contact_email, contact_phone, facebook_url, instagram_url, twitter_url, website_url, sort_order,
       home_stream_links, away_stream_links, home_ticket_links, away_ticket_links, show_on_platform
     )
-    VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     org.id, req.user.id, trimmedName,
     logo_url      || null,
     away_logo_url || null,
     cover_url     || null,
-    location      ? location.trim().toUpperCase()      : null,
+    city          ? city.trim().toUpperCase()          : null,
+    institution   ? institution.trim().toUpperCase()   : null,
+    maps_url      ? maps_url.trim()                    : null,
     contact_email || null,
     contact_phone ? contact_phone.trim().toUpperCase() : null,
     facebook_url  || null,
@@ -1736,7 +1743,7 @@ router.post('/teams', authRequired, asyncHandler(async (req, res) => {
 
 router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (req, res) => {
   const {
-    name, logo_url, away_logo_url, cover_url, location, contact_email, contact_phone,
+    name, logo_url, away_logo_url, cover_url, city, institution, maps_url, contact_email, contact_phone,
     facebook_url, instagram_url, twitter_url, website_url, sort_order,
     home_stream_links, away_stream_links, home_ticket_links, away_ticket_links,
     country_id, description, show_on_platform, brand_color,
@@ -1745,6 +1752,7 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
 
   const resolved = {
     contact_email: contact_email ?? t.contact_email,
+    maps_url:      maps_url      ?? t.maps_url,
     facebook_url:  facebook_url  ?? t.facebook_url,
     instagram_url: instagram_url ?? t.instagram_url,
     twitter_url:   twitter_url   ?? t.twitter_url,
@@ -1768,7 +1776,9 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
       logo_url          = COALESCE(?, logo_url),
       away_logo_url     = COALESCE(?, away_logo_url),
       cover_url         = COALESCE(?, cover_url),
-      location          = COALESCE(?, location),
+      city              = COALESCE(?, city),
+      institution       = COALESCE(?, institution),
+      maps_url          = COALESCE(?, maps_url),
       contact_email     = COALESCE(?, contact_email),
       contact_phone     = COALESCE(?, contact_phone),
       facebook_url      = COALESCE(?, facebook_url),
@@ -1784,7 +1794,8 @@ router.put('/teams/:id', authRequired, teamOwnerRequired, asyncHandler(async (re
     WHERE id = ?
   `).run(
     toNull(name),          toNull(logo_url),      toNull(away_logo_url), toNull(cover_url),
-    toNull(location),      toNull(contact_email), toNull(contact_phone),
+    toNull(city),          toNull(institution),   toNull(maps_url),
+    toNull(contact_email), toNull(contact_phone),
     toNull(facebook_url),  toNull(instagram_url), toNull(twitter_url),
     toNull(website_url),   toNull(sort_order),
     toLinksJson(home_stream_links), toLinksJson(away_stream_links),

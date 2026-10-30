@@ -2467,6 +2467,17 @@ export async function initSchema() {
     // donde viven sus transmisiones. Mismo nombre que `leagues.youtube_url`.
     await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS youtube_url TEXT`);
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // "Ubicación" del equipo se parte en ciudad, institución y link de Google
+    // Maps (README, "La ficha de un equipo", 2026-10-30). Columnas nuevas y no
+    // `location` con otra etiqueta: al censarla, 37 de los 63 equipos que la
+    // llenaron habían puesto su universidad o un estado, no una ciudad.
+    // `location` se queda como respaldo (regla 4): ya nadie la escribe ni la
+    // muestra. Sin DEFAULT: NULL es "no lo puso".
+    await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS city TEXT`);
+    await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS institution TEXT`);
+    await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS maps_url TEXT`);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se

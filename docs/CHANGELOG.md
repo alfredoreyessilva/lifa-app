@@ -15,6 +15,26 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Ciudad, institución y link de Google Maps en la ficha de un equipo
+  (2026-10-30).** Lo pidió Alfredo: "Ubicación" se cambia por "Ciudad", y se
+  agregan "Institución" y el link de Google Maps. Tres columnas nuevas en
+  `teams` (`city`, `institution`, `maps_url`) y no `location` renombrada: al
+  censarla en `desarrollo-local`, 37 de los 63 equipos que la llenaron tenían
+  su universidad o un estado. Alfredo decidió que arranquen vacías; `location`
+  se queda como respaldo y ya no se escribe ni se muestra. El link se valida
+  con el mismo `isValidGoogleMapsUrl` de las sedes y no se pasa a mayúsculas.
+  Detalle en el README, "La ficha de un equipo".
+
+  Verificado contra el backend de pruebas: las tres lecturas públicas (la
+  ficha dentro de un partido, el home y la pestaña Equipos de ONEFA) traen las
+  columnas nuevas y ya no `location`. En el navegador, con el dueño de un
+  equipo de la suite de roles: el formulario rechaza un link de Waze, ciudad e
+  institución se escriben en mayúsculas, guardar deja el link con sus
+  mayúsculas, y el perfil y la ficha pública del partido enseñan "UANL",
+  "MONTERREY" y "Ver en Google Maps" (pestaña nueva, `noopener`). El `PUT`
+  contesta 400 a `evil-google.com/maps` y uno que solo manda el nombre no borra
+  lo demás. 283 unitarias del backend, 167 del frontend y el build.
+
 - **YouTube en la ficha de un medio (2026-10-30).** Lo pidió Alfredo, después
   de la portada y las demás redes: para un medio es donde viven sus
   transmisiones. `organizations.youtube_url` —el nombre de `leagues`—, en una
