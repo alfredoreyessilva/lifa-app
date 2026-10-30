@@ -15,6 +15,37 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Un medio se abre en una ficha, como un equipo (2026-10-30)**, en el home
+  y en "También transmiten" de un partido. Lo pidió Alfredo: tocar un medio
+  mandaba a su página (`/panel/organizacion/:id`); ahora abre su ficha encima
+  de la pantalla (`OrganizationInfoPanel`), con el mismo diseño que la de un
+  equipo: logo, nombre, "✓ Verificada", país, descripción y sitio web, que es
+  todo lo que esa página le enseña al público.
+  - En el home, los datos ya venían en `GET /organizations`. Las tiendas
+    siguen llevando a su página, donde tienen su catálogo y el botón de
+    WhatsApp.
+  - En el partido, solo cuando el medio no puso link para ese partido; con
+    link, el logo sigue abriendo su transmisión. `GET /broadcasts/match/:id`
+    trae ahora país, descripción y sitio web: lo mismo que el directorio ya
+    muestra de un medio publicado.
+  - La ficha se monta en `document.body` y corta los toques: en el partido,
+    deslizar el dedo cambia de partido, y los eventos de React suben por el
+    árbol de componentes aunque haya portal.
+
+  Verificado así:
+  - la consulta nueva contra la de HEAD, en solo lectura sobre
+    `desarrollo-local`: las mismas 3 transmisiones visibles de 5, en el mismo
+    orden y sin diferencias en las columnas de antes;
+  - `invites-roles.e2e.mjs`: 213 ok, 0 fallas (la sección 18 cubre "También
+    transmiten"); 280 unitarias del backend, 167 del frontend y el build;
+  - en el navegador, escritorio y celular: los dos medios del home, con y sin
+    sitio web, y con la respuesta simulada —sin escribir en la base— uno con
+    descripción, uno sin nada (iniciales y aviso, sin pastilla) y una tienda,
+    que sigue siendo enlace. El partido 604 (ESPN Mx sin link) abre la ficha
+    y el 603 (con link) sigue abriendo YouTube. Escape, la ✕ y el clic fuera
+    la cierran, un clic dentro no; deslizar dentro de ella no cambia de
+    partido, y el mismo gesto sobre la tarjeta del partido sí.
+
 - **Publicar y verificar una organización son dos botones (2026-10-29)**,
   como en las ligas. Lo pidió Alfredo: en la pestaña Organizaciones del panel
   admin, "Marcar verificada" también publicaba — metía al medio o a la tienda

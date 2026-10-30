@@ -4844,13 +4844,25 @@ Ahora son dos botones, el mismo modelo que las ligas, y los dos los toca
 
 Un medio necesita **las dos** para transmitir (abajo).
 
+### El medio abre su ficha; la tienda, su página
+
+Tocar un medio en el home abre su ficha encima, como la de un equipo
+(`OrganizationInfoPanel`, con la misma pastilla "✓ Verificada"); tocar una
+tienda lleva a su página. Al público, la página de un medio no le enseña nada
+que no quepa en la ficha —logo, nombre, verificada, país, descripción y sitio
+web, todo ya en `GET /organizations`—, y la de una tienda sí: su catálogo y el
+botón de WhatsApp. La misma ficha abre su logo en "También transmiten" de un
+partido cuando no puso link para ese partido (ver "Transmisiones"). La página
+del medio sigue existiendo: es su panel.
+
 ### Privada es privada
 
 Igual que una liga oculta, una organización privada no existe para el público:
 
 - No sale en el directorio (`GET /organizations` filtra `is_public`).
-- Su página (`/panel/organizacion/:id`, la que abre al tocarla en el home)
-  responde "No encontramos esta organización", y su catálogo tampoco sale. 404
+- Su página (`/panel/organizacion/:id`, la que abre al tocar una tienda en el
+  home) responde "No encontramos esta organización", y su catálogo tampoco
+  sale. 404
   y no 403, como la tarjeta de un jugador: a quien no debe verla no se le
   confirma que existe.
 - Quien la administra y el admin de la plataforma la siguen viendo y editando:
@@ -4955,7 +4967,7 @@ La liga se entera, pero no aprueba: el medio ya quedó puesto.
 
 | Método | Ruta | Quién |
 |---|---|---|
-| GET | `/match/:matchId` | **Público** — quién transmite este partido (solo medios publicados y verificados) |
+| GET | `/match/:matchId` | **Público** — quién transmite este partido (solo medios publicados y verificados), con lo que enseña su ficha |
 | GET | `/organization/:organizationId` | El medio — qué está transmitiendo, para su panel |
 | POST | `/` | El medio — se suma a un partido (o edita su link) |
 | DELETE | `/:id` | El medio — se quita |
@@ -4969,6 +4981,15 @@ del jugador.
 `MatchBroadcasters.jsx` (quién transmite, para cualquiera) y
 `MediaBroadcastControl.jsx` (el control para sumarse o quitarse, si administras
 ese medio), los dos dentro de `MatchPage`.
+
+El logo de un medio en "También transmiten" abre **su link para ese partido**,
+si lo puso. Si no, abre su ficha encima del partido (`OrganizationInfoPanel`,
+la misma que en el home) en vez de mandar a su página: quien está viendo un
+partido no tiene por qué salirse de él para saber quién es el medio. Por eso
+el `GET` público trae también país, descripción y sitio web: lo mismo que el
+directorio del home ya muestra de un medio publicado. La ficha se monta en
+`document.body` y corta los toques, porque en esa pantalla deslizar el dedo
+cambia de partido.
 
 ## Tiendas y bot de WhatsApp
 

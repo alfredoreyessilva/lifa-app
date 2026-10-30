@@ -14,11 +14,17 @@ const router = express.Router();
 // Solo medios publicados Y verificados, la misma regla que para sumarse. Se
 // resuelve al leer: si al medio lo ocultan o le quitan la verificación, sale
 // de aquí sin que se borre su fila, y vuelve si recupera las dos.
+//
+// Trae también lo que enseña la ficha del medio (país, descripción, sitio web),
+// que se abre al tocar un logo sin link propio para este partido. Es lo mismo
+// que el directorio del home ya muestra de un medio publicado: no destapa nada.
 router.get('/match/:matchId', asyncHandler(async (req, res) => {
   const broadcasts = await db.prepare(`
-    SELECT b.id, b.url, o.id AS organization_id, o.name, o.slug, o.logo_url
+    SELECT b.id, b.url, o.id AS organization_id, o.name, o.slug, o.logo_url,
+           o.description, o.website_url, o.is_verified, c.name AS country_name
     FROM match_broadcasts b
     JOIN organizations o ON o.id = b.organization_id
+    LEFT JOIN countries c ON c.id = o.country_id
     WHERE b.match_id = ? AND ${puedeTransmitirSql('o')}
     ORDER BY o.name
   `).all(req.params.matchId);

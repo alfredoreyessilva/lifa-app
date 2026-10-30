@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
+import OrganizationInfoPanel from './OrganizationInfoPanel.jsx';
+
+const itemStyle = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: 64, textDecoration: 'none' };
 
 // Fila de medios (publicados y verificados: el backend ya filtra al leer) que
 // se autoasignaron a este partido — se muestra ADEMÁS del botón "Ver
@@ -9,6 +11,7 @@ import { api } from '../api/client.js';
 // hueco vacío que mostrar.
 export default function MatchBroadcasters({ matchId }) {
   const [broadcasts, setBroadcasts] = useState(null);
+  const [selected, setSelected] = useState(null);
 
   useEffect(() => {
     api.getMatchBroadcasts(matchId).then((d) => setBroadcasts(d.broadcasts)).catch(() => setBroadcasts([]));
@@ -29,22 +32,26 @@ export default function MatchBroadcasters({ matchId }) {
               href={b.url}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: 64, textDecoration: 'none' }}
+              style={itemStyle}
             >
               <BroadcasterLogo b={b} />
             </a>
           ) : (
-            // Sin link propio: el logo lleva al perfil del medio dentro de la app.
-            <Link
+            // Sin link propio para este partido: el logo abre la ficha del
+            // medio aquí mismo, la misma que en el home, en vez de mandar a
+            // su página.
+            <button
               key={b.id}
-              to={`/panel/organizacion/${b.organization_id}`}
-              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: 64, textDecoration: 'none' }}
+              type="button"
+              onClick={() => setSelected(b)}
+              style={{ ...itemStyle, background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'inherit', cursor: 'pointer' }}
             >
               <BroadcasterLogo b={b} />
-            </Link>
+            </button>
           )
         ))}
       </div>
+      {selected && <OrganizationInfoPanel org={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }

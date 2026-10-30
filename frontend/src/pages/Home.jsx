@@ -4,6 +4,7 @@ import { api } from '../api/client.js';
 import Loading from '../components/Loading.jsx';
 import TeamCard from '../components/TeamCard.jsx';
 import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
+import OrganizationInfoPanel from '../components/OrganizationInfoPanel.jsx';
 
 export default function Home() {
   const [leagues, setLeagues] = useState(null);
@@ -15,6 +16,7 @@ export default function Home() {
 
   const [mediaOrgs, setMediaOrgs] = useState(null);
   const [mediaError, setMediaError] = useState('');
+  const [selectedMedia, setSelectedMedia] = useState(null);
 
   const [storeOrgs, setStoreOrgs] = useState(null);
   const [storeError, setStoreError] = useState('');
@@ -129,7 +131,12 @@ export default function Home() {
         emptyText="En cuanto se publique un medio de comunicación, va a aparecer aquí."
         registerTo="/registrar-organizacion?tipo=media"
         registerLabel="Registrar medio"
+        selectedId={selectedMedia?.id}
+        onSelect={setSelectedMedia}
       />
+      {selectedMedia && (
+        <OrganizationInfoPanel org={selectedMedia} onClose={() => setSelectedMedia(null)} />
+      )}
 
       <OrganizationDirectorySection
         id="tiendas"
@@ -162,7 +169,12 @@ export default function Home() {
 // Aquí sale lo PUBLICADO, verificado o no: desde el 2026-10-29 son dos botones
 // del admin (README, "Organizaciones: publicar y verificar"), así que la
 // verificación se dice en cada tarjeta con la palomita, como en Equipos.
-function OrganizationDirectorySection({ id, title, orgs, error, loadingMessage, emptyTitle, emptyText, registerTo, registerLabel }) {
+//
+// Con `onSelect`, tocar una tarjeta abre su ficha encima del home, como la de
+// un equipo: así van los medios, cuya página no le enseña al público nada que
+// no quepa en la ficha. Sin él, la tarjeta lleva a su página: así van las
+// tiendas, que ahí tienen su catálogo y el botón de WhatsApp.
+function OrganizationDirectorySection({ id, title, orgs, error, loadingMessage, emptyTitle, emptyText, registerTo, registerLabel, selectedId, onSelect }) {
   return (
     <>
       <SectionHead
@@ -187,27 +199,43 @@ function OrganizationDirectorySection({ id, title, orgs, error, loadingMessage, 
 
       {orgs && orgs.length > 0 && (
         <div className="league-grid">
-          {orgs.map((org) => (
-            <Link key={org.id} to={`/panel/organizacion/${org.id}`} className="league-card">
-              {org.logo_url ? (
-                <img src={org.logo_url} alt={org.name} style={{ width: 56, height: 56, borderRadius: '50%' }} />
-              ) : (
-                <div style={{
-                  width: 56, height: 56, borderRadius: '50%', background: 'var(--surface)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontFamily: 'var(--font-display)', color: 'var(--flag)',
-                }}>
-                  {initials(org.name)}
-                </div>
-              )}
-              <h3>
-                {org.name}
-                {org.is_verified && (
-                  <span className="team-card-verified" title="Verificada" aria-label="Verificada">✓</span>
+          {orgs.map((org) => {
+            const content = (
+              <>
+                {org.logo_url ? (
+                  <img src={org.logo_url} alt={org.name} style={{ width: 56, height: 56, borderRadius: '50%' }} />
+                ) : (
+                  <div style={{
+                    width: 56, height: 56, borderRadius: '50%', background: 'var(--surface)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontFamily: 'var(--font-display)', color: 'var(--flag)',
+                  }}>
+                    {initials(org.name)}
+                  </div>
                 )}
-              </h3>
-            </Link>
-          ))}
+                <h3>
+                  {org.name}
+                  {org.is_verified && (
+                    <span className="team-card-verified" title="Verificada" aria-label="Verificada">✓</span>
+                  )}
+                </h3>
+              </>
+            );
+            return onSelect ? (
+              <button
+                key={org.id}
+                type="button"
+                className={`league-card${selectedId === org.id ? ' league-card--selected' : ''}`}
+                onClick={() => onSelect(org)}
+              >
+                {content}
+              </button>
+            ) : (
+              <Link key={org.id} to={`/panel/organizacion/${org.id}`} className="league-card">
+                {content}
+              </Link>
+            );
+          })}
         </div>
       )}
     </>

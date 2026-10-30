@@ -336,6 +336,16 @@ a { color: inherit; }
   border-color: var(--flag);
   transform: translateY(-2px);
 }
+/* La tarjeta de un medio en el home es botón (abre su ficha, como la de un
+   equipo) y no enlace: sin esto el navegador le pone su propia fuente. */
+button.league-card {
+  font: inherit;
+  cursor: pointer;
+}
+.league-card--selected {
+  border-color: var(--flag);
+  background: var(--card-hover);
+}
 .league-logo {
   width: 72px;
   height: 72px;
