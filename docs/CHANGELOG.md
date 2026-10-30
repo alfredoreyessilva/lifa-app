@@ -15,6 +15,27 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **La página de una tienda deja la cancha: ahora es una vitrina
+  (2026-10-30).** Lo pidió Alfredo: con la cancha de fondo, la página pública
+  de una tienda se veía infantil. Ahora el logo y el nombre van en una placa
+  verde casi negra, y el catálogo en blanco, con las fotos cuadradas y sin
+  recortar y los precios alineados por fila. CFBAMX se queda en el verde de la
+  placa, en el amarillo del sello y del botón de WhatsApp, y en su logo chico
+  en el pie. "Editar" sigue sobre la cancha. De paso, los precios con centavos
+  ya no salen "$850.5", la etiqueta "STORE" en inglés desapareció, y un
+  catálogo vacío o que no cargó lo dice. El detalle está en el README, "La
+  vitrina de una tienda".
+
+  Verificado en el navegador (escritorio a 1366 px y celular a 390 px) con la
+  fila real de "Deportes Cancún" y sus tres productos de `desarrollo-local`,
+  contestados desde el propio navegador, sin backend ni escrituras. Se
+  probaron seis escenas: la tienda tal cual, ya publicada; con todo lleno
+  (portada, verificada, Pro con WhatsApp, contacto, redes, productos sin foto y
+  sin precio); la mínima, sin logo ni productos; la del dueño, privada y
+  publicada; y la del catálogo que no carga. La ida y vuelta a "Editar" y la
+  salida al home regresan la cancha, el `theme-color` y el título. 452 pruebas
+  unitarias. No se probó contra el backend real ni en Safari de iPhone.
+
 - **Las visitas del admin ya no cuentan en "Visitas a Home" (2026-10-30).** Lo
   pidió Alfredo: sus propias visitas inflaban la estadística. Home manda la
   sesión con la visita; si es del admin, `POST /track` guarda ese `visitor_id`

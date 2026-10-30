@@ -1,4 +1,5 @@
-// Formato de dinero y fechas para las pantallas de cobranza.
+// Formato de dinero y fechas para las pantallas de cobranza, y el precio del
+// catálogo de una tienda.
 //
 // Estas mismas cuatro líneas estaban copiadas en BillingLeaguePanel.jsx,
 // TeamStatementPanel.jsx y (del lado del backend) en routes/billing.js y
@@ -17,6 +18,19 @@ export function money(value) {
 export function moneyShort(value) {
   const n = Number(value || 0);
   return `$${Math.abs(n).toLocaleString('es-MX', { maximumFractionDigits: 0 })}`;
+}
+
+// El precio de un producto en la vitrina de una tienda. Cerrado —casi
+// siempre— va sin ".00" ("$1,650"), y con centavos lleva los dos: el formato
+// de antes pintaba "$850.5", que se lee como error de captura. A diferencia de
+// money(), sin precio no es cero: devuelve null y la vitrina dice "Precio a
+// consultar".
+export function catalogPrice(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  if (Number.isNaN(n)) return null;
+  const decimales = Number.isInteger(n) ? 0 : 2;
+  return `$${n.toLocaleString('es-MX', { minimumFractionDigits: decimales, maximumFractionDigits: 2 })}`;
 }
 
 export function fmtDate(value) {

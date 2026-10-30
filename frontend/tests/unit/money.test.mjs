@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import {
   money,
   moneyShort,
+  catalogPrice,
   fmtDate,
   timeAgo,
   balanceClass,
@@ -54,6 +55,26 @@ test('moneyShort quita los centavos, para los números grandes de los KPIs', () 
   assert.equal(moneyShort(1234567.89), '$1,234,568'); // redondea
   assert.equal(moneyShort(800), '$800');
   assert.equal(moneyShort(null), '$0');
+});
+
+// ── catalogPrice ─────────────────────────────────────────────────────────
+
+test('catalogPrice va sin centavos si el precio es cerrado, y con los dos si no', () => {
+  // Así llega de Postgres (NUMERIC como string), y así lo captura la tienda.
+  assert.equal(catalogPrice('1650'), '$1,650');
+  assert.equal(catalogPrice(0), '$0');
+  // El formato de antes pintaba "$850.5".
+  assert.equal(catalogPrice('850.50'), '$850.50');
+  assert.equal(catalogPrice(1234.5), '$1,234.50');
+  assert.equal(catalogPrice('1234.56'), '$1,234.56');
+});
+
+test('catalogPrice devuelve null sin precio, para que la vitrina diga "Precio a consultar"', () => {
+  // Un producto sin precio no cuesta $0: money() sí lo pintaría así.
+  assert.equal(catalogPrice(null), null);
+  assert.equal(catalogPrice(undefined), null);
+  assert.equal(catalogPrice(''), null);
+  assert.equal(catalogPrice('no soy número'), null);
 });
 
 // ── balanceClass y balanceText ───────────────────────────────────────────

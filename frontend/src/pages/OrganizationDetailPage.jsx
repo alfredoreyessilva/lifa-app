@@ -1,15 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import LogoField from '../components/LogoField.jsx';
 import CharField from '../components/CharField.jsx';
 import Loading from '../components/Loading.jsx';
-import OrganizationInfoPanel, { ContactoDeOrganizacion, RedesDeOrganizacion, redesDeOrganizacion } from '../components/OrganizationInfoPanel.jsx';
+import OrganizationInfoPanel, { redesDeOrganizacion, telDeOrganizacion, initials } from '../components/OrganizationInfoPanel.jsx';
 import { required, validEmail, validUrl, runValidations } from '../utils/validation.js';
+import { imagenAjustada } from '../utils/imagenes.js';
+import { catalogPrice } from '../utils/money.js';
 
 // El panel de una organización (medio/tienda/clínica/marca), y la página
-// pública de una tienda.
+// pública de una tienda: su vitrina (StoreFront, abajo).
 //
 // Solo la TIENDA tiene vista pública aquí: es donde el público ve su catálogo
 // y el botón de WhatsApp, que no caben en la ficha. Para ella, por defecto se
@@ -35,6 +37,7 @@ export default function OrganizationDetailPage() {
 
   const [org, setOrg] = useState(null);
   const [products, setProducts] = useState(null);
+  const [productsError, setProductsError] = useState(false);
   const [countries, setCountries] = useState(null);
   const [form, setForm] = useState(null);
   const [error, setError] = useState('');
@@ -48,8 +51,13 @@ export default function OrganizationDetailPage() {
     api.getCountries().then((d) => setCountries(d.countries)).catch(() => setCountries([]));
     // Catálogo público (ya viene filtrado por el backend: is_active Y
     // show_on_platform). Se pide para cualquier tipo de organización sin
-    // problema — si no es tienda, simplemente regresa un arreglo vacío.
-    api.getPublicProducts(id, token).then((d) => setProducts(d.products)).catch(() => setProducts([]));
+    // problema — si no es tienda, simplemente regresa un arreglo vacío. Si
+    // falla se dice que falló: un catálogo vacío diría "esta tienda no
+    // publica productos", que no es lo que pasó.
+    setProductsError(false);
+    api.getPublicProducts(id, token)
+      .then((d) => setProducts(d.products))
+      .catch(() => { setProducts([]); setProductsError(true); });
   }, [id, token]);
 
   async function load() {
@@ -149,105 +157,14 @@ export default function OrganizationDetailPage() {
 
   // Vista pública de una tienda — por defecto, seas o no el dueño.
   if (tieneVistaPublica && (!isMine || mode === 'view')) {
-    const redes = redesDeOrganizacion(org);
     return (
-      <>
-        {/* Bloque de perfil: angosto y centrado, igual que el resto de
-            páginas de perfil de la app (jugador, cancha, etc). */}
-        <div className="container" style={{ maxWidth: 520 }}>
-          {/* Proporción de banner fija, recortada al centro: una foto
-              cuadrada o vertical, a su altura natural, se comía la pantalla. */}
-          {org.cover_url && (
-            <img
-              src={org.cover_url}
-              alt=""
-              style={{ display: 'block', width: '100%', aspectRatio: '3 / 1', objectFit: 'cover', borderRadius: 12, marginTop: 16 }}
-            />
-          )}
-          <div className="player-hero">
-            <div className="player-photo">
-              {org.logo_url ? <img src={org.logo_url} alt={org.name} /> : <span>{org.name[0]}</span>}
-            </div>
-            <div>
-              <div className="player-hero-eyebrow">{org.type}</div>
-              <h1 className="player-hero-name" style={{ fontSize: 26 }}>{org.name}</h1>
-              {org.country_name && <div className="player-hero-team"><span>{org.country_name}</span></div>}
-              {org.is_verified && (
-                <div style={{ marginTop: 8 }}>
-                  <span className="pill is-ok">✓ Verificada</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {isMine && <EstadoDePublicacion org={org} />}
-
-          {isMine && (
-            <button
-              type="button"
-              className="btn btn-outline btn-sm"
-              style={{ marginTop: 14 }}
-              onClick={() => setMode('edit')}
-            >
-              ✏️ Editar organización
-            </button>
-          )}
-
-          {org.description && <p style={{ marginTop: 16 }}>{org.description}</p>}
-          {(org.contact_email || org.contact_phone) && (
-            <div style={{ marginTop: 16 }}>
-              <ContactoDeOrganizacion org={org} />
-            </div>
-          )}
-          {redes.length > 0 && <RedesDeOrganizacion redes={redes} style={{ justifyContent: 'flex-start' }} />}
-        </div>
-
-        {/* Catálogo: usa el ancho estándar de la app (1080px, el mismo
-            que las demás grillas) para que quepan 4 tarjetas del tamaño
-            normal por fila, en vez del ancho angosto del perfil. */}
-        {products && products.length > 0 && (
-          <div className="container">
-            <div style={{ marginTop: 24 }}>
-              <h3 style={{ marginBottom: 12 }}>Catálogo</h3>
-              <div className="catalog-grid">
-                {products.map((p) => (
-                  <div key={p.id} className="league-card">
-                    {p.image_url && (
-                      <img src={p.image_url} alt={p.name} style={{ width: '100%', borderRadius: 8, marginBottom: 8 }} />
-                    )}
-                    <h3>{p.name}</h3>
-                    {p.description && <p style={{ fontSize: 13, color: 'var(--ink-dim)' }}>{p.description}</p>}
-                    <p style={{ fontSize: 13, fontWeight: 600 }}>
-                      {p.price != null ? `$${Number(p.price).toLocaleString('es-MX')} ${p.currency}` : 'Precio a consultar'}
-                      {p.size_variant ? ` · ${p.size_variant}` : ''}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Botón del bot de WhatsApp con IA — solo aparece si la tienda
-            tiene el plan Pro activo (no vencido) y ya tiene su número
-            configurado desde el Admin Panel. Igual que el resto del flujo,
-            "activo" significa plan === 'pro' Y (sin fecha de vencimiento
-            O la fecha todavía no pasó). */}
-        {org.whatsapp_display_number && org.plan === 'pro' &&
-          (!org.plan_expires_at || new Date(org.plan_expires_at) > new Date()) && (
-          <div className="container" style={{ maxWidth: 520 }}>
-            <a
-              href={`https://wa.me/${org.whatsapp_display_number.replace(/\D/g, '')}?text=${encodeURIComponent(`Hola, vi ${org.name} en CFBAMX y quiero preguntar por un producto`)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn btn-flag"
-              style={{ marginTop: 16, display: 'inline-block' }}
-            >
-              💬 Consultar por WhatsApp
-            </a>
-          </div>
-        )}
-      </>
+      <StoreFront
+        org={org}
+        products={products}
+        productsError={productsError}
+        isMine={isMine}
+        onEdit={() => setMode('edit')}
+      />
     );
   }
 
@@ -364,6 +281,214 @@ export default function OrganizationDetailPage() {
   );
 }
 
+// La vitrina: lo que el público ve de una tienda. Deja la cancha a propósito
+// (README, "La vitrina de una tienda"): una placa en el verde de CFBAMX casi
+// negro lleva el logo y el nombre de la tienda, y el catálogo va en blanco
+// para que el color lo pongan sus productos.
+function StoreFront({ org, products, productsError, isMine, onEdit }) {
+  useVitrina(org.name);
+
+  const redes = redesDeOrganizacion(org);
+  const whatsapp = whatsappDeLaTienda(org);
+  const tieneCanales = Boolean(org.contact_phone || org.contact_email);
+  const tieneContacto = Boolean(whatsapp || tieneCanales);
+
+  return (
+    <div className="storefront">
+      <header className="storefront-plate">
+        <div className="storefront-inner">
+          {isMine && (
+            <div className="storefront-owner">
+              <p>
+                <span className={`storefront-dot${org.is_public ? ' is-public' : ''}`} aria-hidden="true" />
+                {avisoDePublicacion(org)}
+              </p>
+              <button type="button" className="sf-btn sf-btn-ghost sf-btn-sm" onClick={onEdit}>
+                Editar organización
+              </button>
+            </div>
+          )}
+
+          {/* Proporción de banner fija, recortada al centro: una foto
+              cuadrada o vertical, a su altura natural, se comía la pantalla. */}
+          {org.cover_url && (
+            <img className="storefront-cover" src={imagenAjustada(org.cover_url, 2000)} alt="" />
+          )}
+
+          <div className={`storefront-identity${tieneContacto ? '' : ' is-solo'}`}>
+            {/* El logo entero y sobre blanco: hay logos que son un PNG
+                transparente pensado para fondo claro, y en el círculo de
+                antes un logo cuadrado perdía las esquinas. */}
+            <div className="storefront-logo">
+              {org.logo_url
+                ? <img src={imagenAjustada(org.logo_url, 320)} alt="" />
+                : <span aria-hidden="true">{initials(org.name) || org.name[0]}</span>}
+            </div>
+
+            <div className="storefront-heading">
+              <h1>{org.name}</h1>
+              {(org.is_verified || org.country_name) && (
+                <div className="storefront-meta">
+                  {org.is_verified && (
+                    <span className="storefront-seal"><SelloVerificada />Verificada</span>
+                  )}
+                  {org.country_name && <span>{org.country_name}</span>}
+                </div>
+              )}
+            </div>
+
+            {org.description && <p className="storefront-description">{org.description}</p>}
+
+            {/* En escritorio va a la derecha; en celular, después de la
+                descripción y antes de las redes: el botón de WhatsApp es lo
+                que más importa de la placa. */}
+            {tieneContacto && (
+              <div className="storefront-contact">
+                {whatsapp && (
+                  <a className="sf-btn sf-btn-primary" href={whatsapp} target="_blank" rel="noopener noreferrer">
+                    Consultar por WhatsApp
+                  </a>
+                )}
+                {tieneCanales && (
+                  <dl className="storefront-channels">
+                    {org.contact_phone && (
+                      <div>
+                        <dt>Teléfono</dt>
+                        <dd><a href={telDeOrganizacion(org.contact_phone)}>{org.contact_phone}</a></dd>
+                      </div>
+                    )}
+                    {org.contact_email && (
+                      <div>
+                        <dt>Correo</dt>
+                        <dd><a href={`mailto:${org.contact_email}`}>{org.contact_email}</a></dd>
+                      </div>
+                    )}
+                  </dl>
+                )}
+              </div>
+            )}
+
+            {redes.length > 0 && (
+              <div className="storefront-links">
+                {redes.map((r) => (
+                  <a key={r.key} className="sf-btn sf-btn-ghost sf-btn-sm" href={r.href} target="_blank" rel="noopener noreferrer">
+                    {r.label}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <section className="storefront-catalog" aria-labelledby="storefront-catalogo">
+        <div className="storefront-inner">
+          <div className="storefront-catalog-head">
+            <h2 id="storefront-catalogo">Catálogo</h2>
+            {products && products.length > 0 && (
+              <span>{products.length} {products.length === 1 ? 'producto' : 'productos'}</span>
+            )}
+          </div>
+
+          {productsError ? (
+            <div className="storefront-empty">
+              <p>No se pudo cargar el catálogo. Recarga la página para intentarlo de nuevo.</p>
+            </div>
+          ) : products === null ? null : products.length === 0 ? (
+            <div className="storefront-empty">
+              {isMine ? (
+                <>
+                  <p>Tu catálogo está vacío. Aquí salen los productos activos que marcaste con «Mostrar en CFBAMX».</p>
+                  <Link to={`/panel/organizacion/${org.id}/inventario`} className="sf-btn sf-btn-dark sf-btn-sm">
+                    Administrar inventario
+                  </Link>
+                </>
+              ) : (
+                <p>
+                  Esta tienda todavía no publica productos aquí.
+                  {(tieneContacto || redes.length > 0) && ' Pregúntale directamente por lo que tiene.'}
+                </p>
+              )}
+            </div>
+          ) : (
+            <ul className="storefront-grid">
+              {products.map((p) => {
+                const precio = catalogPrice(p.price);
+                return (
+                  <li key={p.id} className="storefront-product">
+                    {/* Cuadrada y sin recortar: las fotos de producto son de
+                        estudio, y a una prenda no se le cortan las mangas. */}
+                    <div className="storefront-product-photo">
+                      {p.image_url
+                        ? <img src={imagenAjustada(p.image_url, 640)} alt={p.name} loading="lazy" decoding="async" />
+                        : <span className="storefront-product-nophoto" aria-hidden="true">Sin foto</span>}
+                    </div>
+                    <h3>{p.name}</h3>
+                    {p.description && <p className="storefront-product-description">{p.description}</p>}
+                    <div className="storefront-product-foot">
+                      {precio
+                        ? <span className="storefront-price">{precio} <small>{p.currency}</small></span>
+                        : <span className="storefront-price is-ask">Precio a consultar</span>}
+                      {p.size_variant && <span className="storefront-variant">{p.size_variant}</span>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// Mientras la vitrina está abierta, el <body> deja la cancha: el fondo vive en
+// el body, y la barra de arriba y el pie no son de esta página. También la
+// barra del navegador del celular toma el verde de la placa en vez del de la
+// cancha, y la pestaña lleva el nombre de la tienda, como las demás páginas
+// públicas. Todo se regresa al salir —también al pasar a "Editar"—. Va en
+// useLayoutEffect para que el primer cuadro ya salga sin cancha.
+function useVitrina(nombre) {
+  useLayoutEffect(() => {
+    document.body.classList.add('is-storefront');
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const colorAntes = meta ? meta.getAttribute('content') : null;
+    const placa = getComputedStyle(document.documentElement).getPropertyValue('--sf-plate').trim();
+    if (meta && placa) meta.setAttribute('content', placa);
+    return () => {
+      document.body.classList.remove('is-storefront');
+      if (meta && colorAntes) meta.setAttribute('content', colorAntes);
+    };
+  }, []);
+
+  useEffect(() => {
+    document.title = `${nombre} · CFBAMX`;
+    return () => { document.title = 'CFBAMX'; };
+  }, [nombre]);
+}
+
+// El botón del bot de WhatsApp con IA — solo aparece si la tienda tiene el
+// plan Pro activo (no vencido) y ya tiene su número configurado desde el Admin
+// Panel. Igual que el resto del flujo, "activo" significa plan === 'pro' Y
+// (sin fecha de vencimiento O la fecha todavía no pasó).
+function whatsappDeLaTienda(org) {
+  const planActivo = org.plan === 'pro' && (!org.plan_expires_at || new Date(org.plan_expires_at) > new Date());
+  if (!org.whatsapp_display_number || !planActivo) return null;
+  const texto = `Hola, vi ${org.name} en CFBAMX y quiero preguntar por un producto`;
+  return `https://wa.me/${org.whatsapp_display_number.replace(/\D/g, '')}?text=${encodeURIComponent(texto)}`;
+}
+
+// La palomita del sello va en el amarillo de CFBAMX: es la plataforma la que
+// dice que confirmó quién es la tienda.
+function SelloVerificada() {
+  return (
+    <svg className="storefront-seal-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <circle cx="8" cy="8" r="8" />
+      <path d="M4.6 8.3l2.2 2.2 4.6-4.8" />
+    </svg>
+  );
+}
+
 // Lo que solo ve quien la administra: si la plataforma la muestra y, si es un
 // medio, qué le pide para transmitir. Desde su sesión la página se ve igual
 // sea pública o privada, así que sin esto no tendría cómo saber que nadie más
@@ -372,7 +497,6 @@ export default function OrganizationDetailPage() {
 // aquí (tienen su propio interruptor).
 function EstadoDePublicacion({ org }) {
   if (org.type === 'league' || org.type === 'team') return null;
-  const faltaParaTransmitir = org.type === 'media' && !(org.is_public && org.is_verified);
   return (
     <div
       className="form-error"
@@ -382,10 +506,17 @@ function EstadoDePublicacion({ org }) {
         color: 'var(--ink)', marginTop: 14,
       }}
     >
-      {org.is_public
-        ? '✓ Es pública: aparece en el home y cualquiera puede ver esta página.'
-        : 'Es privada por ahora: no aparece en el home y esta página solo la ven quienes la administran. La publica el equipo de CFBAMX.'}
-      {faltaParaTransmitir && ' Para transmitir partidos, el medio tiene que estar publicado y verificado.'}
+      {org.is_public && '✓ '}{avisoDePublicacion(org)}
     </div>
   );
+}
+
+// El texto del aviso, aparte: la vitrina de una tienda se lo enseña a su dueño
+// en su propia barra, con un punto de color en vez de la palomita.
+function avisoDePublicacion(org) {
+  const faltaParaTransmitir = org.type === 'media' && !(org.is_public && org.is_verified);
+  const estado = org.is_public
+    ? 'Es pública: aparece en el home y cualquiera puede ver esta página.'
+    : 'Es privada por ahora: no aparece en el home y esta página solo la ven quienes la administran. La publica el equipo de CFBAMX.';
+  return faltaParaTransmitir ? `${estado} Para transmitir partidos, el medio tiene que estar publicado y verificado.` : estado;
 }

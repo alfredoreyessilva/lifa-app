@@ -93,8 +93,10 @@ export default function OrganizationInfoPanel({ org, onClose }) {
   );
 }
 
-// Correo y teléfono, y los botones de sus redes. Los usa también su página
-// (OrganizationDetailPage), para que la ficha y la página enseñen lo mismo.
+// Correo y teléfono, y los botones de sus redes. La página de una tienda
+// (la vitrina, en OrganizationDetailPage) los pinta a su modo, pero con
+// redesDeOrganizacion y telDeOrganizacion: la ficha y la vitrina enseñan lo
+// mismo.
 export function ContactoDeOrganizacion({ org }) {
   return (
     <div className="team-profile-section">
@@ -105,11 +107,17 @@ export function ContactoDeOrganizacion({ org }) {
       )}
       {org.contact_phone && (
         <div className="team-info-row">
-          📞 <a href={`tel:${org.contact_phone.replace(/[^\d+]/g, '')}`}>{org.contact_phone}</a>
+          📞 <a href={telDeOrganizacion(org.contact_phone)}>{org.contact_phone}</a>
         </div>
       )}
     </div>
   );
+}
+
+// El teléfono es texto libre ("998 123 4567", "+52 (998)…"): para marcar, solo
+// los dígitos y el "+".
+export function telDeOrganizacion(phone) {
+  return `tel:${phone.replace(/[^\d+]/g, '')}`;
 }
 
 export function RedesDeOrganizacion({ redes, style }) {
@@ -134,7 +142,7 @@ export function redesDeOrganizacion(org) {
   ].filter((r) => r.href);
 }
 
-function initials(name) {
+export function initials(name) {
   return name
     .split(' ')
     .filter((w) => w.length > 2 || /^[A-ZÁÉÍÓÚÑ]/.test(w))

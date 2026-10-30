@@ -5087,6 +5087,47 @@ cobra por sí mismo** — de hecho es lo único que hace el plan `pro`.
 > Anthropic (`ANTHROPIC_API_KEY`). Mientras no estén, el webhook **nunca se
 > ejecuta** y el inventario funciona solo como catálogo público.
 
+### La vitrina de una tienda (2026-10-30)
+
+Lo pidió Alfredo: la página pública de una tienda (`/panel/organizacion/:id`)
+llevaba de fondo la cancha, como toda la app, y en una tienda la cancha se lee
+infantil. Es **la única página pública que deja la cancha** (`StoreFront`, en
+`OrganizationDetailPage.jsx`):
+
+- **Una placa y un catálogo en blanco.** El logo y el nombre van sobre el verde
+  de CFBAMX llevado casi a negro (`--sf-plate`, `#10271a`), y el catálogo va en
+  blanco para que el color lo pongan los productos. CFBAMX se queda en voz
+  baja: en ese verde, en el amarillo —solo en el sello de verificada y en el
+  botón de WhatsApp—, en el nombre en Anton y en su logo del pie, que ahí mide
+  148 px en vez de 360.
+- **El fondo de cancha vive en el `body`**, y la barra de arriba y el pie están
+  fuera de la página. Mientras la vitrina está abierta le pone `.is-storefront`
+  al `body` —con `useLayoutEffect`, para que el primer cuadro no salga con
+  cancha—, cambia el `theme-color` (la barra del navegador del celular) al
+  verde de la placa y pone el nombre de la tienda en la pestaña. Todo se
+  regresa al salir y al pasar a "Editar", que sigue sobre la cancha: es el
+  panel de quien la administra, no lo que ve el público.
+- **Lo de la tienda se ve entero.** El logo va sobre blanco y sin recortar: el
+  círculo de antes le cortaba las esquinas a un logo cuadrado, y uno
+  transparente se perdía sobre el fondo. Las fotos de producto van en un
+  recuadro cuadrado, también sin recortar: son fotos de estudio, y a una
+  prenda no se le cortan las mangas. Con `mix-blend-mode: multiply` el blanco
+  de la foto toma el gris del recuadro.
+- **Los precios de una fila quedan a la misma altura** aunque las
+  descripciones midan distinto: van al pie de cada producto. Cerrado va sin
+  ".00" ("$1,650") y con centavos lleva los dos (`catalogPrice`, en
+  `utils/money.js`); antes salía "$850.5".
+- **Sin emojis ni etiqueta de tipo.** El "STORE" que salía arriba del nombre
+  era el valor crudo de `organizations.type`, en inglés.
+- **Un catálogo vacío lo dice**, y a quien la administra le da "Administrar
+  inventario". Si el catálogo no se pudo cargar también lo dice, en vez de un
+  "no hay productos" que no es lo que pasó.
+
+Lo que no cambió: qué se enseña (los mismos campos que la ficha, con
+`redesDeOrganizacion` y `telDeOrganizacion`), quién ve qué, la regla del botón
+de WhatsApp (plan Pro vigente y número cargado) ni la portada a 3:1. Las
+imágenes se piden a Cloudinary al tamaño en que se ven (`imagenAjustada`).
+
 ### Inventario — dos listados, y por qué
 
 `products` cuelga de una organización, y hay dos formas de leerlo:

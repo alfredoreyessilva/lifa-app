@@ -28,6 +28,20 @@
   --card-open-line: rgba(255, 255, 255, 0.14);
   --card-open-section: rgba(255, 255, 255, 0.05);
 
+  /* ---- La vitrina de una tienda (StoreFront, en OrganizationDetailPage) ----
+     La única página pública que deja la cancha: a una tienda le daba un aire
+     infantil que no es el suyo (README, "La vitrina de una tienda"). El verde
+     de CFBAMX llevado casi a negro es la placa con su nombre, y el catálogo va
+     en blanco con su propia rampa de grises —el --ink-dim de la app tira a
+     verde claro y sobre blanco no se lee—. El amarillo (--flag) se queda solo
+     en el sello de verificada y en el botón de WhatsApp. */
+  --sf-plate: #10271a;
+  --sf-paper: #ffffff;
+  --sf-tile: #f1f3f0;
+  --sf-ink: #18201b;
+  --sf-ink-dim: #5d6862;
+  --sf-line: #e2e6e2;
+
   --font-display: 'Anton', sans-serif;
   --font-eyebrow: 'Oswald', sans-serif;
   --font-body: 'Inter', sans-serif;
@@ -303,20 +317,6 @@ a { color: inherit; }
   padding-bottom: 64px;
 }
 
-/* ---------- Catálogo de tienda (4 columnas en escritorio) ----------
-   Clase separada de .league-grid a propósito: .league-grid la usan
-   ligas, categorías, grupos, torneos, etc. y no queremos afectarlas. */
-.catalog-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  padding-bottom: 64px;
-}
-@media (max-width: 640px) {
-  .catalog-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
 .league-card {
   background: var(--card);
   border: 1px solid var(--line);
@@ -4881,4 +4881,393 @@ a.match-card-new {
   .stats-drive-start input, .stats-drive-start select { width: 100%; }
   .stats-drive-start label { flex: 1 1 100%; }
   .stats-log-actions { flex-direction: column; }
+}
+
+/* ---------- La vitrina de una tienda ----------
+   StoreFront (OrganizationDetailPage). Mientras está abierta, el body lleva
+   .is-storefront: el fondo de cancha vive en el body, y la barra de arriba y
+   el pie están fuera de la página, así que se visten desde aquí. Los tokens
+   (--sf-*) están en :root. */
+body.is-storefront {
+  background: var(--sf-paper);
+}
+/* Opaca, a diferencia de la de la cancha: translúcida sobre el blanco salía de
+   otro tono que la placa que tiene debajo. */
+body.is-storefront .topbar {
+  background: var(--sf-plate);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+body.is-storefront .topbar-badge { border-color: var(--sf-plate); }
+body.is-storefront .footer {
+  border-top-color: var(--sf-line);
+  color: var(--sf-ink-dim);
+}
+/* El logo de CFBAMX se queda como firma; en el resto de la app mide 360 px. */
+body.is-storefront .footer-logo {
+  max-width: 148px;
+  border-radius: 6px;
+}
+body.is-storefront .footer-links a { color: var(--sf-ink-dim); }
+body.is-storefront .footer-links a:hover { color: var(--sf-ink); }
+
+.storefront { color: var(--sf-ink); }
+.storefront-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* La placa, de orilla a orilla. */
+.storefront-plate {
+  background: var(--sf-plate);
+  color: #fff;
+  padding: 32px 0 40px;
+}
+.storefront-owner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding-bottom: 16px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.storefront-owner p {
+  flex: 1 1 320px;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.72);
+}
+.storefront-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 10px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: var(--flag);
+}
+.storefront-dot.is-public { background: var(--positive); }
+
+.storefront-cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 1;
+  object-fit: cover;
+  border-radius: 10px;
+  margin-bottom: 32px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Logo, nombre, descripción y redes a la izquierda; WhatsApp, teléfono y
+   correo, a la derecha. */
+.storefront-identity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(240px, 300px);
+  grid-template-rows: auto auto 1fr;
+  grid-template-areas:
+    "logo heading contact"
+    "logo description contact"
+    "logo links contact";
+  column-gap: 28px;
+  row-gap: 14px;
+  align-items: start;
+}
+.storefront-identity.is-solo {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "logo heading"
+    "logo description"
+    "logo links";
+}
+.storefront-logo {
+  grid-area: logo;
+  width: 112px;
+  height: 112px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 36px;
+  color: var(--sf-plate);
+}
+.storefront-logo img { width: 100%; height: 100%; object-fit: contain; }
+
+.storefront-heading { grid-area: heading; min-width: 0; }
+/* Sin descripción ni redes, el nombre solo quedaba pegado arriba del logo:
+   ahí se centra contra él. Sin :has(), se queda arriba. Solo en escritorio:
+   en celular el nombre ya va centrado junto al logo. */
+@media (min-width: 861px) {
+  .storefront-identity:not(:has(.storefront-description)):not(:has(.storefront-links)) .storefront-heading {
+    grid-row: 1 / -1;
+    align-self: center;
+  }
+}
+.storefront-heading h1 {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(30px, 4.4vw, 46px);
+  line-height: 1.04;
+  letter-spacing: 0.01em;
+  color: #fff;
+  overflow-wrap: anywhere;
+}
+.storefront-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 12px;
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.62);
+}
+.storefront-seal {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+}
+.storefront-seal-icon { flex-shrink: 0; }
+.storefront-seal-icon circle { fill: var(--flag); }
+.storefront-seal-icon path {
+  fill: none;
+  stroke: #1a1300;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.storefront-description {
+  grid-area: description;
+  max-width: 60ch;
+  margin: 0;
+  font-size: 15.5px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.74);
+  white-space: pre-line;
+}
+
+.storefront-contact {
+  grid-area: contact;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.storefront-channels {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+.storefront-channels div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+}
+.storefront-channels dt {
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.5);
+}
+.storefront-channels dd {
+  margin: 0;
+  font-size: 14.5px;
+  overflow-wrap: anywhere;
+}
+.storefront-channels a {
+  color: rgba(255, 255, 255, 0.92);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+}
+.storefront-channels a:hover { border-bottom-color: #fff; }
+.storefront-links {
+  grid-area: links;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* Los botones de la vitrina van en Inter y sin mayúsculas: los de la app
+   (Oswald, todo en mayúsculas) en una tienda gritan. */
+.sf-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 22px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.sf-btn-sm { padding: 8px 15px; font-size: 13.5px; font-weight: 500; }
+.sf-btn-primary { background: var(--flag); color: #1a1300; }
+.sf-btn-primary:hover { background: #ffe066; }
+.sf-btn-ghost {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+  border-color: rgba(255, 255, 255, 0.26);
+}
+.sf-btn-ghost:hover { background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.6); }
+.sf-btn-dark { background: var(--sf-ink); color: #fff; }
+.sf-btn-dark:hover { background: #2c372f; }
+.storefront a:focus-visible,
+.storefront button:focus-visible {
+  outline: 2px solid var(--flag);
+  outline-offset: 3px;
+}
+.storefront-catalog a:focus-visible,
+.storefront-catalog button:focus-visible { outline-color: var(--sf-ink); }
+
+/* El catálogo, en blanco: el color lo ponen los productos. */
+.storefront-catalog { padding: 44px 0 72px; }
+.storefront-catalog-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.storefront-catalog-head h2 {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--sf-ink);
+}
+.storefront-catalog-head span { font-size: 14px; color: var(--sf-ink-dim); }
+
+.storefront-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 44px 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.storefront-product { display: flex; flex-direction: column; min-width: 0; }
+/* multiply: el blanco de una foto de estudio toma el gris del recuadro, y la
+   foto no se ve como una estampa pegada encima. */
+.storefront-product-photo {
+  aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--sf-tile);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.storefront-product-nophoto { font-size: 13px; color: var(--sf-ink-dim); }
+.storefront-product-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+.storefront-product h3 {
+  margin: 14px 0 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--sf-ink);
+  overflow-wrap: anywhere;
+}
+.storefront-product-description {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--sf-ink-dim);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+/* Precio y talla al pie: con descripciones de distinto largo, los precios de
+   una misma fila quedan a la misma altura. */
+.storefront-product-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+.storefront-price {
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--sf-ink);
+}
+.storefront-price small {
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--sf-ink-dim);
+}
+.storefront-price.is-ask { font-size: 14px; font-weight: 500; color: var(--sf-ink-dim); }
+.storefront-variant { font-size: 12.5px; color: var(--sf-ink-dim); }
+
+.storefront-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px 24px;
+  padding: 28px;
+  border-radius: 10px;
+  background: var(--sf-tile);
+}
+.storefront-empty p {
+  max-width: 60ch;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--sf-ink-dim);
+}
+
+@media (max-width: 980px) {
+  .storefront-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+/* En celular todo va en una columna, salvo logo y nombre. Sin áreas con
+   nombre: una descripción o un contacto que no existen no dejan su hueco. */
+@media (max-width: 860px) {
+  .storefront-identity,
+  .storefront-identity.is-solo {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-template-areas: none;
+    align-items: center;
+    column-gap: 18px;
+    row-gap: 20px;
+  }
+  .storefront-logo,
+  .storefront-heading { grid-area: auto; }
+  .storefront-description,
+  .storefront-contact,
+  .storefront-links { grid-area: auto; grid-column: 1 / -1; }
+  .storefront-description { max-width: none; }
+  .storefront-links { margin-top: 0; }
+}
+@media (max-width: 640px) {
+  .storefront-inner { padding: 0 16px; }
+  .storefront-plate { padding: 20px 0 28px; }
+  .storefront-cover { margin-bottom: 22px; border-radius: 8px; }
+  .storefront-logo { width: 76px; height: 76px; border-radius: 12px; font-size: 26px; }
+  .storefront-catalog { padding: 32px 0 56px; }
+  .storefront-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 14px; }
+  .storefront-empty { padding: 22px 20px; }
 }
