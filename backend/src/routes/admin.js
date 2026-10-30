@@ -89,13 +89,20 @@ router.get(`/cron`, authRequired, adminRequired, asyncHandler(async (req, res) =
 
 /* ===================== ESTADÍSTICAS ===================== */
 
+// Las visitas desde un navegador del admin no cuentan (lo marca POST /track).
+// Se descuentan al leer, así que salen también las que hizo antes de quedar
+// marcado. Una fila sin visitor_id no se puede atribuir y sí cuenta.
+const SIN_VISITAS_DEL_ADMIN = `NOT EXISTS (
+  SELECT 1 FROM internal_visitors iv WHERE iv.visitor_id = page_views.visitor_id
+)`;
+
 router.get('/stats', authRequired, adminRequired, asyncHandler(async (req, res) => {
   const [leagues, users, matches, teams, homeViews, uniqueVisitors, homeViewsByDay, sponsorStats, userGrowthByMonth, predictionStats, leaguesByStateRows] = await Promise.all([
     db.prepare('SELECT COUNT(*) as count FROM leagues').get(),
     db.prepare('SELECT COUNT(*) as count FROM users').get(),
     db.prepare('SELECT COUNT(*) as count FROM matches').get(),
     db.prepare('SELECT COUNT(*) as count FROM teams').get(),
-    db.prepare(`SELECT COUNT(*) as count FROM page_views WHERE event_type = 'home_view'`).get(),
+    db.prepare(`SELECT COUNT(*) as count FROM page_views WHERE event_type = 'home_view' AND ${SIN_VISITAS_DEL_ADMIN}`).get(),
     // Visitantes únicos (por visitor_id, ver track.js) contra vistas totales
     // de Home: la diferencia entre ambos es lo que le importa a un
     // patrocinador — cuánta GENTE llega, no solo cuántas veces se cargó la
@@ -105,12 +112,14 @@ router.get('/stats', authRequired, adminRequired, asyncHandler(async (req, res) 
       SELECT COUNT(DISTINCT visitor_id) as count
       FROM page_views
       WHERE event_type = 'home_view' AND visitor_id IS NOT NULL
+        AND ${SIN_VISITAS_DEL_ADMIN}
     `).get(),
     db.prepare(`
       SELECT created_at::date as day, COUNT(*) as count
       FROM page_views
       WHERE event_type = 'home_view'
         AND created_at >= CURRENT_DATE - INTERVAL '30 days'
+        AND ${SIN_VISITAS_DEL_ADMIN}
       GROUP BY day
       ORDER BY day ASC
     `).all(),

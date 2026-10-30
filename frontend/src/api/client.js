@@ -60,13 +60,14 @@ export const api = {
   // Estadísticas de uso (visitas, clics) — no requiere login. Si falla (ej.
   // sin internet un instante) no debe tronar la pantalla del visitante, así
   // que quien la llama la debe envolver en try/catch y simplemente ignorar
-  // el error.
-  trackEvent: (eventType, sponsorId) => {
+  // el error. El token es opcional: con él, el backend reconoce el navegador
+  // del admin y lo saca de las estadísticas (ver routes/track.js).
+  trackEvent: (eventType, sponsorId, token) => {
     const body = { event_type: eventType };
     if (sponsorId) body.sponsor_id = sponsorId;
     const visitorId = getVisitorId();
     if (visitorId) body.visitor_id = visitorId;
-    return request('/track', { method: 'POST', body });
+    return request('/track', { method: 'POST', body, token });
   },
 
   // Juego de predicciones ("¿quién gana?")

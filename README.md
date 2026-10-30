@@ -698,7 +698,12 @@ lifa-app/
                               eventos (home_view, sponsor_impression, sponsor_click).
                               Es el medidor de patrocinadores; alimenta las métricas de
                               /admin. El visitor_id es un id al azar de localStorage,
-                              no un dato personal
+                              no un dato personal. Si la visita trae la sesión del
+                              admin, ese navegador queda en `internal_visitors` y las
+                              visitas a Home de /admin lo descuentan AL LEER (regla 4):
+                              salen también las que hizo antes de marcarse y las que
+                              haga ya sin sesión. Las filas viejas sin visitor_id no
+                              se pueden atribuir y siguen contando
       utils/                 Validaciones, manejo de errores async, zonas horarias,
                               Cloudinary (compartido por upload.js y playerBilling.js),
                               billingReminders.js (los dos libros de cobranza),

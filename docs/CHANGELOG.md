@@ -15,6 +15,23 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Las visitas del admin ya no cuentan en "Visitas a Home" (2026-10-30).** Lo
+  pidió Alfredo: sus propias visitas inflaban la estadística. Home manda la
+  sesión con la visita; si es del admin, `POST /track` guarda ese `visitor_id`
+  en la tabla nueva `internal_visitors`, y las tres cifras de Home en
+  `GET /admin/stats` (total, únicos y los 30 días) lo descuentan al leer. No se
+  borra ninguna fila de `page_views` (regla 4), así que también salen las
+  visitas que ese navegador hizo antes de quedar marcado y las que haga ya sin
+  sesión. Lo que no alcanza: las visitas viejas sin `visitor_id` (917 de 1407
+  en `desarrollo-local`) y un navegador donde el admin nunca abre Home con su
+  sesión. Las impresiones y clics de patrocinadores no cambian.
+
+  Verificado en solo lectura contra `desarrollo-local`, con el SQL sacado del
+  propio `admin.js` de HEAD y del árbol: sin nadie marcado da idéntico
+  (1407 visitas, 102 únicos); al marcar al visitante más frecuente, el total
+  baja exactamente sus 185 visitas y los únicos baja 1. `POST /track` con
+  sesión de admin no se corrió de punta a punta.
+
 - **Ciudad, institución y link de Google Maps en la ficha de un equipo
   (2026-10-30).** Lo pidió Alfredo: "Ubicación" se cambia por "Ciudad", y se
   agregan "Institución" y el link de Google Maps. Tres columnas nuevas en

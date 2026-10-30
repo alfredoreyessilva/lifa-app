@@ -2478,6 +2478,20 @@ export async function initSchema() {
     await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS institution TEXT`);
     await run(`ALTER TABLE teams ADD COLUMN IF NOT EXISTS maps_url TEXT`);
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Los navegadores del admin, para que sus propias visitas no inflen las
+    // estadísticas de /admin (2026-10-30, lo pidió Alfredo). Se marca el
+    // `visitor_id` y no se borra ninguna fila de `page_views` (regla 4): el
+    // conteo las descuenta al leer, y por eso también salen las visitas que ese
+    // navegador hizo antes de quedar marcado. Lo llena POST /track.
+    await run(`
+      CREATE TABLE IF NOT EXISTS internal_visitors (
+        visitor_id TEXT PRIMARY KEY,
+        user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se

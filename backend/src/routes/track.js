@@ -1,5 +1,6 @@
 import express from 'express';
 import db from '../config/db.js';
+import { optionalAuth } from '../middleware/auth.js';
 import { trackLimiter } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
@@ -22,7 +23,9 @@ const SPONSOR_EVENTS = new Set(['sponsor_impression', 'sponsor_click']);
 
 // POST /api/track — sin autenticación (lo llama cualquier visitante,
 // incluso sin cuenta). Solo guarda que "algo pasó", sin datos personales.
-router.post('/', trackLimiter, asyncHandler(async (req, res) => {
+// La sesión es opcional y solo sirve para una cosa: reconocer el navegador
+// del admin (ver abajo).
+router.post('/', trackLimiter, optionalAuth, asyncHandler(async (req, res) => {
   const { event_type, sponsor_id, visitor_id } = req.body;
   if (!VALID_EVENTS.has(event_type)) {
     return res.status(400).json({ error: 'Tipo de evento no válido' });
@@ -42,6 +45,16 @@ router.post('/', trackLimiter, asyncHandler(async (req, res) => {
 
   await db.prepare('INSERT INTO page_views (event_type, sponsor_id, visitor_id) VALUES (?, ?, ?)')
     .run(event_type, SPONSOR_EVENTS.has(event_type) ? sponsor_id : null, visitorId);
+
+  // Un navegador desde el que entra el admin queda marcado como interno, y
+  // las estadísticas de /admin descuentan sus visitas al leer: las de hoy,
+  // las de antes y las que haga ya sin sesión. El evento se guarda igual —el
+  // dato crudo no se toca— y el usuario no se liga a la fila de page_views,
+  // que sigue siendo anónima.
+  if (visitorId && req.user?.role === 'admin') {
+    await db.prepare('INSERT INTO internal_visitors (visitor_id, user_id) VALUES (?, ?) ON CONFLICT (visitor_id) DO NOTHING')
+      .run(visitorId, req.user.id);
+  }
 
   res.status(204).end();
 }));

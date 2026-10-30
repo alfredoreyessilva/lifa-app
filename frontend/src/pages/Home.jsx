@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import Loading from '../components/Loading.jsx';
 import TeamCard from '../components/TeamCard.jsx';
 import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
@@ -27,6 +28,9 @@ export default function Home() {
   // contaríamos cada visita como 2. El ref sobrevive ese doble-arranque
   // porque StrictMode no destruye el componente, solo repite los efectos.
   const trackedHomeView = useRef(false);
+  // La sesión viaja con la visita para que el backend reconozca el navegador
+  // del admin y no cuente sus visitas (ver routes/track.js).
+  const { token } = useAuth();
 
   useEffect(() => {
     api.getLeagues().then(setLeagues).catch((e) => setError(e.message));
@@ -35,7 +39,7 @@ export default function Home() {
     api.getPublicOrganizations('store').then((d) => setStoreOrgs(d.organizations)).catch((e) => setStoreError(e.message));
     if (!trackedHomeView.current) {
       trackedHomeView.current = true;
-      api.trackEvent('home_view').catch(() => {});
+      api.trackEvent('home_view', null, token).catch(() => {});
     }
   }, []);
 
