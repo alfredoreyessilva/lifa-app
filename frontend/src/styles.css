@@ -2320,13 +2320,15 @@ a.match-card-new {
 .match-nav .match-card-new--live:hover {
   border-color: var(--live);
 }
+/* Círculo en el negro de la tarjeta que acompañan (--card-open): en el verde
+   de --card se perdían contra la cancha, igual que la tarjeta. */
 .match-nav-arrow {
   flex: 0 0 auto;
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  border: 1px solid var(--line-strong);
-  background: var(--card);
+  border: 1px solid var(--card-open-line);
+  background: var(--card-open);
   color: var(--flag);
   font-size: 26px;
   line-height: 1;
@@ -2334,10 +2336,10 @@ a.match-card-new {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+  transition: border-color 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
 }
 .match-nav-arrow:hover:not(:disabled) {
-  background: var(--card-hover);
+  border-color: var(--flag);
   transform: scale(1.08);
 }
 .match-nav-arrow:disabled {
