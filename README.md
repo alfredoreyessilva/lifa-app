@@ -4848,12 +4848,54 @@ Un medio necesita **las dos** para transmitir (abajo).
 
 Tocar un medio en el home abre su ficha encima, como la de un equipo
 (`OrganizationInfoPanel`, con la misma pastilla "✓ Verificada"); tocar una
-tienda lleva a su página. Al público, la página de un medio no le enseña nada
-que no quepa en la ficha —logo, nombre, verificada, país, descripción y sitio
-web, todo ya en `GET /organizations`—, y la de una tienda sí: su catálogo y el
-botón de WhatsApp. La misma ficha abre su logo en "También transmiten" de un
-partido cuando no puso link para ese partido (ver "Transmisiones"). La página
-del medio sigue existiendo: es su panel.
+tienda lleva a su página. En la ficha cabe todo lo de un medio —ya viene en `GET
+/organizations`, abajo—, y no lo de una tienda: su catálogo y el botón de
+WhatsApp. La misma ficha abre su logo en "También transmiten" de un partido
+cuando no puso link para ese partido (ver "Transmisiones").
+
+**La ficha sustituye a la vista pública de su página (2026-10-30).** Con el home
+y el partido abriendo la ficha, a la vista pública de un medio ya no llegaba
+nadie, y Alfredo pidió borrarla. `/panel/organizacion/:id` queda así:
+
+| Tipo | Quien la administra | Cualquier otro (el "Ver" del panel admin, un link viejo) |
+|-|-|-|
+| Tienda | Su página, con "Editar" | Su página: catálogo y WhatsApp |
+| Medio, clínica, marca | Directo al formulario; "Ver como público" abre la ficha encima | La ficha; cerrarla lleva al home |
+
+Clínica y marca van con el medio: no salen en el home, así que su página
+tampoco tenía otra entrada, y la ficha enseña lo mismo que enseñaba esa vista.
+"Ver como público" enseña lo ya guardado, no lo que está a medio escribir en el
+formulario.
+
+### Lo que enseña su ficha
+
+**Desde el 2026-10-30**, además de logo, nombre, palomita, país, descripción y
+sitio web, una organización puede poner **foto de portada, Facebook, Instagram,
+TikTok, correo y número de contacto**. Lo pidió Alfredo para los medios: un
+medio vive de que lo sigan en sus redes, y la ficha era un callejón sin salida
+con un solo botón. Son columnas de `organizations` con los mismos nombres que
+en `teams` y `leagues` (`cover_url`, `facebook_url`, `instagram_url`,
+`tiktok_url`, `contact_email`, `contact_phone`).
+
+- **Valen para los cuatro tipos**, no solo para el medio: tienda, clínica y
+  marca comparten página y formulario, y a una tienda le sirve igual que la
+  encuentren por Instagram. Liga y equipo guardan los suyos en `leagues` y
+  `teams`; en su fila de `organizations` estas columnas quedan en NULL y no se
+  leen.
+- **Todo es público, y el formulario lo dice** ("Todo lo de esta sección lo ve
+  cualquiera que abra tu organización"). Quien pone un teléfono tiene que
+  saber que no es un dato interno: la ficha lo enseña como enlace `tel:`.
+- **Una sola lista** (`CAMPOS_DE_FICHA`, en `utils/orgVisibility.js`) para las
+  dos lecturas públicas que arman la ficha: el directorio (`GET
+  /organizations`) y "También transmiten" (`GET /broadcasts/match/:id`). Antes
+  cada una nombraba sus columnas a mano; con ocho, la que se quedara atrás
+  dejaría la ficha a medias según desde dónde se abriera. Lo que es solo para
+  administrarla (el plan, el número del bot, `is_public`) no está en la lista.
+- **La portada se recorta a banner** (3:1 en la página de una tienda, la
+  franja de 120 px en la ficha). A su altura natural, una foto cuadrada o
+  vertical se comía la pantalla.
+- El correo y las direcciones se validan en los dos lados; el teléfono es
+  texto libre de hasta 20 caracteres en el formulario, como el de un equipo.
 
 ### Privada es privada
 
@@ -4861,8 +4903,8 @@ Igual que una liga oculta, una organización privada no existe para el público:
 
 - No sale en el directorio (`GET /organizations` filtra `is_public`).
 - Su página (`/panel/organizacion/:id`, la que abre al tocar una tienda en el
-  home) responde "No encontramos esta organización", y su catálogo tampoco
-  sale. 404
+  home, o la ficha de un medio a quien llega por la URL) responde "No
+  encontramos esta organización", y su catálogo tampoco sale. 404
   y no 403, como la tarjeta de un jugador: a quien no debe verla no se le
   confirma que existe.
 - Quien la administra y el admin de la plataforma la siguen viendo y editando:
@@ -4920,7 +4962,8 @@ que crea la columna, que en ese mismo paso queda `NOT NULL DEFAULT FALSE`.
 | PUT | `/admin/organizations/:id/unpublish` | Admin — oculta (ídem) |
 | PUT | `/admin/organizations/:id/verify` y `/unverify` | Admin — solo la insignia; ya no publica |
 | GET | `/admin/organizations` | Admin — trae `is_public` y, de un equipo, `show_on_platform` |
-| GET | `/organizations` | **Público** — el directorio: solo publicadas, con `is_verified` para la palomita |
+| GET | `/organizations` | **Público** — el directorio: solo publicadas, con `is_verified` para la palomita y `CAMPOS_DE_FICHA` para la ficha |
+| PUT | `/organizations/:id` | Dueño o administrador de la organización, o el admin — edita nombre, país, logo, descripción, sitio web, portada, redes y contacto (400 si es liga o equipo) |
 | GET | `/organizations/:id` | Público si está publicada; si no, quien la administra o el admin (404 a los demás) |
 | GET | `/products/organization/:id` | El mismo criterio que su página |
 | GET | `/auth/me` | `organizations[].is_public`, para el control de "Transmitir" |
@@ -4986,8 +5029,9 @@ El logo de un medio en "También transmiten" abre **su link para ese partido**,
 si lo puso. Si no, abre su ficha encima del partido (`OrganizationInfoPanel`,
 la misma que en el home) en vez de mandar a su página: quien está viendo un
 partido no tiene por qué salirse de él para saber quién es el medio. Por eso
-el `GET` público trae también país, descripción y sitio web: lo mismo que el
-directorio del home ya muestra de un medio publicado. La ficha se monta en
+el `GET` público trae también el país y `CAMPOS_DE_FICHA` (descripción, sitio
+web, portada, redes y contacto): lo mismo que el directorio del home ya muestra
+de un medio publicado. La ficha se monta en
 `document.body` y corta los toques, porque en esa pantalla deslizar el dedo
 cambia de partido.
 

@@ -11,6 +11,8 @@
 //      transmitir — que fue justo lo que se separó el 2026-10-29.
 //   3. Liga y equipo no se ocultan por aquí: tienen su propio interruptor, y
 //      `organizations.is_public` no se lee para ellos.
+//   4. La ficha pública trae lo que la organización llenó en su página, y nada
+//      de lo que solo es para administrarla.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,6 +22,8 @@ import {
   esPrivadaAlPublico,
   puedeTransmitir,
   puedeTransmitirSql,
+  CAMPOS_DE_FICHA,
+  camposDeFichaSql,
 } from '../../src/utils/orgVisibility.js';
 
 // Un medio como lo deja `POST /organizations`: privado y sin verificar.
@@ -86,4 +90,27 @@ test('una liga o un equipo nunca son privados por organizations.is_public', () =
   // equipo con teams.show_on_platform.
   assert.equal(esPrivadaAlPublico({ type: 'league', is_public: false }), false);
   assert.equal(esPrivadaAlPublico({ type: 'team', is_public: false }), false);
+});
+
+// ── 4. Lo que enseña la ficha ─────────────────────────────────────────────
+
+test('la ficha trae portada, redes y contacto, además de descripción y sitio web', () => {
+  assert.deepEqual([...CAMPOS_DE_FICHA].sort(), [
+    'contact_email', 'contact_phone', 'cover_url', 'description',
+    'facebook_url', 'instagram_url', 'tiktok_url', 'website_url',
+  ]);
+});
+
+test('la ficha no trae nada de lo que es solo para administrarla', () => {
+  // El plan, el número del bot de WhatsApp y si está publicada no son de la
+  // ficha: los lee quien la administra en GET /organizations/:id.
+  for (const campo of ['plan', 'plan_expires_at', 'whatsapp_phone_number_id', 'whatsapp_display_number', 'is_public']) {
+    assert.ok(!CAMPOS_DE_FICHA.includes(campo), campo);
+  }
+});
+
+test('la versión SQL lleva el alias en cada columna y ningún signo de interrogación', () => {
+  assert.equal(camposDeFichaSql('o'), CAMPOS_DE_FICHA.map((c) => `o.${c}`).join(', '));
+  assert.equal(camposDeFichaSql(), camposDeFichaSql('o'), 'el alias por default es o');
+  assert.ok(!camposDeFichaSql('org').includes('?'), 'sin signos de interrogación: db.prepare los vuelve parámetros');
 });

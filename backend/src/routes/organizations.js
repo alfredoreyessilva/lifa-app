@@ -1,9 +1,10 @@
 import express from 'express';
 import db from '../config/db.js';
 import { authRequired, optionalAuth } from '../middleware/auth.js';
-import { isValidUrl, isNonEmptyString } from '../utils/validation.js';
+import { isValidUrl, isValidEmail, isNonEmptyString } from '../utils/validation.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isOrgMember, puedeVerOrganizacion } from '../utils/orgMembers.js';
+import { camposDeFichaSql } from '../utils/orgVisibility.js';
 import { organizationAdminRequired } from '../middleware/ownership.js';
 import { rolesDeTipo, etiquetaDeRol, puede, esRolValido } from '../utils/orgRoles.js';
 
@@ -55,11 +56,15 @@ router.get('/countries', asyncHandler(async (req, res) => {
 //
 // Liga y equipo nunca salen de aquí, ni pidiéndolos con `type`: tienen su
 // propio directorio, y `is_public` no se lee para ellos.
+//
+// Trae todo lo de la ficha (CAMPOS_DE_FICHA): tocar un medio en el home la
+// abre con estos datos, sin pedir nada más.
 router.get('/', asyncHandler(async (req, res) => {
   const { type } = req.query;
   const params = [];
   let sql = `
-    SELECT o.id, o.name, o.slug, o.type, o.logo_url, o.description, o.website_url, o.is_verified,
+    SELECT o.id, o.name, o.slug, o.type, o.logo_url, o.is_verified,
+           ${camposDeFichaSql('o')},
            c.name AS country_name
     FROM organizations o
     LEFT JOIN countries c ON c.id = o.country_id
@@ -144,14 +149,24 @@ router.put('/:id', authRequired, asyncHandler(async (req, res) => {
     return res.status(403).json({ error: 'No tienes permiso sobre esta organización' });
   }
 
-  const { name, country_id, logo_url, description, website_url } = req.body;
+  const {
+    name, country_id, logo_url, description, website_url,
+    cover_url, facebook_url, instagram_url, tiktok_url, contact_email, contact_phone,
+  } = req.body;
   if (name !== undefined && !isNonEmptyString(name)) return res.status(400).json({ error: 'El nombre no puede estar vacío' });
   if (logo_url && !isValidUrl(logo_url)) return res.status(400).json({ error: 'El logo no es una dirección web válida' });
   if (website_url && !isValidUrl(website_url)) return res.status(400).json({ error: 'El sitio web no es válido' });
+  if (cover_url && !isValidUrl(cover_url)) return res.status(400).json({ error: 'La foto de portada no es una dirección web válida' });
+  if (facebook_url && !isValidUrl(facebook_url)) return res.status(400).json({ error: 'El enlace de Facebook no es una dirección web válida' });
+  if (instagram_url && !isValidUrl(instagram_url)) return res.status(400).json({ error: 'El enlace de Instagram no es una dirección web válida' });
+  if (tiktok_url && !isValidUrl(tiktok_url)) return res.status(400).json({ error: 'El enlace de TikTok no es una dirección web válida' });
+  if (contact_email && !isValidEmail(contact_email)) return res.status(400).json({ error: 'El correo de contacto no tiene un formato válido' });
 
   const updated = await db.prepare(`
     UPDATE organizations SET
-      name = ?, country_id = ?, logo_url = ?, description = ?, website_url = ?
+      name = ?, country_id = ?, logo_url = ?, description = ?, website_url = ?,
+      cover_url = ?, facebook_url = ?, instagram_url = ?, tiktok_url = ?,
+      contact_email = ?, contact_phone = ?
     WHERE id = ?
     RETURNING *
   `).get(
@@ -160,6 +175,12 @@ router.put('/:id', authRequired, asyncHandler(async (req, res) => {
     logo_url !== undefined ? logo_url : org.logo_url,
     description !== undefined ? description : org.description,
     website_url !== undefined ? website_url : org.website_url,
+    cover_url !== undefined ? cover_url : org.cover_url,
+    facebook_url !== undefined ? facebook_url : org.facebook_url,
+    instagram_url !== undefined ? instagram_url : org.instagram_url,
+    tiktok_url !== undefined ? tiktok_url : org.tiktok_url,
+    contact_email !== undefined ? contact_email : org.contact_email,
+    contact_phone !== undefined ? contact_phone : org.contact_phone,
     org.id
   );
 

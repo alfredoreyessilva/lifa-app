@@ -2,11 +2,14 @@ import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
 // Ficha de un medio: se abre encima de la pantalla, igual que la de un equipo
-// (TeamInfoPanel), en vez de mandar a su página. La abren el directorio del
-// home y "También transmiten" de un partido, cuando el medio no puso link para
-// ese partido. Muestra lo mismo que su página le enseña al público —logo,
-// nombre, verificada, país, descripción y sitio web—, y quien la abre ya trae
-// esos datos (GET /organizations, GET /broadcasts/match/:id): no pide nada.
+// (TeamInfoPanel). Es TODO lo que el público ve de un medio —portada, logo,
+// nombre, verificada, país, descripción, contacto, redes y sitio web—: la
+// vista pública que tenía su página se borró el 2026-10-30. La abren el
+// directorio del home, "También transmiten" de un partido cuando el medio no
+// puso link para ese partido, y su página (OrganizationDetailPage) a quien no
+// lo administra, o a quien sí con "Ver como público". Sirve igual para una
+// clínica o una marca. Quien la abre ya trae los datos (GET /organizations,
+// GET /broadcasts/match/:id, con CAMPOS_DE_FICHA del backend): no pide nada.
 //
 // Va en un portal a document.body, como Modal.jsx, para no quedar anidada en la
 // tarjeta del partido. Pero los eventos de React suben por el árbol de
@@ -23,6 +26,8 @@ export default function OrganizationInfoPanel({ org, onClose }) {
   }, [onClose]);
 
   const hasInfo = org.country_name || org.description;
+  const hasContact = org.contact_email || org.contact_phone;
+  const redes = redesDeOrganizacion(org);
 
   const stop = (e) => e.stopPropagation();
 
@@ -30,8 +35,15 @@ export default function OrganizationInfoPanel({ org, onClose }) {
     <div className="modal-backdrop" onClick={onClose} onTouchStart={stop} onTouchEnd={stop}>
       <div className="team-profile-modal" onClick={stop}>
 
-        {/* BANNER — una organización no tiene portada, va el degradado */}
-        <div className="team-profile-banner">
+        {/* BANNER — su portada, o el degradado si no subió una */}
+        <div
+          className="team-profile-banner"
+          style={org.cover_url ? {
+            backgroundImage: `url(${org.cover_url})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          } : {}}
+        >
           <button className="team-profile-close" onClick={onClose}>✕</button>
         </div>
 
@@ -65,17 +77,13 @@ export default function OrganizationInfoPanel({ org, onClose }) {
             </div>
           )}
 
-          {org.website_url && (
-            <div className="team-info-links">
-              <a href={org.website_url} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
-                Sitio web
-              </a>
-            </div>
-          )}
+          {hasContact && <ContactoDeOrganizacion org={org} />}
 
-          {!hasInfo && !org.website_url && (
+          {redes.length > 0 && <RedesDeOrganizacion redes={redes} />}
+
+          {!hasInfo && !hasContact && redes.length === 0 && (
             <p style={{ color: 'var(--ink-dim)', fontSize: 13, textAlign: 'center', margin: '8px 0 0' }}>
-              Todavía no agregó una descripción ni su sitio web.
+              Todavía no agregó su información.
             </p>
           )}
         </div>
@@ -83,6 +91,46 @@ export default function OrganizationInfoPanel({ org, onClose }) {
     </div>,
     document.body
   );
+}
+
+// Correo y teléfono, y los botones de sus redes. Los usa también su página
+// (OrganizationDetailPage), para que la ficha y la página enseñen lo mismo.
+export function ContactoDeOrganizacion({ org }) {
+  return (
+    <div className="team-profile-section">
+      {org.contact_email && (
+        <div className="team-info-row">
+          ✉️ <a href={`mailto:${org.contact_email}`}>{org.contact_email}</a>
+        </div>
+      )}
+      {org.contact_phone && (
+        <div className="team-info-row">
+          📞 <a href={`tel:${org.contact_phone.replace(/[^\d+]/g, '')}`}>{org.contact_phone}</a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function RedesDeOrganizacion({ redes, style }) {
+  return (
+    <div className="team-info-links" style={style}>
+      {redes.map((r) => (
+        <a key={r.key} href={r.href} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
+          {r.label}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+export function redesDeOrganizacion(org) {
+  return [
+    { key: 'facebook_url',  label: 'Facebook',  href: org.facebook_url },
+    { key: 'instagram_url', label: 'Instagram', href: org.instagram_url },
+    { key: 'tiktok_url',    label: 'TikTok',    href: org.tiktok_url },
+    { key: 'website_url',   label: 'Sitio web', href: org.website_url },
+  ].filter((r) => r.href);
 }
 
 function initials(name) {

@@ -2447,6 +2447,22 @@ export async function initSchema() {
       ALTER TABLE organizations ALTER COLUMN is_public SET NOT NULL
     `);
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Lo que una organización pone en su ficha además del sitio web: portada,
+    // redes y contacto (README, "Organizaciones: publicar y verificar",
+    // 2026-10-30). Lo pidió Alfredo para los medios; vale para los cuatro tipos
+    // porque comparten página y formulario. Los mismos nombres que en `teams` y
+    // `leagues`, y sin DEFAULT: NULL es "no lo puso".
+    //
+    // Solo se leen para medio/tienda/clínica/marca. Liga y equipo guardan los
+    // suyos en `leagues` y `teams`, y PUT /organizations/:id no los edita.
+    await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS cover_url TEXT`);
+    await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS facebook_url TEXT`);
+    await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS instagram_url TEXT`);
+    await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS tiktok_url TEXT`);
+    await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS contact_email TEXT`);
+    await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS contact_phone TEXT`);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se

@@ -43,3 +43,18 @@ export function puedeTransmitirSql(aliasOrganizacion = 'o') {
   const o = aliasOrganizacion;
   return `(${o}.type = 'media' AND ${o}.is_public AND ${o}.is_verified)`;
 }
+
+// Lo que enseña la ficha pública de una organización además de logo, nombre y
+// palomita: lo que ella misma llenó en su página para que la encuentren. Una
+// sola lista para las dos lecturas que arman la ficha —el directorio del home y
+// "También transmiten" de un partido—: dos listas a mano se separan, y la que
+// se queda atrás deja la ficha a medias sin que nadie lo note.
+export const CAMPOS_DE_FICHA = [
+  'description', 'website_url', 'cover_url',
+  'facebook_url', 'instagram_url', 'tiktok_url',
+  'contact_email', 'contact_phone',
+];
+
+export function camposDeFichaSql(aliasOrganizacion = 'o') {
+  return CAMPOS_DE_FICHA.map((campo) => `${aliasOrganizacion}.${campo}`).join(', ');
+}

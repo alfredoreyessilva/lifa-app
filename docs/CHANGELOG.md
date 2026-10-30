@@ -15,6 +15,70 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **La ficha sustituye a la vista pública de la página de un medio
+  (2026-10-30).** Lo pidió Alfredo: con el home y "También transmiten" abriendo
+  la ficha, a esa vista ya no llegaba nadie. Se borró para medio, clínica y
+  marca; la tienda la conserva, porque ahí están su catálogo y el botón de
+  WhatsApp, y el home todavía lleva a ella. Quien administra un medio cae
+  directo en el formulario, y "Ver como público" le abre la ficha encima; quien
+  llega por la URL sin administrarlo (el "Ver" del panel admin, un link viejo)
+  ve la ficha, y al cerrarla va al home. Tabla en el README, "Organizaciones:
+  publicar y verificar".
+  - De paso: guardar dejaba a la página sin el nombre del país (el `PUT`
+    regresa la fila sin el `JOIN` del `GET`), y la ficha lo perdía hasta
+    recargar. Ahora se completa con la lista de países que ya tiene la página.
+
+  Verificado en el navegador, contra el backend de pruebas: el medio de
+  prueba abre directo en el formulario; "Ver como público" abre su ficha y
+  Escape la cierra; elegir México y guardar lo deja en la ficha; ESPN Mx,
+  abierto por URL con una cuenta que no lo administra, se ve como su ficha y
+  cerrarla lleva al home; la tienda de prueba sigue con su página y su
+  catálogo, y "Editar" / "Ver como público" van y vienen sin ficha. 167
+  unitarias del frontend y el build.
+
+- **Portada, redes y contacto en la ficha de un medio (2026-10-30).** Lo pidió
+  Alfredo: un medio puede poner foto de portada, Facebook, Instagram, TikTok,
+  correo y número de contacto, además de lo que ya tenía. Seis columnas nuevas
+  en `organizations`, con los nombres de `teams` y `leagues`; valen también
+  para tienda, clínica y marca porque comparten página y formulario. Detalle y
+  porqués en el README, "Organizaciones: publicar y verificar → Lo que enseña
+  su ficha".
+  - `PUT /organizations/:id` las acepta y valida (direcciones y correo); la
+    ficha del home, "También transmiten" y la página de la organización las
+    enseñan. Las dos lecturas públicas que arman la ficha nombran sus columnas
+    desde una sola lista, `CAMPOS_DE_FICHA`.
+  - El formulario avisa que todo lo de "Contacto y redes" es público, y va en
+    la tarjeta negra de los editores de equipo y de sede
+    (`.team-editor-preview`, que pasa los campos de verde a gris): sobre la
+    cancha, un formulario así de largo no se despegaba del fondo. Dentro del
+    panel, correo y teléfono llevan `minWidth: 0`: el teléfono se salía por la
+    derecha, con su contador cortado.
+  - La portada de la página se recorta a banner 3:1: la primera prueba, con una
+    imagen cuadrada, ocupaba la pantalla entera.
+
+  Verificado así:
+  - las dos consultas públicas contra las de HEAD, en solo lectura sobre
+    `desarrollo-local` y con un CTE que agregaba las columnas antes de que
+    existieran: los 2 medios del directorio y las 3 transmisiones visibles
+    salen idénticos en las columnas de antes, con las nuevas en NULL; simulando
+    un medio con todo lleno, salen sus seis valores y las demás siguen en NULL;
+  - `invites-roles.e2e.mjs`: 213 ok, 0 fallas; 283 unitarias del backend (3
+    nuevas, de `CAMPOS_DE_FICHA`), 167 del frontend y el build;
+  - el `PUT` con `curl` sobre el medio de prueba de la suite: guarda los seis,
+    400 con TikTok, correo o portada inválidos, mandar solo el nombre no borra
+    lo demás, 403 a quien no lo administra y 404 al público mientras es
+    privado;
+  - en el navegador, escritorio y celular: el formulario frena un TikTok sin
+    `https://`, guarda uno bueno y borra el teléfono (confirmado leyendo del
+    servidor); la página enseña portada, correo y los cuatro botones; la ficha
+    del home, con el directorio simulado —sin escribir en la base— para incluir
+    al medio privado, enseña lo mismo, y la de ESPN Mx, que no llenó nada, se ve
+    igual que antes;
+  - el formulario en la tarjeta negra, midiendo en el navegador: en escritorio
+    correo y teléfono miden lo mismo y terminan dentro del panel; en celular se
+    apilan, ningún campo se sale y no hay desplazamiento horizontal; y guardar
+    sigue funcionando.
+
 - **Un medio se abre en una ficha, como un equipo (2026-10-30)**, en el home
   y en "También transmiten" de un partido. Lo pidió Alfredo: tocar un medio
   mandaba a su página (`/panel/organizacion/:id`); ahora abre su ficha encima
