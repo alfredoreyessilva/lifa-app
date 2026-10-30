@@ -252,7 +252,7 @@ function SectionHead({ id, title, count, registerTo, registerLabel, style }) {
       <h2>{title}</h2>
       <div className="home-section-actions">
         {count && <span className="count">{count}</span>}
-        <Link to={registerTo} className="btn btn-outline btn-sm">{registerLabel}</Link>
+        <Link to={registerTo} className="btn btn-flag btn-sm">{registerLabel}</Link>
       </div>
     </div>
   );
