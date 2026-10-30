@@ -663,6 +663,11 @@ no bloquea nada de lo de arriba.
   **salga** de la plataforma (correo al tutor). Hoy es imposible:
   `notifications` tiene `CHECK (recipient_type IN ('league','team'))` y los
   jugadores no tienen cuenta.
+- **Que un medio, tienda, clínica o marca pida publicarse**, que el admin
+  rechace la solicitud con un motivo, y que le llegue el aviso de publicada o
+  verificada, como a una liga. Choca con el mismo `CHECK`: esas organizaciones
+  no tienen bandeja. Quedó fuera a propósito el 2026-10-29; ver README,
+  "Organizaciones: publicar y verificar".
 - **Permisos de colaboración entre organizaciones**: punto 2 de "Roadmap — en
   construcción".
 - **Credencial digital con QR**: ver "Roster de jugadores".

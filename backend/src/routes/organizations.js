@@ -1,9 +1,9 @@
 import express from 'express';
 import db from '../config/db.js';
-import { authRequired } from '../middleware/auth.js';
+import { authRequired, optionalAuth } from '../middleware/auth.js';
 import { isValidUrl, isNonEmptyString } from '../utils/validation.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { isOrgMember } from '../utils/orgMembers.js';
+import { isOrgMember, puedeVerOrganizacion } from '../utils/orgMembers.js';
 import { organizationAdminRequired } from '../middleware/ownership.js';
 import { rolesDeTipo, etiquetaDeRol, puede, esRolValido } from '../utils/orgRoles.js';
 
@@ -47,24 +47,28 @@ router.get('/countries', asyncHandler(async (req, res) => {
   res.json({ countries });
 }));
 
-// Directorio público de organizaciones verificadas — lo que alimenta la
-// sección "Medios de comunicación" (y a futuro, proveedores/tiendas/
-// clínicas) del home. Solo trae verificadas: is_verified es justo el
-// filtro que decide qué se hace público, como se definió desde el paso 1.
+// Directorio público de organizaciones — lo que alimenta las secciones
+// "Medios de comunicación" y "Tiendas y proveedores" del home. Solo trae las
+// PUBLICADAS: desde el 2026-10-29 eso es `is_public`, y `is_verified` viaja
+// aparte para la palomita (README, "Organizaciones: publicar y verificar").
+// Hasta ese día el filtro era `is_verified`, que hacía las dos cosas.
+//
+// Liga y equipo nunca salen de aquí, ni pidiéndolos con `type`: tienen su
+// propio directorio, y `is_public` no se lee para ellos.
 router.get('/', asyncHandler(async (req, res) => {
   const { type } = req.query;
   const params = [];
   let sql = `
-    SELECT o.id, o.name, o.slug, o.type, o.logo_url, o.description, o.website_url, c.name AS country_name
+    SELECT o.id, o.name, o.slug, o.type, o.logo_url, o.description, o.website_url, o.is_verified,
+           c.name AS country_name
     FROM organizations o
     LEFT JOIN countries c ON c.id = o.country_id
-    WHERE o.is_verified = TRUE AND o.status = 'active'
+    WHERE o.is_public = TRUE AND o.status = 'active'
+      AND o.type NOT IN ('league', 'team')
   `;
   if (type) {
     sql += ' AND o.type = ?';
     params.push(type);
-  } else {
-    sql += " AND o.type NOT IN ('league', 'team')";
   }
   sql += ' ORDER BY o.name';
   const organizations = await db.prepare(sql).all(...params);
@@ -105,14 +109,21 @@ router.post('/', authRequired, asyncHandler(async (req, res) => {
 // Público, sin authRequired — mismo criterio que la tarjeta del jugador:
 // el perfil de un medio/proveedor/tienda/clínica debe poder verse sin
 // necesitar sesión, igual que cualquier liga o equipo hoy.
-router.get('/:id', asyncHandler(async (req, res) => {
+//
+// Salvo si es privada (2026-10-29): entonces no existe para el público, igual
+// que una liga oculta, y responde el mismo 404 que una que no existe. La siguen
+// viendo quienes la administran y el admin de la plataforma — esta misma página
+// es su panel —, por eso `optionalAuth`.
+router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
   const org = await db.prepare(`
     SELECT o.*, c.name AS country_name
     FROM organizations o
     LEFT JOIN countries c ON c.id = o.country_id
     WHERE o.id = ?
   `).get(req.params.id);
-  if (!org) return res.status(404).json({ error: 'Organización no encontrada' });
+  if (!org || !(await puedeVerOrganizacion(req.user, org))) {
+    return res.status(404).json({ error: 'Organización no encontrada' });
+  }
   res.json(org);
 }));
 

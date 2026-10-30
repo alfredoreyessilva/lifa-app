@@ -661,13 +661,15 @@ lifa-app/
         manage.js            CRUD protegido: ligas, categorías, grupos, equipos (con o sin
                               liga, ver "Equipos independientes"), partidos, sedes
         organizations.js     Medio/Tienda/Clínica/Marca (registro genérico) + directorio
-                              público verificado (liga y equipo tienen su propio flujo) +
-                              listar/quitar administradores de cualquier organización
+                              público de las publicadas (liga y equipo tienen su propio
+                              flujo) + listar/quitar administradores de cualquier
+                              organización — ver "Organizaciones: publicar y verificar"
         upload.js             Subida de imágenes a Cloudinary
         invites.js           Invitaciones de un solo uso: entregar un equipo a otro usuario
                               (reemplaza al representante), o sumar un administrador más a una
                               liga/equipo (org_admin, agrega sin reemplazar a nadie)
-        admin.js             Endpoints exclusivos para role = 'admin' (incluye aprobar ligas)
+        admin.js             Endpoints exclusivos para role = 'admin' (incluye publicar y
+                              verificar ligas y organizaciones)
         notifications.js     "Mis notificaciones" (una bandeja por persona), seguir partidos,
                               el interruptor del push y el endpoint /trigger del cron
                               (dos cadencias en un endpoint) — ver "Notificaciones" y
@@ -686,8 +688,8 @@ lifa-app/
                               o predijo). No tiene tabla propia — es una
                               vista derivada de push_subscriptions + predictions, y es
                               historial: el partido se queda ahí después de jugarse
-        broadcasts.js        Un medio verificado se suma solo a un partido y pone su
-                              link — ver "Transmisiones"
+        broadcasts.js        Un medio publicado y verificado se suma solo a un partido
+                              y pone su link — ver "Transmisiones"
         products.js          Inventario por organización — ver "Tiendas y bot de WhatsApp"
         bot.js               Webhook de WhatsApp: responde a clientes de una tienda con
                               su inventario, vía Claude — misma sección. CONSTRUIDO PERO
@@ -731,6 +733,11 @@ lifa-app/
                               que sigues y de tus predicciones),
                               sesiones.js (cuándo deja de servir un token
                               después de cambiar la contraseña. Puro),
+                              orgVisibility.js (qué organizaciones se publican
+                              con `is_public`, cuándo una no existe para el
+                              público y qué le pide a un medio transmitir. Puro,
+                              con su versión de SQL — ver "Organizaciones:
+                              publicar y verificar"),
                               email.js (los dos correos con código, por Resend;
                               EMAIL_TRANSPORT=log para el backend de pruebas)
       seed.js                Datos de ejemplo para desarrollo local
@@ -4676,7 +4683,7 @@ otra organización, y sin que le falte ninguna función por no tener liga.
 |-|-|-|
 | `POST` | `/manage/teams` | Registra un equipo sin liga — crea `teams` + `organizations` + `organization_members` de un jalón. Owner = quien lo registra, de inmediato (a diferencia de un equipo de liga, que nace sin representante hasta que alguien reclama una invitación). |
 | `PUT` | `/manage/teams/:id` | Ahora también acepta `country_id`/`description` (se guardan en la organización del equipo) y `show_on_platform`. |
-| `GET` | `/admin/organizations` | Ya incluye a los equipos **independientes** (antes excluía `type = 'team'` por completo) — verificables con el mismo botón `is_verified` que medio/tienda/clínica/marca. Un equipo de liga sigue sin aparecer aquí (se administra desde el panel de su liga). |
+| `GET` | `/admin/organizations` | Ya incluye a los equipos **independientes** (antes excluía `type = 'team'` por completo) — verificables con el mismo botón `is_verified` que medio/tienda/clínica/marca. Desde el 2026-10-29 es el único botón que tienen ahí: no se publican desde esa pestaña (ver "Organizaciones: publicar y verificar"). Un equipo de liga sigue sin aparecer aquí (se administra desde el panel de su liga). |
 | `GET` | `/leagues/all-teams` | Suma, además del roster de ligas públicas, a los equipos independientes con `show_on_platform = TRUE`. |
 | `GET` | `/billing/teams/:id/statement` | Un equipo sin liga no tiene relación de cobranza con nadie — regresa un estado de cuenta vacío en vez de tronar. |
 
@@ -4817,6 +4824,105 @@ verían.
 - Reducir la foto en el celular antes de subirla. Hoy viaja completa (hasta
   8 MB) y Cloudinary la recorta al guardarla.
 
+## Organizaciones: publicar y verificar
+
+**Decidido el 2026-10-29.** Medios, tiendas, clínicas y marcas se registran
+solos (`POST /organizations`) y nacen privados y sin verificar. Hasta ese día un
+solo botón de la pestaña Organizaciones del panel admin, "Marcar verificada",
+hacía tres cosas a la vez: metía a la organización al directorio del home, le
+ponía la insignia y, si era un medio, le daba permiso de transmitir partidos. No
+había forma de mostrar una tienda sin certificar quién es, ni de certificar a un
+medio sin mostrarlo.
+
+Ahora son dos botones, el mismo modelo que las ligas, y los dos los toca
+únicamente el admin de la plataforma:
+
+| Botón | Columna | Qué dice | Qué hace |
+|-|-|-|-|
+| **Publicar / Ocultar** | `organizations.is_public` | Que la plataforma la muestra | Sale en el directorio del home ("Medios de comunicación", "Tiendas y proveedores") y su página abre para cualquiera |
+| **Marcar verificada / Quitar verificación** | `organizations.is_verified` | Que se confirmó quién es | La palomita en el directorio y "✓ Verificada" en su página |
+
+Un medio necesita **las dos** para transmitir (abajo).
+
+### Privada es privada
+
+Igual que una liga oculta, una organización privada no existe para el público:
+
+- No sale en el directorio (`GET /organizations` filtra `is_public`).
+- Su página (`/panel/organizacion/:id`, la que abre al tocarla en el home)
+  responde "No encontramos esta organización", y su catálogo tampoco sale. 404
+  y no 403, como la tarjeta de un jugador: a quien no debe verla no se le
+  confirma que existe.
+- Quien la administra y el admin de la plataforma la siguen viendo y editando:
+  por eso `GET /organizations/:id` y el catálogo público llevan `optionalAuth`
+  (`puedeVerOrganizacion`, en `utils/orgMembers.js`). A quien la administra, su
+  página le dice si es pública o privada y quién la publica: desde su sesión la
+  ve igual que siempre, y no tendría cómo saber que nadie más la ve.
+
+### Para transmitir: publicada y verificada
+
+La verificación sigue siendo **identidad, no licencia** (ver "Transmisiones"):
+es el candado contra quien se registra con el nombre de un medio que no es. Y
+publicar es lo que dice que la plataforma lo muestra; un medio privado con su
+logo en la página de un partido sería un medio privado a la vista. Por eso
+`POST /broadcasts` pide las dos.
+
+Se resuelve al leer (regla 4): `GET /broadcasts/match/:matchId` aplica la misma
+regla (`puedeTransmitirSql`, en `utils/orgVisibility.js`). Ocultar un medio o
+quitarle la verificación lo saca de "También transmiten" sin borrar sus filas
+de `match_broadcasts`, y vuelve solo cuando recupera las dos. Antes, quitarle la
+verificación no lo sacaba de los partidos donde ya estaba.
+
+### Los equipos independientes no se publican desde aquí
+
+En la pestaña Organizaciones también salen los equipos sin liga, pero solo con
+"Marcar verificada". Si salen en el home lo decide el propio equipo con
+`teams.show_on_platform` ("Mostrar en el home", ver "Equipos independientes"),
+sin aprobación de nadie, y eso no cambia. La fila dice "En el home" o "Fuera
+del home" para que se vea, sin botón.
+
+`organizations.is_public` solo se lee para medio, tienda, clínica y marca
+(`TIPOS_PUBLICABLES`). Una liga se publica con `leagues.is_public` y un equipo
+con `teams.show_on_platform`; publicar u ocultar uno de esos por aquí contesta
+400, porque escribir la columna dejaría una fila que dice lo que no hace.
+
+### Las que ya existían
+
+Columna nueva, sin reusar la vieja (regla 4): `is_verified` sigue diciendo lo
+que decía, ahora solo eso. `is_public` se llena **una vez** con `is_verified`
+para medio, tienda, clínica y marca, así que al desplegar nadie se mueve: la
+que estaba en el home queda publicada y verificada, y la que no, privada y sin
+verificar. Liga y equipo quedan en `FALSE`, que no se lee.
+
+Ese llenado puede quedarse en `config/db.js`, a diferencia del que pasó
+`leagues.status` a `is_public`: aquel corría en cada arranque y volvía a
+publicar las ligas que alguien había ocultado a mano, y por eso se quitó. Este
+solo toca filas con `is_public` en NULL, y NULL existe únicamente en el arranque
+que crea la columna, que en ese mismo paso queda `NOT NULL DEFAULT FALSE`.
+
+### Endpoints
+
+| Método | Ruta | Quién |
+|-|-|-|
+| PUT | `/admin/organizations/:id/publish` | Admin — publica (400 si es liga o equipo) |
+| PUT | `/admin/organizations/:id/unpublish` | Admin — oculta (ídem) |
+| PUT | `/admin/organizations/:id/verify` y `/unverify` | Admin — solo la insignia; ya no publica |
+| GET | `/admin/organizations` | Admin — trae `is_public` y, de un equipo, `show_on_platform` |
+| GET | `/organizations` | **Público** — el directorio: solo publicadas, con `is_verified` para la palomita |
+| GET | `/organizations/:id` | Público si está publicada; si no, quien la administra o el admin (404 a los demás) |
+| GET | `/products/organization/:id` | El mismo criterio que su página |
+| GET | `/auth/me` | `organizations[].is_public`, para el control de "Transmitir" |
+
+### Fuera de esta versión
+
+- **Que la organización pida publicarse**, que el admin rechace la solicitud
+  con un motivo, y los avisos de publicada y verificada, como en las ligas.
+  Falta dónde avisarle: `notifications` solo acepta `recipient_type` `'league'`
+  y `'team'`, así que un medio o una tienda no tienen bandeja. Anotado en
+  "Siguiente alcance" de `docs/PENDIENTES.md`.
+- **Que el dueño la oculte solo.** Una liga puede ("Ocultar mi liga"); una
+  organización, hoy no.
+
 ## Transmisiones — un medio se suma a un partido
 
 El único caso **ya construido** de una organización colaborando en el contenido
@@ -4829,10 +4935,12 @@ le da permiso, se entera después.
 `match_broadcasts` — una fila por (partido, medio) con su link. La pareja es
 única, así que volver a mandar el mismo par **edita la URL** en vez de duplicar.
 
-Para sumarse, la organización tiene que ser `type = 'media'` **y** estar
-verificada (`is_verified`). La decisión de fondo está escrita en el código y
-conviene no revertirla por descuido: **la verificación certifica quién es el
-medio, no que tenga derechos sobre ese partido.** Es identidad, no licencia.
+Para sumarse, la organización tiene que ser `type = 'media'`, estar publicada
+(`is_public`) **y** verificada (`is_verified`); desde el 2026-10-29 son dos
+botones distintos, ver "Organizaciones: publicar y verificar". La decisión de
+fondo está escrita en el código y conviene no revertirla por descuido: **la
+verificación certifica quién es el medio, no que tenga derechos sobre ese
+partido.** Es identidad, no licencia.
 
 ### El aviso a la liga sale una sola vez
 
@@ -4847,7 +4955,7 @@ La liga se entera, pero no aprueba: el medio ya quedó puesto.
 
 | Método | Ruta | Quién |
 |---|---|---|
-| GET | `/match/:matchId` | **Público** — quién transmite este partido |
+| GET | `/match/:matchId` | **Público** — quién transmite este partido (solo medios publicados y verificados) |
 | GET | `/organization/:organizationId` | El medio — qué está transmitiendo, para su panel |
 | POST | `/` | El medio — se suma a un partido (o edita su link) |
 | DELETE | `/:id` | El medio — se quita |

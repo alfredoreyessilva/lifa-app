@@ -125,8 +125,8 @@ export default function Home() {
         orgs={mediaOrgs}
         error={mediaError}
         loadingMessage="Cargando medios…"
-        emptyTitle="Todavía no hay medios verificados"
-        emptyText="En cuanto un medio de comunicación sea verificado, va a aparecer aquí."
+        emptyTitle="Todavía no hay medios registrados"
+        emptyText="En cuanto se publique un medio de comunicación, va a aparecer aquí."
         registerTo="/registrar-organizacion?tipo=media"
         registerLabel="Registrar medio"
       />
@@ -137,8 +137,8 @@ export default function Home() {
         orgs={storeOrgs}
         error={storeError}
         loadingMessage="Cargando tiendas y proveedores…"
-        emptyTitle="Todavía no hay tiendas ni proveedores verificados"
-        emptyText="En cuanto una tienda o proveedor sea verificado, va a aparecer aquí."
+        emptyTitle="Todavía no hay tiendas ni proveedores registrados"
+        emptyText="En cuanto se publique una tienda o proveedor, va a aparecer aquí."
         registerTo="/registrar-organizacion?tipo=store"
         registerLabel="Registrar tienda o proveedor"
       />
@@ -158,13 +158,17 @@ export default function Home() {
 // Reusado para cualquier tipo de organización que se muestre como
 // directorio público en el home (medios, tiendas/proveedores, y los que
 // sigan) — mismo layout, solo cambian los datos y los textos.
+//
+// Aquí sale lo PUBLICADO, verificado o no: desde el 2026-10-29 son dos botones
+// del admin (README, "Organizaciones: publicar y verificar"), así que la
+// verificación se dice en cada tarjeta con la palomita, como en Equipos.
 function OrganizationDirectorySection({ id, title, orgs, error, loadingMessage, emptyTitle, emptyText, registerTo, registerLabel }) {
   return (
     <>
       <SectionHead
         id={id}
         title={title}
-        count={orgs && `${orgs.length} verificados`}
+        count={orgs && `${orgs.length} registrados`}
         registerTo={registerTo}
         registerLabel={registerLabel}
         style={{ marginTop: 28 }}
@@ -196,7 +200,12 @@ function OrganizationDirectorySection({ id, title, orgs, error, loadingMessage, 
                   {initials(org.name)}
                 </div>
               )}
-              <h3>{org.name}</h3>
+              <h3>
+                {org.name}
+                {org.is_verified && (
+                  <span className="team-card-verified" title="Verificada" aria-label="Verificada">✓</span>
+                )}
+              </h3>
             </Link>
           ))}
         </div>

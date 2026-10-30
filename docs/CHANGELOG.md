@@ -15,6 +15,39 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Publicar y verificar una organización son dos botones (2026-10-29)**,
+  como en las ligas. Lo pidió Alfredo: en la pestaña Organizaciones del panel
+  admin, "Marcar verificada" también publicaba — metía al medio o a la tienda
+  al directorio del home y, a un medio, le daba permiso de transmitir. Ahora
+  "Publicar / Ocultar" (`organizations.is_public`, columna nueva) dice si la
+  plataforma la muestra, y "Marcar verificada" solo pone la insignia: la
+  palomita en el directorio y "✓ Verificada" en su página. Lo demás lo decidió
+  Alfredo:
+  - una privada no existe para el público: su página y su catálogo dan 404,
+    como una liga oculta, salvo a quien la administra y al admin;
+  - un medio necesita las dos para transmitir, y se resuelve al leer:
+    ocultarlo o quitarle la verificación lo saca de "También transmiten" sin
+    borrar su fila;
+  - los equipos independientes no se publican desde ahí: lo sigue decidiendo
+    el equipo con "Mostrar en el home";
+  - la solicitud de publicación con avisos quedó fuera. Pasó a "Siguiente
+    alcance", porque un medio o una tienda no tienen bandeja.
+
+  La columna se llena una vez con `is_verified`, así que al desplegar nadie se
+  mueve. Verificado así:
+  - con ROLLBACK sobre `desarrollo-local` y el SQL exacto de `db.js`: el
+    directorio de medios y tiendas sale idéntico al de antes, ninguna otra
+    columna se mueve, y un segundo arranque no vuelve a publicar la que se
+    ocultó;
+  - `invites-roles.e2e.mjs`, con una sección 18 nueva (28 comprobaciones,
+    213 ok en total);
+  - en el navegador, en escritorio y a 390 px: la pestaña del admin, el
+    directorio del home, la página como público, como admin y como su dueño,
+    y el "Panel de medio" de un partido, que aparece y desaparece.
+
+  Diez pruebas nuevas (`orgVisibility.test.mjs`). Ver README, "Organizaciones:
+  publicar y verificar".
+
 - **La columna AVG en las tablas (2026-10-25)**: una tabla cuyo reglamento
   usa el goal average lo enseña entre DIF y la racha, en pantalla y en la
   imagen para compartir, con tres decimales (`10.357`). Con 0 en contra va

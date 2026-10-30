@@ -913,16 +913,19 @@ export async function initSchema() {
     // y poder autoasignarse a partidos como transmisor. La verificación
     // certifica QUIÉN es el medio, no le da derechos sobre un partido en
     // particular — eso es una decisión consciente, no un descuido.
+    // (Desde el 2026-10-29 el directorio lo decide `is_public`, y transmitir
+    // pide las dos: ver la migración de `is_public`, al final.)
     await run(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT FALSE`);
     await run(`CREATE INDEX IF NOT EXISTS idx_organizations_verified ON organizations(is_verified)`);
 
     // Qué medio (verificado) transmite qué partido. Se autoasigna el medio
     // mismo, sin que la liga intervenga — la verificación (arriba) es el
-    // único filtro. url es opcional: si el medio transmite cada partido en
-    // un canal distinto, aquí va ese link específico; si no, el perfil del
-    // medio (su website_url) sirve como referencia general. Independiente
-    // de match.stream_links, que sigue siendo el link predeterminado del
-    // equipo local — esto se muestra ADEMÁS, no lo reemplaza.
+    // único filtro (desde el 2026-10-29, verificado Y publicado: ver
+    // utils/orgVisibility.js). url es opcional: si el medio transmite cada
+    // partido en un canal distinto, aquí va ese link específico; si no, el
+    // perfil del medio (su website_url) sirve como referencia general.
+    // Independiente de match.stream_links, que sigue siendo el link
+    // predeterminado del equipo local — esto se muestra ADEMÁS, no lo reemplaza.
     await run(`
       CREATE TABLE IF NOT EXISTS match_broadcasts (
         id SERIAL PRIMARY KEY,
@@ -2414,6 +2417,34 @@ export async function initSchema() {
     await run(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_phase_qual_conference
       ON phase_qualifications(phase_id, conference_id) WHERE conference_id IS NOT NULL
+    `);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Publicar y verificar una organización son dos cosas (README,
+    // "Organizaciones: publicar y verificar", 2026-10-29), como en las ligas.
+    // Hasta ese día `is_verified` hacía las dos: metía a un medio o una tienda
+    // al directorio del home, le ponía la insignia y le daba permiso de
+    // transmitir. Columna nueva, sin reusar la vieja (regla 4): `is_verified`
+    // sigue diciendo lo mismo, ahora solo eso.
+    //
+    // Solo se lee para medio/tienda/clínica/marca (utils/orgVisibility.js). Una
+    // liga se publica con `leagues.is_public` y un equipo independiente con
+    // `teams.show_on_platform`; para ellos queda en FALSE.
+    //
+    // Se llena UNA vez con `is_verified`, para que al desplegar nadie se mueva.
+    // Y ese llenado puede quedarse aquí, a diferencia del de `leagues.is_public`
+    // (corría en cada arranque, volvía a publicar lo que alguien había ocultado a
+    // mano y por eso se quitó): solo toca filas en NULL, y NULL existe
+    // únicamente en el arranque que crea la columna. El DEFAULT va antes del
+    // llenado para que una fila que entre en medio nazca en FALSE, y las cuatro
+    // instrucciones van en un solo paso para que sean todo o nada: si el llenado
+    // fallara, la columna no se queda creada con todas las de hoy privadas.
+    await run(`
+      ALTER TABLE organizations ADD COLUMN IF NOT EXISTS is_public BOOLEAN;
+      ALTER TABLE organizations ALTER COLUMN is_public SET DEFAULT FALSE;
+      UPDATE organizations SET is_public = (type NOT IN ('league', 'team') AND is_verified)
+       WHERE is_public IS NULL;
+      ALTER TABLE organizations ALTER COLUMN is_public SET NOT NULL
     `);
 
     await client.query('COMMIT');

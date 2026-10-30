@@ -2,17 +2,18 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
-// Se muestra solo si el usuario administra al menos un medio verificado —
-// nadie más ve este bloque. Reusa la navegación que ya existe para
-// encontrar el partido (calendario, liga, etc.) en vez de construir una
-// pantalla de búsqueda aparte; el medio simplemente llega al partido como
-// cualquier usuario y se autoasigna ahí mismo.
+// Se muestra solo si el usuario administra al menos un medio publicado y
+// verificado — nadie más ve este bloque. Son las dos cosas que el backend le
+// pide para sumarse (README, "Organizaciones: publicar y verificar"). Reusa la
+// navegación que ya existe para encontrar el partido (calendario, liga, etc.)
+// en vez de construir una pantalla de búsqueda aparte; el medio simplemente
+// llega al partido como cualquier usuario y se autoasigna ahí mismo.
 //
-// Si la cuenta administra VARIOS medios verificados, se pregunta con cuál
-// de ellos transmite (selector) — nunca se asume uno solo.
+// Si la cuenta administra VARIOS medios así, se pregunta con cuál de ellos
+// transmite (selector) — nunca se asume uno solo.
 export default function MediaBroadcastControl({ matchId, onChange }) {
   const { token, organizations } = useAuth();
-  const myVerifiedMedia = (organizations || []).filter((o) => o.type === 'media' && o.is_verified);
+  const myEnabledMedia = (organizations || []).filter((o) => o.type === 'media' && o.is_public && o.is_verified);
 
   const [selectedOrgId, setSelectedOrgId] = useState('');
   const [url, setUrl] = useState('');
@@ -21,9 +22,9 @@ export default function MediaBroadcastControl({ matchId, onChange }) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (myVerifiedMedia.length === 0) return;
+    if (myEnabledMedia.length === 0) return;
     api.getMatchBroadcasts(matchId).then((d) => {
-      const myOrgIds = new Set(myVerifiedMedia.map((o) => String(o.id)));
+      const myOrgIds = new Set(myEnabledMedia.map((o) => String(o.id)));
       setMine(d.broadcasts.filter((b) => myOrgIds.has(String(b.organization_id))));
     }).catch(() => setMine([]));
   }, [matchId, organizations]);
@@ -33,7 +34,7 @@ export default function MediaBroadcastControl({ matchId, onChange }) {
   // asignado, recién quitado), y el selector se mantiene sincronizado con
   // la primera opción disponible en vez de quedarse en un valor que ya no
   // aparece en la lista.
-  const availableToAssign = myVerifiedMedia.filter(
+  const availableToAssign = myEnabledMedia.filter(
     (o) => !(mine || []).some((b) => String(b.organization_id) === String(o.id))
   );
 
@@ -41,13 +42,13 @@ export default function MediaBroadcastControl({ matchId, onChange }) {
     if (availableToAssign.length > 0 && !availableToAssign.some((o) => String(o.id) === String(selectedOrgId))) {
       setSelectedOrgId(availableToAssign[0].id);
     }
-  }, [mine, myVerifiedMedia.length]);
+  }, [mine, myEnabledMedia.length]);
 
-  if (myVerifiedMedia.length === 0) return null;
+  if (myEnabledMedia.length === 0) return null;
 
   async function refreshMine() {
     const d = await api.getMatchBroadcasts(matchId);
-    const myOrgIds = new Set(myVerifiedMedia.map((o) => String(o.id)));
+    const myOrgIds = new Set(myEnabledMedia.map((o) => String(o.id)));
     setMine(d.broadcasts.filter((b) => myOrgIds.has(String(b.organization_id))));
   }
 
@@ -97,7 +98,7 @@ export default function MediaBroadcastControl({ matchId, onChange }) {
 
       {availableToAssign.length === 0 ? (
         mine && mine.length > 0 && (
-          <p style={{ fontSize: 12, color: 'var(--ink-dim)' }}>Ya asignaste todos tus medios verificados a este partido.</p>
+          <p style={{ fontSize: 12, color: 'var(--ink-dim)' }}>Ya asignaste todos tus medios a este partido.</p>
         )
       ) : (
         <form onSubmit={handleAssign} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>

@@ -30,19 +30,22 @@ export default function OrganizationDetailPage() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Las dos se piden CON la sesión: una organización privada no existe para el
+  // público (404), y esta misma página es el panel de quien la administra
+  // (README, "Organizaciones: publicar y verificar").
   useEffect(() => {
     load();
     api.getCountries().then((d) => setCountries(d.countries)).catch(() => setCountries([]));
     // Catálogo público (ya viene filtrado por el backend: is_active Y
     // show_on_platform). Se pide para cualquier tipo de organización sin
     // problema — si no es tienda, simplemente regresa un arreglo vacío.
-    api.getPublicProducts(id).then((d) => setProducts(d.products)).catch(() => setProducts([]));
-  }, [id]);
+    api.getPublicProducts(id, token).then((d) => setProducts(d.products)).catch(() => setProducts([]));
+  }, [id, token]);
 
   async function load() {
     setError('');
     try {
-      const data = await api.getOrganization(id);
+      const data = await api.getOrganization(id, token);
       setOrg(data);
       setForm({
         name: data.name || '',
@@ -117,8 +120,15 @@ export default function OrganizationDetailPage() {
               <div className="player-hero-eyebrow">{org.type}</div>
               <h1 className="player-hero-name" style={{ fontSize: 26 }}>{org.name}</h1>
               {org.country_name && <div className="player-hero-team"><span>{org.country_name}</span></div>}
+              {org.is_verified && (
+                <div style={{ marginTop: 8 }}>
+                  <span className="pill is-ok">✓ Verificada</span>
+                </div>
+              )}
             </div>
           </div>
+
+          {isMine && <EstadoDePublicacion org={org} />}
 
           {isMine && (
             <button
@@ -198,6 +208,7 @@ export default function OrganizationDetailPage() {
           ← Ver como público
         </button>
       </div>
+      <EstadoDePublicacion org={org} />
       {error && <div className="form-error">{error}</div>}
 
       {org.type === 'store' && (
@@ -240,6 +251,32 @@ export default function OrganizationDetailPage() {
           {saving ? 'Guardando…' : 'Guardar cambios'}
         </button>
       </form>
+    </div>
+  );
+}
+
+// Lo que solo ve quien la administra: si la plataforma la muestra y, si es un
+// medio, qué le pide para transmitir. Desde su sesión la página se ve igual
+// sea pública o privada, así que sin esto no tendría cómo saber que nadie más
+// la ve. Sin botón, a diferencia del aviso de una liga: a una organización la
+// publica únicamente el admin de la plataforma. Liga y equipo no pasan por
+// aquí (tienen su propio interruptor).
+function EstadoDePublicacion({ org }) {
+  if (org.type === 'league' || org.type === 'team') return null;
+  const faltaParaTransmitir = org.type === 'media' && !(org.is_public && org.is_verified);
+  return (
+    <div
+      className="form-error"
+      style={{
+        background: org.is_public ? 'rgba(58,141,63,0.12)' : 'rgba(255,210,63,0.12)',
+        borderColor: org.is_public ? 'var(--field)' : 'var(--flag)',
+        color: 'var(--ink)', marginTop: 14,
+      }}
+    >
+      {org.is_public
+        ? '✓ Es pública: aparece en el home y cualquiera puede ver esta página.'
+        : 'Es privada por ahora: no aparece en el home y esta página solo la ven quienes la administran. La publica el equipo de CFBAMX.'}
+      {faltaParaTransmitir && ' Para transmitir partidos, el medio tiene que estar publicado y verificado.'}
     </div>
   );
 }

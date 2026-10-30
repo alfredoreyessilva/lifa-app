@@ -3,6 +3,7 @@ import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { HOY_MX } from '../utils/sqlDates.js';
+import { TIPOS_PUBLICABLES } from '../utils/orgVisibility.js';
 
 const router = express.Router();
 
@@ -345,17 +346,19 @@ router.put('/leagues/:id/unverify', authRequired, adminRequired, asyncHandler(as
 }));
 
 // Mismo patrón que arriba, para organizaciones (medio/proveedor/tienda/
-// clínica/marca). Para "medio" en particular, esto es lo que habilita
-// aparecer en el directorio público y autoasignarse a partidos.
+// clínica/marca): publicar y verificar son dos botones (README,
+// "Organizaciones: publicar y verificar", 2026-10-29). Un medio necesita los
+// dos para autoasignarse a partidos.
 //
 // Los equipos de liga se excluyen a propósito (su liga ya los administra
 // desde su propio panel) — pero un equipo INDEPENDIENTE (sin liga, ver
 // POST /manage/teams) sí entra aquí: es exactamente el mismo mecanismo de
 // verificación de identidad que cualquier otra organización, porque no
-// tiene una liga que lo respalde.
+// tiene una liga que lo respalde. Publicarlo no: si sale en el home lo decide
+// el propio equipo (`show_on_platform`), y viaja aquí solo para que se vea.
 router.get('/organizations', authRequired, adminRequired, asyncHandler(async (req, res) => {
   const orgs = await db.prepare(`
-    SELECT o.*, c.name AS country_name
+    SELECT o.*, c.name AS country_name, t.show_on_platform AS show_on_platform
     FROM organizations o
     LEFT JOIN countries c ON c.id = o.country_id
     LEFT JOIN teams t ON t.organization_id = o.id
@@ -366,6 +369,30 @@ router.get('/organizations', authRequired, adminRequired, asyncHandler(async (re
   res.json(orgs);
 }));
 
+// Publicar es que la plataforma la muestre: el directorio del home y su página
+// para cualquiera. Solo medio/tienda/clínica/marca — una liga tiene su propio
+// botón y un equipo independiente decide solo; escribirles `is_public` dejaría
+// una fila que dice lo que no hace.
+async function setOrganizationPublic(req, res, isPublic) {
+  const org = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(req.params.id);
+  if (!org) return res.status(404).json({ error: 'Organización no encontrada' });
+  if (!TIPOS_PUBLICABLES.includes(org.type)) {
+    return res.status(400).json({
+      error: 'Las ligas y los equipos no se publican desde aquí: una liga tiene su propio botón, y un equipo independiente decide solo si sale en el home',
+    });
+  }
+  res.json(await db.prepare('UPDATE organizations SET is_public = ? WHERE id = ? RETURNING *').get(isPublic, org.id));
+}
+
+router.put('/organizations/:id/publish', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  await setOrganizationPublic(req, res, true);
+}));
+
+router.put('/organizations/:id/unpublish', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  await setOrganizationPublic(req, res, false);
+}));
+
+// Verificar es solo la insignia: ya no publica (hasta el 2026-10-29 sí).
 router.put('/organizations/:id/verify', authRequired, adminRequired, asyncHandler(async (req, res) => {
   const org = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(req.params.id);
   if (!org) return res.status(404).json({ error: 'Organización no encontrada' });

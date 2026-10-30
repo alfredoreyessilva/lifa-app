@@ -4,17 +4,22 @@ import { authRequired } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isOrgMember } from '../utils/orgMembers.js';
 import { isValidUrl } from '../utils/validation.js';
+import { puedeTransmitir, puedeTransmitirSql } from '../utils/orgVisibility.js';
 
 const router = express.Router();
 
 // Público, sin authRequired — la ficha de un partido debe poder mostrar
 // quién lo transmite sin necesitar sesión, igual que la tarjeta del jugador.
+//
+// Solo medios publicados Y verificados, la misma regla que para sumarse. Se
+// resuelve al leer: si al medio lo ocultan o le quitan la verificación, sale
+// de aquí sin que se borre su fila, y vuelve si recupera las dos.
 router.get('/match/:matchId', asyncHandler(async (req, res) => {
   const broadcasts = await db.prepare(`
     SELECT b.id, b.url, o.id AS organization_id, o.name, o.slug, o.logo_url
     FROM match_broadcasts b
     JOIN organizations o ON o.id = b.organization_id
-    WHERE b.match_id = ?
+    WHERE b.match_id = ? AND ${puedeTransmitirSql('o')}
     ORDER BY o.name
   `).all(req.params.matchId);
   res.json({ broadcasts });
@@ -42,9 +47,11 @@ router.get('/organization/:organizationId', authRequired, asyncHandler(async (re
 
 // Autoasignación: el medio se agrega solo a un partido, sin que la liga
 // intervenga. Requiere: (a) ser miembro de esa organización, y (b) que la
-// organización sea de tipo 'media' y esté verificada — la verificación
-// certifica QUIÉN es el medio, no que tenga derechos sobre ESTE partido en
-// particular (decisión consciente, ver comentario en db.js).
+// organización sea de tipo 'media', esté publicada y esté verificada — la
+// verificación certifica QUIÉN es el medio, no que tenga derechos sobre ESTE
+// partido en particular (decisión consciente, ver comentario en db.js), y
+// publicada porque su logo sale en la página del partido (README,
+// "Organizaciones: publicar y verificar").
 router.post('/', authRequired, asyncHandler(async (req, res) => {
   const { match_id, organization_id, url } = req.body;
   if (!match_id || !organization_id) {
@@ -55,7 +62,13 @@ router.post('/', authRequired, asyncHandler(async (req, res) => {
   const org = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(organization_id);
   if (!org) return res.status(404).json({ error: 'Organización no encontrada' });
   if (org.type !== 'media') return res.status(400).json({ error: 'Solo organizaciones de tipo medio pueden transmitir partidos' });
-  if (!org.is_verified) return res.status(403).json({ error: 'Este medio todavía no está verificado' });
+  if (!puedeTransmitir(org)) {
+    return res.status(403).json({
+      error: org.is_verified
+        ? 'Este medio todavía no está publicado'
+        : 'Este medio todavía no está verificado',
+    });
+  }
 
   const match = await db.prepare('SELECT id FROM matches WHERE id = ?').get(match_id);
   if (!match) return res.status(404).json({ error: 'Partido no encontrado' });

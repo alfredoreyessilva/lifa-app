@@ -891,6 +891,25 @@ function OrganizationsTab({ token }) {
     }
   }
 
+  // Publicar y verificar son dos botones, como en Ligas (README,
+  // "Organizaciones: publicar y verificar"). Hasta el 2026-10-29 "Marcar
+  // verificada" también la publicaba.
+  async function togglePublic(org) {
+    setBusyId(org.id);
+    try {
+      if (org.is_public) {
+        await api.adminUnpublishOrganization(org.id, token);
+      } else {
+        await api.adminPublishOrganization(org.id, token);
+      }
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function toggleVerified(org) {
     setBusyId(org.id);
     try {
@@ -941,6 +960,21 @@ function OrganizationsTab({ token }) {
                   <span className="tag" style={{ marginLeft: 8 }}>
                     {ORG_TYPE_LABELS[org.type] || org.type}
                   </span>
+                  {/* Un equipo independiente decide solo si sale en el home
+                      (show_on_platform): aquí se ve, pero no tiene botón. */}
+                  {org.type === 'team' ? (
+                    <span
+                      className="tag"
+                      title="Lo decide el equipo desde su panel"
+                      style={{ marginLeft: 8, color: org.show_on_platform ? 'var(--field)' : 'var(--ink-dim)', borderColor: org.show_on_platform ? 'var(--field)' : 'var(--line-strong)' }}
+                    >
+                      {org.show_on_platform ? 'En el home' : 'Fuera del home'}
+                    </span>
+                  ) : (
+                    <span className="tag" style={{ marginLeft: 8, color: org.is_public ? 'var(--field)' : 'var(--ink-dim)', borderColor: org.is_public ? 'var(--field)' : 'var(--line-strong)' }}>
+                      {org.is_public ? 'Pública' : 'Privada'}
+                    </span>
+                  )}
                   {org.is_verified && (
                     <span className="tag" style={{ marginLeft: 8, color: 'var(--field)', borderColor: 'var(--field)' }}>
                       ✓ Verificada
@@ -951,6 +985,15 @@ function OrganizationsTab({ token }) {
               </div>
             </div>
             <div className="row-actions">
+              {org.type !== 'team' && (
+                <button
+                  className={`btn btn-sm ${org.is_public ? 'btn-outline' : 'btn-flag'}`}
+                  disabled={busyId === org.id}
+                  onClick={() => togglePublic(org)}
+                >
+                  {busyId === org.id ? 'Un momento…' : org.is_public ? 'Ocultar' : 'Publicar'}
+                </button>
+              )}
               <button
                 className="btn btn-outline btn-sm"
                 disabled={busyId === org.id}

@@ -387,14 +387,18 @@ export const api = {
   getCountries: () => request('/organizations/countries'),
   createOrganization: (payload, token) =>
     request('/organizations', { method: 'POST', body: payload, token }),
-  getOrganization: (id) => request(`/organizations/${id}`),
+  // El token es opcional: una organización privada solo la ve quien la
+  // administra (o un admin), y al público le contesta 404.
+  getOrganization: (id, token) => request(`/organizations/${id}`, { token }),
   getPublicOrganizations: (type) => request(`/organizations${type ? `?type=${type}` : ''}`),
   updateOrganization: (id, payload, token) =>
     request(`/organizations/${id}`, { method: 'PUT', body: payload, token }),
 
   // Inventario de tienda (products)
-  getPublicProducts: (organizationId) =>
-    request(`/products/organization/${organizationId}`),
+  // Mismo criterio que getOrganization: el catálogo de una tienda privada
+  // solo lo ve quien la administra.
+  getPublicProducts: (organizationId, token) =>
+    request(`/products/organization/${organizationId}`, { token }),
   getManagedProducts: (organizationId, token) =>
     request(`/products/organization/${organizationId}/manage`, { token }),
   createProduct: (organizationId, payload, token) =>
@@ -605,6 +609,12 @@ export const api = {
     request(`/admin/leagues/${id}`, { method: 'DELETE', token }),
   adminGetOrganizations: (token) =>
     request('/admin/organizations', { token }),
+  // Publicar y verificar son dos botones, como en las ligas. Publicar solo
+  // aplica a medio/tienda/clínica/marca: con una liga o un equipo, 400.
+  adminPublishOrganization: (id, token) =>
+    request(`/admin/organizations/${id}/publish`, { method: 'PUT', token }),
+  adminUnpublishOrganization: (id, token) =>
+    request(`/admin/organizations/${id}/unpublish`, { method: 'PUT', token }),
   adminVerifyOrganization: (id, token) =>
     request(`/admin/organizations/${id}/verify`, { method: 'PUT', token }),
   adminUnverifyOrganization: (id, token) =>

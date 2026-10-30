@@ -1,4 +1,5 @@
 import db from '../config/db.js';
+import { esPrivadaAlPublico } from './orgVisibility.js';
 
 // Reemplaza la comparación repetida "owner_user_id === req.user.id" que hoy
 // vive en las 10 funciones de middleware/ownership.js. En vez de reescribir
@@ -56,4 +57,16 @@ export async function orgTieneMiembros(organizationId) {
     .prepare("SELECT COUNT(*)::int AS count FROM organization_members WHERE organization_id = ? AND status = 'active'")
     .get(organizationId);
   return Number(count) > 0;
+}
+
+// ¿Puede esta persona ver la página de esta organización (y su catálogo)?
+// Una privada no existe para el público, igual que una liga oculta: la ven
+// quienes la administran y el admin de la plataforma. `user` es el de
+// `optionalAuth`, así que puede no venir. README, "Organizaciones: publicar y
+// verificar".
+export async function puedeVerOrganizacion(user, org) {
+  if (!esPrivadaAlPublico(org)) return true;
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  return isOrgMember(user.id, org.id);
 }

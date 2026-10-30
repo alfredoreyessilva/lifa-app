@@ -40,7 +40,8 @@ export default function ProductsPanel() {
 
   useEffect(() => {
     if (!token) return;
-    api.getOrganization(id).then(setOrg).catch((e) => setError(e.message));
+    // Con la sesión: si la tienda es privada, al público le contesta 404.
+    api.getOrganization(id, token).then(setOrg).catch((e) => setError(e.message));
     refreshProducts();
   }, [id, token]);
 

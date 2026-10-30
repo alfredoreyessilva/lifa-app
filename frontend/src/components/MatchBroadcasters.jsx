@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 
-// Fila de medios verificados que se autoasignaron a este partido — se
-// muestra ADEMÁS del botón "Ver partido"/"Ver en vivo" (el link
-// predeterminado del equipo local), no lo reemplaza. Si nadie se
-// autoasignó todavía, no se renderiza nada — no hay hueco vacío que mostrar.
+// Fila de medios (publicados y verificados: el backend ya filtra al leer) que
+// se autoasignaron a este partido — se muestra ADEMÁS del botón "Ver
+// partido"/"Ver en vivo" (el link predeterminado del equipo local), no lo
+// reemplaza. Si nadie se autoasignó todavía, no se renderiza nada — no hay
+// hueco vacío que mostrar.
 export default function MatchBroadcasters({ matchId }) {
   const [broadcasts, setBroadcasts] = useState(null);
 

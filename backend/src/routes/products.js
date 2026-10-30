@@ -1,9 +1,9 @@
 import express from 'express';
 import db from '../config/db.js';
-import { authRequired } from '../middleware/auth.js';
+import { authRequired, optionalAuth } from '../middleware/auth.js';
 import { isNonEmptyString, isValidUrl } from '../utils/validation.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { isOrgMember } from '../utils/orgMembers.js';
+import { isOrgMember, puedeVerOrganizacion } from '../utils/orgMembers.js';
 
 const router = express.Router();
 
@@ -46,14 +46,21 @@ function validateProductFields(body, { partial } = {}) {
 // nicho y quiere que se vea en CFBAMX). El bot de WhatsApp NO usa este
 // endpoint — usa el catálogo completo directo desde bot.js, porque ahí sí
 // debe poder responder sobre cualquier producto, sea o no del nicho.
-// Sin authRequired a propósito, igual que GET /organizations/:id.
-router.get('/organization/:organizationId', asyncHandler(async (req, res) => {
+// Sin authRequired a propósito, igual que GET /organizations/:id — y con su
+// mismo criterio: el catálogo de una tienda privada no existe para el público,
+// solo para quien la administra (README, "Organizaciones: publicar y
+// verificar").
+router.get('/organization/:organizationId', optionalAuth, asyncHandler(async (req, res) => {
+  const org = await db.prepare('SELECT id, type, is_public FROM organizations WHERE id = ?').get(req.params.organizationId);
+  if (!org || !(await puedeVerOrganizacion(req.user, org))) {
+    return res.status(404).json({ error: 'Organización no encontrada' });
+  }
   const products = await db.prepare(`
     SELECT id, organization_id, name, description, price, currency, stock, size_variant, image_url
     FROM products
     WHERE organization_id = ? AND is_active = TRUE AND show_on_platform = TRUE
     ORDER BY created_at DESC
-  `).all(req.params.organizationId);
+  `).all(org.id);
   res.json({ products });
 }));
 

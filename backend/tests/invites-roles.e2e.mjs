@@ -718,6 +718,85 @@ ok((await call(`/player-billing/teams/${TEAM}/overview`, { token: REP })).status
 const borrarPorSuDueno = await call(`/manage/teams/${TEAM}`, { method: 'DELETE', token: REP });
 ok(borrarPorSuDueno.status === 409, 'ni siquiera su propio dueño lo borra por esta ruta', `=${borrarPorSuDueno.status}`);
 
+console.log('\n=== 18. Una organización: publicar y verificar son dos botones ===');
+// README, "Organizaciones: publicar y verificar" (2026-10-29). Hasta ese día
+// "Marcar verificada" también la publicaba, y no había cómo tener un medio
+// verificado sin mostrarlo, ni mostrar una tienda sin verificarla.
+const MEDIO = await alta('Medio');
+const regMedio = await call('/organizations', { method: 'POST', token: MEDIO, body: { type: 'media', name: `Medio Pruebas ${stamp}` } });
+const MEDIA = regMedio.data.id;
+ok(regMedio.status === 201 && regMedio.data.is_public === false && regMedio.data.is_verified === false,
+  'un medio nace privado y sin verificar', JSON.stringify({ s: regMedio.status, p: regMedio.data.is_public, v: regMedio.data.is_verified }));
+const TIENDA = (await call('/organizations', { method: 'POST', token: MEDIO, body: { type: 'store', name: `Tienda Pruebas ${stamp}` } })).data.id;
+const producto = await call(`/products/organization/${TIENDA}`, { method: 'POST', token: MEDIO, body: { name: 'Jersey e2e', price: 500 } });
+ok(producto.status === 201, 'una tienda privada sí carga su inventario', `=${producto.status}`);
+
+// Privada es privada: ni en el directorio, ni su página, ni su catálogo.
+const enDirectorio = async (type, id) => (await call(`/organizations?type=${type}`)).data.organizations.find((o) => o.id === id);
+ok(!(await enDirectorio('media', MEDIA)), 'privado, no sale en el directorio del home');
+ok((await call(`/organizations/${MEDIA}`)).status === 404, 'su página da 404 al público, como una liga oculta');
+ok((await call(`/organizations/${MEDIA}`, { token: FAN })).status === 404, 'también a alguien con sesión que no la administra');
+ok((await call(`/organizations/${MEDIA}`, { token: MEDIO })).status === 200, 'quien la administra sí la ve: esa página es su panel');
+ok((await call(`/products/organization/${TIENDA}`)).status === 404, 'el catálogo de una tienda privada tampoco sale');
+ok((await call(`/products/organization/${TIENDA}`, { token: MEDIO })).data.products?.length === 1, 'pero su dueño sí lo ve');
+
+// El admin de la plataforma: el mismo de 11c, de vuelta a admin solo aquí.
+await pool.query("UPDATE users SET role='admin' WHERE id=$1", [idPlat]);
+const PLAT2 = (await call('/auth/login', {
+  method: 'POST', body: { email: `plataforma${stamp}@example.com`, password: 'prueba123' },
+})).data.token;
+ok((await call(`/organizations/${MEDIA}`, { token: PLAT2 })).status === 200, 'el admin de la plataforma ve una privada (el botón Ver de su panel)');
+
+const verificar = await call(`/admin/organizations/${MEDIA}/verify`, { method: 'PUT', token: PLAT2 });
+ok(verificar.status === 200 && verificar.data.is_verified === true && verificar.data.is_public === false,
+  'Marcar verificada ya NO publica: solo pone la insignia', JSON.stringify({ v: verificar.data.is_verified, p: verificar.data.is_public }));
+ok(!(await enDirectorio('media', MEDIA)), 'verificado, sigue fuera del directorio');
+
+const transmitir = () => call('/broadcasts', {
+  method: 'POST', token: MEDIO, body: { match_id: MATCH, organization_id: MEDIA, url: 'https://example.com/en-vivo' },
+});
+const privadoTransmite = await transmitir();
+ok(privadoTransmite.status === 403, 'verificado pero privado no se suma a un partido', `=${privadoTransmite.status} ${privadoTransmite.data.error}`);
+
+const publicar = await call(`/admin/organizations/${MEDIA}/publish`, { method: 'PUT', token: PLAT2 });
+ok(publicar.status === 200 && publicar.data.is_public === true, 'Publicar lo publica', `=${publicar.status}`);
+ok((await enDirectorio('media', MEDIA))?.is_verified === true, 'ya sale en el directorio, con is_verified para la palomita');
+ok((await call(`/organizations/${MEDIA}`)).status === 200, 'y su página abre para cualquiera');
+
+ok((await transmitir()).status === 201, 'publicado y verificado SÍ se suma al partido');
+const transmite = async () => (await call(`/broadcasts/match/${MATCH}`)).data.broadcasts.some((b) => b.organization_id === MEDIA);
+ok(await transmite(), 'y sale en "También transmiten"');
+
+// Se resuelve al leer: ocultarlo o quitarle la verificación lo saca del
+// partido sin borrar su fila, y vuelve si recupera las dos.
+await call(`/admin/organizations/${MEDIA}/unpublish`, { method: 'PUT', token: PLAT2 });
+ok(!(await transmite()), 'oculto, ya no sale en el partido');
+const { rows: filaTransmision } = await pool.query('SELECT id FROM match_broadcasts WHERE match_id=$1 AND organization_id=$2', [MATCH, MEDIA]);
+ok(filaTransmision.length === 1, 'pero su fila sigue ahí', `filas=${filaTransmision.length}`);
+await call(`/admin/organizations/${MEDIA}/publish`, { method: 'PUT', token: PLAT2 });
+ok(await transmite(), 'y vuelve en cuanto se publica otra vez');
+await call(`/admin/organizations/${MEDIA}/unverify`, { method: 'PUT', token: PLAT2 });
+ok(!(await transmite()), 'quitarle la verificación también lo saca (antes no lo sacaba)');
+ok(!!(await enDirectorio('media', MEDIA)), 'aunque siga publicado en el directorio');
+
+const suMedio = (await call('/auth/me', { token: MEDIO })).data.organizations?.find((o) => o.id === MEDIA);
+ok(suMedio?.is_public === true && suMedio?.is_verified === false,
+  '/auth/me lleva is_public: es lo que lee el control de "Transmitir"', JSON.stringify(suMedio));
+
+// Una liga y un equipo no se publican desde aquí: tienen su propio interruptor.
+const publicarEquipo = await call(`/admin/organizations/${ORG}/publish`, { method: 'PUT', token: PLAT2 });
+ok(publicarEquipo.status === 400, 'publicar la organización de un equipo da 400', `=${publicarEquipo.status}`);
+ok((await call(`/admin/organizations/${ORGLIGA}/publish`, { method: 'PUT', token: PLAT2 })).status === 400,
+  'y la de una liga, también');
+const { rows: [{ is_public: equipoPublico }] } = await pool.query('SELECT is_public FROM organizations WHERE id=$1', [ORG]);
+ok(equipoPublico === false, 'y la columna del equipo no se movió', `=${equipoPublico}`);
+ok((await call(`/admin/organizations/${MEDIA}/publish`, { method: 'PUT', token: MEDIO })).status === 403,
+  'el dueño del medio no se publica solo');
+// Que la suite no deje un medio de prueba en el home de la rama cada vez que corre.
+ok((await call(`/admin/organizations/${MEDIA}/unpublish`, { method: 'PUT', token: PLAT2 })).data.is_public === false,
+  'y Ocultar lo deja privado otra vez');
+await pool.query("UPDATE users SET role='rep' WHERE id=$1", [idPlat]);
+
 
 console.log(`\n========  ${pass} ok, ${fail} fallas  ========`);
 await pool.end();

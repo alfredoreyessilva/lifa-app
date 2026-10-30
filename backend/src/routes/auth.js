@@ -441,7 +441,7 @@ router.get('/me', authRequired, asyncHandler(async (req, res) => {
   // panel va a adoptar en el siguiente paso para los tipos que no son liga
   // ni equipo (medios, proveedores, tiendas, clínicas).
   const organizations = await db.prepare(`
-    SELECT o.id, o.name, o.slug, o.type, o.logo_url, o.status, o.is_verified, om.role AS member_role
+    SELECT o.id, o.name, o.slug, o.type, o.logo_url, o.status, o.is_verified, o.is_public, om.role AS member_role
     FROM organization_members om
     JOIN organizations o ON o.id = om.organization_id
     WHERE om.user_id = ? AND om.status = 'active'

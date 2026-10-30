@@ -1121,8 +1121,9 @@ a { color: inherit; }
   margin: 0;
   letter-spacing: 0.02em;
 }
-/* Palomita de "equipo verificado" en la tarjeta. Solo el símbolo: el texto
-   completo vive en el title/aria-label del span y en la pastilla de la ficha. */
+/* Palomita de "verificado" en la tarjeta de un equipo, y en la de un medio o
+   tienda del directorio del home. Solo el símbolo: el texto completo vive en el
+   title/aria-label del span y en la pastilla de la ficha. */
 .team-card-verified {
   color: var(--positive);
   font-size: 12px;

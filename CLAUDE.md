@@ -29,8 +29,9 @@ frontend/public/sw.js   Service worker: push + que la app abra SIN SEÑAL.
 Dónde buscar antes de preguntar: **README** tiene una sección por dominio
 (Cobranza · Cuotas del club · Tabla de posiciones · Predicciones y quinielas ·
 Roster · Roster público y pase de lista · Estadísticas por jugada · Capturar
-sin señal · Equipos independientes · Playbook del equipo · Transmisiones ·
-Tiendas y bot de WhatsApp · Seguridad), cada una con el porqué de sus decisiones. **`docs/ESTADO.md`** dice
+sin señal · Equipos independientes · Playbook del equipo · Organizaciones:
+publicar y verificar · Transmisiones · Tiendas y bot de WhatsApp · Seguridad),
+cada una con el porqué de sus decisiones. **`docs/ESTADO.md`** dice
 qué producto está a qué nivel, y **`docs/PENDIENTES.md`** es la lista única de lo
 que falta, con prioridad.
 
@@ -198,7 +199,8 @@ lo inventaba el mismo código que se estaba probando.
 
 - Cambio de cobranza → las dos suites e2e de cobranza contra una rama de Neon,
   antes y después, **más `billing-multiliga.e2e.mjs`** si toca qué liga le cobra
-  a quién. Cambio de permisos, invitaciones o entrega de un equipo →
+  a quién. Cambio de permisos, invitaciones, entrega de un equipo, o de qué se
+  ve de una organización (publicar, verificar, transmitir) →
   `invites-roles.e2e.mjs`, la tercera. Cambio de puntos, ranking o avisos de
   predicciones → `predicciones.e2e.mjs`, y comparar en solo lectura el ranking
   de ONEFA antes y después: es el concurso en curso. Cambio de login, sesión o
