@@ -15,6 +15,28 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **En "Ver por: Jornada", los recuadros de jornadas se quedan arriba
+  (2026-10-30).** Lo pidió Alfredo: al abrir una jornada desaparecían los
+  recuadros y para ver la siguiente había que regresar o volver a picar
+  "Jornada". Ahora siguen arriba, la jornada abierta se marca con borde
+  amarillo y sus partidos salen debajo; cambiar de jornada es un clic. Ya no
+  hace falta "← Todas las jornadas" y se quitó. Las demás vistas (Equipo,
+  Sede, Grupo, Conferencia) siguen igual.
+
+  De paso, una jornada con nombre en vez de número ya no se sale de su
+  recuadro: "SCRIMMAGE" se pintaba a 28 px en el lugar del número y repetido
+  abajo. Ahora el nombre va una sola vez, a 14 px, y "N partidos" queda a la
+  altura del de los recuadros vecinos. Las de la base son SCRIMMAGE,
+  SEMIFINAL y FINAL; un nombre que no quepa se parte en vez de salirse.
+
+  Verificado en el navegador (escritorio a 1366 px y celular a 320 y 390 px)
+  con la rama Varonil de Liga Mayor de `desarrollo-local` (12 jornadas): de la
+  3 a la 4 con un clic, la URL pasa a `sel=4` y salen sus 14 partidos. En
+  celular los 12 recuadros ocupan ~430 px antes de los partidos. Las jornadas
+  con nombre, en esa rama y en la del torneo 17 (SEMIFINAL, FINAL): ningún
+  elemento se sale de su recuadro, ni con la cuadrícula forzada al recuadro
+  más angosto (90 px), donde "SCRIMMAGE" mide 63 px de los 68 que caben.
+
 - **La página de una tienda deja la cancha: ahora es una vitrina
   (2026-10-30).** Lo pidió Alfredo: con la cancha de fondo, la página pública
   de una tienda se veía infantil. Ahora el logo y el nombre van en una placa

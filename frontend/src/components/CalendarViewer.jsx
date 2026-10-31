@@ -322,16 +322,31 @@ export default function CalendarViewer({
         <>
           {view === 'completo' && <MatchGrid matches={matches} nextMatchIds={nextMatchIds} />}
 
-          {view === 'jornada' && !selected && (
+          {/* A diferencia de las otras vistas, los recuadros de jornada se
+              quedan arriba al abrir una: así se brinca de la 3 a la 4 sin
+              regresar, que es como se recorre un calendario semana a semana.
+              Por eso aquí no hay "← Todas las jornadas". */}
+          {view === 'jornada' && (
             <div className="filter-grid">
               {jornadas.length === 0
                 ? <div className="empty-state"><p>Ningún partido tiene jornada asignada.</p></div>
                 : jornadas.map((j) => {
                     const count = matches.filter((m) => m.week_label === j.key).length;
+                    const isActive = selected === j.key;
+                    const num = j.key.replace(/\D/g, '');
                     return (
-                      <button key={j.key} className="filter-card" onClick={() => selectFilter(j.key)}>
-                        <div className="filter-card-num">{j.key.replace(/\D/g, '') || j.key}</div>
-                        <div className="filter-card-label">{j.label}</div>
+                      <button key={j.key} className={`filter-card${isActive ? ' active' : ''}`} aria-pressed={isActive} onClick={() => selectFilter(j.key)}>
+                        {/* Una jornada con nombre (SCRIMMAGE, SEMIFINAL, FINAL)
+                            no tiene número que poner en grande: el nombre
+                            toma su lugar, una sola vez. */}
+                        {num ? (
+                          <>
+                            <div className="filter-card-num">{num}</div>
+                            <div className="filter-card-label">{j.label}</div>
+                          </>
+                        ) : (
+                          <div className="filter-card-num filter-card-num--name">{j.label}</div>
+                        )}
                         <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
                       </button>
                     );
@@ -340,7 +355,6 @@ export default function CalendarViewer({
           )}
           {view === 'jornada' && selected && (
             <>
-              <button className="filter-back" onClick={clearSelection}>← Todas las jornadas</button>
               <div className="filter-selected-title">{/^\d+$/.test(selected) ? `Jornada ${selected}` : selected}</div>
               <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} />
             </>

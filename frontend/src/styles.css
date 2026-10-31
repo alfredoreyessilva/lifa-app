@@ -2636,11 +2636,37 @@ a.match-card-new {
   border-color: var(--flag);
 }
 
+/* La jornada abierta, cuando los recuadros se quedan arriba de sus partidos.
+   El segundo pixel del borde va en la sombra para que el recuadro no crezca. */
+.filter-card.active {
+  background: var(--card-hover);
+  border-color: var(--flag);
+  box-shadow: inset 0 0 0 1px var(--flag);
+}
+
 .filter-card-num {
   font-family: var(--font-display);
   font-size: 28px;
   color: var(--flag);
   line-height: 1;
+}
+
+/* El nombre de una jornada sin número (SCRIMMAGE) a 28 px se salía del
+   recuadro. A 14 px "SCRIMMAGE" mide 63 px y cabe en el recuadro más angosto
+   (90 px, 68 por dentro); a 15 px cabía sin un pixel de sobra. Si un nombre
+   más largo no cabe, se parte en vez de salirse. La altura mínima es la del
+   número más su etiqueta (28 + 6 + 14), para que "N partidos" quede a la
+   altura del de los recuadros vecinos. */
+.filter-card-num--name {
+  font-size: 14px;
+  line-height: 1.15;
+  min-height: 48px;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  hyphens: auto;
+  overflow-wrap: anywhere;
 }
 
 .filter-card-logo {
