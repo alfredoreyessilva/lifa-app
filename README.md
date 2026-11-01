@@ -958,6 +958,65 @@ Dos recorridos de punta a punta en `backend/tests/`. **Nunca contra producción*
 - Acceso a `/admin` con endpoints propios en `admin.js` (fuera del alcance de un representante normal).
 - Pestaña "Ligas": aprueba ligas pendientes (aparecen primero en la lista, marcadas), o las elimina.
 
+## Partidos con fecha por definir
+
+Hay partidos —y calendarios enteros— que se publican antes de tener fecha: se
+sabe quién juega contra quién y en qué jornada, pero el día todavía no. Hasta
+el 2026-11-01 el formulario no dejaba guardar sin "Fecha y hora", y el Excel
+saltaba la fila con un error de Postgres, porque `matches.match_date` era
+`NOT NULL`. Decidido con Alfredo ese día:
+
+- **Sin fecha es `match_date` en `NULL`, y nada más.** No hay columna
+  `date_tbd` ni fecha de relleno: un 1 de enero inventado para "ordenar" sería
+  un dato falso que alguien acabaría leyendo como cierto. La migración solo le
+  quita el `NOT NULL` (`ALTER … DROP NOT NULL`, al final de `db.js`); ninguna
+  fila existente cambia. La zona horaria se sigue guardando, para cuando
+  llegue la fecha.
+- **Es "fecha por definir", no "hora por definir".** Un partido con día y sin
+  hora sigue capturándose con una hora; se decidió no abrir esa segunda
+  variante. Lo que hay hoy a las 00:00 son importaciones de Excel sin hora.
+- **En el formulario** es una casilla "Fecha por definir" junto a "Fecha y
+  hora". La API la recibe como `match_date_local: null` explícito. Una cadena
+  vacía sigue siendo error, y al crear también la llave que falta, para que un
+  input que se quedó vacío por descuido no publique un partido sin fecha. Al
+  editar, `null` borra la fecha, una fecha nueva la pone y la llave ausente no
+  la toca; el visor también puede, porque la fecha ya era de lo que él cambia.
+- **En el Excel**, una celda de Fecha vacía o que diga "por definir" (también
+  "pendiente", "TBD", "por confirmar") importa el partido sin fecha. Una fecha
+  que no se entiende también lo importa, con un aviso en esa fila que dice qué
+  texto no se entendió: perder la fila es peor que un partido sin fecha que el
+  aviso señala. Una hora sin fecha se descarta, también con aviso.
+- **Dónde aparece: al final de su jornada.** Un partido de la Jornada 5 sin
+  fecha va justo después del último de la Jornada 5 que sí tiene fecha. Si su
+  jornada no tiene ninguno con fecha —o no tiene jornada—, va al final, en
+  orden de jornada y luego de captura; así un calendario todo sin fechas sale
+  en orden de jornada. Lo hacen `ordenarCalendario()` (`utils/matchDisplay.js`)
+  para el calendario y el panel, y la misma regla en SQL para las flechas de
+  partido anterior y siguiente (`GET /leagues/matches/:id`), que prometen el
+  orden del calendario. Con todas las fechas capturadas el orden queda
+  idéntico al de antes.
+- **Nunca es "Próximo" ni pasa solo a "En vivo".** El estado automático y el
+  aviso de "empieza en una hora" necesitan una hora; sin ella el partido se
+  queda programado hasta que le pongan fecha o lo marquen a mano.
+- **Predicciones: se puede votar.** La votación cierra cuando arranca el
+  partido; sin fecha sigue abierta. Para que un partido que se jugó sin que
+  nadie le pusiera fecha no quede abierto para siempre, el voto también se
+  rechaza en cuanto el partido está En vivo o Finalizado — que es lo que ya
+  hacía la pantalla, que solo ofrece votar en uno programado. En el ranking,
+  un partido sin fecha **no cuenta como jugado** hasta que se califica: no
+  detiene el cierre de su jornada, igual que un partido reprogramado a una
+  fecha futura. El recordatorio de "te falta votar" se ancla en los partidos
+  con fecha de la jornada y cuenta solo esos; una jornada toda sin fecha no
+  manda recordatorio, porque no hay a qué hora anclarlo.
+- **Avisos a quien lo sigue.** Ponerle fecha a un partido que no tenía, o
+  quitársela a uno que todavía no se juega, es un cambio de programación como
+  cualquier otro: deja su evento en "Mis notificaciones" ("Ahora la fecha está
+  por definir").
+- **El pase de lista** de un partido sin fecha usa el roster vigente: con la
+  fecha en `NULL`, la comparación contra la baja de cada jugador deja dentro a
+  los que siguen activos, que es lo correcto para un partido que todavía no
+  se juega.
+
 ## Monetización (afiliados de viaje)
 
 La plataforma monetiza mediante comisión de afiliado en dos accesos de `MatchPage`: 🏨 Hotel y ✈️ Vuelo. Ninguno de los dos vende nada directamente — ambos mandan al usuario a un tercero (Booking.com, Aviasales) que sí procesa la reserva y el pago; CFBAMX solo cobra comisión cuando esa reserva se completa.

@@ -161,10 +161,14 @@ export async function generateMatchCard(match, formatKey, dateParts, status) {
   const panelY = namesY + 70;
   const panelW = w * 0.82;
 
-  const panelLines = [
-    { text: `${dateParts.day} ${dateParts.month}`, font: `700 46px ${theme.fontDisplay}`, color: theme.flag, gapBefore: 0 },
-    { text: `${dateParts.time} · ${dateParts.tzLabel}`, font: `600 32px ${theme.fontEyebrow}`, color: theme.ink, gapBefore: 54 },
-  ];
+  // Fecha por definir: una sola línea en el lugar del día, sin hora ni zona
+  // (README, "Partidos con fecha por definir").
+  const panelLines = dateParts.porDefinir
+    ? [{ text: 'FECHA POR DEFINIR', font: `700 46px ${theme.fontDisplay}`, color: theme.flag, gapBefore: 0 }]
+    : [
+        { text: `${dateParts.day} ${dateParts.month}`, font: `700 46px ${theme.fontDisplay}`, color: theme.flag, gapBefore: 0 },
+        { text: `${dateParts.time} · ${dateParts.tzLabel}`, font: `600 32px ${theme.fontEyebrow}`, color: theme.ink, gapBefore: 54 },
+      ];
   if (categoryLabel) {
     panelLines.push({ text: categoryLabel, font: `500 26px ${theme.fontBody}`, color: theme.inkDim, gapBefore: 44 });
   }

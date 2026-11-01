@@ -18,6 +18,7 @@ import MatchStatsModal from '../components/MatchStatsModal.jsx';
 import CompetitionModelModal from '../components/CompetitionModelModal.jsx';
 import { getTimezoneLabel } from '../utils/timezones.js';
 import { scopeName, matchScopeLabel } from '../utils/matchScope.js';
+import { ordenarCalendario } from '../utils/matchDisplay.js';
 import { puede, puedeAlguno } from '../utils/permisos.js';
 
 // Panel unificado de una liga: TODO en una sola página, sin salir a ninguna
@@ -577,7 +578,9 @@ function BranchBlock({ t, c, b, q, open, onToggle, isOpen, onToggleKey, openKey,
 }
 
 function BranchMatches({ t, c, b, setModal }) {
-  const matches = b.matches || [];
+  // En el mismo orden que el calendario público: uno con fecha por definir,
+  // al final de su jornada.
+  const matches = ordenarCalendario(b.matches || []);
 
   // El backend ya manda conferencia y grupo resueltos desde los equipos, así
   // que el panel muestra exactamente lo mismo que verá el calendario público y
@@ -668,7 +671,7 @@ function Highlight({ text, q }) {
 
 const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 function fmtDate(iso, tz) {
-  if (!iso) return 'sin fecha';
+  if (!iso) return 'fecha por definir';
   const d = new Date(iso);
   const zone = tz || 'America/Mexico_City';
   const day = d.toLocaleString('es-MX', { timeZone: zone, day: 'numeric' });

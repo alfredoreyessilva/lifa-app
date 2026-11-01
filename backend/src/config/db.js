@@ -2492,6 +2492,13 @@ export async function initSchema() {
       )
     `);
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Partidos con fecha por definir (README, "Partidos con fecha por definir",
+    // 2026-11-01, lo pidió Alfredo). Sin fecha es `match_date` en NULL: no hay
+    // bandera aparte ni fecha de relleno. Solo se suelta el NOT NULL; ninguna
+    // fila cambia, y sobre una columna que ya acepta NULL no hace nada.
+    await run(`ALTER TABLE matches ALTER COLUMN match_date DROP NOT NULL`);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se

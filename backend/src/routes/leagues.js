@@ -173,19 +173,37 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
   // (match_date ASC, con el id como desempate estable). El alcance es el
   // Torneo cuando el partido pertenece a uno, o si no, la Categoría —
   // igual criterio que el botón "Ver calendario completo" de MatchPage.
+  //
+  // Uno con fecha por definir va donde lo pone el calendario
+  // (ordenarCalendario, frontend/src/utils/matchDisplay.js): justo después
+  // del último con fecha de su jornada; si su jornada no tiene ninguno con
+  // fecha, o no tiene jornada, al final por número de jornada y luego id.
+  // Con todas las fechas capturadas, el orden es el de siempre.
   const scopeSql = match.tournament_id
     ? `JOIN categories c ON c.id = m.category_id WHERE c.tournament_id = ?`
     : `WHERE m.category_id = ?`;
   const scopeId = match.tournament_id || match.category_id;
   const neighbors = scopeId
     ? await db.prepare(`
-        WITH ordered AS (
-          SELECT m.id,
-                 LAG(m.id)  OVER w AS prev_id,
-                 LEAD(m.id) OVER w AS next_id
+        WITH base AS (
+          SELECT m.id, m.match_date, m.week_label,
+                 CASE WHEN NULLIF(m.week_label, '') IS NOT NULL
+                      THEN MAX(m.match_date) OVER (PARTITION BY m.week_label)
+                 END AS ultimo_de_su_jornada
           FROM matches m
           ${scopeSql} AND m.is_draft = FALSE
-          WINDOW w AS (ORDER BY m.match_date ASC, m.id ASC)
+        ),
+        ordered AS (
+          SELECT id,
+                 LAG(id)  OVER w AS prev_id,
+                 LEAD(id) OVER w AS next_id
+          FROM base
+          WINDOW w AS (ORDER BY
+            COALESCE(match_date, ultimo_de_su_jornada) ASC NULLS LAST,
+            (match_date IS NULL) ASC,
+            CASE WHEN match_date IS NULL AND week_label ~ '^[0-9]+$'
+                 THEN week_label::numeric END ASC NULLS LAST,
+            id ASC)
         )
         SELECT prev_id, next_id FROM ordered WHERE id = ?
       `).get(scopeId, match.id)

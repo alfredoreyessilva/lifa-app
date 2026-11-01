@@ -732,7 +732,8 @@ async function avisosDePredicciones(userId, ahora) {
       FROM predictions p
       JOIN matches m ON m.id = p.match_id
       WHERE p.user_id = ?
-        AND m.match_date::timestamptz > NOW() - INTERVAL '60 days'
+        -- Uno con fecha por definir todavía no se juega: cuenta como reciente.
+        AND (m.match_date IS NULL OR m.match_date::timestamptz > NOW() - INTERVAL '60 days')
     )
     SELECT m.id, m.branch_id, m.category_id, c.tournament_id,
            m.week_label, m.match_date, m.timezone,

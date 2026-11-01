@@ -387,8 +387,10 @@ function championFromMatch({ title, scope, teams, matches, level }) {
 
   if (!candidates.length) return null;
 
+  // Uno con fecha por definir cuenta como el más viejo: String(null) es
+  // "null", que como texto le gana a cualquier fecha.
   const last = candidates.reduce((a, b) =>
-    String(b.match_date).localeCompare(String(a.match_date)) > 0 ? b : a);
+    String(b.match_date ?? '').localeCompare(String(a.match_date ?? '')) > 0 ? b : a);
 
   // Una final empatada no corona a nadie. En americano no debería pasar
   // (hay tiempo extra), pero si el marcador quedó así capturado, decirlo es

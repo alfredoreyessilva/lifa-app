@@ -208,6 +208,52 @@ ok((await nuevas(F1)) === 1, 'el balón lo cuenta, y solo a él: el resultado de
 await call('/notifications/mine/seen', { method: 'POST', token: F1 });
 ok((await nuevas(F1)) === 0, 'al abrir la bandeja otra vez, vuelve a cero', `=${await nuevas(F1)}`);
 
+console.log('\n=== 7. Un partido con fecha por definir ===');
+// README, "Partidos con fecha por definir". Sin fecha es match_date en NULL;
+// se puede votar mientras siga programado, y cierra al marcarlo En vivo.
+const crearSinFecha = (body) => call(`/manage/categories/${CAT}/matches`, {
+  method: 'POST', token: LIGA,
+  body: { home_team: `Cuervos ${stamp}`, away_team: `Linces ${stamp}`, branch_id: BRANCH, ...body },
+});
+const sinFecha = await crearSinFecha({ match_date_local: null, week_label: '3' });
+const M5 = sinFecha.data.id;
+ok(sinFecha.status === 201 && sinFecha.data.match_date === null, 'la liga crea un partido con fecha por definir', `=${sinFecha.status} ${JSON.stringify(sinFecha.data).slice(0, 120)}`);
+ok((await crearSinFecha({ match_date_local: '' })).status === 400, 'una fecha vacía sigue siendo error (no es "por definir")');
+ok((await crearSinFecha({})).status === 400, 'y también no mandar la fecha');
+
+const detalle5 = (await call(`/leagues/matches/${M5}`)).data;
+ok(detalle5.match_date === null && detalle5.prev_match_id === M4 && detalle5.next_match_id === null,
+  'en las flechas va al final: su jornada no tiene ningún partido con fecha', JSON.stringify({ prev: detalle5.prev_match_id, next: detalle5.next_match_id }));
+// Uno de la jornada 1 sin fecha va detrás del último de la jornada 1 que sí la tiene.
+const M6 = (await crearSinFecha({ match_date_local: null, week_label: '1' })).data.id;
+const detalle6 = (await call(`/leagues/matches/${M6}`)).data;
+ok(detalle6.prev_match_id === M2 && detalle6.next_match_id === M4,
+  'otro de la jornada 1 sin fecha va justo después del último de la jornada 1', JSON.stringify({ prev: detalle6.prev_match_id, next: detalle6.next_match_id }));
+
+ok((await votar(F1, M5, 'home')).status === 201, 'sin fecha se puede votar');
+ok((await call('/notifications/mine', { token: F1 })).status === 200, 'y la bandeja de quien lo votó sigue respondiendo');
+
+const conFecha = await call(`/manage/matches/${M5}`, { method: 'PUT', token: LIGA, body: { match_date_local: '2026-12-12T18:00' } });
+ok(conFecha.status === 200 && conFecha.data.match_date === '2026-12-13T00:00:00.000Z', 'al editar se le pone fecha', JSON.stringify(conFecha.data.match_date));
+const otraVez = await call(`/manage/matches/${M5}`, { method: 'PUT', token: LIGA, body: { match_date_local: null } });
+ok(otraVez.status === 200 && otraVez.data.match_date === null, 'y se le puede volver a quitar', JSON.stringify(otraVez.data.match_date));
+// Los dos avisos se escriben después de responder: se espera a que estén los dos.
+let cambios = 0;
+for (let i = 0; i < 20 && cambios < 2; i++) {
+  cambios = (await pool.query(`SELECT COUNT(*)::int AS n FROM match_events WHERE match_id=$1 AND type='schedule_change'`, [M5])).rows[0].n;
+  if (cambios < 2) await new Promise((r) => setTimeout(r, 150));
+}
+ok(cambios === 2, 'ponerle y quitarle la fecha deja un aviso de cambio de programación cada uno', `=${cambios}`);
+const sinTocar = await call(`/manage/matches/${M5}`, { method: 'PUT', token: LIGA, body: { home_score: 0, away_score: 0 } });
+ok(sinTocar.status === 200 && sinTocar.data.match_date === null, 'una edición que no manda la fecha no se la inventa', JSON.stringify(sinTocar.data.match_date));
+const soloZona = await call(`/manage/matches/${M5}`, { method: 'PUT', token: LIGA, body: { timezone: 'America/Tijuana' } });
+ok(soloZona.status === 200 && soloZona.data.match_date === null && soloZona.data.timezone === 'America/Tijuana',
+  'cambiar solo la zona tampoco', JSON.stringify([soloZona.status, soloZona.data.match_date, soloZona.data.timezone]));
+
+const enVivo = await call(`/manage/matches/${M5}/status`, { method: 'PATCH', token: LIGA, body: { status: 'live' } });
+const tarde = await votar(F2, M5, 'away');
+ok(enVivo.status === 200 && tarde.status === 400, 'en cuanto lo marcan En vivo, ya no se vota aunque no tenga fecha', `=${tarde.status} ${JSON.stringify(tarde.data)}`);
+
 console.log(`\n========  ${pass} ok, ${fail} fallas  ========`);
 await pool.end();
 process.exit(fail ? 1 : 0);

@@ -114,3 +114,14 @@ test('isMatchLiveOrPast incluye el instante exacto del inicio', () => {
   assert.equal(isMatchLiveOrPast(ahora), true);
   assert.equal(isMatchLiveOrPast(partido(1)), false);
 });
+
+// ── Fecha por definir (README, "Partidos con fecha por definir") ──────────
+
+test('sin fecha, el automático no lo mueve: new Date(null) es 1970 y lo daba por finalizado', () => {
+  const sinFecha = { match_date: null, status: 'scheduled', auto_status_enabled: true, auto_status_window_hours: 3 };
+  assert.equal(getMatchStatus(sinFecha), 'scheduled');
+  // Lo puesto a mano se sigue respetando.
+  assert.equal(getMatchStatus({ ...sinFecha, status: 'finished' }), 'finished');
+  assert.equal(isMatchPast(sinFecha), false);
+  assert.equal(isMatchLiveOrPast(sinFecha), false);
+});

@@ -110,6 +110,8 @@ export default function ExcelImport({ categoryId, branchId, categoryName, teams,
       {!result && (
         <div className="import-notice">
           ⚠️ En caso de ser detectado un error, la casilla quedará vacía pero podrás rellenarla manualmente desde el panel.
+          <br />
+          📅 Si un partido todavía no tiene fecha, deja la Fecha vacía o escribe «por definir»: se sube con fecha por definir.
         </div>
       )}
 

@@ -11,6 +11,49 @@ entradas traen el post-mortem del bug que las provocó.
 
 ---
 
+## Noviembre 2026
+
+### Cambios
+
+- **Un partido se puede guardar con "Fecha por definir" (2026-11-01).** Lo
+  pidió Alfredo: "Crear partido" no dejaba guardar sin fecha, y hay partidos
+  —y calendarios enteros— que se publican antes de tenerla. Ahora hay una
+  casilla "Fecha por definir" bajo "Fecha y hora"; marcada, esconde la fecha y
+  la zona horaria. Sin fecha es `match_date` en `NULL`, sin bandera aparte ni
+  fecha de relleno: la migración solo le quita el `NOT NULL`. Las decisiones
+  —solo fecha, no "hora por definir"; se puede votar; va al final de su
+  jornada; el Excel la acepta— están en el README, "Partidos con fecha por
+  definir".
+
+  Lo que no se veía y salió al recorrer cada lector de la fecha: `new Date(null)`
+  es 1970, no "inválido". Con el estado automático encendido, un partido sin
+  fecha salía **Finalizado**; en "Mi cartelera" quedaba hasta arriba; el widget
+  de vuelos sugería el 31 de diciembre de 1969. En el ranking, `null <= ahora`
+  es `true` en JS, así que un partido sin fecha detenía el cierre de toda su
+  jornada; y en "te falta votar", su `NaN` apagaba el recordatorio de la
+  jornada entera. En la tabla, `String(null)` es `"null"`, que como texto le
+  gana a cualquier fecha: un partido finalizado sin fecha pasaba por el más
+  reciente en la racha y en el partido decisivo del campeón.
+
+  De paso, el importador de Excel ya no corre en silencio una fecha que no
+  existe (31/02 se guardaba como 3 de marzo): la importa sin fecha y lo avisa.
+  Las dos copias del código que leía la fecha de una fila quedaron en una sola
+  función pura (`utils/fechaPorDefinir.js`), con sus pruebas. Y el voto ahora
+  también se cierra en cuanto el partido está En vivo o Finalizado, que es lo
+  que ya hacía la pantalla.
+
+  Verificado contra `desarrollo-local`. En solo lectura, las flechas de
+  anterior/siguiente dan lo mismo que antes en los 228 partidos, y en una
+  simulación con ONEFA (dos partidos de la J5 y la J9 entera sin fecha)
+  quedan en el mismo orden que el calendario. El cierre del voto no cambia en
+  ningún partido real. La migración, en una transacción con `ROLLBACK`: 56 ms,
+  ninguna fila movida. `predicciones.e2e.mjs` con una sección 7 nueva: 48 ok,
+  0 fallas. Un Excel con seis filas, cinco sin fecha útil: 6 importados, 0
+  omitidos, con aviso en las tres que traían algo inservible. Y en el
+  navegador, en escritorio: crear el partido sin fecha desde la ventana,
+  editarlo para ponerle fecha, la tarjeta del calendario, la página del
+  partido y la imagen para compartir. Sin desplegar.
+
 ## Octubre 2026
 
 ### Cambios

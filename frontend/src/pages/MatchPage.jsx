@@ -147,7 +147,7 @@ export default function MatchPage() {
 
   if (!match) return <div className="container"><Loading /></div>;
 
-  const { day, month, time, tzLabel } = getMatchParts(match.match_date, match.timezone || match.league_timezone);
+  const { day, month, time, tzLabel, porDefinir } = getMatchParts(match.match_date, match.timezone || match.league_timezone);
   const status        = getMatchStatus(match);
   const isFinished     = status === 'finished';
   const isLive         = status === 'live';
@@ -225,9 +225,18 @@ export default function MatchPage() {
         >
         <div className="match-card-header">
           <div className="match-card-datetime">
-            <span className="match-card-date">{day} {month}</span>
-            <span className="match-card-time">{time}</span>
-            <span className="match-card-tz">{tzLabel}</span>
+            {porDefinir ? (
+              <>
+                <span className="match-card-date">Fecha</span>
+                <span className="match-card-time">Por definir</span>
+              </>
+            ) : (
+              <>
+                <span className="match-card-date">{day} {month}</span>
+                <span className="match-card-time">{time}</span>
+                <span className="match-card-tz">{tzLabel}</span>
+              </>
+            )}
           </div>
           <div className="match-card-status">
             {isLive      && <span className="tag live">🔴 En vivo</span>}
@@ -366,7 +375,7 @@ export default function MatchPage() {
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
-          <ShareImageButton match={match} dateParts={{ day, month, time, tzLabel }} matchStatus={status} />
+          <ShareImageButton match={match} dateParts={{ day, month, time, tzLabel, porDefinir }} matchStatus={status} />
         </div>
 
         {isScheduled && (

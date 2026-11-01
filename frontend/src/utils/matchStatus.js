@@ -27,6 +27,11 @@ export function getMatchStatus(match) {
     return 'scheduled';
   }
 
+  // Fecha por definir: no hay hora contra la cual medir la ventana. Se queda
+  // programado hasta que le pongan fecha o lo marquen a mano. Sin esto,
+  // `new Date(null)` es 1970 y el partido salía "Finalizado".
+  if (!match.match_date) return 'scheduled';
+
   const hours     = match.auto_status_window_hours || 3; // resguardo, no debería faltar
   const now       = Date.now();
   const matchTime = new Date(match.match_date).getTime();
@@ -37,10 +42,13 @@ export function getMatchStatus(match) {
   return 'finished';                        // ya pasó la ventana automática
 }
 
+// Sin fecha, ni pasó ni arrancó.
 export function isMatchPast(match) {
+  if (!match.match_date) return false;
   return Date.now() > new Date(match.match_date).getTime();
 }
 
 export function isMatchLiveOrPast(match) {
+  if (!match.match_date) return false;
   return Date.now() >= new Date(match.match_date).getTime();
 }

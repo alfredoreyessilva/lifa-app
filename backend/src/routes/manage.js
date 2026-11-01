@@ -13,6 +13,7 @@ import {
   getLocalPartsInZone,
   parseLocalDateTimeString,
 } from '../utils/timezones.js';
+import { fechaDeFilaDelExcel, sigueSinJugarse } from '../utils/fechaPorDefinir.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { notifyMatchFollowers, pushEncendido } from '../utils/pushNotifier.js';
 import { PHASE_TYPES, PHASE_TYPE_KEYS } from '../utils/matchPhase.js';
@@ -125,9 +126,12 @@ async function avisosDeEdicionDePartido(before, after) {
   }
 
   // 3. Cambio de fecha/hora o de sede en un partido que todavía no ocurre.
-  const dateChanged  = String(before.match_date) !== String(after.match_date);
+  //    Ponerle fecha a uno que no tenía, o quitársela, también es cambio de
+  //    fecha; y uno sin fecha "todavía no ocurre" mientras siga programado
+  //    (README, "Partidos con fecha por definir").
+  const dateChanged  = (before.match_date ?? null) !== (after.match_date ?? null);
   const venueChanged = (before.venue_id || null) !== (after.venue_id || null);
-  const isFuture     = new Date(after.match_date).getTime() > Date.now();
+  const isFuture     = sigueSinJugarse(after);
   if (isFuture && (dateChanged || venueChanged)) {
     // Se guarda QUÉ cambió y no el texto: el aviso se arma al leer con la
     // fecha y la sede de hoy, que son las que valen.
@@ -135,8 +139,11 @@ async function avisosDeEdicionDePartido(before, after) {
       INSERT INTO match_events (match_id, type, data) VALUES (?, 'schedule_change', ?)
     `).run(after.id, JSON.stringify({ date_changed: dateChanged, venue_changed: venueChanged }));
     if (conPush) {
+      const sinFecha = dateChanged && after.match_date == null;
       const body =
-        dateChanged && venueChanged ? 'Cambiaron la fecha/hora y la sede de este partido.'
+        sinFecha && venueChanged    ? 'La fecha de este partido quedó por definir y cambió la sede.'
+        : sinFecha                  ? 'La fecha de este partido quedó por definir.'
+        : dateChanged && venueChanged ? 'Cambiaron la fecha/hora y la sede de este partido.'
         : dateChanged               ? 'Cambió la fecha u hora de este partido.'
         :                             'Cambió la sede de este partido.';
       await notifyMatchFollowers(after.id, {
@@ -742,9 +749,15 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
   // navegador. La única conversión a UTC autoritativa ocurre aquí, en el
   // backend, usando la zona horaria explícita del partido (nunca la zona
   // ambiente del servidor ni la del navegador de quien lo captura).
+  //
+  // `match_date_local: null` EXPLÍCITO es "fecha por definir" (README,
+  // "Partidos con fecha por definir"). La llave ausente o una cadena vacía
+  // siguen siendo error: un input que se quedó vacío por descuido no debe
+  // publicar un partido sin fecha.
   const { home_team, away_team, match_date_local, venue_id, group_id, group_id_2, conference_id, conference_override_id, stream_links, ticket_links, week_label, status, home_score, away_score, timezone, branch_id, phase_id } = req.body;
-  if (!isNonEmptyString(home_team) || !isNonEmptyString(away_team) || !match_date_local) {
-    return res.status(400).json({ error: 'Se requieren equipo local, visitante y fecha' });
+  const fechaPorDefinir = match_date_local === null;
+  if (!isNonEmptyString(home_team) || !isNonEmptyString(away_team) || (!match_date_local && !fechaPorDefinir)) {
+    return res.status(400).json({ error: 'Se requieren equipo local, visitante y fecha (o marcar "Fecha por definir")' });
   }
 
   const resolvedStatus = status || 'scheduled';
@@ -754,8 +767,8 @@ router.post('/categories/:categoryId/matches', authRequired, categoryOwnerRequir
   // Cadena de respaldo de zona horaria: la del partido -> la de la liga
   // (siempre tiene un valor por el DEFAULT de la columna) -> México Centro.
   const effectiveTimezone = timezone || req.league.timezone || 'America/Mexico_City';
-  const matchDateUtc = localDateTimeStringToUtcISO(match_date_local, effectiveTimezone);
-  if (!matchDateUtc) return res.status(400).json({ error: 'La fecha y hora no son válidas' });
+  const matchDateUtc = fechaPorDefinir ? null : localDateTimeStringToUtcISO(match_date_local, effectiveTimezone);
+  if (!fechaPorDefinir && !matchDateUtc) return res.status(400).json({ error: 'La fecha y hora no son válidas' });
 
   const homeTeamId = await resolveTeamId(req.category, home_team);
   const awayTeamId = await resolveTeamId(req.category, away_team);
@@ -984,39 +997,19 @@ router.post(
           }
         }
 
-        let matchDate = null;
-        if (fechaRaw) {
-          let y = null, mo = null, d = null;
-
-          const rawFechaKey = Object.keys(row).find(k => k.trim().toLowerCase() === 'fecha');
-          if (rawFechaKey && row[rawFechaKey] instanceof Date) {
-            const cellDate = row[rawFechaKey];
-            y = cellDate.getFullYear(); mo = cellDate.getMonth() + 1; d = cellDate.getDate();
-          }
-          if (y === null) {
-            const dmyMatch = /^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/.exec(fechaRaw);
-            if (dmyMatch) { d = Number(dmyMatch[1]); mo = Number(dmyMatch[2]); y = Number(dmyMatch[3]); }
-          }
-          if (y === null) {
-            const ymdMatch = /^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/.exec(fechaRaw);
-            if (ymdMatch) { y = Number(ymdMatch[1]); mo = Number(ymdMatch[2]); d = Number(ymdMatch[3]); }
-          }
-
-          if (y !== null) {
-            let hour = 0, minute = 0;
-            if (horaRaw) {
-              const timeMatch = /^(\d{1,2}):(\d{2})/.exec(horaRaw);
-              if (timeMatch) { hour = Number(timeMatch[1]); minute = Number(timeMatch[2]); }
-            }
-            // Clave del fix: convertir usando la zona horaria de LA FILA (o la
-            // de la liga como respaldo) — nunca la zona del servidor. Antes,
-            // `new Date(y, m, d)` + `setHours` + `toISOString()` interpretaba
-            // la hora capturada como si ya fuera la hora del servidor (UTC en
-            // Render), ignorando por completo la columna "Zona horaria".
-            const effectiveTz = timezone || req.league.timezone || 'America/Mexico_City';
-            matchDate = zonedTimeToUtcISO(y, mo, d, hour, minute, effectiveTz);
-          }
-        }
+        // Sin fecha —celda vacía, "por definir" o un texto que no se entiende—
+        // el partido se importa con fecha por definir (match_date en NULL), y
+        // el aviso dice qué se descartó (README, "Partidos con fecha por
+        // definir"). La hora se convierte con la zona de LA FILA, o la de la
+        // liga como respaldo — nunca con la del servidor (UTC en Render).
+        const rawFechaKey = Object.keys(row).find(k => k.trim().toLowerCase() === 'fecha');
+        const { matchDate, aviso: avisoDeFecha } = fechaDeFilaDelExcel({
+          fechaRaw,
+          horaRaw,
+          celdaFecha: rawFechaKey ? row[rawFechaKey] : null,
+          timezone: timezone || req.league.timezone || 'America/Mexico_City',
+        });
+        if (avisoDeFecha) warnings.push({ row: rowN, reason: avisoDeFecha });
 
         let validStream = '';
         if (streamUrl) {
@@ -1264,34 +1257,16 @@ router.post(
           }
         }
 
-        let matchDate = null;
-        if (fechaRaw) {
-          let y = null, mo = null, d = null;
-
-          const rawFechaKey = Object.keys(row).find((k) => k.trim().toLowerCase() === 'fecha');
-          if (rawFechaKey && row[rawFechaKey] instanceof Date) {
-            const cellDate = row[rawFechaKey];
-            y = cellDate.getFullYear(); mo = cellDate.getMonth() + 1; d = cellDate.getDate();
-          }
-          if (y === null) {
-            const dmyMatch = /^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/.exec(fechaRaw);
-            if (dmyMatch) { d = Number(dmyMatch[1]); mo = Number(dmyMatch[2]); y = Number(dmyMatch[3]); }
-          }
-          if (y === null) {
-            const ymdMatch = /^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/.exec(fechaRaw);
-            if (ymdMatch) { y = Number(ymdMatch[1]); mo = Number(ymdMatch[2]); d = Number(ymdMatch[3]); }
-          }
-
-          if (y !== null) {
-            let hour = 0, minute = 0;
-            if (horaRaw) {
-              const timeMatch = /^(\d{1,2}):(\d{2})/.exec(horaRaw);
-              if (timeMatch) { hour = Number(timeMatch[1]); minute = Number(timeMatch[2]); }
-            }
-            const effectiveTz = timezone || req.league.timezone || 'America/Mexico_City';
-            matchDate = zonedTimeToUtcISO(y, mo, d, hour, minute, effectiveTz);
-          }
-        }
+        // Igual que en el importador de una categoría: sin fecha, el partido
+        // entra con fecha por definir y el aviso dice qué se descartó.
+        const rawFechaKey = Object.keys(row).find((k) => k.trim().toLowerCase() === 'fecha');
+        const { matchDate, aviso: avisoDeFecha } = fechaDeFilaDelExcel({
+          fechaRaw,
+          horaRaw,
+          celdaFecha: rawFechaKey ? row[rawFechaKey] : null,
+          timezone: timezone || req.league.timezone || 'America/Mexico_City',
+        });
+        if (avisoDeFecha) warnings.push({ row: rowN, reason: avisoDeFecha });
 
         let validStream = '';
         if (streamUrl) {
@@ -1417,20 +1392,28 @@ router.put('/matches/:id', authRequired, matchScoreRequired, asyncHandler(async 
     ? null
     : (conference_id !== undefined ? (conference_id || null) : m.conference_id);
 
-  // Solo se recalcula match_date si esta edición tocó la fecha/hora o la
-  // zona horaria (si no tocó ninguna de las dos, matchDateUtc queda en null
-  // y el COALESCE de abajo conserva el valor que ya existía).
-  let matchDateUtc = null;
-  if (match_date_local !== undefined || timezone !== undefined) {
+  // La fecha que queda. Se escribe directo, sin COALESCE, porque NULL ya no
+  // es "no tocar": es "fecha por definir" (README, "Partidos con fecha por
+  // definir"). Por eso el "no tocar" se resuelve aquí, con la fecha que ya
+  // tenía:
+  //   - match_date_local null  → se borra: queda por definir.
+  //   - match_date_local texto → la fecha nueva, en la zona que quede.
+  //   - solo cambió la zona    → la misma hora de pared en la zona nueva; si
+  //                              no tenía fecha, sigue sin tenerla.
+  //   - ninguna de las dos     → la que tenía.
+  let matchDateUtc = m.match_date ?? null;
+  if (match_date_local === null) {
+    matchDateUtc = null;
+  } else if (match_date_local !== undefined || timezone !== undefined) {
     const effectiveTimezone = (timezone !== undefined ? timezone : m.timezone) || req.league.timezone || 'America/Mexico_City';
 
-    let localParts;
+    let localParts = null;
     if (match_date_local !== undefined) {
       // Se editó la fecha/hora (con o sin cambio de zona también): se toma
       // tal cual el string crudo del formulario.
       localParts = parseLocalDateTimeString(match_date_local);
       if (!localParts) return res.status(400).json({ error: 'La fecha y hora no son válidas' });
-    } else {
+    } else if (m.match_date) {
       // Solo se cambió la zona horaria, sin tocar la fecha/hora: se
       // RE-interpreta la misma hora de pared (la que ya estaba guardada, leída
       // en su zona anterior) dentro de la nueva zona — en vez de dejar el
@@ -1438,7 +1421,9 @@ router.put('/matches/:id', authRequired, matchScoreRequired, asyncHandler(async 
       localParts = getLocalPartsInZone(m.match_date, m.timezone || req.league.timezone || 'America/Mexico_City');
     }
 
-    matchDateUtc = zonedTimeToUtcISO(localParts.year, localParts.month, localParts.day, localParts.hour, localParts.minute, effectiveTimezone);
+    if (localParts) {
+      matchDateUtc = zonedTimeToUtcISO(localParts.year, localParts.month, localParts.day, localParts.hour, localParts.minute, effectiveTimezone);
+    }
   }
 
   // Se guarda siempre la zona ya resuelta cuando se tocó algo de fecha/hora,
@@ -1459,7 +1444,7 @@ router.put('/matches/:id', authRequired, matchScoreRequired, asyncHandler(async 
       away_team    = COALESCE(?, away_team),
       home_team_id = ?,
       away_team_id = ?,
-      match_date   = COALESCE(?, match_date),
+      match_date   = CASE WHEN ?::boolean THEN ? ELSE match_date END,
       venue_id     = ?,
       group_id     = ?,
       group_id_2   = ?,
@@ -1480,7 +1465,10 @@ router.put('/matches/:id', authRequired, matchScoreRequired, asyncHandler(async 
   `).run(
     toNull(home_team), toNull(away_team),
     homeTeamId, awayTeamId,
-    toNull(matchDateUtc),
+    // Ya resuelta arriba: NULL aquí es "fecha por definir", no "no tocar";
+    // el "no tocar" es el primer parámetro en false.
+    match_date_local !== undefined || timezone !== undefined,
+    matchDateUtc,
     venue_id  !== undefined ? (venue_id  || null) : m.venue_id,
     group_id  !== undefined ? (group_id  || null) : m.group_id,
     group_id_2 !== undefined ? (group_id_2 || null) : m.group_id_2,

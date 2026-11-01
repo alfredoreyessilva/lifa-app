@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getMatchStatus } from '../utils/matchStatus.js';
-import { getMatchParts, initials, groupByJornada, jornadaDateRange } from '../utils/matchDisplay.js';
+import { getMatchParts, initials, groupByJornada, jornadaDateRange, ordenarCalendario } from '../utils/matchDisplay.js';
 import { shareLink } from '../utils/share.js';
 import MatchCard from './MatchCard.jsx';
 import CalendarRanking from './CalendarRanking.jsx';
@@ -155,12 +155,15 @@ export default function CalendarViewer({
   // endpoint que no tenga todavía el fix-, nos quedamos solo con el
   // primero. Así el calendario nunca muestra un mismo partido dos veces,
   // sin importar de dónde vino el duplicado.
+  //
+  // Los de fecha por definir van al final de su jornada (ordenarCalendario);
+  // con todas las fechas capturadas, la lista queda como llegó.
   const seenMatchIds = new Set();
-  const matches = matchesProp.filter((m) => {
+  const matches = ordenarCalendario(matchesProp.filter((m) => {
     if (seenMatchIds.has(m.id)) return false;
     seenMatchIds.add(m.id);
     return true;
-  });
+  }));
 
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -224,8 +227,9 @@ export default function CalendarViewer({
 
   // El primer partido pendiente marca la "hora próxima". Todos los partidos
   // que siguen en "scheduled" y arrancan exactamente a esa misma hora
-  // comparten el estado "Próximo" — no solo el primero de la lista.
-  const nextMatch = matches.find(m => getMatchStatus(m) === 'scheduled');
+  // comparten el estado "Próximo" — no solo el primero de la lista. Uno con
+  // fecha por definir nunca es "Próximo": no se sabe cuándo es.
+  const nextMatch = matches.find(m => m.match_date && getMatchStatus(m) === 'scheduled');
   const nextMatchTime = nextMatch ? new Date(nextMatch.match_date).getTime() : null;
   const nextMatchIds = new Set(
     nextMatchTime === null

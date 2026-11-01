@@ -12,7 +12,11 @@ const VALID_PICKS = new Set(['home', 'away', 'tie']);
 // Votar quién gana un partido. Requiere sesión. Una sola vez por partido y
 // por usuario — el voto queda fijo para siempre, como una quiniela de
 // papel: no hay ruta para editarlo ni borrarlo. Se rechaza si el partido
-// ya arrancó (comparando match_date contra la hora del servidor).
+// ya arrancó (comparando match_date contra la hora del servidor) o si ya lo
+// marcaron En vivo o Finalizado. Lo segundo es lo que cierra a un partido con
+// fecha por definir, que no tiene hora contra la cual comparar; y es lo que
+// ya hacía la pantalla, que solo ofrece votar en uno programado (README,
+// "Partidos con fecha por definir").
 router.post('/', authRequired, asyncHandler(async (req, res) => {
   const { match_id, pick } = req.body;
   if (!match_id || !VALID_PICKS.has(pick)) {
@@ -20,7 +24,9 @@ router.post('/', authRequired, asyncHandler(async (req, res) => {
   }
 
   const match = await db.prepare(`
-    SELECT id, (match_date::timestamptz <= NOW()) as started
+    SELECT id,
+           (COALESCE(match_date::timestamptz <= NOW(), FALSE)
+            OR status IN ('live', 'finished')) AS started
     FROM matches WHERE id = ?
   `).get(match_id);
   if (!match) return res.status(404).json({ error: 'Partido no encontrado' });

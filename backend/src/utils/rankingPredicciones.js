@@ -53,6 +53,9 @@ const ZONA_POR_DEFECTO = 'America/Mexico_City';
 export function jornadaDe(partido) {
   const etiqueta = partido.week_label == null ? '' : String(partido.week_label);
   if (etiqueta.trim()) return { key: `J:${etiqueta}`, week_label: etiqueta, fecha: null };
+  // Sin jornada y con fecha por definir: no hay día con quien agruparlo. Los
+  // que estén así van juntos en una "jornada" propia.
+  if (partido.match_date == null) return { key: 'D:por-definir', week_label: null, fecha: null };
   const { year, month, day } = getLocalPartsInZone(partido.match_date, partido.timezone || ZONA_POR_DEFECTO);
   const fecha = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   return { key: `D:${fecha}`, week_label: null, fecha };
@@ -123,7 +126,10 @@ export function cortesDeJornada({ partidos, ahora }) {
 
   const cortes = [];
   for (const { jornada, partidos: dela } of grupos.values()) {
-    const jugados = dela.filter((p) => ms(p.match_date) <= ahoraMs);
+    // Uno con fecha por definir no cuenta como jugado: `ms(null)` es null, y
+    // `null <= ahoraMs` es true en JS, así que detenía el cierre de toda su
+    // jornada. Si ya se calificó, entra igual por `calificados`.
+    const jugados = dela.filter((p) => p.match_date != null && ms(p.match_date) <= ahoraMs);
     if (jugados.some((p) => p.gradable_at == null)) continue;
     const calificados = dela.filter((p) => p.gradable_at != null);
     if (calificados.length === 0) continue;

@@ -131,6 +131,10 @@ export default function MatchForm({
     home_team:   initial?.home_team   || '',
     away_team:   initial?.away_team   || '',
     match_date:  utcIsoToLocalInputValue(initial?.match_date, defaultTimezone) || '',
+    // "Fecha por definir": el partido se guarda sin fecha (README, "Partidos
+    // con fecha por definir"). Un partido que ya existe sin fecha abre con la
+    // casilla marcada; uno nuevo, sin marcar.
+    fecha_por_definir: Boolean(initial?.id) && !initial?.match_date,
     venue_id:    initial?.venue_id    || null,
     group_id:    initial?.group_id    || null,
     group_id_2:  initial?.group_id_2  || null,
@@ -331,8 +335,8 @@ export default function MatchForm({
     e.preventDefault();
     setError('');
 
-    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(form.match_date || '')) {
-      setError('Ingresa una fecha y hora válidas.');
+    if (!form.fecha_por_definir && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(form.match_date || '')) {
+      setError('Ingresa una fecha y hora válidas, o marca "Fecha por definir".');
       return;
     }
 
@@ -379,7 +383,7 @@ export default function MatchForm({
     try {
       const {
         conference_id: _c, conference_override_id: _co,
-        group_id: _g, group_id_2: _g2, ...rest
+        group_id: _g, group_id_2: _g2, fecha_por_definir: _fpd, ...rest
       } = form;
       // Lo del día del partido: lo único que manda la ventana del visor, y la
       // parte que comparten las dos.
@@ -387,7 +391,9 @@ export default function MatchForm({
         venue_id:    form.venue_id || null,
         stream_links: (form.stream_links || []).filter((u) => u && u.trim()),
         ticket_links: (form.ticket_links || []).filter((u) => u && u.trim()),
-        match_date_local: form.match_date,
+        // null explícito = "fecha por definir"; el backend no acepta la
+        // cadena vacía, para que un input olvidado no pase como "sin fecha".
+        match_date_local: form.fecha_por_definir ? null : form.match_date,
         home_score:  form.home_score === '' ? null : Number(form.home_score),
         away_score:  form.away_score === '' ? null : Number(form.away_score),
         timezone:    form.timezone,
@@ -510,22 +516,40 @@ export default function MatchForm({
 
       <div className="field">
         <label>Fecha y hora</label>
-        <input
-          type="datetime-local"
-          required
-          value={form.match_date}
-          onChange={(e) => update('match_date', e.target.value)}
-        />
+        {/* Con la casilla marcada el input se esconde, pero lo que tenía
+            escrito se conserva: desmarcarla lo devuelve tal cual. */}
+        {!form.fecha_por_definir && (
+          <input
+            type="datetime-local"
+            required
+            value={form.match_date}
+            onChange={(e) => update('match_date', e.target.value)}
+          />
+        )}
+        <label className="state-checkbox">
+          <input
+            type="checkbox"
+            checked={form.fecha_por_definir}
+            onChange={(e) => update('fecha_por_definir', e.target.checked)}
+          />
+          Fecha por definir
+        </label>
       </div>
 
-      <TimezoneSelect
-        label="Zona horaria de este partido"
-        value={form.timezone}
-        onChange={(v) => update('timezone', v)}
-      />
-      <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: -8, marginBottom: 16 }}>
-        Por defecto usa la zona de tu liga. Cámbiala solo si este partido se juega en otra región.
-      </div>
+      {/* La zona solo dice algo con una hora; sin fecha se esconde y se
+          guarda la que tenga, para cuando la fecha llegue. */}
+      {!form.fecha_por_definir && (
+        <>
+          <TimezoneSelect
+            label="Zona horaria de este partido"
+            value={form.timezone}
+            onChange={(v) => update('timezone', v)}
+          />
+          <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginTop: -8, marginBottom: 16 }}>
+            Por defecto usa la zona de tu liga. Cámbiala solo si este partido se juega en otra región.
+          </div>
+        </>
+      )}
 
       <div className="field">
         <label>Sede (opcional)</label>

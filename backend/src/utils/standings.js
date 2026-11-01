@@ -755,7 +755,9 @@ export function computeStandings({ teams = [], matches = [], config = {}, inScop
 // Se calcula por fecha, no por el orden en que llegaron los partidos, porque
 // la captura no siempre es cronológica.
 function streakOf(teamId, matches) {
-  const ordered = [...matches].sort((a, b) => String(b.match_date).localeCompare(String(a.match_date)));
+  // Uno con fecha por definir va al final (el más viejo): String(null) es
+  // "null", que como texto le gana a cualquier fecha.
+  const ordered = [...matches].sort((a, b) => String(b.match_date ?? '').localeCompare(String(a.match_date ?? '')));
   let kind = null;
   let count = 0;
   for (const m of ordered) {

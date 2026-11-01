@@ -189,7 +189,7 @@ export default function TournamentMatchesPanel() {
               return (
                 <li key={m.id} style={{ marginBottom: 10 }}>
                   {m.is_draft && <strong style={{ color: 'var(--flag)' }}>[BORRADOR] </strong>}
-                  {m.category_name} / {m.branch_name || 'sin rama'} — {m.home_team} vs {m.away_team} — {new Date(m.match_date).toLocaleString()} — estado: <strong>{m.status}</strong>
+                  {m.category_name} / {m.branch_name || 'sin rama'} — {m.home_team} vs {m.away_team} — {m.match_date ? new Date(m.match_date).toLocaleString() : 'fecha por definir'} — estado: <strong>{m.status}</strong>
                   {needsReview && (
                     <strong style={{ color: 'var(--live)' }}> ⚠ Sin clasificar — edítalo para poder publicar</strong>
                   )}

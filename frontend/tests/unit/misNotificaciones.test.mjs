@@ -139,3 +139,18 @@ test('te falta votar: cuántos y cuándo empieza el primero, en la zona del part
   assert.match(uno.body, /^Te falta 1 partido: HALCONES vs TIGRES, el 3 OCT/);
   assert.equal(nombreDeJornada({ week_label: null, fecha: '2026-10-03' }), 'los partidos del 3 OCT');
 });
+
+// ── Fecha por definir (README, "Partidos con fecha por definir") ──────────
+
+test('si le quitaron la fecha, el cambio de programación lo dice', () => {
+  const sinFecha = { ...partido, match_date: null };
+  const { body } = textoDeSeguimiento({ type: 'schedule_change', match: sinFecha, data: { date_changed: true } });
+  assert.equal(body, 'Cambió la fecha u hora. Ahora la fecha está por definir.');
+  // Si solo cambió la sede de un partido sin fecha, no se inventa nada de la fecha.
+  const soloSede = textoDeSeguimiento({ type: 'schedule_change', match: sinFecha, data: { venue_changed: true } });
+  assert.equal(soloSede.body, 'Cambió la sede.');
+});
+
+test('la "jornada" de los partidos sin jornada ni fecha tiene nombre', () => {
+  assert.equal(nombreDeJornada({ key: 'D:por-definir', week_label: null, fecha: null }), 'los partidos con fecha por definir');
+});

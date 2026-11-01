@@ -54,6 +54,11 @@ export function textoDeSeguimiento(aviso) {
       const que = d.date_changed && d.venue_changed ? 'Cambiaron la fecha y la sede.'
         : d.venue_changed ? 'Cambió la sede.'
         : 'Cambió la fecha u hora.';
+      // Le quitaron la fecha: el aviso dice lo que vale hoy, igual que cuando
+      // la cambiaron (README, "Partidos con fecha por definir").
+      if (!cuando && d.date_changed && m.match_date == null) {
+        return { title: `Cambio de programación — ${cruce}`, body: `${que} Ahora la fecha está por definir.` };
+      }
       return { title: `Cambio de programación — ${cruce}`, body: cuando ? `${que} Ahora: ${cuando}.` : que };
     }
     default:
@@ -71,6 +76,9 @@ export function textoDeSeguimiento(aviso) {
 // los partidos cuando la liga no puso jornada.
 export function nombreDeJornada(jornada) {
   if (jornada?.week_label) return jornadaLabel(jornada.week_label);
+  // Sin jornada ni fecha: el backend los junta en 'D:por-definir'
+  // (utils/rankingPredicciones.js, jornadaDe).
+  if (jornada?.key === 'D:por-definir') return 'los partidos con fecha por definir';
   const [, , mes, dia] = /^(\d{4})-(\d{2})-(\d{2})$/.exec(jornada?.fecha || '') || [];
   return mes ? `los partidos del ${Number(dia)} ${MESES[Number(mes) - 1]}` : 'la jornada';
 }

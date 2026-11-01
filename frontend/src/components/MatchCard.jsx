@@ -20,7 +20,7 @@ export function TeamBadge({ name, logoUrl }) {
 // calendario (CalendarViewer) como en Mi Cartelera — misma tarjeta en los
 // dos lugares, no una parecida.
 export default function MatchCard({ match, isNext = false }) {
-  const { day, month, time, tzLabel } = getMatchParts(match.match_date, match.timezone);
+  const { day, month, time, tzLabel, porDefinir } = getMatchParts(match.match_date, match.timezone);
   const status      = getMatchStatus(match);
   const isFinished  = status === 'finished';
   const isLive      = status === 'live';
@@ -37,9 +37,18 @@ export default function MatchCard({ match, isNext = false }) {
     >
       <div className="match-card-header">
         <div className="match-card-datetime">
-          <span className="match-card-date">{day} {month}</span>
-          <span className="match-card-time">{time}</span>
-          <span className="match-card-tz">{tzLabel}</span>
+          {porDefinir ? (
+            <>
+              <span className="match-card-date">Fecha</span>
+              <span className="match-card-time">Por definir</span>
+            </>
+          ) : (
+            <>
+              <span className="match-card-date">{day} {month}</span>
+              <span className="match-card-time">{time}</span>
+              <span className="match-card-tz">{tzLabel}</span>
+            </>
+          )}
         </div>
         <div className="match-card-status">
           {isNext && !isLive && <span className="tag" style={{ color: 'var(--flag)', borderColor: 'var(--flag)' }}>Próximo</span>}

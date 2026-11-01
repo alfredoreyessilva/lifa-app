@@ -134,6 +134,12 @@ test('"próximo" sale una hora antes y "en vivo" a la hora del partido, ni un mi
   assert.equal(avisos.find((a) => a.type === 'live').at.getTime(), antes(1).getTime());
 });
 
+test('un partido con fecha por definir no avisa "próximo" ni "en vivo" (new Date(null) es 1970)', () => {
+  const sinFecha = { ...partido(1, AHORA), match_date: null };
+  const avisos = avisosDeSeguimiento({ seguimientos: [siguePartido(1, new Date(0))], partidos: [sinFecha], eventos: [], ahora: AHORA });
+  assert.deepEqual(avisos, []);
+});
+
 test('no enseña lo que pasó antes de que empezaras a seguir', () => {
   const p = partido(1, antes(1));
   // Empezó a seguirlo hace 90 minutos: el "próximo" (hace 2 h) ya había pasado.
@@ -391,6 +397,20 @@ test('te falta votar: no antes de 24 h, y nada si ya no queda partido por empeza
   // La jornada 1 ya se jugó y YO no votó un partido suyo: ya no hay nada que votar.
   const sinVotar = votosJ1.filter((v) => !(v.user_id === YO && v.match_id === 2));
   assert.deepEqual(deTipo(avisosDePrediccion({ userId: YO, partidos: jornada1, predicciones: sinVotar, ahora: AHORA }), 'prediction_reminder'), []);
+});
+
+test('te falta votar: uno con fecha por definir no apaga el de su jornada ni se cuenta', () => {
+  // Antes, su NaN volvía NaN el Math.min de la jornada y el recordatorio no salía.
+  const sinFecha = deRama(5, AHORA, { week_label: '2', match_date: null });
+  const partidos = [...jornada1, ...jornada2, sinFecha];
+  const [recordatorio] = deTipo(avisosDePrediccion({ userId: YO, partidos, predicciones: votosJ1, ahora: AHORA }), 'prediction_reminder');
+  assert.equal(recordatorio.at.getTime(), despues(20 - 24).getTime(), 'se ancla en el primero CON fecha');
+  assert.equal(recordatorio.data.missing, 2, 'el de fecha por definir no cuenta');
+  assert.equal(recordatorio.partido.id, 3);
+
+  // Una jornada toda sin fecha no tiene a qué hora recordar.
+  const todaSinFecha = [...jornada1, deRama(6, AHORA, { week_label: '3', match_date: null })];
+  assert.deepEqual(deTipo(avisosDePrediccion({ userId: YO, partidos: todaSinFecha, predicciones: votosJ1, ahora: AHORA }), 'prediction_reminder'), []);
 });
 
 test('nada de hace más de 30 días', () => {

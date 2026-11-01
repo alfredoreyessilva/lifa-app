@@ -36,6 +36,8 @@ function buildWidgetSrc(destinationIata) {
 // quedó preconfigurado cuando no es así.
 function formatMatchDateHint(match) {
   const tz = match?.timezone || match?.league_timezone || 'America/Mexico_City';
+  // Fecha por definir: no hay día que sugerir. `new Date(null)` daría 1970.
+  if (!match?.match_date) return null;
   const matchDate = new Date(match?.match_date);
   if (Number.isNaN(matchDate.getTime())) return null;
 

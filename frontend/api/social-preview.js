@@ -26,7 +26,8 @@ function escapeHtml(str = '') {
 // bots no necesitan la hora exacta al minuto, solo un texto real e
 // indexable — muy distinto de mandarles nada de contenido).
 function formatDateEs(isoString) {
-  if (!isoString) return '';
+  // Sin fecha es "fecha por definir" (README, "Partidos con fecha por definir").
+  if (!isoString) return 'por definir';
   try {
     return new Date(isoString).toLocaleDateString('es-MX', {
       day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit',

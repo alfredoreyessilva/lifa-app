@@ -104,6 +104,27 @@ test('cortes: una jornada cierra cuando todo lo jugado califica, a la hora del Ã
   ]);
 });
 
+test('fecha por definir: con jornada va en su jornada; sin jornada, en una propia', () => {
+  assert.equal(jornadaDe({ week_label: '5', match_date: null }).key, 'J:5');
+  assert.deepEqual(jornadaDe({ week_label: null, match_date: null }), { key: 'D:por-definir', week_label: null, fecha: null });
+});
+
+test('cortes: un partido con fecha por definir no detiene su jornada; si ya calificÃ³, entra', () => {
+  const sinFecha = (id, week_label, gradable_at = null) =>
+    ({ id, week_label, match_date: null, gradable_at, exhibition: false });
+  const partidos = [
+    partido(1, '1', antes(50), antes(46)),
+    sinFecha(2, '1'),                         // sin fecha y sin calificar: la 1 cierra igual
+    partido(3, '2', antes(30), antes(26)),
+    sinFecha(4, '2', antes(20)),              // lo finalizaron sin ponerle fecha: cuenta
+  ];
+  const cortes = cortesDeJornada({ partidos, ahora: AHORA });
+  assert.deepEqual(cortes.map((c) => [c.jornada.key, c.at.getTime(), c.partidos]), [
+    ['J:1', antes(46).getTime(), [1]],
+    ['J:2', antes(20).getTime(), [3, 4]],
+  ]);
+});
+
 test('repasoPorJornada: un corte por jornada cerrada, cada uno con su tabla', () => {
   const partidos = [partido(1, '1', antes(50), antes(46)), partido(2, '2', antes(10), antes(6))];
   const predicciones = [pred(1, 1, true), pred(2, 1, false), pred(2, 2, true), pred(1, 2, false)];

@@ -154,7 +154,9 @@ export function avisosDeSeguimiento({ seguimientos, partidos, eventos, ahora }) 
       avisos.push({ key: `final_score-${partido.id}`, type: 'final_score', at: new Date(final), partido, data: null });
     }
 
-    const inicio = new Date(partido.match_date).getTime();
+    // Sin fecha (fecha por definir) no hay "empieza en una hora" ni "en vivo"
+    // que calcular. `new Date(null)` daría 1970, no NaN: se dice aparte.
+    const inicio = partido.match_date == null ? NaN : new Date(partido.match_date).getTime();
     if (Number.isNaN(inicio)) continue;
     if (entra(cubren, 'upcoming', inicio - HORA_MS)) {
       avisos.push({ key: `upcoming-${partido.id}`, type: 'upcoming', at: new Date(inicio - HORA_MS), partido, data: null });
@@ -396,7 +398,13 @@ export function avisosDePrediccion({ userId, partidos, predicciones, quinielas =
       if (!jornadas.has(j.key)) jornadas.set(j.key, { jornada: j, partidos: [] });
       jornadas.get(j.key).partidos.push(p);
     }
-    for (const { jornada, partidos: dela } of jornadas.values()) {
+    for (const { jornada, partidos: todos } of jornadas.values()) {
+      // Se ancla y se cuenta solo con los que tienen fecha: uno con fecha por
+      // definir no tiene hora para el recordatorio, y con un solo NaN el
+      // Math.min apagaba el de toda su jornada. Una jornada toda sin fecha no
+      // recuerda nada (README, "Partidos con fecha por definir").
+      const dela = todos.filter((p) => p.match_date != null);
+      if (dela.length === 0) continue;
       const primero = Math.min(...dela.map((p) => msDe(p.match_date)));
       const at = primero - HORAS_DE_RECORDATORIO * HORA_MS;
       if (Number.isNaN(at) || !enVentana(at)) continue;

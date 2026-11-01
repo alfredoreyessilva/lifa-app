@@ -69,12 +69,16 @@ export default function MiCartelera({ children }) {
     );
   }
 
+  // Uno con fecha por definir va al final de los próximos (y de los pasados,
+  // si lo finalizaron sin ponerle fecha): `new Date(null)` es 1970 y lo
+  // ponía hasta arriba.
+  const ms = (m) => (m.match_date ? new Date(m.match_date).getTime() : null);
   const upcoming = board
     .filter((m) => getMatchStatus(m) !== 'finished')
-    .sort((a, b) => new Date(a.match_date) - new Date(b.match_date));
+    .sort((a, b) => (ms(a) ?? Infinity) - (ms(b) ?? Infinity) || a.id - b.id);
   const past = board
     .filter((m) => getMatchStatus(m) === 'finished')
-    .sort((a, b) => new Date(b.match_date) - new Date(a.match_date));
+    .sort((a, b) => (ms(b) ?? -Infinity) - (ms(a) ?? -Infinity) || a.id - b.id);
 
   return (
     <div style={{ marginBottom: 24 }}>

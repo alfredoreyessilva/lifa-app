@@ -15,6 +15,7 @@ import {
   groupByJornada,
   jornadaDateRange,
   buildMatchShareText,
+  ordenarCalendario,
 } from '../../src/utils/matchDisplay.js';
 
 // Cruce con el backend: este archivo es el único del frontend que importa
@@ -222,6 +223,57 @@ test('jornadaDateRange lee cada partido en su zona y toma los extremos aunque ve
   ]), '12–14 SEP');
 });
 
+// ── Fecha por definir (README, "Partidos con fecha por definir") ──────────
+
+test('getMatchParts sin fecha dice "por definir" en vez de pintar 1969', () => {
+  for (const vacio of [null, undefined, '']) {
+    assert.deepEqual(getMatchParts(vacio, 'America/Mexico_City'), { day: '', month: '', time: '', tzLabel: '', porDefinir: true });
+  }
+  assert.equal(getMatchParts('2026-09-16T01:00:00Z', 'America/Mexico_City').porDefinir, false);
+});
+
+test('ordenarCalendario: con todas las fechas, devuelve la misma lista', () => {
+  const lista = [partido(2, '1', '2026-09-05T20:00:00Z'), partido(1, '1', '2026-09-05T20:00:00Z')];
+  assert.equal(ordenarCalendario(lista), lista, 'ni copia ni reordena: el empate se queda como llegó');
+});
+
+test('ordenarCalendario: el sin fecha va al final de SU jornada, no al final de todo', () => {
+  // El backend los manda con NULLS LAST: todos los sin fecha al final.
+  const lista = [
+    partido(1, '1', '2026-09-05T20:00:00Z'),
+    partido(2, '1', '2026-09-06T20:00:00Z'),
+    partido(3, '2', '2026-09-12T20:00:00Z'),
+    partido(4, '1', null),
+    partido(5, '2', null),
+  ];
+  assert.deepEqual(ordenarCalendario(lista).map((m) => m.id), [1, 2, 4, 3, 5]);
+  // Y así la jornada no se parte en dos tramos.
+  assert.deepEqual(groupByJornada(ordenarCalendario(lista)).map((g) => g.matches.map((m) => m.id)), [[1, 2, 4], [3, 5]]);
+});
+
+test('ordenarCalendario: sin nadie con fecha en su jornada, o sin jornada, al final por número de jornada y luego id', () => {
+  const lista = [
+    partido(1, '1', '2026-09-05T20:00:00Z'),
+    partido(9, null, null),
+    partido(7, 'FINAL', null),
+    partido(8, '10', null),
+    partido(6, '2', null),
+    partido(5, '2', null),
+  ];
+  assert.deepEqual(ordenarCalendario(lista).map((m) => m.id), [1, 5, 6, 8, 7, 9]);
+});
+
+test('ordenarCalendario: un calendario todo sin fechas sale en orden de jornada', () => {
+  const lista = [partido(30, '3', null), partido(10, '1', null), partido(21, '2', null), partido(20, '2', null)];
+  assert.deepEqual(ordenarCalendario(lista).map((m) => m.id), [10, 20, 21, 30]);
+});
+
+test('jornadaDateRange no cuenta los sin fecha; si ninguno tiene, lo dice', () => {
+  const conUno = [partido(1, '1', '2026-09-12T20:00:00Z'), partido(2, '1', null), partido(3, '1', '2026-09-14T20:00:00Z')];
+  assert.equal(jornadaDateRange(conUno), '12–14 SEP');
+  assert.equal(jornadaDateRange([partido(1, '1', null), partido(2, '1', null)]), 'Fecha por definir');
+});
+
 // ── buildMatchShareText ──────────────────────────────────────────────────
 
 // Esta función lee window.location.origin, así que necesita un navegador
@@ -248,6 +300,12 @@ test('el texto al compartir siempre lleva equipos, fecha y link', () => {
   assert.match(texto, /Borregos vs Pumas — CFBAMX/);
   assert.match(texto, /16 SEP · 7:00 p\.m\. \(Hora Centro MX\)/);
   assert.match(texto, /https:\/\/cfbamx\.com\/partidos\/42/);
+});
+
+test('sin fecha, el texto al compartir dice "Fecha por definir" y nada de hora', () => {
+  const texto = conVentana(() => buildMatchShareText(partidoBase, getMatchParts(null), 'scheduled'));
+  assert.match(texto, /📅 Fecha por definir\n/);
+  assert.doesNotMatch(texto, /undefined|null|\(\)/);
 });
 
 test('no inventa nada: lo que el partido no tenga, no aparece', () => {

@@ -42,14 +42,56 @@ export const TZ_LABELS = {
   'America/Sao_Paulo':              'Hora Brasil',
 };
 
+// Sin fecha (match_date en null) es "fecha por definir" (README, "Partidos con
+// fecha por definir"): se devuelven las partes vacías con `porDefinir`, y cada
+// pantalla lo dice a su manera. `new Date(null)` daría el 31 de diciembre de
+// 1969, que es lo que se veía si alguien se saltaba esta revisión.
 export function getMatchParts(isoString, tz) {
+  if (!isoString) return { day: '', month: '', time: '', tzLabel: '', porDefinir: true };
   const zone       = tz || DEFAULT_TZ;
   const date       = new Date(isoString);
   const dayStr     = date.toLocaleString('es-MX', { timeZone: zone, day: 'numeric' });
   const monthIndex = Number(date.toLocaleString('en-US', { timeZone: zone, month: 'numeric' })) - 1;
   const time       = date.toLocaleTimeString('es-MX', { timeZone: zone, hour: 'numeric', minute: '2-digit' });
   const tzLabel    = TZ_LABELS[zone] || zone;
-  return { day: dayStr, month: MESES[monthIndex], time, tzLabel };
+  return { day: dayStr, month: MESES[monthIndex], time, tzLabel, porDefinir: false };
+}
+
+// El orden del calendario cuando hay partidos con fecha por definir (README,
+// "Partidos con fecha por definir"). Los que tienen fecha se quedan como
+// llegan —el backend ya los manda en orden de fecha—, y cada uno sin fecha va
+// justo después del último con fecha de su jornada. Si su jornada no tiene
+// ninguno con fecha, o no tiene jornada, va al final: por número de jornada y
+// luego por id, así que un calendario todo sin fechas sale en orden de jornada.
+//
+// Las flechas de partido anterior y siguiente (GET /leagues/matches/:id)
+// hacen lo mismo en SQL; si cambia aquí, cambia allá.
+export function ordenarCalendario(matches) {
+  if (!matches.some((m) => !m.match_date)) return matches;
+
+  const ultimoDeJornada = new Map();
+  for (const m of matches) {
+    if (!m.match_date || !m.week_label) continue;
+    const prev = ultimoDeJornada.get(m.week_label);
+    if (!prev || m.match_date > prev) ultimoDeJornada.set(m.week_label, m.match_date);
+  }
+  const clave = (m) => m.match_date || (m.week_label && ultimoDeJornada.get(m.week_label)) || null;
+  const numero = (m) => (/^\d+$/.test(m.week_label || '') ? Number(m.week_label) : Infinity);
+
+  // sort es estable: dos con fecha a la misma hora se quedan como llegaron.
+  return [...matches].sort((a, b) => {
+    const ka = clave(a);
+    const kb = clave(b);
+    if (ka !== kb) {
+      if (ka == null) return 1;
+      if (kb == null) return -1;
+      return ka < kb ? -1 : 1;
+    }
+    if (!a.match_date !== !b.match_date) return a.match_date ? -1 : 1;
+    if (a.match_date) return 0;
+    const porNumero = numero(a) - numero(b);
+    return (Number.isNaN(porNumero) ? 0 : porNumero) || a.id - b.id;
+  });
 }
 
 // "3" → "Jornada 3"; "SEMIFINAL" se queda como está. Un partido sin jornada
@@ -83,7 +125,9 @@ export function groupByJornada(matches) {
 // misma hora partían la jornada en dos tramos.
 function acomodarEmpates(matches) {
   const week = (m) => m?.week_label || null;
-  const time = (m) => new Date(m.match_date).getTime();
+  // Sin fecha no empata con nadie (NaN !== NaN): su lugar ya lo decidió
+  // ordenarCalendario.
+  const time = (m) => (m.match_date ? new Date(m.match_date).getTime() : NaN);
   const out = [];
   let i = 0;
   while (i < matches.length) {
@@ -102,9 +146,12 @@ function acomodarEmpates(matches) {
 }
 
 // "12–14 SEP", "30 AGO – 2 SEP" o "12 SEP" si todo es el mismo día. Cada
-// partido se lee en su propia zona horaria, igual que en su tarjeta.
-export function jornadaDateRange(matches) {
-  if (matches.length === 0) return '';
+// partido se lee en su propia zona horaria, igual que en su tarjeta. Los de
+// fecha por definir no mueven el rango; si ninguno tiene fecha, lo dice.
+export function jornadaDateRange(allMatches) {
+  if (allMatches.length === 0) return '';
+  const matches = allMatches.filter((m) => m.match_date);
+  if (matches.length === 0) return 'Fecha por definir';
   let first = matches[0];
   let last  = matches[0];
   for (const m of matches) {
@@ -142,7 +189,9 @@ export function buildMatchShareText(match, dateParts, status) {
   const lines = [];
 
   lines.push(`${match.home_team} vs ${match.away_team} — CFBAMX`);
-  lines.push(`📅 ${dateParts.day} ${dateParts.month} · ${dateParts.time} (${dateParts.tzLabel})`);
+  lines.push(dateParts.porDefinir
+    ? '📅 Fecha por definir'
+    : `📅 ${dateParts.day} ${dateParts.month} · ${dateParts.time} (${dateParts.tzLabel})`);
 
   const metaParts = [];
   if (match.league_name) metaParts.push(match.league_name);
