@@ -769,9 +769,12 @@ button.league-card {
   outline-offset: 1px;
   border-color: transparent;
 }
+/* minmax(0, 1fr) y no 1fr: con 1fr una columna no se encoge por debajo de lo
+   más ancho que trae, y un <select> mide lo que su opción más larga. Así el
+   selector de equipo del partido empujaba la ventana y le salía barra de lado. */
 .field-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
 }
 .state-checkbox-grid {
@@ -1090,7 +1093,7 @@ button.league-card {
 @media (max-width: 640px) {
   .match-card { grid-template-columns: 1fr; gap: 10px; text-align: left; }
   .match-date { display: flex; gap: 8px; align-items: baseline; text-align: left; }
-  .field-row { grid-template-columns: 1fr; }
+  .field-row { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ---------- Teams ---------- */
@@ -1352,6 +1355,12 @@ button.league-card {
   max-width: 560px;
 }
 
+/* Y para el del partido: local y visitante van lado a lado, cada uno con su
+   escudo, y a 480px cada selector se quedaba en ~160px. */
+.modal:has(.match-form) {
+  max-width: 640px;
+}
+
 /* ---------- Team combobox (autocompletado en MatchForm) ---------- */
 .team-combobox-wrap {
   position: relative;
@@ -1363,7 +1372,8 @@ button.league-card {
   gap: 8px;
 }
 
-.team-combobox-input-row input {
+.team-combobox-input-row input,
+.team-combobox-input-row select {
   flex: 1;
   min-width: 0;
 }
@@ -1966,7 +1976,7 @@ button.league-card {
 
   /* field-row apilado en móvil */
   .field-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   /* Container con menos padding */

@@ -415,7 +415,7 @@ export default function MatchForm({
 
   return (
     <>
-    <form onSubmit={submit}>
+    <form className="match-form" onSubmit={submit}>
       {error && <div className="form-error">{error}</div>}
 
       {initial?.id && (
@@ -557,7 +557,9 @@ export default function MatchForm({
           <select
             value={form.venue_id || ''}
             onChange={(e) => update('venue_id', e.target.value ? Number(e.target.value) : null)}
-            style={{ flex: 1 }}
+            // minWidth 0: un <select> no se encoge por debajo de su opción más
+            // larga, y a 320 px empujaba "+ Crear sede" fuera de la ventana.
+            style={{ flex: 1, minWidth: 0 }}
           >
             <option value="">— Sin sede —</option>
             {localVenues.map((v) => (

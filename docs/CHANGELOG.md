@@ -15,6 +15,25 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **La ventana de un partido ya no se sale de lado (2026-11-01).** Lo pidió
+  Alfredo: en "Nuevo partido" y "Editar partido", la fila de Equipo local y
+  Equipo visitante no cabía y la ventana tenía barra de lado. La causa: las
+  dos columnas eran `1fr 1fr`, y una columna así no se encoge por debajo de lo
+  más ancho que trae; un `<select>` mide lo que su opción más larga, así que a
+  480 px el selector de equipo, con su escudo, empujaba la ventana. Dos
+  arreglos. La ventana del partido pasa a 640 px (`.modal:has(.match-form)`,
+  el mismo patrón que ya ensanchaba el editor de equipo y el modelo de
+  competencia). Y `.field-row` usa `minmax(0, 1fr)`, con `min-width: 0` en el
+  selector, para que un nombre muy largo se recorte dentro de su selector en
+  vez de desbordar. A 320 px la fila de Sede tenía el mismo problema
+  ("+ Crear sede" se salía 18 px), y se arregló igual.
+
+  Verificado en el navegador contra `desarrollo-local` a 1366, 390 y 320 px:
+  sin barra de lado en ninguno, ni con un nombre de equipo de 70 letras metido
+  a mano en los dos selectores. El editor de equipo, el otro formulario con
+  `.field-row` que vive en una ventana, quedó igual: 560 px y columnas
+  parejas.
+
 - **Un partido se puede guardar con "Fecha por definir" (2026-11-01).** Lo
   pidió Alfredo: "Crear partido" no dejaba guardar sin fecha, y hay partidos
   —y calendarios enteros— que se publican antes de tenerla. Ahora hay una
