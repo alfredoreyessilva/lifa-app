@@ -43,6 +43,17 @@ export function mirrorColumns(bracket) {
   return { left, right, final: finalRound ? { round: finalRound, game, left: a, right: b } : null };
 }
 
+// El escudo de un equipo según el lado del espejo donde se pinta. Un escudo
+// casi siempre es un casco que mira a la derecha: del lado derecho le daría la
+// espalda al centro. Ahí va el de visitante —que el equipo sube mirando al otro
+// lado, justo para eso—, y sin él, el de siempre. El campeón y la lista del
+// teléfono no tienen lado: van con el de siempre.
+export function logoForSide(participant, side) {
+  if (!participant) return null;
+  if (side === 'right' && participant.away_logo_url) return participant.away_logo_url;
+  return participant.logo_url || null;
+}
+
 // Cómo se dice una ronda en la cabeza de su columna, como en la imagen de
 // guía ("CUARTOS", "SEMIFINAL", "FINAL"). Una fase con otro nombre se queda
 // con el suyo: lo eligió la liga.

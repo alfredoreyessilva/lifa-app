@@ -15,6 +15,26 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Del lado derecho del bracket, el logo de visitante (2026-11-01).** Lo pidió
+  Alfredo al ver el bracket de la Nacional publicado: casi todos los escudos
+  son cascos que miran a la derecha, y del lado derecho del espejo le daban la
+  espalda al centro. Ahí cada equipo lleva ahora su logo de visitante —el que
+  sube mirando al otro lado— y, si no tiene, el de siempre, como ya pasaba en
+  la página de un partido. Vale para la página y para "Generar imagen", que
+  deciden con la misma función (`logoForSide`, en `utils/bracketFormat.js`).
+  El campeón, al centro, y la lista del teléfono no tienen lado: siguen con
+  el de siempre. El backend agrega `away_logo_url` a cada sembrado y
+  participante, con el mismo `NULLIF(…, '')` de la entrada del 2026-10-04: la
+  cadena vacía que deja "Quitar" cuenta como sin logo.
+
+  **Verificado:** la consulta de equipos de `HEAD` contra la nueva, en sesión
+  de solo lectura sobre `desarrollo-local` (rama Varonil de ONEFA): las mismas
+  33 filas, más la columna nueva. En el navegador, el bracket real de
+  producción (API pública) con los logos de visitante de esa rama, en dos
+  escenarios: el de hoy, con un equipo del lado derecho sin logo de visitante
+  (sale con el de siempre), y uno con la final jugada y campeón del lado
+  derecho; la página y la imagen descargada.
+
 - **El bracket de los playoffs, al final del calendario (2026-11-01). Cierra
   PD-40.** Lo pidió Alfredo cuando la Conferencia Nacional de ONEFA terminó su
   temporada regular, con una imagen de guía y una condición: que no cree

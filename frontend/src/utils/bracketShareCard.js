@@ -19,7 +19,7 @@ import {
 } from './shareCardCommon.js';
 import { imagenAjustada } from './imagenes.js';
 import { cutoffLabel } from './standingsFormat.js';
-import { mirrorColumns, roundShortName, gameStatus, bracketTitle, hasTiedSeeds, finalLabel } from './bracketFormat.js';
+import { mirrorColumns, roundShortName, gameStatus, bracketTitle, hasTiedSeeds, finalLabel, logoForSide } from './bracketFormat.js';
 
 const LOGO_TIMEOUT_MS = 8000;
 const HEAD_H = 46;
@@ -156,7 +156,7 @@ function drawLogo(ctx, img, name, cx, cy, size, theme) {
 // y el que perdió va atenuado, como en la página.
 function drawTeamBox(ctx, p, box, opts) {
   const { x, y, w, h } = box;
-  const { theme, logos, state, nameSize, tiedIds, placeholder } = opts;
+  const { theme, logos, state, nameSize, tiedIds, placeholder, side = null } = opts;
 
   ctx.save();
   if (state === 'loser') ctx.globalAlpha = 0.45;
@@ -199,7 +199,7 @@ function drawTeamBox(ctx, p, box, opts) {
   const bottom = y + h - pad;
   const logoSize = Math.max(24, Math.min(w * 0.5, bottom - top - nameBlock - 8));
   const logoCy = top + (bottom - top - nameBlock - 6) / 2;
-  drawLogo(ctx, logos.get(p.team_id), p.name, x + w / 2, logoCy, logoSize, theme);
+  drawLogo(ctx, logos.get(logoForSide(p, side)), p.name, x + w / 2, logoCy, logoSize, theme);
 
   ctx.font = `600 ${nameSize}px ${theme.fontEyebrow}`;
   ctx.fillStyle = theme.ink;
@@ -294,14 +294,27 @@ export async function generateBracketCard(bracket, formatKey, { header = {}, dat
     for (const g of r.games) for (const p of [g.top, g.bottom]) if (p && !equipos.has(p.team_id)) equipos.set(p.team_id, p);
   }
   const ids = [...equipos.keys()];
+  const cols = mirrorColumns(bracket);
+
+  // Los escudos que se van a pintar, cada uno una vez: el de siempre de todos
+  // (el campeón lo lleva aunque venga del lado derecho) y el de visitante de
+  // los que salen del lado derecho, igual que en la página.
+  const derecha = [
+    ...cols.right.flatMap((c) => c.games.flatMap((g) => [g.top, g.bottom])),
+    cols.final?.right,
+  ];
+  const urls = [...new Set([
+    ...ids.map((id) => equipos.get(id).logo_url),
+    ...derecha.map((p) => logoForSide(p, 'right')),
+  ].filter(Boolean))];
 
   await ensureFonts();
   const [leagueImg, brandImg, ...imgs] = await Promise.all([
     loadImageWithin(imagenAjustada(header.leagueLogo, 240), LOGO_TIMEOUT_MS),
     loadImage(BRAND_LOGO_SRC),
-    ...ids.map((id) => loadImageWithin(imagenAjustada(equipos.get(id).logo_url, 200), LOGO_TIMEOUT_MS)),
+    ...urls.map((u) => loadImageWithin(imagenAjustada(u, 200), LOGO_TIMEOUT_MS)),
   ]);
-  const logos = new Map(ids.map((id, i) => [id, imgs[i]]));
+  const logos = new Map(urls.map((u, i) => [u, imgs[i]]));
 
   drawBackground(ctx, w, h, theme);
 
@@ -318,7 +331,6 @@ export async function generateBracketCard(bracket, formatKey, { header = {}, dat
   const brandY = h - h * 0.026 - brandH;
 
   // --- Geometría ---
-  const cols = mirrorColumns(bracket);
   const sideCols = cols.left.length;              // rondas antes de la final, por lado
   const slots = Math.max(1, (bracket.size || 2) / 2); // cajas de la primera ronda, por lado
 
@@ -368,16 +380,16 @@ export async function generateBracketCard(bracket, formatKey, { header = {}, dat
   // Columnas de izquierda a derecha: rondas del lado izquierdo, final
   // izquierda, centro, final derecha, rondas del lado derecho (al revés).
   const columnas = [
-    ...cols.left.map((c) => ({ kind: 'round', col: c })),
+    ...cols.left.map((c) => ({ kind: 'round', col: c, side: 'left' })),
     { kind: 'final', side: 'left' },
     { kind: 'center' },
     { kind: 'final', side: 'right' },
-    ...[...cols.right].reverse().map((c) => ({ kind: 'round', col: c })),
+    ...[...cols.right].reverse().map((c) => ({ kind: 'round', col: c, side: 'right' })),
   ];
 
   let x = innerX;
-  const boxOpts = (p, g) => ({
-    theme, logos, nameSize, tiedIds,
+  const boxOpts = (p, g, side = null) => ({
+    theme, logos, nameSize, tiedIds, side,
     state: !p || !g?.winner_team_id ? '' : p.team_id === g.winner_team_id ? 'winner' : 'loser',
   });
 
@@ -403,13 +415,13 @@ export async function generateBracketCard(bracket, formatKey, { header = {}, dat
         const gy = treeY + i * gameH;
         const topCy = gy + gameH * 0.25;
         const botCy = gy + gameH * 0.75;
-        drawTeamBox(ctx, g.top, { x, y: topCy - boxH / 2, w: cw, h: boxH }, boxOpts(g.top, g));
-        drawTeamBox(ctx, g.bottom, { x, y: botCy - boxH / 2, w: cw, h: boxH }, { ...boxOpts(g.bottom, g), placeholder: g.bye ? 'Descansa' : null });
+        drawTeamBox(ctx, g.top, { x, y: topCy - boxH / 2, w: cw, h: boxH }, boxOpts(g.top, g, c.side));
+        drawTeamBox(ctx, g.bottom, { x, y: botCy - boxH / 2, w: cw, h: boxH }, { ...boxOpts(g.bottom, g, c.side), placeholder: g.bye ? 'Descansa' : null });
         drawStatusLine(ctx, g, cx, gy + gameH / 2, cw, theme, statusSize);
       });
     } else if (c.kind === 'final' && cols.final) {
       const p = c.side === 'left' ? cols.final.left : cols.final.right;
-      drawTeamBox(ctx, p, { x, y: treeY + treeH / 2 - boxH / 2, w: cw, h: boxH }, boxOpts(p, cols.final.game));
+      drawTeamBox(ctx, p, { x, y: treeY + treeH / 2 - boxH / 2, w: cw, h: boxH }, boxOpts(p, cols.final.game, c.side));
     } else if (c.kind === 'center' && cols.final) {
       const trophySize = Math.min(cw * 0.55, treeH * 0.16);
       let y = treeY + treeH * 0.5 - boxH * 0.5 - trophySize * 0.9 - 30;

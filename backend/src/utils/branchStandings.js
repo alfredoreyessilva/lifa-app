@@ -93,6 +93,9 @@ async function loadTeams(branchId) {
       bt.team_id,
       t.name,
       t.logo_url,
+      -- El del lado derecho del bracket. Cadena vacía es lo que guarda
+      -- "Quitar" y significa lo mismo que NULL (CHANGELOG, 2026-10-04).
+      NULLIF(t.away_logo_url, '') AS away_logo_url,
       COALESCE(bt.conference_id, g.conference_id) AS conference_id,
       cf.name AS conference_name,
       bt.group_id,
@@ -319,7 +322,7 @@ async function loadCompetition(branchId) {
 // sin base, con datos armados o con los de la API pública.
 export function bracketsOf({ teams, matches, phases, quals, tables }) {
   const branchTeamIds = teams.map((t) => t.team_id);
-  const teamsById = new Map(teams.map((t) => [t.team_id, { name: t.name, logo_url: t.logo_url }]));
+  const teamsById = new Map(teams.map((t) => [t.team_id, { name: t.name, logo_url: t.logo_url, away_logo_url: t.away_logo_url ?? null }]));
 
   const out = [];
   for (const rule of quals) {

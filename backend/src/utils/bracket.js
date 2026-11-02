@@ -31,7 +31,7 @@ import { crossCriteriaOf, compareByCriteria, sortByPrecomputed, countsForStandin
  *                           regla, en el mismo orden que usa markWildcards()
  *                           para que los lugares extra salgan iguales.
  * @param {object}   rule    la fila de phase_qualifications.
- * @returns {object[]} [{ seed, team_id, name, logo_url, wins, losses, ties,
+ * @returns {object[]} [{ seed, team_id, name, logo_url, away_logo_url, wins, losses, ties,
  *                      qualified_as, table_name, table_rank, tied }]
  */
 export function computeSeeding({ tables = [], rule = {} } = {}) {
@@ -58,6 +58,7 @@ export function computeSeeding({ tables = [], rule = {} } = {}) {
       team_id: row.team_id,
       name: row.name,
       logo_url: row.logo_url ?? null,
+      away_logo_url: row.away_logo_url ?? null,
       wins: row.wins ?? 0,
       losses: row.losses ?? 0,
       ties: row.ties ?? 0,
@@ -191,7 +192,7 @@ function porFecha(a, b) {
  * @param {object[]} phases   las fases de eliminación directa (knockoutPhasesFor)
  * @param {object[]} matches  los partidos de eliminación directa entre equipos
  *                            del bracket, con `is_final` ya resuelto
- * @param {Map}      teams    team_id → { name, logo_url }: para nombrar a un
+ * @param {Map}      teams    team_id → { name, logo_url, away_logo_url }: para nombrar a un
  *                            equipo que aparece en un partido capturado sin
  *                            estar en la siembra
  * @returns {object|null}     null si no hay a quién cruzar (menos de 2)
@@ -218,6 +219,7 @@ export function buildBracket({ seeds = [], phases = [], matches = [], teams = ne
       seed: s ? s.seed : null,
       name: s?.name ?? t?.name ?? null,
       logo_url: s?.logo_url ?? t?.logo_url ?? null,
+      away_logo_url: s?.away_logo_url ?? t?.away_logo_url ?? null,
       ...extra,
     };
   };

@@ -3,7 +3,7 @@ import BracketImageButton from './BracketImageButton.jsx';
 import { initials } from '../utils/matchDisplay.js';
 import {
   mirrorColumns, roundShortName, gameStatus, seedOrigin, recordOf, bracketTitle,
-  hasTiedSeeds, isSingleTable, seedOf, finalLabel,
+  hasTiedSeeds, isSingleTable, seedOf, finalLabel, logoForSide,
 } from '../utils/bracketFormat.js';
 
 // El bracket de los playoffs de una conferencia (README, "El bracket de los
@@ -47,13 +47,13 @@ export default function BracketView({ bracket, shareImage = null, note = null })
         style={{ gridTemplateColumns: `repeat(${cols.left.length + 1}, minmax(0, 1fr)) minmax(0, 1.35fr) repeat(${cols.left.length + 1}, minmax(0, 1fr))` }}
       >
         {cols.left.map((col) => (
-          <RoundColumn key={`l-${col.r}`} col={col} ctx={ctx} />
+          <RoundColumn key={`l-${col.r}`} col={col} ctx={ctx} side="left" />
         ))}
-        {cols.final && <FinalSide participant={cols.final.left} game={cols.final.game} ctx={ctx} />}
+        {cols.final && <FinalSide participant={cols.final.left} game={cols.final.game} ctx={ctx} side="left" />}
         {cols.final && <Center final={cols.final} champion={bracket.champion} />}
-        {cols.final && <FinalSide participant={cols.final.right} game={cols.final.game} ctx={ctx} />}
+        {cols.final && <FinalSide participant={cols.final.right} game={cols.final.game} ctx={ctx} side="right" />}
         {[...cols.right].reverse().map((col) => (
-          <RoundColumn key={`r-${col.r}`} col={col} ctx={ctx} />
+          <RoundColumn key={`r-${col.r}`} col={col} ctx={ctx} side="right" />
         ))}
       </div>
 
@@ -88,16 +88,16 @@ export default function BracketView({ bracket, shareImage = null, note = null })
 
 // ── El espejo ────────────────────────────────────────────────────────────
 
-function RoundColumn({ col, ctx }) {
+function RoundColumn({ col, ctx, side }) {
   return (
     <div className="bracket-col">
       <div className="bracket-col-head">{roundShortName(col.round.name)}</div>
       <div className="bracket-col-body">
         {col.games.map((g, i) => (
           <div key={i} className="bracket-game">
-            <TreeTeam participant={g.top} game={g} ctx={ctx} />
+            <TreeTeam participant={g.top} game={g} ctx={ctx} side={side} />
             <GameLine game={g} />
-            <TreeTeam participant={g.bottom} game={g} ctx={ctx} placeholder={g.bye ? 'Descansa' : null} />
+            <TreeTeam participant={g.bottom} game={g} ctx={ctx} side={side} placeholder={g.bye ? 'Descansa' : null} />
           </div>
         ))}
       </div>
@@ -105,13 +105,13 @@ function RoundColumn({ col, ctx }) {
   );
 }
 
-function FinalSide({ participant, game, ctx }) {
+function FinalSide({ participant, game, ctx, side }) {
   return (
     <div className="bracket-col">
       <div className="bracket-col-head">Final</div>
       <div className="bracket-col-body">
         <div className="bracket-game bracket-game--single">
-          <TreeTeam participant={participant} game={game} ctx={ctx} />
+          <TreeTeam participant={participant} game={game} ctx={ctx} side={side} />
         </div>
       </div>
     </div>
@@ -149,7 +149,7 @@ function teamState(participant, game) {
   return participant.team_id === game.winner_team_id ? 'is-winner' : 'is-loser';
 }
 
-function TreeTeam({ participant, game, ctx, placeholder = null }) {
+function TreeTeam({ participant, game, ctx, side, placeholder = null }) {
   if (!participant) {
     return <div className="bracket-team is-tbd">{placeholder || '?'}</div>;
   }
@@ -161,7 +161,7 @@ function TreeTeam({ participant, game, ctx, placeholder = null }) {
       {participant.score !== null && participant.score !== undefined && (
         <span className="bracket-score">{participant.score}</span>
       )}
-      <TeamLogo participant={participant} size={44} />
+      <TeamLogo participant={participant} size={44} side={side} />
       <span className="bracket-team-name">{participant.name}</span>
     </div>
   );
@@ -235,9 +235,11 @@ function PendingRound({ previous }) {
   );
 }
 
-function TeamLogo({ participant, size }) {
-  if (participant?.logo_url) {
-    return <img src={participant.logo_url} alt="" className="bracket-logo" style={{ width: size, height: size }} loading="lazy" />;
+// `side` solo lo pasa el espejo: el lado derecho lleva el logo de visitante.
+function TeamLogo({ participant, size, side = null }) {
+  const src = logoForSide(participant, side);
+  if (src) {
+    return <img src={src} alt="" className="bracket-logo" style={{ width: size, height: size }} loading="lazy" />;
   }
   return (
     <span className="bracket-logo bracket-logo--initials" style={{ width: size, height: size, fontSize: Math.round(size * 0.36) }}>

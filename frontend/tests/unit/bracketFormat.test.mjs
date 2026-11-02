@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 
 import {
   mirrorColumns, roundShortName, gameStatus, seedOrigin, recordOf, bracketTitle,
-  hasTiedSeeds, isSingleTable, publishNote, seedOf, finalLabel, unplacedNote,
+  hasTiedSeeds, isSingleTable, publishNote, seedOf, finalLabel, unplacedNote, logoForSide,
 } from '../../src/utils/bracketFormat.js';
 
 const p = (seed, extra = {}) => ({ team_id: 100 + seed, seed, name: `EQUIPO ${seed}`, logo_url: null, ...extra });
@@ -67,6 +67,21 @@ test('un bracket de dos es solo la final', () => {
   const { left, right, final } = mirrorColumns(b);
   assert.deepEqual([left.length, right.length], [0, 0]);
   assert.deepEqual([final.left.seed, final.right.seed], [1, 2]);
+});
+
+test('del lado derecho va el logo de visitante; sin él, el de siempre', () => {
+  const conAmbos = p(2, { logo_url: 'https://x/casa.png', away_logo_url: 'https://x/visita.png' });
+  assert.equal(logoForSide(conAmbos, 'right'), 'https://x/visita.png');
+  assert.equal(logoForSide(conAmbos, 'left'), 'https://x/casa.png');
+  // El campeón y la lista del teléfono no tienen lado.
+  assert.equal(logoForSide(conAmbos, null), 'https://x/casa.png');
+
+  // Sin logo de visitante —o con la cadena vacía que deja "Quitar"—, el de siempre.
+  assert.equal(logoForSide(p(3, { logo_url: 'https://x/casa.png' }), 'right'), 'https://x/casa.png');
+  assert.equal(logoForSide(p(3, { logo_url: 'https://x/casa.png', away_logo_url: '' }), 'right'), 'https://x/casa.png');
+  // Sin ninguno, nada: se pintan las iniciales.
+  assert.equal(logoForSide(p(4), 'right'), null);
+  assert.equal(logoForSide(null, 'right'), null);
 });
 
 test('la cabeza de cada columna, como en la imagen de guía', () => {

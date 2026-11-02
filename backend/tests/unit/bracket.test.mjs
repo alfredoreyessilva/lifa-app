@@ -264,6 +264,22 @@ test('sin fase de la ronda, un partido que no cabe no se adivina', () => {
   assert.equal(b.rounds[0].games[0].match.home_team_id, s1);
 });
 
+test('cada equipo del bracket trae su logo de visitante, para el lado derecho del espejo', () => {
+  const conLogos = TABLAS_NACIONAL.map((t) => ({
+    ...t,
+    rows: t.rows.map((r) => ({ ...r, logo_url: `https://x/${r.team_id}.png`, away_logo_url: r.team_id === 44 ? 'https://x/44-visita.png' : null })),
+  }));
+  const seeds = computeSeeding({ tables: conLogos, rule: REGLA_NACIONAL });
+  assert.equal(seeds.find((s) => s.team_id === 44).away_logo_url, 'https://x/44-visita.png');
+  assert.equal(seeds.find((s) => s.team_id === 60).away_logo_url, null);
+
+  const b = buildBracket({ seeds, phases: KO });
+  const todos = b.rounds[0].games.flatMap((g) => [g.top, g.bottom]);
+  assert.equal(todos.find((p) => p.team_id === 44).away_logo_url, 'https://x/44-visita.png');
+  assert.equal(todos.find((p) => p.team_id === 60).away_logo_url, null);
+  assert.equal(todos.find((p) => p.team_id === 60).logo_url, 'https://x/60.png');
+});
+
 test('con una sola fase para todos los playoffs, las rondas llevan nombre genérico', () => {
   const b = buildBracket({ seeds: siembraNacional(), phases: [{ id: 6, name: 'Postemporada', type: 'single_elimination' }] });
   assert.deepEqual(b.rounds.map((r) => [r.name, r.phase_id]), [['Cuartos de final', null], ['Semifinales', null], ['Final', null]]);

@@ -3562,6 +3562,15 @@ cuántos partidos faltan: es una proyección que cambia cada jornada.
   su fecha o su marcador, y liga a la página del partido; el que pierde queda
   atenuado. En el teléfono el espejo no cabe con nombres —siete columnas en
   360 px—, así que ahí las rondas van una debajo de otra.
+- **Del lado derecho, el logo de visitante** (lo pidió Alfredo el
+  2026-11-01). Un escudo casi siempre es un casco que mira a la derecha: del
+  lado derecho del espejo le daría la espalda al centro. El logo de visitante
+  es justo el que el equipo sube mirando al otro lado, así que ahí va ese, y
+  sin él, el de siempre. Lo decide `logoForSide()` para la página y la imagen
+  por igual. El campeón y la lista del teléfono no tienen lado y van con el de
+  siempre. Es del lado donde se pinta, no de quién es local: con el reacomodo,
+  un equipo del lado derecho puede jugar la semifinal en la columna izquierda,
+  y ahí mira a la derecha como todos los de ese lado.
 - **Generar imagen**, en publicación (1080×1350, el tamaño de la imagen de
   guía) e historia (1080×1920), con el estilo de las demás imágenes de CFBAMX
   (lo eligió Alfredo el 2026-11-01). Lleva los nombres y no solo los escudos:
