@@ -44,7 +44,16 @@ entradas traen el post-mortem del bug que las provocó.
   cosas que ninguna prueba veía (la final en blanco con un finalista ya
   conocido, "FINAL · FINAL" bajo el campeón, "Partido por capturar" en la
   página pública), corregidas. 318 pruebas del backend y 187 del frontend, en
-  verde. Sin desplegar.
+  verde.
+
+  **Desplegado ese mismo día** (`293027c`), a pedido de Alfredo ("commit y
+  push a main"). El CI pasó; Render respondió la ruta nueva a los 74 s del
+  push, y su respuesta es idéntica al bracket que se había calculado antes de
+  desplegar —misma siembra, mismos cruces—, con la Nacional publicada (77
+  jugados, 0 pendientes) y 14 Grandes todavía no. En el sitio público, la página
+  de ONEFA enseña el bracket de la Nacional al final del calendario, sin
+  errores. LFA, sin regla de clasificación, llega con `has_playoffs` en falso
+  y su página no lo pide.
 
   **De paso se cierra PD-14** ("ONEFA sin competencia configurada"): medido
   el mismo día en la API pública, la rama Varonil de ONEFA ya tiene el Modo
