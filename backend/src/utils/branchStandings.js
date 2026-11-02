@@ -22,6 +22,10 @@ import { MATCH_SCOPE_COLUMNS, MATCH_SCOPE_JOINS } from './matchScope.js';
 import { MATCH_PHASE_COLUMNS, MATCH_PHASE_JOINS } from './matchPhase.js';
 import { computeStandings, computeQualification, MULTI_TEAM_MODES } from './standings.js';
 import { MATCH_IS_FINAL_SQL } from './scoring.js';
+import {
+  computeSeeding, buildBracket, knockoutPhasesFor, knockoutMatchesOf,
+  regularSeasonProgress, isBracketReady,
+} from './bracket.js';
 
 const LEVELS = ['branch', 'conference', 'group'];
 
@@ -111,11 +115,15 @@ async function loadTeams(branchId) {
 //
 // `is_draft` se filtra aquí y no en el motor: un borrador no existe para
 // nadie más, tampoco para la tabla.
+//
+// El auto-status de la categoría viaja con cada partido para el bracket, que
+// pinta "En vivo" con la misma regla que la tarjeta del calendario.
 async function loadMatches(branchId) {
   return db.prepare(`
     SELECT
       m.id, m.home_team_id, m.away_team_id, m.home_score, m.away_score,
-      m.status, m.match_date, m.week_label, m.is_draft,
+      m.status, m.match_date, m.week_label, m.is_draft, m.timezone,
+      c.auto_status_enabled, c.auto_status_window_hours,
       ${MATCH_IS_FINAL_SQL} AS is_final,
       ${MATCH_SCOPE_COLUMNS},
       ${MATCH_PHASE_COLUMNS}
@@ -177,9 +185,49 @@ function teamsInScope(level, scopeId, teams) {
 
 /**
  * Todas las tablas de una rama, más sus títulos con el campeón resuelto.
- * `publicOnly` recorta lo que solo le sirve al panel de la liga.
+ * `publicOnly` recorta lo que solo le sirve al panel de la liga, y
+ * `withBrackets` agrega los brackets de playoffs —todos, también los que
+ * todavía no se publican— para la vista previa del panel.
  */
-export async function buildBranchStandings(branchId, { publicOnly = false } = {}) {
+export async function buildBranchStandings(branchId, { publicOnly = false, withBrackets = false } = {}) {
+  const c = await loadCompetition(branchId);
+  if (!c) return null;
+  const { branch, config, teams, matches, phases, titles, overrides, tables } = c;
+
+  const resolved = titles.map((title) =>
+    resolveTitle({ title, tables, teams, matches, overrides }));
+
+  return {
+    branch: {
+      id: branch.id,
+      name: branch.name,
+      category_id: branch.category_id,
+      ...config,
+    },
+    phases: publicOnly ? phases.map(({ id, name, type }) => ({ id, name, type })) : phases,
+    tables,
+    titles: resolved,
+    ...(withBrackets ? { brackets: bracketsOf(c) } : {}),
+  };
+}
+
+/**
+ * Los brackets de playoffs de una rama que ya se publican (README, "El
+ * bracket de los playoffs"). Uno por regla de clasificación que tenga fases de
+ * eliminación directa después: en ONEFA, uno por conferencia.
+ */
+export async function buildBranchBrackets(branchId) {
+  const c = await loadCompetition(branchId);
+  if (!c) return null;
+  return {
+    branch: { id: c.branch.id, name: c.branch.name },
+    brackets: bracketsOf(c).filter((b) => b.ready),
+  };
+}
+
+// Lo que leen la tabla y el bracket, en un solo viaje: la rama, sus equipos,
+// sus partidos y su configuración, con las tablas ya calculadas.
+async function loadCompetition(branchId) {
   const branch = await db.prepare('SELECT * FROM branches WHERE id = ?').get(branchId);
   if (!branch) return null;
 
@@ -209,6 +257,7 @@ export async function buildBranchStandings(branchId, { publicOnly = false } = {}
       SELECT q.* FROM phase_qualifications q
       JOIN phases ph ON ph.id = q.phase_id
       WHERE ph.branch_id = ?
+      ORDER BY q.id ASC
     `).all(branchId),
   ]);
 
@@ -254,20 +303,63 @@ export async function buildBranchStandings(branchId, { publicOnly = false } = {}
 
   markWildcards(tables, quals);
 
-  const resolved = titles.map((title) =>
-    resolveTitle({ title, tables, teams, matches, overrides }));
+  return { branch, config, teams, matches, phases, titles, overrides, quals, tables };
+}
 
-  return {
-    branch: {
-      id: branch.id,
-      name: branch.name,
-      category_id: branch.category_id,
-      ...config,
-    },
-    phases: publicOnly ? phases.map(({ id, name, type }) => ({ id, name, type })) : phases,
-    tables,
-    titles: resolved,
-  };
+// Un bracket por regla de clasificación que tenga fases de eliminación directa
+// después de la suya. Toma las MISMAS tablas que markWildcards() le da a esa
+// regla, en el mismo orden, para que los lugares extra de la siembra sean los
+// mismos que la tabla marca como comodín.
+//
+// El bracket se trae entero aunque no se publique todavía (`ready`): la ruta
+// pública filtra, y la vista previa del panel enseña la proyección con cuántos
+// partidos de temporada regular faltan.
+//
+// Es pura —recibe lo que ya leyó loadCompetition()— y se exporta para probarla
+// sin base, con datos armados o con los de la API pública.
+export function bracketsOf({ teams, matches, phases, quals, tables }) {
+  const branchTeamIds = teams.map((t) => t.team_id);
+  const teamsById = new Map(teams.map((t) => [t.team_id, { name: t.name, logo_url: t.logo_url }]));
+
+  const out = [];
+  for (const rule of quals) {
+    const fases = knockoutPhasesFor(rule, phases);
+    if (!fases.length) continue;
+
+    const suyas = tables.filter((t) => rulesForTable(t, quals).includes(rule));
+    if (!suyas.length) continue;
+
+    const seeds = computeSeeding({
+      tables: suyas.map((t) => ({ key: `${t.level}-${t.scope_id}`, name: t.scope_name, rows: t.rows })),
+      rule,
+    });
+    const poolIds = [...new Set(suyas.flatMap((t) => t.rows.map((r) => r.team_id)))];
+    const knockout = knockoutMatchesOf({ matches, poolIds });
+
+    const bracket = buildBracket({ seeds, phases: fases, matches: knockout, teams: teamsById });
+    if (!bracket) continue;
+
+    const { played, pending } = regularSeasonProgress({ matches, poolIds, eligibleIds: branchTeamIds });
+    const conference = rule.conference_id
+      ? teams.find((t) => t.conference_id === rule.conference_id)
+      : null;
+
+    out.push({
+      key: `${rule.phase_id}-${rule.conference_id ?? 'all'}`,
+      conference_id: rule.conference_id ?? null,
+      title: conference?.conference_name ?? null,
+      ready: isBracketReady({ played, pending, knockoutCount: knockout.length }),
+      regular_played: played,
+      regular_pending: pending,
+      ...bracket,
+      // Para ordenarlos como las tablas; no viaja.
+      order: tables.indexOf(suyas[0]),
+    });
+  }
+
+  return out
+    .sort((a, b) => a.order - b.order)
+    .map(({ order, ...b }) => b); // eslint-disable-line no-unused-vars
 }
 
 // Marca a los que avanzan por lugar EXTRA (wild card, "mejores terceros").

@@ -7,7 +7,7 @@ import { isValidTimezone } from '../utils/timezones.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { MEXICO_STATES } from '../utils/mexicoStates.js';
 import { MATCH_SCOPE_JOINS, MATCH_SCOPE_COLUMNS } from '../utils/matchScope.js';
-import { buildBranchStandings } from '../utils/branchStandings.js';
+import { buildBranchStandings, buildBranchBrackets } from '../utils/branchStandings.js';
 import { interruptoresDeCategoria, rosterEsPublico, fotoSePublica } from '../utils/rosterVisibility.js';
 import { rosterDelPartidoSql } from '../utils/attendance.js';
 import { HAY_BOX_SCORE_SQL } from '../utils/plays.js';
@@ -1146,9 +1146,18 @@ router.get('/tournaments/:tournamentId/public', asyncHandler(async (req, res) =>
   // ofrecer tabla de posiciones sin tener que deducirlas de los partidos.
   // Se filtran las que no tienen ningún equipo inscrito: una rama vacía no
   // tiene tabla que mostrar.
+  //
+  // `has_playoffs`: la rama declaró quién clasifica y tiene fases de
+  // eliminación directa, que es lo que necesita un bracket (README, "El
+  // bracket de los playoffs"). Solo en esas la página pide el bracket.
   const branches = await db.prepare(`
     SELECT b.id, b.name, b.standings_levels, c.id AS category_id, c.name AS category_name,
-           (SELECT COUNT(*)::int FROM branch_teams bt WHERE bt.branch_id = b.id) AS team_count
+           (SELECT COUNT(*)::int FROM branch_teams bt WHERE bt.branch_id = b.id) AS team_count,
+           (
+             EXISTS (SELECT 1 FROM phase_qualifications q JOIN phases ph ON ph.id = q.phase_id
+                     WHERE ph.branch_id = b.id)
+             AND EXISTS (SELECT 1 FROM phases ph WHERE ph.branch_id = b.id AND ph.type = 'single_elimination')
+           ) AS has_playoffs
     FROM branches b
     JOIN categories c ON c.id = b.category_id
     WHERE c.tournament_id = ?
@@ -1185,6 +1194,28 @@ router.get('/branches/:branchId/standings', asyncHandler(async (req, res) => {
   if (!standings) return res.status(404).json({ error: 'Rama no encontrada' });
 
   res.json({ ...standings, branch: { ...standings.branch, ...branch } });
+}));
+
+
+// El bracket de los playoffs de una rama (README, "El bracket de los
+// playoffs"): solo los que ya se publican, porque su conferencia terminó la
+// temporada regular o ya empezó sus playoffs. Mismo filtro de visibilidad que
+// la tabla, y aparte del calendario por la misma razón: la página lo pide solo
+// en las ramas con `has_playoffs`, y sin hacer esperar al calendario.
+router.get('/branches/:branchId/bracket', asyncHandler(async (req, res) => {
+  const branch = await db.prepare(`
+    SELECT b.id
+    FROM branches b
+    JOIN categories c   ON c.id = b.category_id
+    JOIN tournaments t  ON t.id = c.tournament_id
+    JOIN leagues l      ON l.id = t.league_id
+    WHERE b.id = ? AND l.is_public = TRUE
+  `).get(req.params.branchId);
+  if (!branch) return res.status(404).json({ error: 'Rama no encontrada' });
+
+  const data = await buildBranchBrackets(branch.id);
+  if (!data) return res.status(404).json({ error: 'Rama no encontrada' });
+  res.json(data);
 }));
 
 

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import Modal from './Modal.jsx';
 import Loading from './Loading.jsx';
 import StandingsView from './StandingsView.jsx';
+import BracketView from './BracketView.jsx';
+import { publishNote, unplacedNote } from '../utils/bracketFormat.js';
 import { api } from '../api/client.js';
 
 // Cómo se compite en esta rama: las fases del calendario, a qué nivel se
@@ -131,6 +133,17 @@ export default function CompetitionModelModal({ branch, token, onClose }) {
                   data={standings}
                   emptyText="Inscribe equipos en la rama y captura partidos con marcador para que aparezca la tabla."
                 />
+                {/* El bracket de cada conferencia, también el que todavía no
+                    se publica: aquí la liga ve cómo quedaría y cuánto falta
+                    (README, "El bracket de los playoffs"). */}
+                {(standings?.brackets || []).map((b) => (
+                  <div key={b.key}>
+                    <BracketView bracket={b} note={publishNote(b) || null} />
+                    {b.unplaced_matches?.length > 0 && (
+                      <p className="form-error" style={{ marginTop: 8 }}>{unplacedNote(b.unplaced_matches)}</p>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </>

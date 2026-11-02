@@ -6,6 +6,7 @@ import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
 import Loading from '../components/Loading.jsx';
 import CalendarViewer from '../components/CalendarViewer.jsx';
 import StandingsView from '../components/StandingsView.jsx';
+import BracketView from '../components/BracketView.jsx';
 
 // Pantalla pública de un Torneo específico. Misma idea visual que
 // LeaguePage.jsx (portada, header, sección de contenido), pero solo con
@@ -38,11 +39,14 @@ export default function TournamentPage() {
   const [view, setView] = useState('calendar');
   const [standings, setStandings] = useState({});
   const [standingsError, setStandingsError] = useState('');
+  // Los brackets de playoffs, por rama, igual que la tabla: se piden una vez y
+  // se guardan para ir y venir entre pestañas sin volver a pedirlos.
+  const [brackets, setBrackets] = useState({});
 
   useEffect(() => {
     setData(null); setError('');
     setSelectedCategoryId(null); setSelectedBranchId(ramaDelLink); setSelectedTeam(null);
-    setView('calendar'); setStandings({}); setStandingsError('');
+    setView('calendar'); setStandings({}); setStandingsError(''); setBrackets({});
     api.getTournamentPublic(tournamentId).then(setData).catch((e) => setError(e.message));
   }, [tournamentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -156,6 +160,26 @@ export default function TournamentPage() {
       infoLabel = `${cat.name} · ${b?.name || ''}`;
     }
   }
+
+  // El bracket va al final del calendario (README, "El bracket de los
+  // playoffs"), y solo se pide en una rama que declaró quién clasifica y
+  // tiene fases de eliminación directa: a las demás no les cuesta nada.
+  const shareHeader = {
+    tournament: tournament.name,
+    context: infoLabel || null,
+    leagueLogo: tournament.league_logo_url || null,
+  };
+  const activeBranch = (data.branches || []).find((b) => b.id === activeBranchId);
+  const bracketData = activeBranchId ? brackets[activeBranchId] : undefined;
+  const bracketFooter = activeBranch?.has_playoffs ? (
+    <BracketSection
+      key={activeBranchId}
+      branchId={activeBranchId}
+      data={bracketData}
+      onData={(d) => setBrackets((prev) => ({ ...prev, [activeBranchId]: d }))}
+      shareImage={shareHeader}
+    />
+  ) : null;
 
   function openStandings(branchId) {
     setView('standings');
@@ -275,11 +299,7 @@ export default function TournamentPage() {
                   <StandingsView
                     data={standings[activeBranchId]}
                     emptyText="Esta rama todavía no tiene tabla de posiciones publicada."
-                    shareImage={{
-                      tournament: tournament.name,
-                      context: infoLabel || null,
-                      leagueLogo: tournament.league_logo_url || null,
-                    }}
+                    shareImage={shareHeader}
                   />
                 ) : (
                   <Loading />
@@ -296,6 +316,8 @@ export default function TournamentPage() {
                 }}
                 emptyTitle="Calendario sin publicar"
                 emptyText="Este torneo aún no tiene partidos programados."
+                footer={bracketFooter}
+                footerJumpLabel={bracketData?.brackets?.length ? 'Ver bracket' : null}
               />
               )}
             </>
@@ -339,4 +361,24 @@ export default function TournamentPage() {
       )}
     </div>
   );
+}
+
+// Pide los brackets de una rama la primera vez que se ve su calendario, y
+// pinta uno por conferencia. El backend solo manda los que ya se publican
+// (su conferencia terminó la temporada regular o empezó sus playoffs); sin
+// ninguno, no pinta nada. Si la petición falla, el calendario se queda como
+// estaba: el bracket es un extra al final.
+function BracketSection({ branchId, data, onData, shareImage }) {
+  useEffect(() => {
+    if (!branchId || data !== undefined) return undefined;
+    let vigente = true;
+    api.getBranchBracket(branchId)
+      .then((d) => { if (vigente) onData(d); })
+      .catch(() => { if (vigente) onData({ brackets: [] }); });
+    return () => { vigente = false; };
+  }, [branchId, data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const lista = data?.brackets || [];
+  if (!lista.length) return null;
+  return lista.map((b) => <BracketView key={b.key} bracket={b} shareImage={shareImage} />);
 }

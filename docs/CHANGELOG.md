@@ -15,6 +15,43 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El bracket de los playoffs, al final del calendario (2026-11-01). Cierra
+  PD-40.** Lo pidió Alfredo cuando la Conferencia Nacional de ONEFA terminó su
+  temporada regular, con una imagen de guía y una condición: que no cree
+  partidos. El bracket se arma al leer, como la tabla: la siembra sale de la
+  regla de clasificación y las tablas (todos los primeros, luego los segundos,
+  luego los lugares extra, cada lugar ordenado con los criterios de los
+  mejores terceros), los cruces van 1–8, 2–7, 3–6 y 4–5, y cada partido se
+  encuentra por la pareja de equipos. Sin columna nueva ni migración. Alfredo
+  decidió tres cosas: las rondas siguientes **se reacomodan** (el mejor
+  sembrado vivo recibe al peor; en 2025 la Nacional jugó semis 1–4 y 2–3), el
+  bracket **sale solo al terminar la temporada regular** de su conferencia, y
+  lleva **"Generar imagen"** con el estilo de CFBAMX. Va uno por conferencia,
+  con un botón "Ver bracket" arriba del calendario; en la computadora en
+  espejo, como la imagen de guía, y en el celular ronda por ronda. La vista
+  previa de ⚙ competencia lo enseña antes de publicarse, con cuántos partidos
+  faltan. El detalle, en el README, "El bracket de los playoffs".
+
+  Verificado sin tocar la base de producción: con las tablas y los 141 partidos
+  de ONEFA leídos de la API pública, la función del backend da la siembra que
+  publicó la liga (Leones UANQ, Águilas UACH, Pumas Acatlán, Tecos UAG, Potros
+  Salvajes UAEM, Potros ITSON, Lobos UADEC y Búhos IPN), publica Nacional (77
+  jugados, 0 pendientes) y no 14 Grandes (faltaban 7). Las rutas, contra
+  `desarrollo-local`. En el navegador, con ese bracket inyectado porque ahí
+  ONEFA no tiene fases: escritorio y 390 px, cuartos jugados con una sorpresa,
+  semifinales reacomodadas y campeón; la imagen en publicación e historia; la
+  vista previa del panel; y LFA, que sin regla no lo pide. Verlo encontró tres
+  cosas que ninguna prueba veía (la final en blanco con un finalista ya
+  conocido, "FINAL · FINAL" bajo el campeón, "Partido por capturar" en la
+  página pública), corregidas. 318 pruebas del backend y 187 del frontend, en
+  verde. Sin desplegar.
+
+  **De paso se cierra PD-14** ("ONEFA sin competencia configurada"): medido
+  el mismo día en la API pública, la rama Varonil de ONEFA ya tiene el Modo
+  ONEFA aplicado en producción —fases, la regla de cada conferencia y el
+  título—, y su tabla se ve. PD-14 decía que eso llevaba la tabla de nivel 4 a
+  5; no se movió, porque el nivel 5 pide datos de uso y no se midieron.
+
 - **La ventana de un partido ya no se sale de lado (2026-11-01).** Lo pidió
   Alfredo: en "Nuevo partido" y "Editar partido", la fila de Equipo local y
   Equipo visitante no cabía y la ventana tenía barra de lado. La causa: las

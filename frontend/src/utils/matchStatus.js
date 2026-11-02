@@ -15,7 +15,9 @@
 // funcione — si no vienen, se asume "apagado" por seguridad (nunca se activa
 // solo un cálculo que nadie pidió).
 
-export function getMatchStatus(match) {
+// `now` es opcional: solo lo pasan las pruebas y el bracket (utils/bracketFormat.js),
+// que necesitan fijar la hora; todos los demás usan el reloj.
+export function getMatchStatus(match, now = Date.now()) {
   // Estado decidido a mano: se respeta sin cuestionarlo.
   if (match.status === 'live' || match.status === 'finished') {
     return match.status;
@@ -33,7 +35,6 @@ export function getMatchStatus(match) {
   if (!match.match_date) return 'scheduled';
 
   const hours     = match.auto_status_window_hours || 3; // resguardo, no debería faltar
-  const now       = Date.now();
   const matchTime = new Date(match.match_date).getTime();
   const endTime   = matchTime + hours * 60 * 60 * 1000;
 

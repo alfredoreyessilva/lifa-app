@@ -547,8 +547,8 @@ Se retiran `GET /notifications/league/:id`, `GET /notifications/team/:id`,
   por X" a quien lo sigue (`match_broadcasts`, hoy solo le llega a la liga); el
   récord en el marcador final ("ganó y va 5–1"); un resumen de jornada para
   quien sigue una liga entera en vez de un aviso por partido; campeón o
-  clasificado (sin datos mientras ONEFA no tenga competencia configurada,
-  PD-14); y, para la liga, la actividad de su afición ("Jornada 5: 312
+  clasificado (ya hay datos: ONEFA tiene su competencia configurada y, desde
+  el 2026-11-01, su bracket de playoffs); y, para la liga, la actividad de su afición ("Jornada 5: 312
   predicciones de 36 aficionados") y sus hitos de seguidores.
 
 ## Respaldos
@@ -3211,9 +3211,9 @@ semifinales 1º–4º y 2º–3º:
   Pero al capturar cuartos, semifinales y final **hay que elegir su fase** en
   el partido: el campeón sale del partido de la fase Final, y uno que solo
   dice "FINAL" en la jornada no tiene fase propia.
-- **Lo que no hace todavía: la siembra.** Quién es 1º a 8º en los playoffs
-  (en Nacional: líderes 1–3, segundos 4–6, terceros 7–8) y quién es local en
-  cada cruce. Está en `docs/PENDIENTES.md`.
+- **La siembra y los cruces no los escribe:** se calculan al leer, en el
+  bracket de los playoffs (ver "El bracket de los playoffs", abajo). Antes del
+  2026-11-01 no existían y estaban en `docs/PENDIENTES.md` (PD-40).
 
 ### El candado de migración: de sesión a transacción
 
@@ -3250,9 +3250,14 @@ backend/src/utils/standings.js        El catálogo de criterios, los reglamentos
 backend/src/utils/matchPhase.js       De dónde sale la fase de un partido
                                       (phase_id, o derivada de week_label).
 backend/src/utils/branchStandings.js  Junta la base con el motor: arma todas las
-                                      tablas de una rama y resuelve los campeones.
+                                      tablas de una rama, resuelve los campeones y
+                                      le pasa al bracket sus datos.
+backend/src/utils/bracket.js          El bracket de los playoffs: siembra, cruces,
+                                      quién avanza y cuándo aparece. PURO.
 backend/tests/unit/standings.test.mjs 16 pruebas, casi todas del reglamento de
                                       desempates (que es donde está el riesgo).
+backend/tests/unit/bracket.test.mjs   La siembra con los datos reales de la
+                                      Nacional, el reacomodo y lo capturado.
 backend/scripts/verify-standings.mjs  Verificación de SOLO LECTURA contra la base
                                       real: revisa estructura e imprime la tabla ya
                                       calculada, para comparar con lo que la liga
@@ -3261,11 +3266,16 @@ frontend/src/components/
   StandingsTable.jsx                  Una tabla.
   StandingsView.jsx                   Campeones + pestañas por nivel + tablas.
   StandingsImageButton.jsx            "Generar imagen" de una tabla (publicación / historia).
+  BracketView.jsx                     El bracket: en espejo en la computadora, por
+                                      rondas en el teléfono, con su "Generar imagen".
   CompetitionModelModal.jsx           El panel: Fases · Formato · Títulos · Vista previa.
 frontend/src/utils/
   standingsFormat.js                  Cómo se escribe cada cifra y qué columnas lleva la
                                       imagen. PURO: lo comparten la tabla y la imagen.
   standingsShareCard.js               El dibujo de la imagen (canvas 2D, en el navegador).
+  bracketFormat.js                    Qué va en cada lado del espejo y cómo se escribe
+                                      cada cruce. PURO: lo comparten la página y la imagen.
+  bracketShareCard.js                 El dibujo de la imagen del bracket.
 ```
 
 ### Endpoints
@@ -3273,7 +3283,8 @@ frontend/src/utils/
 | Método | Ruta | Para qué |
 |---|---|---|
 | GET | `/api/leagues/branches/:branchId/standings` | Público. Tabla de una rama (solo si la liga está publicada) |
-| GET | `/api/manage/branches/:branchId/standings` | La misma, con la configuración, para el panel |
+| GET | `/api/manage/branches/:branchId/standings` | La misma, con la configuración, para el panel. Trae también `brackets`, incluidos los que todavía no se publican |
+| GET | `/api/leagues/branches/:branchId/bracket` | Público. Los brackets de la rama que ya se ven: su conferencia terminó la temporada regular o ya empezó sus playoffs |
 | GET | `/api/manage/standings-catalog` | Criterios, reglamentos preconfigurados y tipos de fase |
 | PUT | `/api/manage/branches/:branchId/standings-config` | Niveles, desempates, modo, sistema de puntos y el reglamento por nivel |
 | GET POST | `/api/manage/branches/:branchId/phases` | Fases de la rama. El GET devuelve `{ phases, week_labels }`: las jornadas con partidos sin fase, para poder adoptarlas |
@@ -3378,9 +3389,6 @@ mismo código que se estaba probando:
 
 ### Lo que queda abierto
 
-- **Configurar ONEFA**: su temporada está en curso y su estructura (2
-  conferencias, la Nacional con grupos) todavía no tiene fases ni títulos
-  declarados. Desde el 2026-10-25 se hace con el botón **Modo ONEFA** (arriba).
 - El orden con que se comparan los lugares extra (`cross_tiebreakers`) ya se
   guarda por regla, pero en el panel todavía no se puede elegir: solo lo pone
   el Modo ONEFA, y sin él se usa % de ganados → diferencia → anotados.
@@ -3450,6 +3458,147 @@ ninguna prueba:
 - El botón **Compartir** no se ejercitó en Playwright, porque abre el panel
   nativo del sistema. Es el mismo código que el del ranking, que ya está en
   producción.
+
+### El bracket de los playoffs (2026-11-01)
+
+Lo pidió Alfredo cuando la Conferencia Nacional de ONEFA terminó su temporada
+regular: que el calendario enseñe el bracket —quién se enfrenta a quién y,
+conforme se juega, quién avanza—, **sin crear partidos**. Los partidos de
+playoffs se siguen capturando a mano, como siempre; el bracket los lee.
+
+**No se guarda nada.** Se arma al leer, como la tabla y el campeón, con lo que
+ya existía: la regla de clasificación (quién pasa), las tablas (en qué lugar
+quedó cada quien), las fases de eliminación directa que siguen (las rondas) y
+los partidos de playoffs capturados (quién ganó). No hay columna nueva ni
+migración. La lógica vive en `utils/bracket.js`, pura y con sus pruebas, y
+`utils/branchStandings.js` le pasa los datos, igual que al motor de la tabla.
+
+Hace falta que la rama tenga las dos cosas declaradas: una regla de
+clasificación y, después de su fase, fases de **eliminación directa**. Sin
+ellas no hay bracket que armar. El 2026-11-01 solo ONEFA las tiene (Modo
+ONEFA): LFA tiene una fase "Postemporada" pero ninguna regla.
+
+**La siembra (era PD-40).** Los clasificados se numeran por lugar: primero
+todos los primeros lugares de sus tablas, luego todos los segundos, y así hasta
+`top_n`; al final, los lugares extra, en el orden en que clasificaron. Dentro
+de cada lugar se ordenan con los criterios con que se comparan los lugares
+extra (`cross_tiebreakers`; en ONEFA, % de ganados y luego goal average), por
+la misma razón que ellos: son equipos de tablas distintas que quizá nunca se
+enfrentaron.
+
+- **Nacional**: los tres líderes de grupo son 1 a 3, los tres segundos 4 a 6 y
+  los dos mejores terceros 7 y 8. Con los datos de producción del 2026-11-01
+  sale el mismo orden que publicaron los medios: Leones UANQ, Águilas UACH,
+  Pumas Acatlán, Tecos UAG, Potros Salvajes UAEM, Potros ITSON, Lobos UADEC y
+  Búhos IPN.
+- **14 Grandes** (los 8 primeros de una sola tabla): en cada lugar hay un solo
+  equipo, así que la siembra es el orden de la tabla, con su reglamento
+  completo.
+- Lleva asterisco, como en la tabla, el número que no decidió ningún criterio:
+  dos del mismo lugar que esos criterios no separan, o un equipo cuyo lugar en
+  su propia tabla quedó en empate sin resolver.
+
+**Los cruces.** En la primera ronda, el mejor sembrado contra el peor (1–8,
+2–7, 3–6 y 4–5), y el mejor sembrado es el local: va arriba. Las siguientes
+**se reacomodan**: los que siguen vivos se ordenan otra vez por su siembra y el
+mejor recibe al peor. Es como juega ONEFA —lo decidió Alfredo el 2026-11-01; en
+2025 la Nacional jugó semifinales 1–4 y 2–3— y es la costumbre en México. Por
+eso una ronda se conoce hasta que termina completa la anterior: antes no se
+sabe quién es el peor que sigue vivo. La imagen de la Nacional 2026 que
+circuló en redes cruza al ganador de 1–8 con el de 3–6; no es así como se
+juega.
+
+- Con un número de clasificados que no es potencia de dos, los mejores
+  sembrados descansan la primera ronda: con 6, el bracket es de 8 y al 1 y al
+  2 no les toca rival.
+- **Fuera de esta versión, el bracket fijo** (el ganador de 1–8 contra el de
+  4–5, pase lo que pase). Ninguna liga de la app lo usa hoy; entra como una
+  columna de la regla de clasificación el día que una lo pida. Mientras, una
+  liga que juegue así ve la proyección reacomodada hasta que captura sus
+  partidos, y entonces manda lo capturado (abajo).
+
+**Los partidos: lo capturado manda.**
+
+- Cada cruce encuentra su partido por **la pareja de equipos**: en eliminación
+  directa dos equipos se enfrentan una sola vez, así que la pareja basta, se
+  haya capturado con la fase "Cuartos de final" o solo con la jornada
+  "PLAYOFF". Cuenta cualquier partido de eliminación directa de la rama entre
+  esos dos.
+- Avanza quien tiene más puntos con el partido terminado, con la misma regla de
+  "ya terminó" que la tabla y la quiniela. Un empate capturado no hace avanzar
+  a nadie.
+- **Si la liga cruzó distinto, gana el partido.** Si en el cruce del 1 contra
+  el 8 se capturó, con la fase de esa ronda, al 1 contra otro equipo, el cruce
+  se corrige con ese partido y el bracket sigue desde ahí. Es lo que hace las
+  veces de una siembra a mano, que queda fuera de esta versión. Un partido de
+  playoffs que no cabe en ningún cruce no se adivina: el público no lo ve en el
+  bracket y la vista previa del panel lo avisa.
+- El campeón del bracket es el ganador de la final. El título "Campeón de
+  conferencia" de la pestaña Posiciones sale del partido de la fase Final, así
+  que al capturar la final hay que elegirle esa fase, como ya decía el Modo
+  ONEFA.
+
+**Cuándo aparece.** Cuando la conferencia termina su temporada regular: todos
+sus partidos que cuentan para la tabla tienen marcador final. Nadie lo
+enciende (decidido por Alfredo el 2026-11-01); ese día la Nacional ya estaba
+completa y a 14 Grandes le faltaban 7 partidos. También aparece en cuanto se
+captura su primer partido de playoffs, aunque quede uno de temporada regular
+sin marcador: con los playoffs empezados, esconderlo por un partido olvidado
+sería peor. Antes, solo lo ve la liga, en ⚙ competencia → Vista previa, con
+cuántos partidos faltan: es una proyección que cambia cada jornada.
+
+**Dónde se ve.**
+
+- Al final de la pestaña Calendario del torneo, uno por conferencia: abajo del
+  último partido, que en playoffs es justo el último cruce. Un botón **Ver
+  bracket** junto al número de partidos baja hasta él, porque con 141
+  partidos el final queda lejos.
+- Se pide aparte (`GET /leagues/branches/:id/bracket`) y solo en las ramas con
+  regla de clasificación, por lo mismo que la tabla: el calendario se pinta
+  sin esperarlo, y a las ligas sin playoffs no les cuesta nada.
+- En la computadora va en espejo, como la imagen de guía que pasó Alfredo: la
+  mitad del 1 a la izquierda, la del 2 a la derecha y la final al centro, con
+  el campeón. Cada equipo lleva su escudo, su siembra y su nombre; cada cruce,
+  su fecha o su marcador, y liga a la página del partido; el que pierde queda
+  atenuado. En el teléfono el espejo no cabe con nombres —siete columnas en
+  360 px—, así que ahí las rondas van una debajo de otra.
+- **Generar imagen**, en publicación (1080×1350, el tamaño de la imagen de
+  guía) e historia (1080×1920), con el estilo de las demás imágenes de CFBAMX
+  (lo eligió Alfredo el 2026-11-01). Lleva los nombres y no solo los escudos:
+  la imagen circula sin la página al lado.
+
+**Verificado (2026-11-01).** La siembra se probó con las tablas reales de los
+grupos de la Nacional (`tests/unit/bracket.test.mjs`), y el armado completo
+—`bracketsOf()`, la misma función de la ruta— con los 141 partidos y las tablas
+de producción leídos de la API pública, sin tocar la base: Nacional sale
+publicada (77 partidos jugados, 0 pendientes) con el orden que publicó la liga,
+y 14 Grandes no (le faltaban 7). Las rutas, contra `desarrollo-local`. En el
+navegador, la página real con ese bracket inyectado —ahí ONEFA no tiene fases—
+en escritorio y a 390 px, con cuartos jugados, semifinales reacomodadas y
+campeón; la imagen en sus dos formatos; la vista previa del panel, y LFA, que
+sin regla no pide el bracket ni enseña el botón.
+
+Lo que encontró verlo, y no veía ninguna prueba:
+
+1. Con una semifinal jugada y la otra no, la final salía en blanco: la regla de
+   "una ronda reacomodada espera a la anterior" también detenía la final, que
+   no tiene nada que reacomodar. El que ya ganó su semifinal aparece desde ese
+   momento, de su lado.
+2. Bajo el campeón decía "FINAL · FINAL" con la final terminada, y "VS" en la
+   imagen con la final por definir. La frase del centro es ahora una sola
+   función (`finalLabel`) que usan la página y la imagen.
+3. Un cruce sin partido capturado decía "Partido por capturar", que es el
+   idioma de la liga y no el de la afición: dice "Fecha por confirmar".
+
+**Fuera de esta versión:**
+
+- **La siembra a mano.** Si la liga siembra distinto de lo que dice la tabla
+  (un sorteo, una sanción), hoy lo corrigen sus propios partidos al
+  capturarse con su fase (arriba). Un `*_override` de la siembra, como el del
+  campeón, entra si eso no alcanza.
+- **El bracket fijo**, ver arriba.
+- **Una imagen con las dos conferencias juntas.** Como la tabla: una por
+  conferencia.
 
 ## Predicciones y quinielas
 

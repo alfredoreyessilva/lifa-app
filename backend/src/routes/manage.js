@@ -2580,8 +2580,10 @@ async function validateTitle({ name, scope, decided_by, phase_id, branchId }) {
 
 // La tabla completa para el panel: incluye la configuración y las fases con
 // todos sus campos, que la vista pública no necesita.
+// Con los brackets, también los que todavía no se publican: la vista previa
+// del panel enseña la proyección y cuántos partidos faltan para que salga.
 router.get('/branches/:branchId/standings', authRequired, branchOwnerRequired, asyncHandler(async (req, res) => {
-  res.json(await buildBranchStandings(req.branch.id));
+  res.json(await buildBranchStandings(req.branch.id, { withBrackets: true }));
 }));
 
 

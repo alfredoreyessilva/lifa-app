@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { getMatchStatus } from '../utils/matchStatus.js';
 import { getMatchParts, initials, groupByJornada, jornadaDateRange, ordenarCalendario } from '../utils/matchDisplay.js';
@@ -148,7 +148,13 @@ export default function CalendarViewer({
   rankingHeader = {},
   emptyTitle = 'Calendario sin publicar',
   emptyText = 'Todavía no hay partidos programados.',
+  // Lo que va abajo del último partido, en la pestaña Calendario: el bracket
+  // de los playoffs en la página del torneo. `footerJumpLabel` pone arriba un
+  // botón que baja hasta él, porque con 141 partidos el final queda lejos.
+  footer = null,
+  footerJumpLabel = null,
 }) {
+  const footerRef = useRef(null);
   // Segunda barrera contra partidos duplicados (además de la que ya se
   // agregó en el backend): si por cualquier motivo llegan dos objetos de
   // partido con el mismo id -por ejemplo, datos viejos en caché, u otro
@@ -308,8 +314,19 @@ export default function CalendarViewer({
         </div>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <span className="count">{matches.length} partidos</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span className="count">{matches.length} partidos</span>
+          {footer && footerJumpLabel && (
+            <button
+              type="button"
+              className="btn btn-flag btn-sm"
+              onClick={() => footerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            >
+              🏆 {footerJumpLabel}
+            </button>
+          )}
+        </span>
         {shareLabel && (
           <button className="btn btn-outline btn-sm" onClick={() => handleShareCalendar(shareLabel)}>
             {copied ? '✓ Link copiado' : shareLabel}
@@ -478,6 +495,8 @@ export default function CalendarViewer({
           )}
         </>
       )}
+
+      {footer && <div ref={footerRef}>{footer}</div>}
       </>
       )}
 

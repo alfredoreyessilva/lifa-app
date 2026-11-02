@@ -202,6 +202,9 @@ export const api = {
   // cuando alguien abre esa pestaña. Calcularla en cada carga del calendario
   // le costaría a todos los visitantes un trabajo que casi ninguno pidió.
   getBranchStandings: (branchId) => request(`/leagues/branches/${branchId}/standings`),
+  // El bracket de los playoffs de una rama: solo los que ya se publican
+  // (README, "El bracket de los playoffs").
+  getBranchBracket: (branchId) => request(`/leagues/branches/${branchId}/bracket`),
   getBranchStandingsAdmin: (branchId, token) =>
     request(`/manage/branches/${branchId}/standings`, { token }),
 

@@ -29,7 +29,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | **P1** | Hoy no daña, pero frena el siguiente paso: la primera liga que cobre, la prueba en cancha, el siguiente cliente |
 | **P2** | Deuda y pulido. Se toma cuando hay tiempo o cuando se toca ese archivo |
 
-## Índice (2026-10-17)
+## Índice (2026-11-01)
 
 | ID | P | Qué | Tipo |
 |-|-|-|-|
@@ -43,7 +43,6 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-11 | P1 | `main` sin protección y el CI no frena el despliegue | configuración |
 | PD-12 | P1 | Nadie avisa si el servicio deja de responder | configuración |
 | PD-13 | P1 | No existe rescate de un equipo cuyo único dueño perdió acceso | código |
-| PD-14 | P1 | ONEFA sin competencia configurada: su tabla no se ve | captura |
 | PD-34 | P1 | El Excel a nivel torneo y "Publicar todos" publican partidos sin equipos enlazados | código |
 | PD-02 | P2 | El push de partido está en pausa: casi nunca salía a tiempo, y nadie lo recibía | operación |
 | PD-15 | P2 | `PUT /manage/teams/:id` no es atómico | código |
@@ -64,7 +63,6 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-32 | P2 | Un dueño no se puede retirar aunque haya otros dueños, y el README dice que sí | decisión |
 | PD-33 | P2 | Los recordatorios de cobranza esconden su error y pierden el día | código |
 | PD-36 | P2 | En el celular, la tabla de posiciones se desliza de lado, y el README dice que cabe | código |
-| PD-40 | P2 | La siembra de los playoffs de ONEFA no se calcula | código |
 | PD-41 | P2 | En el celular, las pestañas del modal de competencia se salen de lado | código |
 
 ---
@@ -272,21 +270,6 @@ la plataforma invita a la persona como `admin` y después le cede el puesto con
 `transfer-owner`. Ver "Equipos independientes" en el README. Desde el
 2026-10-17 se puede recuperar la contraseña con un código por correo (era
 PD-04), así que el caso que queda es el de quien perdió el acceso a su correo.
-
-### PD-14 · ONEFA sin competencia configurada: su tabla no se ve
-
-Es captura, no código. Su temporada está en curso y no tiene fases ni títulos
-declarados, así que su página pública no muestra tabla. Se hace desde
-Estructura → rama → **⚙ competencia**. Es lo que lleva la tabla de posiciones de
-nivel 4 a nivel 5 en la única liga con uso real. Ver "Lo que queda abierto" en
-"Tabla de posiciones y modelo de competencia".
-
-Desde el 2026-10-25 es **un clic**: Estructura → rama Varonil → ⚙ competencia →
-**Modo ONEFA** (README, "Modo ONEFA"). Deja las tablas por conferencia y por
-grupo, el desempate de su reglamento, las fases de playoffs, quién clasifica en
-cada conferencia y el campeón de conferencia. Solo se aplica sobre una rama sin
-fases ni títulos, que es como está ONEFA hoy. Después, al capturar cuartos,
-semifinales y final, hay que elegir su fase en el partido.
 
 ### PD-34 · El Excel a nivel torneo y "Publicar todos" publican partidos sin equipos enlazados
 
@@ -620,21 +603,6 @@ tabla no se encoge:
 
 AVG se queda en el teléfono porque es la cifra que decide el empate en ONEFA;
 lo que se esconda para cerrar este pendiente tiene que ser otra columna.
-
-### PD-40 · La siembra de los playoffs de ONEFA no se calcula
-
-Quedó fuera del Modo ONEFA a propósito (decidido por Alfredo el 2026-10-25).
-La app marca quién clasifica, pero no en qué lugar entra a los playoffs ni
-contra quién juega:
-
-- **Nacional**: los tres líderes de grupo son 1 a 3, ordenados por récord; los
-  tres segundos, 4 a 6; los dos mejores terceros, 7 y 8.
-- **14 Grandes**: 1 a 8 por su tabla.
-- Los cruces de cuartos, y que el local es siempre el mejor sembrado.
-
-Hoy los partidos de playoffs se capturan a mano viendo la tabla. Para hacerlo
-hace falta confirmar los cruces (1–8, 2–7…), que el formato que pasó Alfredo
-no dice.
 
 ### PD-41 · En el celular, las pestañas del modal de competencia se salen de lado
 

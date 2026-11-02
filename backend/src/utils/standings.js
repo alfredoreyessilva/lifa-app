@@ -805,22 +805,9 @@ export function computeQualification({ tables = [], rule = {} } = {}) {
       if (row) candidates.push({ ...row, from_table: table.key });
     }
 
-    // Comparación entre grupos: solo criterios de universo general, porque
-    // estos equipos no se enfrentaron. Se reusa el mismo motor con una lista
-    // recortada en vez de escribir un segundo ordenador.
-    const crossKeys = (Array.isArray(rule.cross_tiebreakers) && rule.cross_tiebreakers.length
-      ? rule.cross_tiebreakers
-      : ['win_pct', 'point_diff', 'points_for']
-    ).filter((k) => TIEBREAKER_CATALOG[k] && TIEBREAKER_CATALOG[k].universe === 'all');
-
-    const ctx = {
-      config: { ...rule, tiebreakers: crossKeys.length ? crossKeys : ['win_pct'], multi_team_mode: 'sequential' },
-      matchesByTeam: new Map(candidates.map((c) => [c.team_id, []])),
-      inScope: () => true,
-    };
     // Los récords ya vienen calculados en cada fila, así que se ordena sobre
     // los valores que traen en vez de volver a leer partidos.
-    wild = sortByPrecomputed(candidates, ctx.config.tiebreakers)
+    wild = sortByPrecomputed(candidates, crossCriteriaOf(rule))
       .slice(0, plusN)
       .map((row) => ({ ...row, qualified_as: 'wildcard' }));
   }
@@ -828,10 +815,24 @@ export function computeQualification({ tables = [], rule = {} } = {}) {
   return [...direct, ...wild];
 }
 
-// Ordena filas ya calculadas por una lista de criterios generales, leyendo
-// los valores que la fila trae. Solo sirve para la comparación entre tablas
-// (arriba); el desempate normal usa el motor completo con partidos.
-function sortByPrecomputed(rows, keys) {
+// Con qué se comparan equipos de TABLAS DISTINTAS: los lugares extra y, desde
+// el 2026-11-01, la siembra del bracket (utils/bracket.js), que es el mismo
+// problema. Solo criterios de universo general, porque esos equipos quizá
+// nunca se enfrentaron; sin lista en la regla, % de ganados → diferencia →
+// anotados.
+export function crossCriteriaOf(rule = {}) {
+  const keys = (Array.isArray(rule.cross_tiebreakers) && rule.cross_tiebreakers.length
+    ? rule.cross_tiebreakers
+    : ['win_pct', 'point_diff', 'points_for']
+  ).filter((k) => TIEBREAKER_CATALOG[k] && TIEBREAKER_CATALOG[k].universe === 'all');
+  return keys.length ? keys : ['win_pct'];
+}
+
+// Compara dos filas ya calculadas por una lista de criterios generales,
+// leyendo los valores que la fila trae: negativo si `a` va antes, 0 si ningún
+// criterio los separa. Solo sirve para la comparación entre tablas; el
+// desempate normal usa el motor completo con partidos.
+export function compareByCriteria(a, b, keys) {
   const valueOf = (row, key) => {
     const def = TIEBREAKER_CATALOG[key];
     if (!def) return 0;
@@ -841,14 +842,18 @@ function sortByPrecomputed(rows, keys) {
     };
     return metricValue(def.metric, rec, row) * (def.lower_is_better ? -1 : 1);
   };
-  return [...rows].sort((a, b) => {
-    for (const key of keys) {
-      // Sin restar: con goal average, dos equipos sin puntos en contra valen
-      // Infinity, la resta da NaN y cortaba la comparación ahí.
-      const va = valueOf(a, key);
-      const vb = valueOf(b, key);
-      if (va !== vb) return va < vb ? 1 : -1;
-    }
-    return 0;
-  });
+  for (const key of keys) {
+    // Sin restar: con goal average, dos equipos sin puntos en contra valen
+    // Infinity, la resta da NaN y cortaba la comparación ahí.
+    const va = valueOf(a, key);
+    const vb = valueOf(b, key);
+    if (va !== vb) return va < vb ? 1 : -1;
+  }
+  return 0;
+}
+
+// Ordena filas ya calculadas con compareByCriteria. El sort es estable: lo
+// que ningún criterio separa conserva el orden en que llegó.
+export function sortByPrecomputed(rows, keys) {
+  return [...rows].sort((a, b) => compareByCriteria(a, b, keys));
 }

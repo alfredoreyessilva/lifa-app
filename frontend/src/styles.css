@@ -4055,6 +4055,317 @@ a.match-card-new {
   .standings-table tbody td { padding-left: 6px; padding-right: 6px; }
 }
 
+/* ---------- Bracket de los playoffs ----------
+   README, "El bracket de los playoffs". Va al final del calendario del torneo,
+   uno por conferencia, y en la vista previa del panel.
+
+   Se pinta dos veces y aquí se elige: en la computadora, en espejo como la
+   imagen de guía (.bracket-tree: la mitad del 1 a la izquierda, la del 2 a la
+   derecha, la final al centro); en el teléfono, ronda por ronda
+   (.bracket-list), porque siete columnas con nombres no caben en 360 px.
+
+   Mismos tokens locales que la tabla, para que funcione sobre la cancha y
+   sobre el modal. */
+.bracket {
+  --br-line: var(--line);
+  --br-ink-dim: var(--ink-dim);
+  --br-box: rgba(0, 0, 0, 0.22);
+  margin-top: var(--space-6, 32px);
+  padding-top: var(--space-5, 24px);
+  border-top: 1px solid var(--br-line);
+  scroll-margin-top: 80px;
+}
+.bracket + .bracket { margin-top: var(--space-5, 24px); }
+
+.bracket-head {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+.bracket-eyebrow {
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--flag);
+}
+.bracket-title {
+  font-family: var(--font-display);
+  font-size: clamp(22px, 4vw, 30px);
+  line-height: 1.05;
+  margin: 2px 0 0;
+}
+.bracket-head-action { margin-left: auto; max-width: 100%; }
+.bracket-image-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 16px;
+}
+.bracket-note {
+  font-size: 13px;
+  color: var(--flag);
+  border: 1px solid var(--flag);
+  border-radius: var(--radius-md, 8px);
+  padding: 8px 12px;
+  margin: 0 0 12px;
+}
+
+/* ── En espejo ── */
+/* Las columnas las pone BracketView en línea, porque dependen del tamaño del
+   bracket: las rondas de cada lado, la final de cada lado y el centro, un poco
+   más ancho, como en la imagen. */
+.bracket-tree {
+  display: grid;
+  gap: 10px;
+  min-height: 560px;
+}
+.bracket-col { display: flex; flex-direction: column; min-width: 0; }
+.bracket-col-head {
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--flag);
+  text-align: center;
+  height: 22px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bracket-col-body { flex: 1; display: flex; flex-direction: column; }
+/* Cada cruce ocupa su parte de la columna, y sus dos cajas quedan en el
+   centro de cada mitad: así una semifinal cae entre los dos cuartos de su
+   lado, como en la imagen, sin dibujar líneas. */
+.bracket-game {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  padding: 4px 0;
+}
+.bracket-game--single { justify-content: center; }
+
+.bracket-team {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: 104px;
+  padding: 22px 6px 8px;
+  background: var(--br-box);
+  border: 1px solid var(--br-line);
+  border-radius: var(--radius-lg, 12px);
+  text-align: center;
+}
+.bracket-team.is-winner { border: 2px solid var(--flag); }
+.bracket-team.is-loser { opacity: 0.45; }
+.bracket-team.is-tbd {
+  justify-content: center;
+  color: var(--br-ink-dim);
+  font-family: var(--font-eyebrow);
+  font-size: 22px;
+  padding: 8px;
+}
+.bracket-team-name {
+  font-family: var(--font-eyebrow);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.bracket-seed {
+  font-family: var(--font-eyebrow);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--flag);
+  font-variant-numeric: tabular-nums;
+}
+.bracket-team .bracket-seed { position: absolute; top: 5px; left: 8px; }
+.bracket-score {
+  font-family: var(--font-eyebrow);
+  font-weight: 700;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.bracket-team .bracket-score { position: absolute; top: 3px; right: 8px; }
+
+.bracket-logo {
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.bracket-logo--initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  font-family: var(--font-eyebrow);
+  font-weight: 600;
+}
+
+/* La línea entre las dos cajas de un cruce: "vs", la fecha, "En vivo" o
+   "Final". Va en medio del cruce, encima del espacio entre las cajas. */
+.bracket-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  text-align: center;
+  font-family: var(--font-eyebrow);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.bracket-line a { pointer-events: auto; color: inherit; }
+.bracket-status--pending,
+.bracket-status--unscheduled,
+.bracket-status--final { color: var(--flag); }
+.bracket-status--scheduled { color: var(--br-ink-dim); }
+.bracket-status--live { color: var(--live); font-weight: 700; }
+
+.bracket-center-body {
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+.bracket-trophy { font-size: 44px; line-height: 1; }
+.bracket-center-label {
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--flag);
+}
+.bracket-champion {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 12px 8px;
+  border: 2px solid var(--flag);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--br-box);
+}
+.bracket-champion-name {
+  font-family: var(--font-eyebrow);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.15;
+}
+.bracket-champion--tbd {
+  border: 1px dashed var(--br-line);
+  color: var(--br-ink-dim);
+  font-size: 13px;
+}
+.bracket-center-status {
+  font-family: var(--font-eyebrow);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.bracket-center-status a { color: inherit; }
+
+/* ── Ronda por ronda ── */
+.bracket-list { display: none; }
+.bracket-list-round + .bracket-list-round { margin-top: 18px; }
+.bracket-list-round-name {
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--flag);
+  margin: 0 0 8px;
+}
+.bracket-list-game {
+  border: 1px solid var(--br-line);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--br-box);
+  padding: 4px 12px 8px;
+}
+.bracket-list-game + .bracket-list-game { margin-top: 10px; }
+.bracket-list-team {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  min-height: 44px;
+}
+.bracket-list-team + .bracket-list-team { border-top: 1px solid var(--br-line); }
+.bracket-list-team.is-loser { opacity: 0.45; }
+.bracket-list-team.is-winner .bracket-list-team-name { color: var(--flag); }
+.bracket-list-team.is-tbd { color: var(--br-ink-dim); font-size: 13px; }
+.bracket-list-team .bracket-seed { width: 18px; text-align: center; flex-shrink: 0; }
+.bracket-list-team-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.bracket-list-team-name { font-weight: 700; font-size: 14px; line-height: 1.2; }
+.bracket-list-team-meta { font-size: 11px; color: var(--br-ink-dim); line-height: 1.3; }
+.bracket-list-team .bracket-score { font-size: 20px; margin-left: auto; }
+.bracket-list-status {
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: right;
+  padding-top: 4px;
+}
+.bracket-list-status a { color: inherit; }
+.bracket-list-pending {
+  font-size: 13px;
+  color: var(--br-ink-dim);
+  border: 1px dashed var(--br-line);
+  border-radius: var(--radius-lg, 12px);
+  padding: 10px 12px;
+}
+.bracket-list-pending p { margin: 0; }
+.bracket-list-pending-ya { margin-top: 6px !important; color: var(--ink); }
+.bracket-list-champion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 12px;
+  border: 2px solid var(--flag);
+  border-radius: var(--radius-lg, 12px);
+}
+.bracket-list-champion-label {
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--flag);
+}
+
+.bracket-legend {
+  font-size: 11px;
+  color: var(--br-ink-dim);
+  line-height: 1.5;
+  margin-top: 12px;
+}
+
+@media (max-width: 720px) {
+  .bracket-tree { display: none; }
+  .bracket-list { display: block; }
+}
+
 /* ---------- Modelo de competencia (fases, títulos, formato de tabla) ----------
    Vive en un modal ancho: son cuatro secciones con listas editables y una
    vista previa de la tabla real, que en 480px (el ancho normal de .modal) no
