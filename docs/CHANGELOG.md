@@ -15,6 +15,28 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **La imagen de la tabla de posiciones, sobre la misma cancha que la de un partido
+  (2026-11-05).** Lo pidió Alfredo: que se viera más profesional, con un estilo
+  parecido a la imagen de los partidos. Era un panel oscuro sobre la cancha clara, y
+  ahora es la cancha de noche: la end zone de la izquierda baja por toda la tabla,
+  partida en el color de cada equipo con su lugar y su casco, y las end zones de
+  arriba llevan al líder. Dice lo mismo que antes, con todas las columnas y marcas,
+  y se lee mejor: en la tabla de 19 equipos los renglones pasaron de 41 a 50 px y las
+  cifras de 17 a 25.
+
+  **Lo que se movió:** la cancha, las end zones, los cascos y la letra salieron de
+  `matchShareCard.js` a `utils/shareCardField.js`, para que las dos imágenes sean la
+  misma pieza. Las columnas ya no llevan un ancho fijo en `IMAGE_COLUMNS`: se miden
+  contra los datos. `useTeamPaint.js` estrena `pinturaDelLogo`, la misma lectura sin
+  React. `GET /leagues/branches/:id/standings` trae `brand_color` en cada renglón,
+  y la página le pasa a la imagen la liga y el año.
+
+  **Verificación:** ver `docs/ESTADO.md`. Las decisiones están en el README, "La
+  imagen para compartir" de "Tabla de posiciones". La de un partido no cambió: su
+  código viejo y el nuevo, con los mismos datos, dieron los mismos pixeles en 17 de 18
+  casos, y en el otro unas decenas de bytes dentro de un casco, la zona en que el
+  código viejo difiere contra sí mismo cuando Chrome decodifica un logo recién bajado.
+
 - **"Generar imagen" de un partido, igual a su portada (2026-11-04).** Lo pidió
   Alfredo: la página ya era la cancha de noche con los cascos frente a frente, y
   la imagen seguía siendo la de antes, con la cancha clara y los logos en círculo.

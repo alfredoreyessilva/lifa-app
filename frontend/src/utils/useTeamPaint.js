@@ -43,6 +43,26 @@ function leer(url) {
   return promesa;
 }
 
+// De lo leído a la pintura: `teams.brand_color` manda sobre el color del logo.
+function pintar(leido, brandColor) {
+  const color = esHex(brandColor) ? brandColor.trim() : leido?.color;
+  return {
+    ...(color ? pinturaDeZona(color) : PINTURA_NEUTRA),
+    forma: leido?.forma ?? 'disco',
+    listo: leido !== null,
+  };
+}
+
+// La misma pintura, sin React, para la imagen de la tabla: ahí son muchos equipos
+// a la vez y dentro de una función. El logo que no llega en `ms` se queda en verde
+// y en disco, igual que el que no se pudo leer: una imagen con un color de menos es
+// mejor que un botón atorado en "Generando imagen…".
+export function pinturaDelLogo(logoUrl, brandColor, ms) {
+  const tarde = new Promise((resolve) => { setTimeout(() => resolve(SIN_LEER), ms); });
+  return Promise.race([logoUrl ? leer(logoUrl) : SIN_LEER, tarde])
+    .then((leido) => pintar(leido, brandColor));
+}
+
 // `listo` es para que el casco no salte de forma al terminar de leerse: se
 // enseña hasta que se sabe cómo va.
 export function useTeamPaint(logoUrl, brandColor) {
@@ -59,10 +79,5 @@ export function useTeamPaint(logoUrl, brandColor) {
     return () => { vigente = false; };
   }, [logoUrl]);
 
-  const color = esHex(brandColor) ? brandColor.trim() : leido?.color;
-  return {
-    ...(color ? pinturaDeZona(color) : PINTURA_NEUTRA),
-    forma: leido?.forma ?? 'disco',
-    listo: leido !== null,
-  };
+  return pintar(leido, brandColor);
 }

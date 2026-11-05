@@ -30,8 +30,8 @@ const LIVE = '#ff5252';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
-// Pill amarilla con el nombre del bracket ("CONFERENCIA NACIONAL"), igual a la
-// de la imagen de la tabla. Devuelve su alto.
+// Pill amarilla con el nombre del bracket ("CONFERENCIA NACIONAL"). Devuelve su
+// alto.
 function drawPill(ctx, text, cx, top, maxWidth, theme) {
   ctx.save();
   ctx.font = `700 26px ${theme.fontEyebrow}`;
@@ -338,8 +338,7 @@ export async function generateBracketCard(bracket, formatKey, { header = {}, dat
   const statusSize = Math.round(clamp(boxH * 0.1, 14, 19));
   const tiedIds = new Set((bracket.seeds || []).filter((s) => s.tied).map((s) => s.team_id));
 
-  // Panel opaco, como el de la tabla: translúcido, las rayas de la cancha
-  // cruzarían las cajas.
+  // Panel opaco: translúcido, las rayas de la cancha cruzarían las cajas.
   roundRect(ctx, panelX, panelY, panelW, panelH, 24);
   ctx.fillStyle = theme.fieldDeep;
   ctx.fill();

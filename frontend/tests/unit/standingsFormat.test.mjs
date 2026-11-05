@@ -11,7 +11,10 @@ import assert from 'node:assert/strict';
 import {
   pct, recordLabel, rowQualifies, scopeLabel, cutoffLabel,
   imageColumns, cellText, tableMarks, goalAverageLabel, showsGoalAverage,
+  tableDetail, tableLeader, splitName,
 } from '../../src/utils/standingsFormat.js';
+import { PINTURA_NEUTRA, pinturaDeZona } from '../../src/utils/teamPaint.js';
+import { pinturaDelLogo } from '../../src/utils/useTeamPaint.js';
 
 const fila = (extra = {}) => ({
   team_id: 1, rank: 1, name: 'BORREGOS TEC MTY',
@@ -150,4 +153,67 @@ test('la leyenda solo explica las marcas que la tabla trae', () => {
 
   const empatada = { qualifying_count: 0, rows: [fila({ unresolved_tie: true }), fila({ team_id: 2, unresolved_tie: true })] };
   assert.equal(tableMarks(empatada).unresolvedTie, true);
+});
+
+test('el detalle de la imagen nombra la tabla y la categoría, como la portada de un partido', () => {
+  const contexto = 'COLEGIAL UNIVERSITARIO · Varonil';
+  assert.equal(
+    tableDetail({ level: 'conference', scope_name: 'NACIONAL' }, contexto),
+    'Conferencia NACIONAL, COLEGIAL UNIVERSITARIO Varonil',
+  );
+  assert.equal(
+    tableDetail({ level: 'group', scope_name: 'GRUPO A' }, contexto),
+    'GRUPO A, COLEGIAL UNIVERSITARIO Varonil',
+  );
+  // La tabla general no lleva nombre, y una categoría sin rama no lleva separador.
+  assert.equal(tableDetail({ level: 'branch', scope_name: null }, 'PROFESIONAL · Varonil'), 'PROFESIONAL Varonil');
+  assert.equal(tableDetail({ level: 'branch', scope_name: null }, 'PROFESIONAL'), 'PROFESIONAL');
+  assert.equal(tableDetail({ level: 'conference', scope_name: 'NACIONAL' }, null), 'Conferencia NACIONAL');
+  assert.equal(tableDetail({ level: 'branch', scope_name: null }, null), '');
+});
+
+test('la cancha es del primer lugar solo si de verdad hay primer lugar', () => {
+  const lider = fila({ rank: 1 });
+  assert.equal(tableLeader({ rows: [lider, fila({ team_id: 2, rank: 2 })] }), lider);
+
+  // Si nadie ha jugado, el primero de la lista solo es el primero del abecedario.
+  assert.equal(tableLeader({ rows: [fila({ played: 0 }), fila({ team_id: 2, played: 0 })] }), null);
+  // Un empate que el reglamento no resolvió no tiene ganador en la portada.
+  assert.equal(tableLeader({ rows: [fila({ unresolved_tie: true }), fila({ team_id: 2, unresolved_tie: true })] }), null);
+  // Un empate más abajo no le quita el lugar al líder.
+  const conEmpateAbajo = { rows: [lider, fila({ team_id: 2, rank: 2, unresolved_tie: true })] };
+  assert.equal(tableLeader(conEmpateAbajo), lider);
+  assert.equal(tableLeader({ rows: [] }), null);
+  assert.equal(tableLeader({}), null);
+});
+
+test('un nombre largo se parte en dos líneas parejas', () => {
+  const mide = (texto) => texto.length;
+  assert.deepEqual(splitName('PUMAS FES ACATLÁN UNAM', mide), ['PUMAS FES', 'ACATLÁN UNAM']);
+  assert.deepEqual(splitName('POTROS SALVAJES UAEM', mide), ['POTROS', 'SALVAJES UAEM']);
+  assert.deepEqual(splitName('LIEBRES ITCJ', mide), ['LIEBRES', 'ITCJ']);
+  // Una sola palabra no se puede partir.
+  assert.deepEqual(splitName('CAUDILLOS', mide), ['CAUDILLOS']);
+});
+
+test('lo que va pegado a la última línea cuenta al partir el nombre', () => {
+  const mide = (texto) => texto.length;
+  assert.deepEqual(splitName('BÚHOS GUINDA IPN', mide), ['BÚHOS', 'GUINDA IPN']);
+  // Con la pill de comodín, la línea de abajo tiene que ser la corta.
+  assert.deepEqual(splitName('BÚHOS GUINDA IPN', mide, 10), ['BÚHOS GUINDA', 'IPN']);
+  // "LOBOS UADEC" solo se parte de una manera, y ahí no cabe: la pill va sola abajo.
+  assert.deepEqual(splitName('LOBOS UADEC', mide, 10), ['LOBOS UADEC', '']);
+  assert.deepEqual(splitName('CAUDILLOS', mide, 10), ['CAUDILLOS', '']);
+});
+
+test('el color capturado del equipo manda sobre el del logo, también en la imagen', async () => {
+  const sinLogo = await pinturaDelLogo(null, '#08b0e7', 50);
+  assert.equal(sinLogo.fondo, pinturaDeZona('#08b0e7').fondo);
+  assert.equal(sinLogo.forma, 'disco');
+});
+
+test('sin logo ni color, el renglón se queda en el verde de la cancha', async () => {
+  const pintura = await pinturaDelLogo(null, null, 50);
+  assert.equal(pintura.fondo, PINTURA_NEUTRA.fondo);
+  assert.equal(pintura.tinta, PINTURA_NEUTRA.tinta);
 });

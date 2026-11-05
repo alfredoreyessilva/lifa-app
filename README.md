@@ -819,6 +819,8 @@ lifa-app/
                               de cada casco. Pura: no calcula ningún récord
         matchShareCard.js     "Generar imagen" de un partido: su portada, dibujada
                               en canvas (ver "La imagen para compartir")
+        shareCardField.js     La cancha de noche que comparten la imagen de un
+                              partido y la de la tabla: pasto, end zones, cascos
         offlineQueue.js       La REGLA de la cola sin señal: qué se fusiona,
                               cuándo se reintenta, qué se enseña. Pura — la
                               cubre el CI (ver "Capturar sin señal")
@@ -1175,8 +1177,9 @@ que llevaba.
   funciones (`centroDelPartido`, `detalleDelPartido`, `sedeDelPartido`,
   `lineaDelEquipo`, `filasCaraACara`), y el color y la forma de cada logo, de la
   pintura que la página ya leyó (`useTeamPaint`). Lo único repetido son los
-  estilos de `.mh`, que en canvas se escriben a mano: si cambian en `styles.css`,
-  se cambian también ahí.
+  estilos de `.mh`, que en canvas se escriben a mano en `utils/shareCardField.js`:
+  si cambian en `styles.css`, se cambian también ahí, y con ellos cambia la imagen
+  de la tabla, que se dibuja sobre la misma cancha.
 - **Arriba va el logo de la liga de un lado y, del otro, el balón amarillo de
   CFBAMX**, como en las demás imágenes. Aquí va solo, sin el recuadro verde del
   favicon, que sobre la cancha de noche sería un parche, y discreto: del alto del
@@ -3261,14 +3264,10 @@ es ruido, y en el teléfono cada columna cuesta.
   y de grupo ya se deslizaban de lado sin AVG (351 a 393 px en pantallas de
   271 a 323), y con AVG llegan a 398–447. Ese problema es PD-36, no de esta
   columna.
-- **En la imagen para compartir cabe sin recortar a nadie**, pero para eso PF,
-  PC y DIF se angostaron 6 px cada una. Con AVG a 96 px, "PUMAS FES ACATLÁN
-  UNAM" salía recortado en el grupo Centro: a la letra mínima de su renglón
-  mide 218 px y le quedaban 194. Medido en Oswald a 30 px, "108" ocupa 43 de
-  sus 62 y "+131" 51 de sus 72; AVG quedó en 80 para su "10.357" de 76.
-  Revisado con los datos de ONEFA en publicación y en historia: grupo Centro,
-  conferencia Nacional (18 renglones, con "10.357" y "11.000") y 14 Grandes,
-  todos con el nombre completo.
+- **En la imagen para compartir cabe sin recortar a nadie.** Hasta el 2026-11-05
+  se hizo a mano, angostando PF, PC y DIF 6 px cada una; ahora cada columna mide lo
+  que ocupa su cifra más ancha (ver "La imagen para compartir" en esta sección), y
+  un "10.357" ya no le cuesta nada a una tabla que no lo trae.
 
 ### Dos criterios de "rivales en común", y por qué no es un parámetro
 
@@ -3465,7 +3464,8 @@ frontend/src/components/
 frontend/src/utils/
   standingsFormat.js                  Cómo se escribe cada cifra y qué columnas lleva la
                                       imagen. PURO: lo comparten la tabla y la imagen.
-  standingsShareCard.js               El dibujo de la imagen (canvas 2D, en el navegador).
+  standingsShareCard.js               El dibujo de la imagen (canvas 2D, en el navegador),
+                                      sobre la cancha de shareCardField.js.
   bracketFormat.js                    Qué va en cada lado del espejo y cómo se escribe
                                       cada cruce. PURO: lo comparten la página y la imagen.
   bracketShareCard.js                 El dibujo de la imagen del bracket.
@@ -3586,39 +3586,71 @@ mismo código que se estaba probando:
   guarda por regla, pero en el panel todavía no se puede elegir: solo lo pone
   el Modo ONEFA, y sin él se usa % de ganados → diferencia → anotados.
 
-### La imagen para compartir (2026-10-12)
+### La imagen para compartir
 
 Cada tabla de la página pública del torneo tiene su botón **Generar imagen**:
-la dibuja en el navegador con canvas 2D —igual que las imágenes del partido,
-del jugador y del ranking de predicciones—, en publicación (1080×1350) y en
-historia (1080×1920), y la comparte o la descarga. No toca el backend: dibuja
-el mismo `GET /leagues/branches/:id/standings` que pinta la pestaña, sin
-recalcular nada.
+la dibuja en el navegador con canvas 2D, en publicación (1080×1350) y en historia
+(1080×1920), y la comparte o la descarga. No toca el backend: dibuja el mismo
+`GET /leagues/branches/:id/standings` que pinta la pestaña, sin recalcular nada.
 
-- **Una imagen por tabla, no una por rama.** En una rama por conferencias cada
-  conferencia lleva su botón: las dos de ONEFA juntas son 32 renglones, que en
-  un celular no se leen. Y es como las publican las ligas.
+Desde el 2026-11-05 es la misma pieza que la imagen de un partido: la cancha de
+noche, las end zones pintadas, los cascos y la letra de su portada, que viven en
+`utils/shareCardField.js`. Antes fue un panel oscuro sobre la cancha clara, y ya no
+se parecía a lo que circula de cada partido.
+
+- **La tabla es parte de la cancha, no un panel encima.** La end zone de la
+  izquierda baja por toda la tabla, partida en un bloque del color de cada equipo
+  con su lugar y su casco, y la línea de gol sigue de corrido. Las franjas se pintan
+  una sola vez sobre todos los colores, para que se lea como una sola end zone. Es
+  lo que hace que esta imagen se reconozca sin leerla.
+- **La cancha de arriba es del líder**, como un estadio se pinta con el nombre de
+  su equipo en las dos end zones. Se midió el color de la liga, que sería lo
+  obvio, y no sirve: LFA, ONEFA y PFL salen verdes, y una end zone verde sobre pasto
+  verde pierde justo lo que hace fuerte a la portada. Si nadie ha jugado, o el primer
+  lugar es un empate sin resolver, no hay a quién pintarle la cancha (`tableLeader()`):
+  es de la liga, con su color y su nombre.
+- **Lo que sobra de cancha va a media cancha.** En una tabla corta entra el casco
+  del líder con su récord, con la misma línea que lleva debajo en la página de un
+  partido; sin líder, el logo de la liga, que es lo que un estadio pinta ahí. Si no
+  le alcanza para verse, no va: en publicación, de 9 equipos para arriba toda la
+  imagen es de la tabla.
+- **El alto del renglón sale de cuántos equipos hay, no de cuánto cabe.** El ancho
+  es el mismo en los dos formatos, así que en la historia un renglón más alto no
+  lleva letra más grande, solo aire; la primera versión lo llenó todo y las cifras
+  grandes le quitaron lugar a los nombres. Lo que sobra es mejor cancha.
+- **Cada columna mide lo que ocupa su cifra más ancha**, contra los datos de esa
+  tabla, en vez de un ancho fijo calibrado para la peor. Con eso PUMAS FES ACATLÁN
+  UNAM cabe en una sola línea entre las diez columnas de la Nacional, con cifras de
+  25 px y nombres de 29; la versión anterior traía 17 y 20 en renglones de 41 px.
+- **Las cifras ceden antes que el nombre.** Bajan de letra hasta que el nombre más
+  largo se lee, y desde 66 px de renglón un nombre puede ir en dos líneas parejas
+  (`splitName()`): "PUMAS FES / ACATLÁN UNAM". La pill de comodín cuenta al partir, y
+  si no cabe junto al nombre va sola abajo. Solo el que ni así cabe se recorta con
+  "…".
 - **Lleva todas las columnas de la tabla en pantalla**, en el mismo orden: JJ,
   G, P, E si hubo empates, PTS o %, el récord dentro de la conferencia o el
   grupo, PF, PC, DIF, AVG si el reglamento de la tabla usa el goal average, y
-  racha. Ninguna se suelta para darle aire al nombre. La
-  primera versión quitaba PF y PC en las tablas de conferencia, como hace el
-  teléfono, y no hacía falta: en 1080 de ancho el nombre más largo de hoy
-  (PUMAS FES ACATLÁN UNAM) cabe completo con todas, también en la historia.
-  Cuando falta espacio es el nombre el que baja su letra, hasta el 60 % de la
-  del renglón, y solo el que ni así cabe se recorta con "…". La regla es
-  `imageColumns()`, con sus pruebas.
-- **Lo que la tabla marca, la imagen también**: la barra de los que clasifican,
-  la pill de comodín, el asterisco del empate que el reglamento no resolvió y el
-  renglón atenuado del que no ha jugado. Callarlo haría pasar por resuelto un
-  empate que no lo está —la misma razón por la que la tabla lo marca—, y la
-  imagen circula sin la página al lado. La leyenda explica solo las marcas que
-  aparecen.
+  racha. Ninguna se suelta para darle aire al nombre. La regla es
+  `imageColumns()`, con sus pruebas. Las cifras van alineadas a la derecha, para
+  que unidades y decenas caigan unas sobre otras; el récord y la racha, centrados.
+- **Una imagen por tabla, no una por rama.** En una rama por conferencias cada
+  conferencia lleva su botón: las dos de ONEFA juntas son 33 renglones, que en
+  un celular no se leen. Y es como las publican las ligas.
+- **Lo que la tabla marca, la imagen también**: la línea de cal va en amarillo en
+  los renglones de los que clasifican, una raya amarilla cruza la tabla en el corte
+  —la que en la tele marca hasta dónde hay que llegar—, y siguen la pill de comodín,
+  el asterisco del empate que el reglamento no resolvió y el renglón atenuado del que
+  no ha jugado. Callarlo haría pasar por resuelto un empate que no lo está —la misma
+  razón por la que la tabla lo marca—, y la imagen circula sin la página al lado. La
+  leyenda explica solo las marcas que aparecen.
 - **Lleva la fecha de corte** ("Al 12 de octubre de 2026"): una tabla sin fecha
   que circula por WhatsApp no dice de qué jornada es.
 - **Nombra la tabla completa**: "Conferencia NACIONAL", "Grupo CENTRO". En la
   página basta "NACIONAL" porque la pestaña de arriba dice "Por conferencia";
   la imagen viaja sin esa pestaña.
+- **El color de cada equipo es el de la página de su partido**: la misma lectura del
+  logo (`pinturaDelLogo`) y `teams.brand_color` manda, por eso la tabla ahora lo trae
+  en cada renglón.
 - **Los escudos se piden a Cloudinary al tamaño en que se pintan**
   (`imagenAjustada`), y el que no llega en 8 s sale con iniciales: una imagen
   con un logo de menos es mejor que un botón atorado en "Generando imagen…".
@@ -3628,19 +3660,24 @@ recalcular nada.
   `StandingsTable.jsx` a `utils/standingsFormat.js`, para que la tabla y la
   imagen no puedan decir cosas distintas.
 
-Lo que encontró verla en el navegador, contra `desarrollo-local`, y no veía
-ninguna prueba:
+Lo que encontró verla en el navegador con las tablas reales de producción, y no
+veía ninguna prueba:
 
-1. Con el panel translúcido del ranking, las rayas de yarda del fondo cruzaban
-   la tabla y se leían como separadores que no coincidían con ningún renglón.
-   El panel de esta imagen es opaco.
-2. La fecha, fuera del panel, caía en la historia justo sobre una raya y se veía
-   tachada. Va en el pie del panel.
-3. En la historia, con renglones altos, las cifras crecían hasta pegar DIF con
-   la racha. La letra crece con el renglón, con tope.
-4. En una prueba con todas las marcas a la vez, la pill de comodín de un equipo
-   le quitaba ancho al nombre de todos y recortaba PUMAS FES ACATLÁN UNAM. Cada
-   renglón descuenta solo lo suyo.
+1. La primera versión de la cancha recortaba "PUMAS FES ACA…" en las historias y en
+   los grupos: las cifras crecían con el renglón sin ver el ancho. De ahí salieron
+   las dos reglas de arriba, la del alto y la de las cifras.
+2. Al partir un nombre sin contar la pill de comodín quedaba "BÚHOS GUI…": la línea
+   de abajo era la larga, y era la que llevaba la pill. Y "LOBOS UADEC", que solo se
+   parte de una manera, seguía recortado hasta que la pill pudo ir sola abajo: eso
+   salió al revisar las 9 tablas públicas, no las 4 de la primera vuelta.
+3. Un casco del color de su propia pintura se perdía, como el dorado de Pumas o el
+   amarillo de Auténticos. Los renglones llevan el doble de sombra que les tocaría
+   por tamaño.
+4. Con una conferencia de nombre larguísimo, la línea debajo del líder se salía de
+   la cancha.
+5. Sin líder quedaba una cancha enorme y vacía, y por eso va el logo de la liga.
+6. Con todas las marcas a la vez, la pill de comodín de un equipo le quitaba ancho
+   al nombre de todos. Cada renglón descuenta solo lo suyo.
 
 **Fuera de esta versión:**
 
@@ -3648,6 +3685,9 @@ ninguna prueba:
   tabla. Si se agrega, va aparte: el primer lugar no siempre es el campeón.
 - **Todas las tablas de un nivel en una sola imagen** (los tres grupos de ONEFA
   juntos).
+- **Las imágenes del bracket y del ranking de predicciones** siguen con la pieza
+  anterior, la cancha clara con panel. Se dejaron afuera porque no se pidieron;
+  cuando se hagan, la cancha ya está en `utils/shareCardField.js`.
 - El botón **Compartir** no se ejercitó en Playwright, porque abre el panel
   nativo del sistema. Es el mismo código que el del ranking, que ya está en
   producción.

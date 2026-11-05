@@ -8,8 +8,8 @@ import { scopeLabel } from '../utils/standingsFormat.js';
 // navegador, dos formatos fijos (publicación / historia), compartir nativo y,
 // si el navegador no puede compartir archivos, descargar.
 //
-// `header` es lo que la tabla no sabe de sí misma: { tournament, context
-// ("categoría · rama"), leagueLogo }.
+// `header` es lo que la tabla no sabe de sí misma: { league, tournament, year,
+// context ("categoría · rama"), leagueLogo }.
 export default function StandingsImageButton({ table, usesPoints, header = {} }) {
   const [status, setStatus] = useState('idle'); // idle | generating | ready | error
   const [previewUrl, setPreviewUrl] = useState(null);

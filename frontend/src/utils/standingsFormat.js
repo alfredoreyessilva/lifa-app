@@ -62,28 +62,23 @@ export function cutoffLabel(date) {
 }
 
 // Las columnas que puede llevar la imagen, en el orden de la tabla en
-// pantalla. `width` es en pixeles de la imagen (1080 de ancho): lo justo para
-// la cifra más ancha con la letra más grande —"1.000", "+131", "10.357", el
-// encabezado "EN CONF."—, para que al nombre del equipo le toque todo lo demás.
-// `highlight` es la cifra que ordena la tabla, la que va resaltada.
-//
-// PF, PC y DIF eran 62, 62 y 72: con AVG (2026-10-25) recortaban a PUMAS FES
-// ACATLÁN UNAM, que a la letra mínima de su renglón mide 218. Medido en Oswald
-// a 30 px, "108" ocupa 43 y "+131" 51, así que se angostaron 6 cada una y AVG
-// quedó en 80 para su "10.357" de 76. README, "La columna AVG".
+// pantalla. `highlight` es la cifra que ordena la tabla, la que va resaltada. Lo
+// ancho de cada una lo mide la imagen contra lo que trae esa tabla
+// (standingsShareCard.js): una tabla de "1.000" y "+131" y una de "10.357" no
+// necesitan lo mismo, y lo que no se ocupa es del nombre del equipo.
 export const IMAGE_COLUMNS = {
-  played: { label: 'JJ', width: 48 },
-  wins:   { label: 'G', width: 48 },
-  losses: { label: 'P', width: 48 },
-  ties:   { label: 'E', width: 48 },
-  points: { label: 'PTS', width: 80, highlight: true },
-  pct:    { label: '%', width: 80, highlight: true },
-  scope:  { label: '', width: 92 },
-  pf:     { label: 'PF', width: 56 },
-  pc:     { label: 'PC', width: 56 },
-  diff:   { label: 'DIF', width: 66 },
-  avg:    { label: 'AVG', width: 80 },
-  streak: { label: 'RACHA', width: 70 },
+  played: { label: 'JJ' },
+  wins:   { label: 'G' },
+  losses: { label: 'P' },
+  ties:   { label: 'E' },
+  points: { label: 'PTS', highlight: true },
+  pct:    { label: '%', highlight: true },
+  scope:  { label: '' },
+  pf:     { label: 'PF' },
+  pc:     { label: 'PC' },
+  diff:   { label: 'DIF' },
+  avg:    { label: 'AVG' },
+  streak: { label: 'RACHA' },
 };
 
 const ORDER = ['played', 'wins', 'losses', 'ties', 'points', 'pct', 'scope', 'pf', 'pc', 'diff', 'avg', 'streak'];
@@ -99,11 +94,12 @@ const SCOPE_HEADER = { conference: 'EN CONF.', group: 'EN GRUPO' };
  * Ninguna se suelta para darle aire al nombre. La primera versión soltaba PF
  * y PC en las tablas de conferencia, como el teléfono, y no hacía falta: en
  * 1080 de ancho caben todas con el nombre más largo de hoy ("PUMAS FES
- * ACATLÁN UNAM"). Es el nombre el que ajusta su letra (standingsShareCard.js).
+ * ACATLÁN UNAM"). Son las cifras y el nombre los que ajustan su letra
+ * (standingsShareCard.js).
  *
  * @param {{level:string, rows:Array}} table
  * @param {boolean} usesPoints
- * @returns {Array<{id:string,label:string,width:number,highlight:boolean}>}
+ * @returns {Array<{id:string,label:string,highlight:boolean}>}
  */
 export function imageColumns(table, usesPoints) {
   const anyTies = table.rows.some((r) => r.ties > 0);
@@ -119,7 +115,6 @@ export function imageColumns(table, usesPoints) {
     .map((id) => ({
       id,
       label: id === 'scope' ? SCOPE_HEADER[table.level] : IMAGE_COLUMNS[id].label,
-      width: IMAGE_COLUMNS[id].width,
       highlight: Boolean(IMAGE_COLUMNS[id].highlight),
     }));
 }
@@ -141,6 +136,48 @@ export function cellText(id, row) {
     case 'streak': return row.streak || '—';
     default:       return '';
   }
+}
+
+// "Conferencia NACIONAL, COLEGIAL UNIVERSITARIO Varonil", con la misma forma que
+// el detalle de la portada de un partido. `context` es "categoría · rama", tal
+// como lo enseña la página del torneo.
+export function tableDetail(table, context) {
+  return [
+    scopeLabel(table.level, table.scope_name),
+    (context || '').split(' · ').join(' ').trim(),
+  ].filter(Boolean).join(', ');
+}
+
+// Quién va primero de verdad: el de la cancha pintada en la imagen. Nadie, si
+// todavía no se juega, y nadie si el primer lugar es un empate que el reglamento
+// no resolvió: la tabla lo marca con asterisco, y la portada no puede coronar a uno
+// de los dos.
+export function tableLeader(table) {
+  const first = table.rows?.[0];
+  return first && first.played > 0 && !first.unresolved_tie ? first : null;
+}
+
+// Un nombre largo en dos líneas parejas: "PUMAS FES / ACATLÁN UNAM", y no "PUMAS
+// FES ACATLÁN / UNAM", que obligaría a la columna a medir casi lo mismo que en una
+// sola. `mide` dice cuánto ocupa un texto con la letra que se va a usar, y `extra`,
+// lo que va pegado a la última línea: la pill de comodín se cuenta al partir, o el
+// nombre que la lleva sería el que no cabe. Con ella también vale dejar el nombre
+// entero arriba y la pill sola abajo: "LOBOS UADEC" solo se parte de una manera, y
+// en esa no le queda lugar.
+export function splitName(name, mide, extra = 0) {
+  const words = name.split(/\s+/).filter(Boolean);
+  const options = words.slice(1).map((_, i) => [words.slice(0, i + 1).join(' '), words.slice(i + 1).join(' ')]);
+  if (extra > 0) options.push([name, '']);
+  let best = [name];
+  let bestWidth = Infinity;
+  for (const pair of options) {
+    const width = Math.max(mide(pair[0]), mide(pair[1]) + extra);
+    if (width < bestWidth) {
+      best = pair;
+      bestWidth = width;
+    }
+  }
+  return best;
 }
 
 // Las marcas que la tabla trae y que la leyenda de la imagen tiene que

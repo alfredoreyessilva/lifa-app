@@ -94,6 +94,9 @@ async function loadTeams(branchId) {
       bt.team_id,
       t.name,
       t.logo_url,
+      -- De qué color va su renglón en la imagen de la tabla: manda sobre el que
+      -- se lee del logo, igual que en la página de un partido.
+      t.brand_color,
       -- El del lado derecho del bracket. Cadena vacía es lo que guarda
       -- "Quitar" y significa lo mismo que NULL (CHANGELOG, 2026-10-04).
       NULLIF(t.away_logo_url, '') AS away_logo_url,

@@ -16,7 +16,8 @@ import { showsGoalAverage } from '../utils/standingsFormat.js';
 // se ve la tabla y ya.
 //
 // `shareImage` enciende el botón "Generar imagen" en cada tabla, y trae lo que
-// la imagen necesita y la tabla no sabe: { tournament, context, leagueLogo }.
+// la imagen necesita y la tabla no sabe: { league, tournament, year, context,
+// leagueLogo }.
 // Lo pasa la página pública del torneo; la vista previa del panel de la liga
 // no, porque ahí la tabla todavía se está configurando.
 

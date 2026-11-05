@@ -165,7 +165,9 @@ export default function TournamentPage() {
   // playoffs"), y solo se pide en una rama que declaró quién clasifica y
   // tiene fases de eliminación directa: a las demás no les cuesta nada.
   const shareHeader = {
+    league: tournament.league_name,
     tournament: tournament.name,
+    year: tournament.year,
     context: infoLabel || null,
     leagueLogo: tournament.league_logo_url || null,
   };
