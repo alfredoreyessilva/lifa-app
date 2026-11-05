@@ -35,7 +35,8 @@ entradas traen el post-mortem del bug que las provocó.
   imagen para compartir" de "Tabla de posiciones". La de un partido no cambió: su
   código viejo y el nuevo, con los mismos datos, dieron los mismos pixeles en 17 de 18
   casos, y en el otro unas decenas de bytes dentro de un casco, la zona en que el
-  código viejo difiere contra sí mismo cuando Chrome decodifica un logo recién bajado.
+  código viejo difiere contra sí mismo cuando Chrome decodifica un logo recién bajado. Desplegada ese día
+  (`9bea038`) y comprobada en el sitio público.
 
 - **"Generar imagen" de un partido, igual a su portada (2026-11-04).** Lo pidió
   Alfredo: la página ya era la cancha de noche con los cascos frente a frente, y
