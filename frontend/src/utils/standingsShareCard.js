@@ -13,7 +13,7 @@
 // por resuelto algo que no lo está, y esa imagen circula sin la página al lado.
 
 import {
-  FORMATS, readTheme, ensureFonts, loadImage, drawBallIcon, drawBackground,
+  FORMATS, readTheme, ensureFonts, loadImage, loadImageWithin, drawBallIcon, drawBackground,
   fitText, roundRect, drawImageContain, ellipsize, initials,
   BRAND_LOGO_SRC, BRAND_LOGO_RATIO,
 } from './shareCardCommon.js';
@@ -32,14 +32,6 @@ const RANK_W = 50;
 const LOGO_MAX = 46;
 const LOGO_GAP = 12;
 const NAME_GAP = 12;
-
-function loadImageWithin(url, ms) {
-  if (!url) return Promise.resolve(null);
-  return Promise.race([
-    loadImage(url),
-    new Promise((resolve) => setTimeout(() => resolve(null), ms)),
-  ]);
-}
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 

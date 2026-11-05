@@ -15,6 +15,21 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **"Generar imagen" de un partido, igual a su portada (2026-11-04).** Lo pidió
+  Alfredo: la página ya era la cancha de noche con los cascos frente a frente, y
+  la imagen seguía siendo la de antes, con la cancha clara y los logos en círculo.
+  Ahora es la misma portada, con las end zones pintadas del color de cada equipo,
+  en publicación y en historia; la historia lleva además "Cara a cara".
+
+  **Lo que se movió:** lo que dice la portada salió de `MatchHero.jsx` y
+  `MatchPage.jsx` a funciones puras de `utils/matchDisplay.js`, para que la página
+  y la imagen no puedan decir cosas distintas. La imagen del partido también
+  estrena la sede de texto libre de la LFA. `loadImageWithin` y `wrapLines`, que
+  repetían la tabla y el bracket, pasaron a `shareCardCommon.js`.
+
+  **Verificación:** ver `docs/ESTADO.md`. Las decisiones están en el README, "La
+  imagen para compartir".
+
 - **La página de un partido, rehecha (2026-11-04).** Lo pidió Alfredo: era una
   tarjeta con botones amarillos sobre tres fichas sueltas, "dispersa y recopilada
   sin orden", y la quería al nivel de un evento deportivo importante. Ahora la

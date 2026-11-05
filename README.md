@@ -817,6 +817,8 @@ lifa-app/
                               en useTeamPaint.js
         matchCompare.js       Los renglones de "Cara a cara" y la línea debajo
                               de cada casco. Pura: no calcula ningún récord
+        matchShareCard.js     "Generar imagen" de un partido: su portada, dibujada
+                              en canvas (ver "La imagen para compartir")
         offlineQueue.js       La REGLA de la cola sin señal: qué se fusiona,
                               cuándo se reintenta, qué se enseña. Pura — la
                               cubre el CI (ver "Capturar sin señal")
@@ -1158,6 +1160,47 @@ una ficha que reservara esos renglones saldría vacía casi siempre:
 - En vivo se enseña el marcador si ya lo capturaron, y el que va abajo no se
   apaga: eso es solo para el perdedor de un partido terminado.
 
+### La imagen para compartir
+
+**Generar imagen** es esta misma portada, en publicación (1080×1350) y en historia
+(1080×1920), dibujada en el navegador de quien la pide con canvas 2D
+(`utils/matchShareCard.js`). Hasta el 2026-11-04 fue otra pieza, con la cancha
+clara y los logos en círculo: lo que circulaba ya no se parecía a la página a la
+que llevaba.
+
+- **El acomodo es el del teléfono:** los cascos lado a lado y, debajo, la hora o
+  el marcador. Una imagen vertical es esa misma pantalla; con la hora en medio,
+  como en la computadora, los cascos saldrían a la mitad del tamaño.
+- **No puede decir otra cosa que la portada.** Los textos salen de las mismas
+  funciones (`centroDelPartido`, `detalleDelPartido`, `sedeDelPartido`,
+  `lineaDelEquipo`, `filasCaraACara`), y el color y la forma de cada logo, de la
+  pintura que la página ya leyó (`useTeamPaint`). Lo único repetido son los
+  estilos de `.mh`, que en canvas se escriben a mano: si cambian en `styles.css`,
+  se cambian también ahí.
+- **Arriba va el logo de la liga de un lado y, del otro, el balón amarillo de
+  CFBAMX**, como en las demás imágenes. Aquí va solo, sin el recuadro verde del
+  favicon, que sobre la cancha de noche sería un parche, y discreto: del alto del
+  texto y un poco apagado, porque esa fila es de la liga.
+- **La cuenta regresiva no va.** Una imagen no corre: "Faltan 2 días" sería falso
+  al día siguiente de publicarla.
+- **Los botones tampoco van.** Se probaron, porque dicen dónde se transmite, y
+  Alfredo los quitó: se veían mal, y en una imagen un botón no se puede tocar. Los
+  links de transmisión y el de la página del partido viajan en el texto que
+  acompaña a la imagen.
+- **La historia lleva además "Cara a cara"**, con todos sus renglones, en el orden
+  de la página. La publicación es solo la portada: esos ocho o nueve renglones se
+  los quitarían a los cascos. Si nadie ha jugado no hay tabla, y la portada ocupa
+  toda la historia.
+- **Una historia deja libres los primeros 96 px**, que es lo que tapa la barra de
+  Instagram.
+- **Lo que sobra se reparte entre los bloques**, y un partido sin sede no le
+  aparta lugar. Siempre sobra: el caso más alto, con nueve renglones de "Cara a
+  cara", un nombre partido en dos y un partido en vivo, sigue cabiendo.
+- **Sale como esté la portada en ese momento.** Si alguien la genera antes de que
+  llegue el contexto, dice "Local" y "Visitante", igual que la página mientras
+  carga. Un logo que no llega en 8 s sale con iniciales, como en la imagen de la
+  tabla: una imagen con un logo de menos es mejor que un botón atorado.
+
 ### Fuera de esta versión
 
 - **Nombres de jugadores.** Los líderes del partido viven en la página
@@ -1166,8 +1209,6 @@ una ficha que reservara esos renglones saldría vacía casi siempre:
 - **Un mapa dentro de la página.** Las sedes guardan un link corto de Google Maps,
   sin coordenadas: embeberlo pide una llave de API o capturar coordenadas.
 - **El clima del partido.** Pide un servicio externo y las mismas coordenadas.
-- **La imagen de "Generar imagen"** conserva su diseño: es otra pieza, y va en una
-  ventana solo para no empujar los botones de la página.
 
 ## Monetización (afiliados de viaje)
 

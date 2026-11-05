@@ -35,6 +35,29 @@ export function ellipsize(ctx, text, maxWidth) {
   return `${t.trimEnd()}…`;
 }
 
+// Parte un nombre en a lo más `maxLines` renglones que quepan en `maxW`. El
+// último se recorta con "…" si ni así cabe.
+export function wrapLines(ctx, text, maxW, maxLines) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let current = '';
+  for (let i = 0; i < words.length; i++) {
+    const probe = current ? `${current} ${words[i]}` : words[i];
+    if (ctx.measureText(probe).width <= maxW || !current) {
+      current = probe;
+    } else {
+      lines.push(current);
+      current = words[i];
+      if (lines.length === maxLines - 1) {
+        current = words.slice(i).join(' ');
+        break;
+      }
+    }
+  }
+  if (current) lines.push(current);
+  return lines.slice(0, maxLines).map((l, i, arr) => (i === arr.length - 1 ? ellipsize(ctx, l, maxW) : l));
+}
+
 // Lee los colores/fuentes reales de styles.css (custom properties) para que
 // la imagen generada nunca se desalinee del branding de la app si cambia.
 export function readTheme() {
@@ -68,10 +91,22 @@ export async function loadImage(url) {
   });
 }
 
+// Un logo que no llega a tiempo sale con iniciales: una imagen con un logo de
+// menos es mejor que un botón atorado en "Generando imagen…".
+export function loadImageWithin(url, ms) {
+  if (!url) return Promise.resolve(null);
+  return Promise.race([
+    loadImage(url),
+    new Promise((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 export async function ensureFonts() {
   const specs = [
     '700 10px Anton',
+    '500 10px Oswald',
     '600 10px Oswald',
+    '500 10px Inter',
     '600 10px Inter',
   ];
   try {
@@ -151,15 +186,18 @@ export function fitText(ctx, text, maxWidth, baseSize, font, minSize = 28) {
 }
 
 // Dibuja el ícono del balón amarillo, replicando public/favicon.svg, para
-// no depender de cargar un archivo SVG externo dentro del canvas.
-export function drawBallIcon(ctx, x, y, size, theme) {
+// no depender de cargar un archivo SVG externo dentro del canvas. `size` es el
+// lado del recuadro verde, aunque se pida sin él: el balón ocupa dos tercios.
+export function drawBallIcon(ctx, x, y, size, theme, { recuadro = true } = {}) {
   ctx.save();
   ctx.translate(x, y);
 
-  const r = size * 0.1875; // 12/64
-  roundRect(ctx, 0, 0, size, size, r);
-  ctx.fillStyle = theme.fieldDeep;
-  ctx.fill();
+  if (recuadro) {
+    const r = size * 0.1875; // 12/64
+    roundRect(ctx, 0, 0, size, size, r);
+    ctx.fillStyle = theme.fieldDeep;
+    ctx.fill();
+  }
 
   const cx = size / 2;
   const cy = size / 2;

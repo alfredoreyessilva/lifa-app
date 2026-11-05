@@ -9,8 +9,8 @@ import { buildMatchShareText } from '../utils/matchDisplay.js';
 // compartir, no una pantalla nueva.
 //
 // v1 a propósito NO tiene: selector de plantilla, subida de foto, ni IA.
-// Un solo template (GAME_PREVIEW), dos formatos fijos (post / story).
-export default function ShareImageButton({ match, dateParts, matchStatus }) {
+// Un solo diseño, la portada de la página, en dos formatos fijos (post / story).
+export default function ShareImageButton({ match, dateParts, matchStatus, pinturas, contexto }) {
   const [status, setStatus] = useState('idle'); // idle | generating | ready | error
   const [previewUrl, setPreviewUrl] = useState(null);
   const [blobByFormat, setBlobByFormat] = useState({});
@@ -21,8 +21,8 @@ export default function ShareImageButton({ match, dateParts, matchStatus }) {
     setStatus('generating');
     try {
       const [postBlob, storyBlob] = await Promise.all([
-        generateMatchCard(match, 'post', dateParts, matchStatus),
-        generateMatchCard(match, 'story', dateParts, matchStatus),
+        generateMatchCard(match, 'post', dateParts, matchStatus, pinturas, contexto),
+        generateMatchCard(match, 'story', dateParts, matchStatus, pinturas, contexto),
       ]);
       const blobs = { post: postBlob, story: storyBlob };
       setBlobByFormat(blobs);

@@ -7,7 +7,10 @@ import assert from 'node:assert/strict';
 import {
   PINTURA_NEUTRA, contraste, esHex, leerLogo, pinturaDeZona, tintaSobre,
 } from '../../src/utils/teamPaint.js';
-import { cuentaRegresiva, fechaLarga, partirHora, plataformaDe, rondaDelPartido } from '../../src/utils/matchDisplay.js';
+import {
+  centroDelPartido, cuentaRegresiva, detalleDelPartido, fechaLarga, partirHora,
+  plataformaDe, rondaDelPartido, sedeDelPartido, torneoDelPartido,
+} from '../../src/utils/matchDisplay.js';
 import { filasCaraACara, lineaDelEquipo, ordinal, rachaLabel } from '../../src/utils/matchCompare.js';
 
 // Un cuadro de lado × lado con pixeles [r, g, b, a].
@@ -130,6 +133,56 @@ test('plataformaDe: nombra las conocidas y deja el dominio de las demás', () =>
   assert.equal(plataformaDe('https://www.eventbrite.com.mx/e/1'), 'Eventbrite');
   assert.equal(plataformaDe('https://live.tec.mx/x'), 'live.tec.mx');
   assert.equal(plataformaDe('no es un link'), 'link');
+});
+
+// Lo que sigue lo comparten la portada y la imagen para compartir.
+test('detalleDelPartido: la conferencia, y la categoría con su rama', () => {
+  const partido = { conference_name: '14 GRANDES', category_name: 'COLEGIAL UNIVERSITARIO', branch_name: 'Varonil' };
+  assert.equal(detalleDelPartido(partido), '14 GRANDES, COLEGIAL UNIVERSITARIO Varonil');
+  assert.equal(detalleDelPartido({ category_name: 'PROFESIONAL' }), 'PROFESIONAL');
+  assert.equal(detalleDelPartido({}), '');
+});
+
+test('torneoDelPartido: el año solo si lo hay', () => {
+  assert.equal(torneoDelPartido({ tournament_name: 'LIGA MAYOR', tournament_year: 2026 }), 'LIGA MAYOR 2026');
+  assert.equal(torneoDelPartido({ tournament_name: 'TAZÓN' }), 'TAZÓN');
+  assert.equal(torneoDelPartido({}), '');
+});
+
+test('sedeDelPartido: sin sede registrada, el texto libre del partido', () => {
+  assert.equal(sedeDelPartido({ venue_name: 'WILFRIDO MASSIEU', venue_city: 'CDMX', venue: 'otra' }), 'WILFRIDO MASSIEU, CDMX');
+  assert.equal(sedeDelPartido({ venue: 'ESTADIO OLÍMPICO UACH' }), 'ESTADIO OLÍMPICO UACH');
+  assert.equal(sedeDelPartido({}), '');
+});
+
+const conFecha = {
+  match_date: '2026-11-07T18:00:00.000Z',
+  timezone: 'America/Mexico_City',
+  home_score: null,
+  away_score: null,
+};
+const partesConFecha = { time: '12:00 p.m.', tzLabel: 'Hora Centro MX', porDefinir: false };
+
+test('centroDelPartido: antes de jugarse es la hora', () => {
+  const centro = centroDelPartido(conFecha, 'scheduled', partesConFecha);
+  assert.equal(centro.momento, 'hora');
+  assert.equal(centro.cifra, '12:00');
+  assert.equal(centro.sufijo, 'p.m.');
+  assert.equal(centro.zona, 'Hora Centro MX');
+  assert.match(centro.fecha, /^Sábado 7 de noviembre/);
+});
+
+test('centroDelPartido: sin fecha lo dice, en vez de una hora inventada', () => {
+  const centro = centroDelPartido({ ...conFecha, match_date: null }, 'scheduled', { porDefinir: true });
+  assert.deepEqual(centro, { momento: 'porDefinir', fecha: 'Fecha por definir' });
+});
+
+test('centroDelPartido: en vivo y al terminar dice si ya hay marcador, y un 0 es marcador', () => {
+  assert.equal(centroDelPartido(conFecha, 'live', partesConFecha).hayMarcador, false);
+  assert.equal(centroDelPartido(conFecha, 'finished', partesConFecha).hayMarcador, false);
+  const terminado = centroDelPartido({ ...conFecha, home_score: 21, away_score: 0 }, 'finished', partesConFecha);
+  assert.equal(terminado.momento, 'finished');
+  assert.equal(terminado.hayMarcador, true);
 });
 
 const equipo = (extra = {}) => ({

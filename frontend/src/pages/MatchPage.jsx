@@ -14,7 +14,7 @@ import MatchWeek from '../components/MatchWeek.jsx';
 import MatchTeamCard from '../components/MatchTeamCard.jsx';
 import { IconoBoleto, IconoCompartir, IconoEditar, IconoEstadisticas, IconoVer } from '../components/MatchIcons.jsx';
 import { getMatchStatus } from '../utils/matchStatus.js';
-import { getMatchParts, plataformaDe } from '../utils/matchDisplay.js';
+import { getMatchParts, plataformaDe, sedeDelPartido } from '../utils/matchDisplay.js';
 import { shareLink } from '../utils/share.js';
 import { useTeamPaint } from '../utils/useTeamPaint.js';
 import ShareImageButton from '../components/ShareImageButton.jsx';
@@ -234,7 +234,7 @@ export default function MatchPage() {
     ...(statsUrl ? [{ key: 'estadisticas', to: statsUrl, icono: <IconoEstadisticas />, texto: 'Estadísticas' }] : []),
   ];
 
-  const venueLabel = [match.venue_name || match.venue, match.venue_city].filter(Boolean).join(', ');
+  const venueLabel = sedeDelPartido(match);
   const venueUrl = esLink(match.venue_address) ? match.venue_address : null;
 
   const hayEquipos = match.home_team_details || match.away_team_details;
@@ -293,7 +293,7 @@ export default function MatchPage() {
               <IconoCompartir />
               {shareState === 'copied' ? 'Link copiado' : isSharing ? 'Compartiendo…' : 'Compartir'}
             </button>
-            <ShareImageButton match={match} dateParts={parts} matchStatus={status} />
+            <ShareImageButton match={match} dateParts={parts} matchStatus={status} pinturas={pinturas} contexto={contexto} />
             {canEditMatch && (
               <button type="button" className="btn btn-outline btn-sm mp-tools-end" onClick={openEdit}>
                 <IconoEditar /> Editar partido

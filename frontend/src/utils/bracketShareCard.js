@@ -13,8 +13,8 @@
 // (los que no, salen con iniciales).
 
 import {
-  FORMATS, readTheme, ensureFonts, loadImage, drawBallIcon, drawBackground,
-  fitText, roundRect, drawImageContain, ellipsize, initials,
+  FORMATS, readTheme, ensureFonts, loadImage, loadImageWithin, drawBallIcon, drawBackground,
+  fitText, roundRect, drawImageContain, ellipsize, initials, wrapLines,
   BRAND_LOGO_SRC, BRAND_LOGO_RATIO,
 } from './shareCardCommon.js';
 import { imagenAjustada } from './imagenes.js';
@@ -29,14 +29,6 @@ const COL_GAP = 10;
 const LIVE = '#ff5252';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-
-function loadImageWithin(url, ms) {
-  if (!url) return Promise.resolve(null);
-  return Promise.race([
-    loadImage(url),
-    new Promise((resolve) => setTimeout(() => resolve(null), ms)),
-  ]);
-}
 
 // Pill amarilla con el nombre del bracket ("CONFERENCIA NACIONAL"), igual a la
 // de la imagen de la tabla. Devuelve su alto.
@@ -93,29 +85,6 @@ function drawHeader(ctx, w, h, theme, header, bracket, cornerEdge) {
     y += drawPill(ctx, scope, cx, y, w * 0.8, theme);
   }
   return y + 24;
-}
-
-// Parte un nombre en a lo más `maxLines` renglones que quepan en `maxW`. El
-// último se recorta con "…" si ni así cabe.
-function wrapLines(ctx, text, maxW, maxLines) {
-  const words = String(text || '').split(/\s+/).filter(Boolean);
-  const lines = [];
-  let current = '';
-  for (let i = 0; i < words.length; i++) {
-    const probe = current ? `${current} ${words[i]}` : words[i];
-    if (ctx.measureText(probe).width <= maxW || !current) {
-      current = probe;
-    } else {
-      lines.push(current);
-      current = words[i];
-      if (lines.length === maxLines - 1) {
-        current = words.slice(i).join(' ');
-        break;
-      }
-    }
-  }
-  if (current) lines.push(current);
-  return lines.slice(0, maxLines).map((l, i, arr) => (i === arr.length - 1 ? ellipsize(ctx, l, maxW) : l));
 }
 
 // La letra más grande con la que TODOS los nombres caben en dos renglones sin

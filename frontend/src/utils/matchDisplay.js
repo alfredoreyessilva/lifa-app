@@ -1,6 +1,8 @@
 // Funciones para mostrar fecha/hora, zona horaria, jornadas e iniciales de equipo.
 // Se usan tanto en el calendario (CalendarPage) como en el detalle de partido (MatchPage).
 
+import { matchScopeLabel } from './matchScope.js';
+
 export const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 export const DEFAULT_TZ = 'America/Mexico_City';
 
@@ -197,6 +199,42 @@ export function rondaDelPartido(match) {
 export function partirHora(time) {
   const m = /^(\d{1,2}:\d{2})\s*(.*)$/.exec(time || '');
   return m ? { cifra: m[1], sufijo: m[2] } : { cifra: time || '', sufijo: '' };
+}
+
+// Lo que sigue es lo que dice la portada de un partido. Lo comparten la página
+// (MatchHero.jsx) y su imagen para compartir (matchShareCard.js): la imagen
+// circula sin la página al lado, pero no puede decir otra cosa.
+
+// "14 GRANDES, COLEGIAL UNIVERSITARIO Varonil". Con coma y no con un separador:
+// en un teléfono esta línea se parte, y una rayita o un punto quedarían sueltos
+// al principio del renglón.
+export function detalleDelPartido(match) {
+  return [
+    matchScopeLabel(match),
+    [match.category_name, match.branch_name].filter(Boolean).join(' '),
+  ].filter(Boolean).join(', ');
+}
+
+export function torneoDelPartido(match) {
+  return [match.tournament_name, match.tournament_year].filter(Boolean).join(' ');
+}
+
+// Sin sede registrada se usa el texto libre del partido: es lo único que tiene
+// la LFA.
+export function sedeDelPartido(match) {
+  return [match.venue_name || match.venue, match.venue_city].filter(Boolean).join(', ');
+}
+
+// El centro de la cancha cambia con el momento del partido: antes es la hora,
+// durante y después es el marcador.
+export function centroDelPartido(match, status, parts) {
+  const fecha = fechaLarga(match.match_date, match.timezone || match.league_timezone);
+  const hayMarcador = match.home_score !== null && match.home_score !== undefined
+    && match.away_score !== null && match.away_score !== undefined;
+
+  if (status === 'live' || status === 'finished') return { momento: status, fecha, hayMarcador };
+  if (parts.porDefinir) return { momento: 'porDefinir', fecha: 'Fecha por definir' };
+  return { momento: 'hora', fecha, ...partirHora(parts.time), zona: parts.tzLabel };
 }
 
 // Cuánto falta para que empiece, o null si ya pasó la hora o no hay fecha.

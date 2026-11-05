@@ -2,10 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { imagenAjustada } from '../utils/imagenes.js';
 import {
-  cuentaRegresiva, fechaLarga, initials, partirHora, rondaDelPartido,
+  centroDelPartido, cuentaRegresiva, detalleDelPartido, initials, rondaDelPartido, torneoDelPartido,
 } from '../utils/matchDisplay.js';
 import { lineaDelEquipo } from '../utils/matchCompare.js';
-import { matchScopeLabel } from '../utils/matchScope.js';
 import { IconoAnterior, IconoMapa, IconoSiguiente } from './MatchIcons.jsx';
 
 // La portada de un partido: la cancha de noche, vista de una end zone a la otra.
@@ -90,48 +89,43 @@ function CuentaRegresiva({ fecha }) {
   );
 }
 
-// El centro de la cancha cambia con el momento del partido: antes es la hora,
-// durante y después es el marcador.
 function Centro({ match, status, parts }) {
-  const fecha = fechaLarga(match.match_date, match.timezone || match.league_timezone);
-  const hayMarcador = match.home_score !== null && match.home_score !== undefined
-    && match.away_score !== null && match.away_score !== undefined;
+  const centro = centroDelPartido(match, status, parts);
 
-  if (status === 'live') {
+  if (centro.momento === 'live') {
     return (
       <div className="mh-center">
         <p className="mh-live"><i aria-hidden="true" />En vivo</p>
-        {hayMarcador ? <Marcador match={match} /> : <p className="mh-vs">VS</p>}
-        <p className="mh-date">{fecha}</p>
+        {centro.hayMarcador ? <Marcador match={match} /> : <p className="mh-vs">VS</p>}
+        <p className="mh-date">{centro.fecha}</p>
       </div>
     );
   }
 
-  if (status === 'finished') {
+  if (centro.momento === 'finished') {
     return (
       <div className="mh-center">
         <p className="mh-state">Finalizado</p>
-        {hayMarcador ? <Marcador match={match} terminado /> : <p className="mh-pending">Marcador por capturar</p>}
-        <p className="mh-date">{fecha}</p>
+        {centro.hayMarcador ? <Marcador match={match} terminado /> : <p className="mh-pending">Marcador por capturar</p>}
+        <p className="mh-date">{centro.fecha}</p>
       </div>
     );
   }
 
-  if (parts.porDefinir) {
+  if (centro.momento === 'porDefinir') {
     return (
       <div className="mh-center">
         <p className="mh-vs">VS</p>
-        <p className="mh-date">Fecha por definir</p>
+        <p className="mh-date">{centro.fecha}</p>
       </div>
     );
   }
 
-  const { cifra, sufijo } = partirHora(parts.time);
   return (
     <div className="mh-center">
-      <p className="mh-date">{fecha}</p>
-      <p className="mh-clock">{cifra}{sufijo && <small> {sufijo}</small>}</p>
-      <p className="mh-tz">{parts.tzLabel}</p>
+      <p className="mh-date">{centro.fecha}</p>
+      <p className="mh-clock">{centro.cifra}{centro.sufijo && <small> {centro.sufijo}</small>}</p>
+      <p className="mh-tz">{centro.zona}</p>
       <CuentaRegresiva fecha={match.match_date} />
     </div>
   );
@@ -142,14 +136,9 @@ export default function MatchHero({
   prevId, nextId, onPrev, onNext, onTouchStart, onTouchEnd, children,
 }) {
   const ronda = rondaDelPartido(match);
-  // Con coma y no con un separador: en un teléfono esta línea se parte, y una
-  // rayita o un punto quedarían sueltos al principio del renglón.
-  const detalle = [
-    matchScopeLabel(match),
-    [match.category_name, match.branch_name].filter(Boolean).join(' '),
-  ].filter(Boolean).join(', ');
+  const detalle = detalleDelPartido(match);
   const eliminatoria = match.phase_type === 'single_elimination';
-  const torneo = [match.tournament_name, match.tournament_year].filter(Boolean).join(' ');
+  const torneo = torneoDelPartido(match);
 
   return (
     <header
