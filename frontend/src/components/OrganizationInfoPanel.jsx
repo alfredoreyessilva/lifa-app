@@ -11,11 +11,8 @@ import { createPortal } from 'react-dom';
 // clínica o una marca. Quien la abre ya trae los datos (GET /organizations,
 // GET /broadcasts/match/:id, con CAMPOS_DE_FICHA del backend): no pide nada.
 //
-// Va en un portal a document.body, como Modal.jsx, para no quedar anidada en la
-// tarjeta del partido. Pero los eventos de React suben por el árbol de
-// componentes aunque haya portal, y en el partido deslizar el dedo cambia de
-// partido (onTouchStart/onTouchEnd de .match-nav, en MatchPage): por eso la
-// ficha corta los toques.
+// Va en un portal a document.body, como Modal.jsx, para que ningún contenedor
+// de quien la abre la recorte.
 export default function OrganizationInfoPanel({ org, onClose }) {
   useEffect(() => {
     function onKey(e) {
@@ -32,7 +29,7 @@ export default function OrganizationInfoPanel({ org, onClose }) {
   const stop = (e) => e.stopPropagation();
 
   return createPortal(
-    <div className="modal-backdrop" onClick={onClose} onTouchStart={stop} onTouchEnd={stop}>
+    <div className="modal-backdrop" onClick={onClose}>
       <div className="team-profile-modal" onClick={stop}>
 
         {/* BANNER — su portada, o el degradado si no subió una */}

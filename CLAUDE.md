@@ -27,10 +27,11 @@ frontend/public/sw.js   Service worker: push + que la app abra SIN SEÑAL.
 ```
 
 Dónde buscar antes de preguntar: **README** tiene una sección por dominio
-(Cobranza · Cuotas del club · Tabla de posiciones · Predicciones y quinielas ·
-Roster · Roster público y pase de lista · Estadísticas por jugada · Capturar
-sin señal · Equipos independientes · Playbook del equipo · Organizaciones:
-publicar y verificar · Transmisiones · Tiendas y bot de WhatsApp · Seguridad),
+(La página de un partido · Cobranza · Cuotas del club · Tabla de posiciones ·
+Predicciones y quinielas · Roster · Roster público y pase de lista ·
+Estadísticas por jugada · Capturar sin señal · Equipos independientes · Playbook
+del equipo · Organizaciones: publicar y verificar · Transmisiones · Tiendas y bot
+de WhatsApp · Seguridad),
 cada una con el porqué de sus decisiones. **`docs/ESTADO.md`** dice
 qué producto está a qué nivel, y **`docs/PENDIENTES.md`** es la lista única de lo
 que falta, con prioridad.

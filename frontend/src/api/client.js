@@ -107,6 +107,10 @@ export const api = {
   getMatches: (categoryId) => request(`/leagues/categories/${categoryId}/matches`),
   getTournamentPublic: (tournamentId) => request(`/leagues/tournaments/${tournamentId}/public`),
   getMatch: (matchId) => request(`/leagues/matches/${matchId}`),
+  // Lo que rodea a un partido: cómo llegó cada equipo y qué más se juega esa
+  // jornada. Aparte del partido porque calcula tablas (README, "La página de un
+  // partido").
+  getMatchContext: (matchId) => request(`/leagues/matches/${matchId}/context`),
 
   // Crear / editar liga
   createLeague: (payload, token) => request('/leagues', { method: 'POST', body: payload, token }),

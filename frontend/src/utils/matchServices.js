@@ -45,7 +45,7 @@ function addDaysToISODate(isoDate, days) {
 
 // Arma el link de búsqueda de hotel para un partido, o null si falta algún
 // dato necesario (match.venue_city todavía no capturado, o fecha inválida).
-// MatchPage.jsx debe ocultar el botón por completo cuando esto regresa null
+// MatchVenue.jsx oculta el botón por completo cuando esto regresa null
 // — nunca mostrar un link genérico o adivinado.
 export function buildHotelSearchUrl(match) {
   if (!match?.venue_city || !match?.match_date) return null;

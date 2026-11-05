@@ -7,7 +7,9 @@ import { isValidTimezone } from '../utils/timezones.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { MEXICO_STATES } from '../utils/mexicoStates.js';
 import { MATCH_SCOPE_JOINS, MATCH_SCOPE_COLUMNS } from '../utils/matchScope.js';
-import { buildBranchStandings, buildBranchBrackets } from '../utils/branchStandings.js';
+import { MATCH_PHASE_JOINS, MATCH_PHASE_COLUMNS } from '../utils/matchPhase.js';
+import { MATCH_GRADABLE_SQL } from '../utils/scoring.js';
+import { buildBranchStandings, buildBranchBrackets, buildMatchContext } from '../utils/branchStandings.js';
 import { interruptoresDeCategoria, rosterEsPublico, fotoSePublica } from '../utils/rosterVisibility.js';
 import { rosterDelPartidoSql } from '../utils/attendance.js';
 import { HAY_BOX_SCORE_SQL } from '../utils/plays.js';
@@ -119,6 +121,7 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
         'facebook_url', th.facebook_url, 'instagram_url', th.instagram_url,
         'twitter_url', th.twitter_url, 'website_url', th.website_url,
         'is_verified', COALESCE(tho.is_verified, FALSE),
+        'brand_color', th.brand_color,
         'league_id', l.id
       ) END AS home_team_details,
       CASE WHEN ta.id IS NOT NULL THEN json_build_object(
@@ -129,6 +132,7 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
         'facebook_url', ta.facebook_url, 'instagram_url', ta.instagram_url,
         'twitter_url', ta.twitter_url, 'website_url', ta.website_url,
         'is_verified', COALESCE(tao.is_verified, FALSE),
+        'brand_color', ta.brand_color,
         'league_id', l.id
       ) END AS away_team_details,
       v.name        AS venue_name,
@@ -139,8 +143,11 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
       v.contact_phone AS venue_contact_phone,
       v.contact_email AS venue_contact_email,
       ${MATCH_SCOPE_COLUMNS},
+      ${MATCH_PHASE_COLUMNS},
       c.tournament_id AS tournament_id,
-      tr.name       AS tournament_name
+      tr.name       AS tournament_name,
+      tr.year       AS tournament_year,
+      br.name       AS branch_name
     FROM matches m
     LEFT JOIN categories c   ON c.id = m.category_id
     LEFT JOIN leagues l      ON l.id = c.league_id
@@ -162,7 +169,9 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
     LEFT JOIN organizations tao ON tao.id = ta.organization_id
     LEFT JOIN venues v       ON v.id = m.venue_id
     LEFT JOIN tournaments tr ON tr.id = c.tournament_id
+    LEFT JOIN branches br    ON br.id = m.branch_id
     ${MATCH_SCOPE_JOINS}
+    ${MATCH_PHASE_JOINS}
     WHERE m.id = ? AND m.is_draft = FALSE
   `).get(req.params.matchId);
 
@@ -212,6 +221,64 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
   match.next_match_id = neighbors?.next_id ?? null;
 
   res.json(match);
+}));
+
+// Lo que rodea a un partido (README, "La página de un partido"): con qué récord
+// y en qué lugar llegó cada equipo, sus últimos resultados, sus enfrentamientos
+// anteriores y qué más se juega esa jornada.
+//
+// Va aparte de GET /matches/:matchId por la misma razón que la tabla: calcular
+// las tablas de una rama no es gratis, y la página tiene que pintar el partido
+// sin esperarlas. Si esta llamada falla, solo faltan esas secciones.
+//
+// El filtro es el de la tabla (l.is_public): una liga sin publicar no expone su
+// tabla por aquí. El partido se sigue viendo por su link, como siempre, pero
+// sin esto. El 200 vacío es a propósito: no es un error que enseñarle a nadie.
+router.get('/matches/:matchId/context', asyncHandler(async (req, res) => {
+  const matchId = Number(req.params.matchId);
+  if (!Number.isInteger(matchId)) return res.status(404).json({ error: 'Partido no encontrado' });
+
+  const match = await db.prepare(`
+    SELECT m.id, m.branch_id, m.week_label, m.match_date, m.home_team_id, m.away_team_id,
+           l.is_public
+    FROM matches m
+    JOIN categories c ON c.id = m.category_id
+    JOIN leagues l    ON l.id = c.league_id
+    WHERE m.id = ? AND m.is_draft = FALSE
+  `).get(matchId);
+  if (!match) return res.status(404).json({ error: 'Partido no encontrado' });
+
+  const empty = { home: null, away: null, week: [], head_to_head: [] };
+  if (!match.is_public) return res.json(empty);
+
+  const context = match.branch_id ? await buildMatchContext(match) : null;
+
+  // Los enfrentamientos anteriores no se limitan a la rama ni a la liga: un
+  // equipo puede jugar en varias, y un cruce de hace dos temporadas es
+  // justamente lo que esta lista quiere contar. Solo los de ligas públicas.
+  const { home_team_id: homeId, away_team_id: awayId } = match;
+  let headToHead = [];
+  if (homeId && awayId) {
+    const antesDeEste = match.match_date ? 'AND m.match_date::timestamptz < ?::timestamptz' : '';
+    headToHead = await db.prepare(`
+      SELECT m.id, m.match_date, m.timezone, m.week_label,
+             m.home_team, m.away_team, m.home_team_id, m.away_team_id,
+             m.home_score, m.away_score,
+             tr.name AS tournament_name, tr.year AS tournament_year
+      FROM matches m
+      JOIN categories c ON c.id = m.category_id
+      JOIN leagues l    ON l.id = c.league_id
+      LEFT JOIN tournaments tr ON tr.id = c.tournament_id
+      WHERE m.id <> ? AND m.is_draft = FALSE AND l.is_public = TRUE
+        AND ((m.home_team_id = ? AND m.away_team_id = ?) OR (m.home_team_id = ? AND m.away_team_id = ?))
+        AND ${MATCH_GRADABLE_SQL}
+        ${antesDeEste}
+      ORDER BY m.match_date::timestamptz DESC
+      LIMIT 5
+    `).all(match.id, homeId, awayId, awayId, homeId, ...(match.match_date ? [match.match_date] : []));
+  }
+
+  res.json({ ...empty, ...context, head_to_head: headToHead });
 }));
 
 // Todos los equipos que aparecen en la sección "Equipos" del home: los que

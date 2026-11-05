@@ -15,6 +15,38 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **La página de un partido, rehecha (2026-11-04).** Lo pidió Alfredo: era una
+  tarjeta con botones amarillos sobre tres fichas sueltas, "dispersa y recopilada
+  sin orden", y la quería al nivel de un evento deportivo importante. Ahora la
+  portada es la cancha de noche, con cada end zone pintada del color de su equipo
+  y los dos cascos frente a frente, y debajo una sola placa ordenada por tres
+  preguntas: quién llega mejor, cómo lo veo y cómo llego. Todo lo que no estaba en
+  pantalla ya estaba en la base.
+
+  **Lo nuevo:** `GET /leagues/matches/:id/context`, con el récord y el lugar A LA
+  FECHA del partido, los últimos resultados, los enfrentamientos anteriores y el
+  resto de la jornada. El color de cada equipo se lee de su logo en el navegador
+  (`utils/teamPaint.js`), porque solo 1 de 217 equipos capturó `brand_color`. El
+  partido agrega `phase_name`, `phase_type`, `tournament_year`, `branch_name` y
+  `brand_color`.
+
+  **Se arregló de paso:** la LFA no decía dónde se jugaban sus partidos (no tiene
+  sedes registradas y la página ignoraba `matches.venue`); Hotel, Vuelo y Boletos
+  se seguían ofreciendo en un partido terminado; el botón de Maps ponía la
+  dirección como link aunque fuera texto; un partido en vivo no enseñaba su
+  marcador aunque ya lo hubieran capturado.
+
+  **Lo que se movió:** el ciclo que arma las tablas salió de `loadCompetition()` a
+  `tablesOf()`, sin cambiar el cálculo. Las tablas y brackets de las 41 ramas de
+  `desarrollo-local` salieron idénticos byte por byte antes y después, y con los
+  datos públicos de producción reproduce las 59 filas publicadas de ONEFA y LFA.
+  La ventana del buscador de vuelos y la de "Generar imagen" sustituyen a sus
+  paneles dentro de la tarjeta, que ya no existe. Se borraron las fichas embebidas
+  (`inline` de `TeamInfoPanel` y `VenueInfoPanel`) y los estilos de la tarjeta.
+
+  **Verificación:** ver `docs/ESTADO.md`. Las reglas de color, de "a la fecha" y de
+  "Cara a cara" están en `matchContext.test.mjs` y `matchPage.test.mjs`.
+
 - **Del lado derecho del bracket, el logo de visitante (2026-11-01).** Lo pidió
   Alfredo al ver el bracket de la Nacional publicado: casi todos los escudos
   son cascos que miran a la derecha, y del lado derecho del espejo le daban la

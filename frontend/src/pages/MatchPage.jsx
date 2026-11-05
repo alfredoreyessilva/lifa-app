@@ -6,35 +6,33 @@ import Loading from '../components/Loading.jsx';
 import Modal from '../components/Modal.jsx';
 import MatchForm from '../components/MatchForm.jsx';
 import SubscribeButton from '../components/SubscribeButton.jsx';
-import PredictionWidget from '../components/PredictionWidget.jsx';
+import MatchHero from '../components/MatchHero.jsx';
+import MatchPoll from '../components/MatchPoll.jsx';
+import MatchCompare from '../components/MatchCompare.jsx';
+import MatchVenue, { esLink } from '../components/MatchVenue.jsx';
+import MatchWeek from '../components/MatchWeek.jsx';
+import MatchTeamCard from '../components/MatchTeamCard.jsx';
+import { IconoBoleto, IconoCompartir, IconoEditar, IconoEstadisticas, IconoVer } from '../components/MatchIcons.jsx';
 import { getMatchStatus } from '../utils/matchStatus.js';
-import { getMatchParts, initials } from '../utils/matchDisplay.js';
+import { getMatchParts, plataformaDe } from '../utils/matchDisplay.js';
 import { shareLink } from '../utils/share.js';
+import { useTeamPaint } from '../utils/useTeamPaint.js';
 import ShareImageButton from '../components/ShareImageButton.jsx';
 import MatchBroadcasters from '../components/MatchBroadcasters.jsx';
 import MediaBroadcastControl from '../components/MediaBroadcastControl.jsx';
 import { buildHotelSearchUrl } from '../utils/matchServices.js';
-import { matchScopeLabel } from '../utils/matchScope.js';
 import { puede } from '../utils/permisos.js';
-import FlightSearchWidget from '../components/FlightSearchWidget.jsx';
-import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
-import VenueInfoPanel from '../components/VenueInfoPanel.jsx';
 
-// Convierte una URL en una etiqueta corta y legible (ej. "youtube.com"),
-// para diferenciar los botones cuando hay más de un link del mismo tipo.
-function linkHost(url) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return 'link';
-  }
-}
-
+// La página de un partido (README, "La página de un partido"). La ordenan las
+// tres preguntas de quien llega a ella: quién llega mejor, cómo lo veo y cómo
+// llego. Arriba va lo que importa en este momento del partido —la hora antes, el
+// marcador durante y después— con el único botón amarillo de la pantalla.
 export default function MatchPage() {
   const { matchId } = useParams();
   const navigate = useNavigate();
   const { leagues, token, user } = useAuth();
   const [match, setMatch]         = useState(null);
+  const [contexto, setContexto]   = useState(null);
   const [error, setError]         = useState('');
   const [shareState, setShareState] = useState('idle');
   const [isSharing, setIsSharing] = useState(false);
@@ -43,11 +41,25 @@ export default function MatchPage() {
   const [manageData, setManageData] = useState(null);
   const [manageError, setManageError] = useState('');
 
+  // El partido no espera a su contexto: va en otra llamada porque calcular las
+  // tablas cuesta, y si falla solo faltan esas secciones. Lo mismo pasa durante
+  // un despliegue, cuando Vercel ya terminó y Render todavía no tiene la ruta.
   useEffect(() => {
+    let vigente = true;
     setMatch(null);
+    setContexto(null);
     setError('');
-    api.getMatch(matchId).then(setMatch).catch((e) => setError(e.message));
+    api.getMatch(matchId)
+      .then((m) => { if (vigente) setMatch(m); })
+      .catch((e) => { if (vigente) setError(e.message); });
+    api.getMatchContext(matchId)
+      .then((c) => { if (vigente) setContexto(c); })
+      .catch(() => {});
+    return () => { vigente = false; };
   }, [matchId]);
+
+  const pinturaLocal  = useTeamPaint(match?.home_logo_url, match?.home_team_details?.brand_color);
+  const pinturaVisita = useTeamPaint(match?.away_logo_url, match?.away_team_details?.brand_color);
 
   const prevId = match?.prev_match_id || null;
   const nextId = match?.next_match_id || null;
@@ -147,17 +159,13 @@ export default function MatchPage() {
 
   if (!match) return <div className="container"><Loading /></div>;
 
-  const { day, month, time, tzLabel, porDefinir } = getMatchParts(match.match_date, match.timezone || match.league_timezone);
-  const status        = getMatchStatus(match);
-  const isFinished     = status === 'finished';
-  const isLive         = status === 'live';
-  const isScheduled    = status === 'scheduled';
-  const categoryLabel  = [match.season, match.year].filter(Boolean).join(' ');
-  // A qué conferencia/grupo pertenece el partido. Ya no se captura en el
-  // partido: se deduce de la que tienen asignada sus equipos, y el backend la
-  // manda ya resuelta (ver backend/src/utils/matchScope.js).
-  const scopeLabel     = matchScopeLabel(match);
-  const hotelUrl       = buildHotelSearchUrl(match);
+  const parts = getMatchParts(match.match_date, match.timezone || match.league_timezone);
+  const status      = getMatchStatus(match);
+  const isFinished  = status === 'finished';
+  const isLive      = status === 'live';
+  const isScheduled = status === 'scheduled';
+  const hotelUrl    = buildHotelSearchUrl(match);
+
   // Lo que quien mira puede hacer en la liga de este partido. `leagues` trae
   // TODAS las ligas donde tiene un rol —dueño, admin, tesorero o visor—, así
   // que estar ahí no alcanza: se pregunta por el permiso. El admin de la
@@ -177,299 +185,163 @@ export default function MatchPage() {
   // Quién captura las estadísticas de este partido: la misma pregunta que hace
   // `matchStatsRequired` en el backend, el permiso `estadisticas`.
   const canCaptureStats = isPlatformAdmin || puede(myLeague, 'estadisticas');
+
+  // ── Estadísticas ──
+  // Cualquiera ve el box score —es el resultado deportivo, que es justo lo que
+  // un torneo publica— y quien tiene `estadisticas` ve además el panel de
+  // captura. Al público se le pinta solo cuando ya hay algo que ver
+  // (`has_box_score`): antes, el botón llevaba a una página que decía "Todavía
+  // no hay estadísticas". A quien captura se le pinta siempre, aunque el partido
+  // no se haya jugado, y a propósito: tiene que poder entrar ANTES para presionar
+  // "Preparar partido" y llevárselo a una cancha sin señal. A los dos les hacen
+  // falta la rama y los dos equipos — sin eso no hay roster al que colgarle una
+  // jugada, que es la misma condición del pase de lista.
+  //
   // `has_box_score` en undefined es el backend viejo durante un despliegue
   // (Vercel termina antes que Render), y se lee como antes: se pinta. Es el
   // mismo criterio de `puede()` — ver utils/permisos.js.
   const showStatsButton = canCaptureStats || match.has_box_score !== false;
+  const statsUrl = match.branch_id && match.home_team_id && match.away_team_id && showStatsButton
+    ? `/partidos/${match.id}/estadisticas`
+    : null;
+
+  // ── Roster ──
+  // Aparece solo si la categoría publica su roster. Un partido creado por
+  // nombre y nunca sincronizado no sabe de qué equipo habla (home_team_id /
+  // away_team_id son nullable), así que ahí no hay roster que abrir y el botón
+  // no se pinta. Conectarlos es trabajo de la liga, no del visitante.
+  const rosterDe = (teamId) => (match.roster_public && match.branch_id && teamId
+    ? `/partidos/${match.id}/equipos/${teamId}/roster`
+    : null);
+
+  // Los botones de la portada, en orden de lo que más se busca en este momento.
+  // Solo el primero va en amarillo. Boletos deja de ofrecerse cuando el partido
+  // terminó, y el link de transmisión ya es para volver a verlo.
+  const verEtiqueta = isLive ? 'Ver en vivo por' : isFinished ? 'Ver repetición en' : 'Ver partido en';
+  const acciones = [
+    ...(match.stream_links || []).map((url) => ({
+      key: `ver-${url}`,
+      href: url,
+      icono: <IconoVer />,
+      texto: `${verEtiqueta} ${plataformaDe(url)}`,
+    })),
+    ...(isFinished ? [] : (match.ticket_links || []).map((url) => ({
+      key: `boletos-${url}`,
+      href: url,
+      icono: <IconoBoleto />,
+      texto: match.ticket_links.length > 1 ? `Comprar boletos en ${plataformaDe(url)}` : 'Comprar boletos',
+    }))),
+    ...(statsUrl ? [{ key: 'estadisticas', to: statsUrl, icono: <IconoEstadisticas />, texto: 'Estadísticas' }] : []),
+  ];
+
+  const venueLabel = [match.venue_name || match.venue, match.venue_city].filter(Boolean).join(', ');
+  const venueUrl = esLink(match.venue_address) ? match.venue_address : null;
+
+  const hayEquipos = match.home_team_details || match.away_team_details;
+  const pinturas = { home: pinturaLocal, away: pinturaVisita };
+  const coloresDelPartido = {
+    '--home': pinturaLocal.fondo,
+    '--home-ink': pinturaLocal.tinta,
+    '--away': pinturaVisita.fondo,
+    '--away-ink': pinturaVisita.tinta,
+  };
 
   return (
-    <div className="container">
-      {/* El breadcrumb solo puede "colgar" del nivel más alto que ya se
-          conoce: si el partido pertenece a un Torneo, el siguiente nivel
-          clicable es el Torneo (nunca la Categoría) — es la propia
-          TournamentPage la que decide, con su navegación inteligente, si
-          hace falta pedir categoría/rama o si puede ir directo al
-          calendario. Poner aquí un link directo a "Categoría" reintroducía
-          esa sección como un paso navegable siempre, incluso en un torneo
-          de una sola categoría, rompiendo el diseño que evita justamente
-          eso. Solo en el modelo viejo (categoría sin torneo) el destino
-          final sigue siendo el calendario plano de la categoría. */}
-      <div className="crumb">
-        <Link to="/">Inicio</Link>
-        {match.league_slug && <> / <Link to={`/ligas/${match.league_slug}`}>{match.league_name}</Link></>}
-        {match.tournament_id ? (
-          <> / <Link to={`/torneos/${match.tournament_id}`}>{match.tournament_name}</Link></>
-        ) : (
-          match.category_id && <> / <Link to={`/categorias/${match.category_id}/calendario`}>{match.category_name}</Link></>
+    <div className="mp" style={coloresDelPartido}>
+      <MatchHero
+        match={match}
+        status={status}
+        parts={parts}
+        pinturas={pinturas}
+        contexto={contexto}
+        venueLabel={venueLabel}
+        venueUrl={venueUrl}
+        prevId={prevId}
+        nextId={nextId}
+        onPrev={goPrev}
+        onNext={goNext}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
+        {acciones.length > 0 && (
+          <div className="mh-cta">
+            {acciones.map((a, i) => {
+              const clase = `btn ${i === 0 ? 'btn-flag' : 'btn-outline'}`;
+              return a.href ? (
+                <a key={a.key} href={a.href} target="_blank" rel="noopener noreferrer" className={clase}>
+                  {a.icono} {a.texto}
+                </a>
+              ) : (
+                <Link key={a.key} to={a.to} className={clase}>{a.icono} {a.texto}</Link>
+              );
+            })}
+          </div>
         )}
-        {' '}/ {match.home_team} vs {match.away_team}
-      </div>
+      </MatchHero>
 
-      {/* Flechas a los lados para saltar al partido anterior / siguiente del
-          mismo calendario (en celular las flechas se ocultan y el salto se
-          hace deslizando el dedo — ver onTouchStart/onTouchEnd). */}
-      <div className="match-nav" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-        <button
-          type="button"
-          className="match-nav-arrow match-nav-arrow--prev"
-          onClick={goPrev}
-          disabled={!prevId}
-          aria-label="Partido anterior"
-        >
-          ‹
-        </button>
-
-        <div
-          className={`match-card-new${isLive ? ' match-card-new--live' : ''}`}
-          style={{ maxWidth: 520, width: '100%' }}
-        >
-        <div className="match-card-header">
-          <div className="match-card-datetime">
-            {porDefinir ? (
-              <>
-                <span className="match-card-date">Fecha</span>
-                <span className="match-card-time">Por definir</span>
-              </>
-            ) : (
-              <>
-                <span className="match-card-date">{day} {month}</span>
-                <span className="match-card-time">{time}</span>
-                <span className="match-card-tz">{tzLabel}</span>
-              </>
+      <div className="mp-plate">
+        <div className="mp-wrap">
+          <div className="mp-tools">
+            {isScheduled && (
+              <SubscribeButton
+                matchId={match.id}
+                label="Seguir este partido"
+                targetName={`${match.home_team} vs ${match.away_team}`}
+              />
             )}
-          </div>
-          <div className="match-card-status">
-            {isLive      && <span className="tag live">🔴 En vivo</span>}
-            {isFinished  && <span className="tag finished">Finalizado</span>}
-            {isScheduled && !isLive && <span className="tag">Programado</span>}
-          </div>
-        </div>
-
-        <div className="match-card-body">
-          <div className="match-card-team">
-            <div className="match-card-logo" style={{ width: 64, height: 64 }}>
-              {match.home_logo_url ? <img src={match.home_logo_url} alt={match.home_team} /> : <span>{initials(match.home_team)}</span>}
-            </div>
-            <div className="match-card-team-name">{match.home_team}</div>
-          </div>
-          <div className="match-card-score">
-            {isFinished && match.home_score !== null
-              ? <><span>{match.home_score}</span><span className="match-card-score-sep">—</span><span>{match.away_score}</span></>
-              : isLive
-                ? <span className="match-card-score-live">EN VIVO</span>
-                : <span className="match-card-score-vs">VS</span>}
-          </div>
-          <div className="match-card-team">
-            <div className="match-card-logo" style={{ width: 64, height: 64 }}>
-              {match.away_logo_url ? <img src={match.away_logo_url} alt={match.away_team} /> : <span>{initials(match.away_team)}</span>}
-            </div>
-            <div className="match-card-team-name">{match.away_team}</div>
-          </div>
-        </div>
-
-        {(match.venue_name || match.week_label || categoryLabel || scopeLabel) && (
-          <div className="match-card-meta">
-            {match.week_label && <span>{/^\d+$/.test(match.week_label) ? `Jornada ${match.week_label}` : match.week_label}</span>}
-            {scopeLabel && <span>{scopeLabel}</span>}
-            {match.venue_name && <span>{match.venue_name}</span>}
-            {categoryLabel && <span>{categoryLabel}</span>}
-          </div>
-        )}
-
-        {isScheduled && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
-            <PredictionWidget matchId={match.id} homeTeam={match.home_team} awayTeam={match.away_team} weekLabel={match.week_label} />
-          </div>
-        )}
-
-        {/* ── Roster de cada equipo ──
-            Se abre desde el PARTIDO y no desde un link suelto: es el mismo
-            botón que va a abrir el pase de lista para quien tenga permiso, y
-            la asistencia es a un partido (README, "Roster público y pase de
-            lista"). Aparece solo si la categoría publica su roster.
-
-            Un partido creado por nombre y nunca sincronizado no sabe de qué
-            equipo habla (home_team_id / away_team_id son nullable), así que
-            ahí no hay roster que abrir y el botón no se pinta. Conectarlos es
-            trabajo de la liga, no del visitante. */}
-        {match.roster_public && match.branch_id && (match.home_team_id || match.away_team_id) && (
-          <div className="match-card-actions" style={{ marginTop: 16 }}>
-            {match.home_team_id && (
-              <Link
-                to={`/partidos/${match.id}/equipos/${match.home_team_id}/roster`}
-                className="btn btn-outline btn-sm"
-              >
-                Roster — {match.home_team}
-              </Link>
-            )}
-            {match.away_team_id && (
-              <Link
-                to={`/partidos/${match.id}/equipos/${match.away_team_id}/roster`}
-                className="btn btn-outline btn-sm"
-              >
-                Roster — {match.away_team}
-              </Link>
-            )}
-          </div>
-        )}
-
-        {/* ── Estadísticas ──
-            El tercer botón, y el mismo trato que el roster: cualquiera ve el
-            box score —es el resultado deportivo, que es justo lo que un torneo
-            publica— y quien tiene `estadisticas` ve además el panel de
-            captura.
-
-            Al público se le pinta solo cuando ya hay algo que ver
-            (`has_box_score`): antes, el botón llevaba a una página que decía
-            "Todavía no hay estadísticas". A quien captura se le pinta
-            siempre, aunque el partido no se haya jugado, y a propósito: tiene
-            que poder entrar ANTES para presionar "Preparar partido" y
-            llevárselo a una cancha sin señal. A los dos les hacen falta la
-            rama y los dos equipos — sin eso no hay roster al que colgarle una
-            jugada, que es la misma condición del pase de lista. */}
-        {match.branch_id && match.home_team_id && match.away_team_id && showStatsButton && (
-          <div className="match-card-actions" style={{ marginTop: 16 }}>
-            <Link to={`/partidos/${match.id}/estadisticas`} className="btn btn-outline btn-sm">
-              Estadísticas
-            </Link>
-          </div>
-        )}
-
-        <div className="match-card-actions" style={{ marginTop: 16 }}>
-          {canEditMatch && (
-            <button type="button" className="btn btn-flag btn-sm" onClick={openEdit}>
-              ✎ Editar partido
+            <button className="btn btn-outline btn-sm" type="button" onClick={handleShare} disabled={isSharing}>
+              <IconoCompartir />
+              {shareState === 'copied' ? 'Link copiado' : isSharing ? 'Compartiendo…' : 'Compartir'}
             </button>
-          )}
-          {(match.stream_links || []).map((url, i) => (
-            <a key={`stream-${i}`} href={url} target="_blank" rel="noopener noreferrer" className="btn btn-flag btn-sm">
-              {isLive ? '🔴 Ver en vivo' : 'Ver partido'}
-              {match.stream_links.length > 1 ? ` — ${linkHost(url)}` : ''}
-            </a>
-          ))}
-          {(match.ticket_links || []).map((url, i) => (
-            <a key={`tickets-${i}`} href={url} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
-              🎟️ Comprar boletos
-              {match.ticket_links.length > 1 ? ` — ${linkHost(url)}` : ''}
-            </a>
-          ))}
-          {hotelUrl && (
-            <a href={hotelUrl} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
-              🏨 Hotel
-            </a>
-          )}
-          <FlightSearchWidget match={match} />
-          {match.venue_address && (
-            <a href={match.venue_address} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
-              Maps
-            </a>
-          )}
-          <button
-            className="btn btn-outline btn-sm"
-            type="button"
-            onClick={handleShare}
-            disabled={isSharing}
-          >
-            {shareState === 'copied' ? '✓ Link copiado' : isSharing ? 'Compartiendo…' : '🔗 Compartir partido'}
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
-          <ShareImageButton match={match} dateParts={{ day, month, time, tzLabel, porDefinir }} matchStatus={status} />
-        </div>
-
-        {isScheduled && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
-            <SubscribeButton
-              matchId={match.id}
-              label="Seguir este partido"
-              targetName={`${match.home_team} vs ${match.away_team}`}
-            />
+            <ShareImageButton match={match} dateParts={parts} matchStatus={status} />
+            {canEditMatch && (
+              <button type="button" className="btn btn-outline btn-sm mp-tools-end" onClick={openEdit}>
+                <IconoEditar /> Editar partido
+              </button>
+            )}
           </div>
-        )}
 
-        {/* Mismo criterio que el breadcrumb: si hay Torneo, el botón manda
-            ahí (y es esa pantalla la que decide si hace falta elegir
-            categoría/rama, o si salta directo al calendario). Solo el
-            modelo viejo sin torneo sigue yendo directo al calendario plano
-            de la categoría. */}
-        {match.tournament_id ? (
-          <div style={{ textAlign: 'center', marginTop: 20 }}>
-            <Link to={`/torneos/${match.tournament_id}`} className="btn btn-outline btn-sm">
-              Ver calendario completo →
-            </Link>
-          </div>
-        ) : match.category_id && (
-          <div style={{ textAlign: 'center', marginTop: 20 }}>
-            <Link to={`/categorias/${match.category_id}/calendario`} className="btn btn-outline btn-sm">
-              Ver calendario completo →
-            </Link>
-          </div>
-        )}
+          <div className="mp-grid">
+            <div className="mp-main">
+              <MatchPoll match={match} abierta={isScheduled} />
+              <MatchCompare match={match} contexto={contexto} terminado={isFinished} />
+            </div>
 
-        <MatchBroadcasters matchId={match.id} key={broadcastVersion} />
-        <MediaBroadcastControl matchId={match.id} onChange={() => setBroadcastVersion((v) => v + 1)} />
+            <aside className="mp-rail">
+              <MatchBroadcasters matchId={match.id} key={broadcastVersion} />
+              <MediaBroadcastControl matchId={match.id} onChange={() => setBroadcastVersion((v) => v + 1)} />
+              <MatchVenue match={match} terminado={isFinished} hotelUrl={hotelUrl} />
+              <MatchWeek match={match} contexto={contexto} />
+            </aside>
+          </div>
+
+          {/* Solo aparecen cuando el partido ya está enlazado con equipos reales
+              (home_team_details / away_team_details vienen del backend). */}
+          {hayEquipos && (
+            <section className="mp-sec">
+              <h2 className="mp-title">Los equipos</h2>
+              <div className="mp-teams">
+                {match.home_team_details && (
+                  <MatchTeamCard
+                    team={match.home_team_details}
+                    lado="home"
+                    logo={match.home_logo_url}
+                    rosterUrl={rosterDe(match.home_team_id)}
+                  />
+                )}
+                {match.away_team_details && (
+                  <MatchTeamCard
+                    team={match.away_team_details}
+                    lado="away"
+                    logo={match.away_logo_url}
+                    rosterUrl={rosterDe(match.away_team_id)}
+                  />
+                )}
+              </div>
+            </section>
+          )}
         </div>
-
-        <button
-          type="button"
-          className="match-nav-arrow match-nav-arrow--next"
-          onClick={goNext}
-          disabled={!nextId}
-          aria-label="Partido siguiente"
-        >
-          ›
-        </button>
       </div>
-
-      {/* Fichas de los dos equipos que juegan, mostradas directamente (no en
-          modal): local a la izquierda, visitante a la derecha, cada una a
-          ancho completo de su columna. En celular quedan una arriba de la
-          otra. Solo aparecen cuando el partido ya está enlazado con equipos
-          reales del roster (home_team_details / away_team_details vienen del
-          backend). */}
-      {(match.home_team_details || match.away_team_details) && (
-        <div className="match-teams">
-          {match.home_team_details && (
-            <TeamInfoPanel
-              inline
-              roleLabel="Local"
-              team={match.home_team_details}
-              leagueId={match.home_team_details.league_id}
-            />
-          )}
-          {match.away_team_details && (
-            <TeamInfoPanel
-              inline
-              roleLabel="Visitante"
-              team={match.away_team_details}
-              leagueId={match.away_team_details.league_id}
-            />
-          )}
-        </div>
-      )}
-
-      {/* Ficha de la sede, debajo de las de los equipos y con el mismo
-          formato "abierto" (no en modal): banner, nombre, institución,
-          ciudad, link a Maps y contacto. Solo aparece cuando el partido
-          tiene una sede registrada (venue_id → venue_name). */}
-      {match.venue_name && (
-        <div className="match-venue">
-          <VenueInfoPanel
-            inline
-            roleLabel="Sede"
-            venue={{
-              name: match.venue_name,
-              institution: match.venue_institution,
-              city: match.venue_city,
-              address: match.venue_address,
-              cover_url: match.venue_cover_url,
-              contact_phone: match.venue_contact_phone,
-              contact_email: match.venue_contact_email,
-            }}
-          />
-        </div>
-      )}
 
       {editing && (
         <Modal title="Editar partido" onClose={() => setEditing(false)}>
@@ -496,6 +368,7 @@ export default function MatchPage() {
                 await api.updateMatch(match.id, payload, token);
                 const updated = await api.getMatch(matchId);
                 setMatch(updated);
+                api.getMatchContext(matchId).then(setContexto).catch(() => {});
                 setEditing(false);
               }}
             />

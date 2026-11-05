@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import Modal from './Modal.jsx';
+import { IconoVuelo } from './MatchIcons.jsx';
 import { iataForCity } from '../utils/matchServices.js';
 
 // Código base del widget "Flights Search Form" de Travelpayouts (Programa
@@ -50,9 +52,11 @@ function formatMatchDateHint(match) {
   return `El partido es el ${label} — ajusta las fechas de ida y vuelta en el buscador de abajo alrededor de esa fecha.`;
 }
 
-// Botón "✈️ Vuelo" para MatchPage. Al hacer clic, despliega el formulario
-// de búsqueda de Aviasales embebido (no una pestaña nueva) con el destino
-// ya puesto en la ciudad de la sede — el usuario nunca lo escribe.
+// Botón "Vuelo" para MatchPage. Al hacer clic, abre el formulario de búsqueda
+// de Aviasales embebido (no una pestaña nueva) con el destino ya puesto en la
+// ciudad de la sede — el usuario nunca lo escribe. Va en una ventana porque el
+// botón vive en la columna angosta de la página, y el formulario necesita más
+// ancho que ese.
 //
 // Si la ciudad de la sede no resuelve a un código IATA conocido
 // (iataForCity), el componente no se renderiza — nunca mostramos un botón
@@ -98,7 +102,7 @@ export default function FlightSearchWidget({ match }) {
       <html>
         <head>
           <meta charset="utf-8" />
-          <style>html, body { margin: 0; padding: 0; background: transparent; }</style>
+          <style>html, body { margin: 0; padding: 0; background: transparent; overflow-x: hidden; }</style>
         </head>
         <body>
           <script async charset="utf-8" src="${buildWidgetSrc(destinationIata)}"></script>
@@ -111,28 +115,33 @@ export default function FlightSearchWidget({ match }) {
 
   return (
     <>
-      <button type="button" className="btn btn-outline btn-sm" onClick={() => setOpen((v) => !v)}>
-        ✈️ Vuelo
+      <button type="button" className="btn btn-outline btn-sm" onClick={() => setOpen(true)}>
+        <IconoVuelo /> Vuelo
       </button>
       {open && (
-        <div style={{ width: '100%', marginTop: 16 }}>
-          {dateHint && (
-            <p style={{ fontSize: 13, opacity: 0.8, marginBottom: 8 }}>📅 {dateHint}</p>
-          )}
-          <iframe
-            key={`flight-widget-${destinationIata}`}
-            ref={iframeRef}
-            title="Buscador de vuelos"
-            // sandbox: allow-same-origin + allow-scripts para que el
-            // script corra con permisos normales (cookies de tracking,
-            // etc., igual que antes); allow-forms porque es un formulario
-            // de búsqueda; allow-popups + allow-popups-to-escape-sandbox
-            // para que el resultado de la búsqueda pueda abrir una
-            // pestaña nueva normal (no también aislada).
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
-            style={{ width: '100%', minHeight: 420, border: 'none', display: 'block' }}
-          />
-        </div>
+        <Modal title={`Buscar vuelo a ${match.venue_city}`} onClose={() => setOpen(false)}>
+          <div className="flight-widget">
+            {dateHint && (
+              <p style={{ fontSize: 13, opacity: 0.8, marginBottom: 8 }}>{dateHint}</p>
+            )}
+            <iframe
+              key={`flight-widget-${destinationIata}`}
+              ref={iframeRef}
+              title="Buscador de vuelos"
+              // sandbox: allow-same-origin + allow-scripts para que el
+              // script corra con permisos normales (cookies de tracking,
+              // etc., igual que antes); allow-forms porque es un formulario
+              // de búsqueda; allow-popups + allow-popups-to-escape-sandbox
+              // para que el resultado de la búsqueda pueda abrir una
+              // pestaña nueva normal (no también aislada).
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+              style={{ width: '100%', minHeight: 420, border: 'none', display: 'block' }}
+            />
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Cerrar</button>
+          </div>
+        </Modal>
       )}
     </>
   );

@@ -270,7 +270,7 @@ export function countsForStandings(match) {
 // finalizado pero SIN marcador capturado (que es justo lo que el recordatorio
 // de notifications.js le reclama a la liga) entraría entonces a la tabla como
 // un 0-0 inventado, dándole un empate a los dos equipos.
-function hasScore(value) {
+export function hasScore(value) {
   if (value === null || value === undefined || value === '') return false;
   return Number.isFinite(Number(value));
 }

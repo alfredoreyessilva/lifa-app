@@ -165,6 +165,77 @@ export function jornadaDateRange(allMatches) {
   return `${a.day} ${a.month}`;
 }
 
+// "Viernes 6 de noviembre", en la zona del partido, como en su tarjeta. El año
+// solo se dice si no es el de hoy: la LFA tiene temporadas cargadas de años
+// pasados, y ahí "Domingo 7 de junio" no alcanza.
+export function fechaLarga(isoString, tz, ahora = Date.now()) {
+  if (!isoString) return '';
+  const timeZone = tz || DEFAULT_TZ;
+  const partes = new Intl.DateTimeFormat('es-MX', {
+    timeZone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  }).formatToParts(new Date(isoString));
+  const de = (tipo) => partes.find((p) => p.type === tipo)?.value || '';
+  const dia = de('weekday');
+  const fecha = `${dia.charAt(0).toUpperCase()}${dia.slice(1)} ${de('day')} de ${de('month')}`;
+  const anioDeHoy = new Intl.DateTimeFormat('es-MX', { timeZone, year: 'numeric' }).format(new Date(ahora));
+  return de('year') === anioDeHoy ? fecha : `${fecha} de ${de('year')}`;
+}
+
+// Qué partido es dentro de la competencia. Casi siempre, su jornada. La fase
+// solo manda cuando la etiqueta no dice nada: ONEFA captura sus playoffs como
+// "PLAYOFF" y la fase es la que sabe que son los cuartos de final; en cambio, la
+// LFA captura "FINAL" y su fase se llama "Postemporada", que dice menos.
+export function rondaDelPartido(match) {
+  const etiqueta = (match.week_label || '').trim();
+  const generica = !etiqueta || etiqueta.toUpperCase() === 'PLAYOFF';
+  if (generica && match.phase_name && match.phase_type === 'single_elimination') return match.phase_name;
+  return etiqueta ? jornadaLabel(etiqueta) : (match.phase_name || '');
+}
+
+// "6:00 p.m." → la cifra y el resto, para que la hora se escriba grande como un
+// marcador sin que el "p.m." pese lo mismo.
+export function partirHora(time) {
+  const m = /^(\d{1,2}:\d{2})\s*(.*)$/.exec(time || '');
+  return m ? { cifra: m[1], sufijo: m[2] } : { cifra: time || '', sufijo: '' };
+}
+
+// Cuánto falta para que empiece, o null si ya pasó la hora o no hay fecha.
+export function cuentaRegresiva(isoString, ahora = Date.now()) {
+  if (!isoString) return null;
+  const faltan = new Date(isoString).getTime() - ahora;
+  if (!(faltan > 0)) return null;
+  const segundos = Math.floor(faltan / 1000);
+  return {
+    dias: Math.floor(segundos / 86400),
+    horas: Math.floor(segundos / 3600) % 24,
+    minutos: Math.floor(segundos / 60) % 60,
+    segundos: segundos % 60,
+  };
+}
+
+const PLATAFORMAS = [
+  [/(^|\.)youtube\.com$|^youtu\.be$/, 'YouTube'],
+  [/(^|\.)facebook\.com$|^fb\.watch$/, 'Facebook'],
+  [/(^|\.)instagram\.com$/, 'Instagram'],
+  [/(^|\.)tiktok\.com$/, 'TikTok'],
+  [/(^|\.)twitch\.tv$/, 'Twitch'],
+  [/^(x|twitter)\.com$/, 'X'],
+  [/(^|\.)eventbrite\.[a-z.]+$/, 'Eventbrite'],
+];
+
+// Dónde abre un link de transmisión, para que el botón lo diga: "Ver partido en
+// YouTube". Lo que no se reconoce se nombra por su dominio.
+export function plataformaDe(url) {
+  let host;
+  try {
+    host = new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return 'link';
+  }
+  const conocida = PLATAFORMAS.find(([patron]) => patron.test(host));
+  return conocida ? conocida[1] : host;
+}
+
 export function initials(name) {
   return (name || '')
     .split(' ')

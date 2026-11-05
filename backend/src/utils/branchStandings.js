@@ -22,6 +22,7 @@ import { MATCH_SCOPE_COLUMNS, MATCH_SCOPE_JOINS } from './matchScope.js';
 import { MATCH_PHASE_COLUMNS, MATCH_PHASE_JOINS } from './matchPhase.js';
 import { computeStandings, computeQualification, MULTI_TEAM_MODES } from './standings.js';
 import { MATCH_IS_FINAL_SQL } from './scoring.js';
+import { playedBefore, sideOfMatch, weekMatches } from './matchContext.js';
 import {
   computeSeeding, buildBracket, knockoutPhasesFor, knockoutMatchesOf,
   regularSeasonProgress, isBracketReady,
@@ -125,6 +126,7 @@ async function loadMatches(branchId) {
   return db.prepare(`
     SELECT
       m.id, m.home_team_id, m.away_team_id, m.home_score, m.away_score,
+      m.home_team, m.away_team,
       m.status, m.match_date, m.week_label, m.is_draft, m.timezone,
       c.auto_status_enabled, c.auto_status_window_hours,
       ${MATCH_IS_FINAL_SQL} AS is_final,
@@ -228,6 +230,27 @@ export async function buildBranchBrackets(branchId) {
   };
 }
 
+/**
+ * Lo que rodea a un partido (README, "La página de un partido"): con qué récord
+ * y en qué lugar llegó cada equipo, sus últimos resultados y qué más se juega
+ * esa jornada. Las tablas se recalculan con los partidos ANTERIORES a este, así
+ * que un partido viejo sigue diciendo cómo llegaron a él, no cómo acabaron.
+ */
+export async function buildMatchContext(match) {
+  const c = await loadCompetition(match.branch_id);
+  if (!c) return null;
+
+  const before = playedBefore(match, c.matches);
+  const tables = tablesOf({ config: c.config, teams: c.teams, matches: before, quals: c.quals });
+  const teamsById = new Map(c.teams.map((t) => [t.team_id, t]));
+
+  return {
+    home: sideOfMatch(match.home_team_id, tables, before, teamsById),
+    away: sideOfMatch(match.away_team_id, tables, before, teamsById),
+    week: weekMatches(match, c.matches, teamsById),
+  };
+}
+
 // Lo que leen la tabla y el bracket, en un solo viaje: la rama, sus equipos,
 // sus partidos y su configuración, con las tablas ya calculadas.
 async function loadCompetition(branchId) {
@@ -264,6 +287,17 @@ async function loadCompetition(branchId) {
     `).all(branchId),
   ]);
 
+  const tables = tablesOf({ config, teams, matches, quals });
+  markWildcards(tables, quals);
+
+  return { branch, config, teams, matches, phases, titles, overrides, quals, tables };
+}
+
+// Las tablas de una rama con los partidos que se le den. Es lo mismo para la
+// tabla pública (todos) y para "con qué récord llegó" un equipo a un partido
+// (los anteriores a él): un solo cálculo, para que los dos números no puedan
+// decir cosas distintas.
+export function tablesOf({ config, teams, matches, quals }) {
   // Una tabla por cada (nivel configurado × alcance con equipos).
   const branchTeamIds = teams.map((t) => t.team_id);
   const tables = [];
@@ -304,9 +338,7 @@ async function loadCompetition(branchId) {
     }
   }
 
-  markWildcards(tables, quals);
-
-  return { branch, config, teams, matches, phases, titles, overrides, quals, tables };
+  return tables;
 }
 
 // Un bracket por regla de clasificación que tenga fases de eliminación directa

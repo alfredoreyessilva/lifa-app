@@ -15,7 +15,7 @@
   --surface-dim: rgba(0, 0, 0, 0.15);
 
   /* ---- Tarjetas "abiertas" de la app pública ----
-     La tarjeta del partido en MatchPage y las fichas de equipo y de sede
+     Las fichas de equipo y de sede
      (.team-profile-modal) van en negro, no en el verde de --card: sobre el
      fondo de cancha una tarjeta verde casi no se despega, y el amarillo de
      --flag en sus botones pierde fuerza. Las tarjetas del calendario
@@ -1241,8 +1241,7 @@ button.league-card {
   justify-content: center;
 }
 
-/* Todos los botones dentro de la ficha de equipo van en amarillo (flag),
-   se abra como modal o embebida en la MatchPage. */
+/* Todos los botones dentro de la ficha de equipo van en amarillo (flag). */
 .team-profile-modal .btn {
   background: var(--flag);
   color: #1a1300;
@@ -2093,9 +2092,8 @@ button.league-card {
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-/* La tarjeta del calendario es un <Link> (se renderiza como <a>), pero la de
-   MatchPage sigue siendo un <div> — este selector solo afecta a la primera,
-   quitándole el azul/subrayado por defecto del navegador. */
+/* La tarjeta del calendario es un <Link> (se renderiza como <a>): se le quita
+   el azul/subrayado por defecto del navegador. */
 a.match-card-new {
   text-decoration: none;
   color: inherit;
@@ -2297,124 +2295,7 @@ a.match-card-new {
   margin-top: 2px;
 }
 
-.match-card-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  flex-wrap: wrap;
-  padding-top: 4px;
-}
-
-/* MatchPage: flechas de navegación entre partidos (anterior / siguiente
-   del mismo calendario), una a cada lado de la tarjeta. */
-.match-nav {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  max-width: 620px;
-  margin: 24px auto;
-}
-/* La tarjeta del partido abierto va en negro como las fichas de equipo y de
-   sede que la acompañan: las cuatro se leen como una sola pantalla. Aquí no es
-   un <Link> sino un <div>, así que tampoco cambia de color al pasar el mouse. */
-.match-nav .match-card-new,
-.match-nav .match-card-new:hover {
-  margin: 0;
-  background: var(--card-open);
-  border-color: var(--card-open-line);
-}
-/* El borde rojo de "en vivo" manda sobre el de la tarjeta negra: .match-card-new--live
-   por sí solo pesa menos que el selector de arriba y se lo comía. */
-.match-nav .match-card-new--live,
-.match-nav .match-card-new--live:hover {
-  border-color: var(--live);
-}
-/* Círculo en el negro de la tarjeta que acompañan (--card-open): en el verde
-   de --card se perdían contra la cancha, igual que la tarjeta. */
-.match-nav-arrow {
-  flex: 0 0 auto;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  border: 1px solid var(--card-open-line);
-  background: var(--card-open);
-  color: var(--flag);
-  font-size: 26px;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: border-color 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
-}
-.match-nav-arrow:hover:not(:disabled) {
-  border-color: var(--flag);
-  transform: scale(1.08);
-}
-.match-nav-arrow:disabled {
-  opacity: 0.25;
-  cursor: default;
-}
-
-/* En celular no hay espacio para flechas a los lados: se ocultan y el
-   salto entre partidos se hace deslizando el dedo sobre la tarjeta. */
-@media (max-width: 640px) {
-  .match-nav {
-    gap: 0;
-  }
-  .match-nav-arrow {
-    display: none;
-  }
-}
-
-/* MatchPage: fichas completas de los dos equipos, lado a lado
-   (local | visitante), cada una a ancho completo de su columna.
-   En celular quedan una arriba de la otra. */
-.match-teams {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  align-items: start;
-  margin: 0 auto 40px;
-}
-@media (max-width: 640px) {
-  .match-teams {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* MatchPage: ficha de la sede, debajo de las de los equipos. Centrada y
-   con el mismo ancho que la tarjeta del partido para que no se estire a
-   todo lo ancho estando sola. */
-.match-venue {
-  max-width: 520px;
-  margin: 0 auto 40px;
-}
-
-/* TeamInfoPanel embebido (sin modal): ocupa todo el ancho disponible
-   de su contenedor, sin límite de alto ni scroll propio. */
-.team-profile-modal--inline {
-  max-width: none;
-  max-height: none;
-  overflow: visible;
-  box-shadow: none;
-}
-.team-profile-role {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  background: rgba(0, 0, 0, 0.35);
-  color: var(--flag);
-  font-family: var(--font-eyebrow);
-  font-size: 10px;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  padding: 4px 10px;
-  border-radius: 999px;
-}
-
-/* MatchPage: todos los botones dentro de la tarjeta van en amarillo (flag) */
+/* Los botones dentro de la tarjeta del calendario van en amarillo (flag) */
 .match-card-new .btn {
   background: var(--flag);
   color: #1a1300;
@@ -5617,4 +5498,986 @@ body.is-storefront .footer-links a:hover { color: var(--sf-ink); }
   .storefront-catalog { padding: 32px 0 56px; }
   .storefront-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 14px; }
   .storefront-empty { padding: 22px 20px; }
+}
+
+/* ---------- La página de un partido (MatchPage) ----------
+   README, "La página de un partido". La portada es la cancha de noche, vista de
+   una end zone a la otra: --home y --away son la pintura de cada equipo, que
+   sale de su logo (utils/teamPaint.js) y MatchPage pone en .mp, porque también
+   la usan la votación y las fichas de abajo.
+
+   Debajo de la portada, una sola placa del mismo verde de noche en vez de
+   tarjetas sueltas sobre la cancha: la queja con la versión anterior era que se
+   leía como cosas juntas, no como una pantalla. Hay UN botón amarillo, el
+   primero de la portada; los demás son de contorno. */
+.mp {
+  --mp-noche: #0a1f13;
+  --mp-noche-2: #102b1b;
+  --mp-noche-3: #17392a;
+  --mp-cal: #f3f6f1;
+  --mp-gris: #aabdb0;
+  --mp-linea: rgba(243, 246, 241, 0.14);
+  --home: #1f4a30;
+  --home-ink: #ffffff;
+  --away: #1f4a30;
+  --away-ink: #ffffff;
+  background: var(--mp-noche);
+  color: var(--mp-cal);
+}
+.mp-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.mp-icon { flex-shrink: 0; }
+.mp a:focus-visible,
+.mp button:focus-visible {
+  outline: 2px solid var(--flag);
+  outline-offset: 2px;
+}
+.mp .btn-outline {
+  color: var(--mp-cal);
+  border-color: rgba(243, 246, 241, 0.32);
+}
+.mp .btn-outline:hover { color: var(--flag); border-color: var(--flag); }
+.mp .btn-ghost { color: var(--mp-gris); }
+.mp .btn-ghost:hover { color: var(--mp-cal); }
+
+/* ── La portada ── */
+.mh {
+  position: relative;
+  display: grid;
+  grid-template-columns: clamp(34px, 12vw, 210px) minmax(0, 1fr) clamp(34px, 12vw, 210px);
+  overflow: hidden;
+  background: #0b2a18;
+}
+
+/* Las end zones: la pintura del equipo con las franjas diagonales de una cancha
+   y la línea de gol en cal. `container-type: size` es lo que deja medir la letra
+   contra la altura de la cancha, que depende de cuánto traiga el centro. */
+.mh-zone {
+  position: relative;
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-color: var(--home);
+  color: var(--home-ink);
+  border-right: 6px solid var(--mp-cal);
+}
+.mh-zone--away {
+  background-color: var(--away);
+  color: var(--away-ink);
+  border-right: 0;
+  border-left: 6px solid var(--mp-cal);
+}
+.mh-zone::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0 16px, transparent 16px 32px);
+}
+.mh-zone::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, rgba(5, 15, 10, 0.5), transparent 34%, transparent 62%, rgba(5, 15, 10, 0.55)),
+    linear-gradient(to right, rgba(5, 15, 10, 0.42), transparent 75%);
+}
+.mh-zone--away::after {
+  background:
+    linear-gradient(to bottom, rgba(5, 15, 10, 0.5), transparent 34%, transparent 62%, rgba(5, 15, 10, 0.55)),
+    linear-gradient(to left, rgba(5, 15, 10, 0.42), transparent 75%);
+}
+.mh-zone-name {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-display);
+  line-height: 1;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  writing-mode: vertical-rl;
+  font-size: min(calc(92cqh / (var(--len) * 0.5)), 74cqw);
+}
+.mh-zone--home .mh-zone-name { transform: rotate(180deg); }
+
+/* El pasto: franjas de podado cada diez yardas, con sus líneas de cal, debajo
+   de la luz de las torres y de un reflejo del color de cada equipo. */
+.mh-field {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px clamp(14px, 3vw, 44px) 58px;
+  background-color: #0e3a22;
+  background-image:
+    radial-gradient(64% 54% at 50% -8%, rgba(233, 255, 226, 0.3), transparent 74%),
+    radial-gradient(40% 56% at 8% 46%, color-mix(in srgb, var(--home) 30%, transparent), transparent 78%),
+    radial-gradient(40% 56% at 92% 46%, color-mix(in srgb, var(--away) 30%, transparent), transparent 78%),
+    linear-gradient(to bottom, rgba(6, 22, 13, 0.3), rgba(6, 22, 13, 0.74)),
+    repeating-linear-gradient(to right, transparent 0 calc(10% - 2px), rgba(255, 255, 255, 0.2) calc(10% - 2px) 10%),
+    repeating-linear-gradient(to right, #17653c 0 10%, #125432 10% 20%);
+}
+.mh-yards {
+  position: absolute;
+  inset: auto 0 6px;
+  height: 44px;
+  pointer-events: none;
+}
+.mh-yards span {
+  position: absolute;
+  bottom: 0;
+  transform: translateX(-50%);
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 44px;
+  color: rgba(255, 255, 255, 0.22);
+}
+
+.mh-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.mh-crumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  min-width: 0;
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  letter-spacing: 0.05em;
+}
+.mh-crumb a { color: rgba(255, 255, 255, 0.82); text-decoration: none; }
+.mh-crumb a:hover { color: var(--flag); }
+.mh-crumb a:not(:last-child)::after {
+  content: '/';
+  margin-left: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+.mh-league-logo {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+.mh-arrows { display: flex; gap: 6px; flex-shrink: 0; }
+.mh-arrows button {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(5, 15, 10, 0.45);
+  color: var(--mp-cal);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.mh-arrows button:hover:not(:disabled) { border-color: var(--flag); color: var(--flag); }
+.mh-arrows button:disabled { opacity: 0.3; cursor: default; }
+
+.mh-round {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px 0;
+  margin: 12px 0 0;
+  font-family: var(--font-eyebrow);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.86);
+  text-align: center;
+}
+.mh-round strong {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 400;
+  color: var(--mp-cal);
+}
+.mh-round--final strong { color: var(--flag); }
+.mh-round strong + span { margin-left: 14px; }
+
+.mh-duel {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(6px, 1.6vw, 24px);
+  margin-top: 4px;
+}
+.mh-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  text-align: center;
+}
+.mh-team p { margin: 0; }
+.mh-team-name {
+  font-family: var(--font-display);
+  font-size: clamp(19px, 2.3vw, 30px);
+  line-height: 1.12;
+  letter-spacing: 0.01em;
+}
+.mh-team-line {
+  margin-top: 4px !important;
+  min-height: 1.45em;
+  font-family: var(--font-eyebrow);
+  font-size: 15px;
+  letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.84);
+}
+
+/* El único movimiento de la página: los cascos salen de su end zone y se
+   encuentran en medio campo. Se vuelve a ver al pasar a otro partido. */
+.mh-helmet {
+  width: min(100%, 310px);
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+}
+.mh-helmet.is-listo { opacity: 1; animation: mh-entra-local 0.6s cubic-bezier(0.16, 0.84, 0.3, 1) both; }
+.mh-helmet--away.is-listo { animation-name: mh-entra-visita; }
+@keyframes mh-entra-local {
+  from { opacity: 0; transform: translateX(-72px) scale(0.92); }
+}
+@keyframes mh-entra-visita {
+  from { opacity: 0; transform: translateX(72px) scale(0.92); }
+}
+.mh-helmet img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 14px 12px rgba(0, 0, 0, 0.55));
+}
+.mh-helmet--placa img { width: 76%; height: 76%; }
+.mh-helmet--disco img {
+  width: 76%;
+  height: 76%;
+  object-fit: cover;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--mp-cal), 0 16px 30px rgba(0, 0, 0, 0.5);
+  filter: none;
+}
+.mh-helmet-initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 70%;
+  height: 70%;
+  border-radius: 50%;
+  border: 3px solid var(--mp-cal);
+  background: rgba(5, 15, 10, 0.5);
+  font-family: var(--font-display);
+  font-size: clamp(36px, 6vw, 72px);
+}
+
+.mh-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.mh-center p { margin: 0; }
+.mh-date {
+  font-family: var(--font-eyebrow);
+  font-size: 17px;
+  letter-spacing: 0.03em;
+}
+.mh-clock,
+.mh-score {
+  font-family: var(--font-display);
+  font-size: clamp(70px, 8.8vw, 124px);
+  line-height: 1.04;
+  color: #fff;
+  text-shadow: 0 6px 34px rgba(0, 0, 0, 0.65);
+}
+.mh-clock small {
+  font-family: var(--font-eyebrow);
+  font-size: 0.24em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.mh-score {
+  display: flex;
+  align-items: center;
+  gap: 0.2em;
+  font-variant-numeric: tabular-nums;
+}
+.mh-score i {
+  width: 0.3em;
+  height: 0.07em;
+  background: rgba(255, 255, 255, 0.6);
+}
+.mh-score .is-out { color: rgba(255, 255, 255, 0.5); }
+.mh-vs {
+  font-family: var(--font-display);
+  font-size: clamp(56px, 7vw, 92px);
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.9);
+}
+.mh-tz {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.76);
+}
+.mh-countdown {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 8px;
+  margin-top: 10px !important;
+  font-family: var(--font-eyebrow);
+  font-size: 14px;
+  letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.86);
+}
+.mh-countdown b {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 400;
+  color: var(--flag);
+}
+.mh-state,
+.mh-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-eyebrow);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.88);
+}
+.mh-live {
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: #c8202a;
+  color: #fff;
+}
+.mh-live i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  animation: pulse-live 1.5s ease-in-out infinite;
+}
+.mh-pending {
+  margin: 10px 0 !important;
+  font-family: var(--font-display);
+  font-size: 24px;
+  color: rgba(255, 255, 255, 0.86);
+}
+.mh-venue {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 14px 0 0;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+  text-align: center;
+}
+.mh-venue a { color: inherit; text-underline-offset: 3px; }
+.mh-venue a:hover { color: var(--flag); }
+.mh-cta {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+.mh-cta .btn-outline { background: rgba(5, 15, 10, 0.42); }
+
+/* ── La placa ── */
+.mp-plate { padding-bottom: 40px; }
+.mp-wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+.mp-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--mp-linea);
+}
+.mp-tools-end { margin-left: auto; }
+.mp-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 0 56px;
+  align-items: start;
+}
+.mp-grid:has(.mp-main:empty) { grid-template-columns: minmax(0, 1fr); }
+.mp-grid .mp-sec:first-child { border-top: 0; }
+.mp-sec {
+  padding: 28px 0;
+  border-top: 1px solid var(--mp-linea);
+}
+.mp-title {
+  margin: 0 0 16px;
+  font-family: var(--font-display);
+  font-size: 27px;
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  color: var(--mp-cal);
+}
+.mp-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--mp-gris);
+}
+.mp-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--mark);
+  height: var(--mark);
+  flex: 0 0 var(--mark);
+  font-family: var(--font-display);
+  font-size: calc(var(--mark) * 0.36);
+  color: var(--mp-gris);
+}
+.mp-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 12%;
+}
+
+/* ¿Quién gana? */
+.mp-poll-picks {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+}
+.mp-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 112px;
+  padding: 12px 10px;
+  border: 1px solid var(--mp-linea);
+  border-bottom: 4px solid var(--home);
+  border-radius: 6px;
+  background: var(--mp-noche-2);
+  color: var(--mp-cal);
+  font-family: var(--font-eyebrow);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1.25;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.mp-pick--away { border-bottom-color: var(--away); }
+.mp-pick--tie {
+  padding: 12px 18px;
+  border-bottom-color: var(--mp-gris);
+  color: var(--mp-gris);
+}
+.mp-pick:hover:not(:disabled) { background: var(--mp-noche-3); border-color: rgba(243, 246, 241, 0.4); }
+.mp-pick--home:hover:not(:disabled) { border-bottom-color: var(--home); }
+.mp-pick--away:hover:not(:disabled) { border-bottom-color: var(--away); }
+.mp-pick:disabled { opacity: 0.6; cursor: default; }
+
+.mp-poll-bar {
+  display: flex;
+  gap: 2px;
+  height: 16px;
+}
+.mp-poll-seg {
+  flex: 0 1 0;
+  min-width: 4px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(243, 246, 241, 0.2);
+}
+.mp-poll-seg--home { background: var(--home); }
+.mp-poll-seg--tie { background: #7c8f83; }
+.mp-poll-seg--away { background: var(--away); }
+.mp-poll-legend {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.mp-poll-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--mp-gris);
+}
+.mp-poll-item--tie { text-align: center; }
+.mp-poll-item--away { text-align: right; }
+.mp-poll-item b {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1.1;
+  color: var(--mp-cal);
+}
+.mp-poll-total {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--mp-gris);
+}
+
+/* Cara a cara */
+.mp-tape {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.mp-tape th,
+.mp-tape td {
+  padding: 9px 6px;
+  border-top: 1px solid var(--mp-linea);
+  text-align: center;
+  vertical-align: middle;
+}
+.mp-tape thead th,
+.mp-tape thead td {
+  padding: 0 0 12px;
+  border-top: 0;
+}
+.mp-tape-team {
+  font-family: var(--font-eyebrow);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  color: var(--mp-cal);
+}
+.mp-tape-team--home { text-align: left !important; box-shadow: inset 0 -3px 0 var(--home); }
+.mp-tape-team--away { text-align: right !important; box-shadow: inset 0 -3px 0 var(--away); }
+.mp-tape-who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.mp-tape-team--away .mp-tape-who { flex-direction: row-reverse; }
+.mp-tape tbody td {
+  width: 33%;
+  font-family: var(--font-display);
+  font-size: 23px;
+  line-height: 1.2;
+  color: var(--mp-gris);
+}
+.mp-tape tbody td:first-child { text-align: left; }
+.mp-tape tbody td:last-child { text-align: right; }
+.mp-tape tbody th {
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--mp-gris);
+}
+.mp-tape tbody td.is-lead { color: #fff; }
+/* "2.º en BAJÍO" no cabe a 23 px en un teléfono. */
+@media (max-width: 480px) {
+  .mp-tape tbody td { font-size: 19px; }
+  .mp-tape tbody th { font-size: 11.5px; }
+}
+
+/* Cómo llegan */
+.mp-recents {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 32px;
+}
+.mp-recent-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-family: var(--font-eyebrow);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--mp-cal);
+}
+.mp-recent-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mp-recent-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--mp-linea);
+  color: inherit;
+  font-size: 13px;
+  text-decoration: none;
+}
+.mp-recent-row:hover { color: var(--flag); }
+.mp-recent-rival {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-recent-rival small { color: var(--mp-gris); font-size: 12px; }
+.mp-recent-score {
+  font-family: var(--font-display);
+  font-size: 16px;
+  letter-spacing: 0.02em;
+}
+/* Una letra y no un color: decir "ganó" no necesita pintar a nadie de rojo. */
+.mp-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  font-weight: 700;
+}
+.mp-chip--G { background: var(--mp-cal); color: var(--mp-noche); }
+.mp-chip--P { border: 1px solid rgba(243, 246, 241, 0.34); color: var(--mp-gris); }
+.mp-chip--E { border: 1px dashed rgba(243, 246, 241, 0.6); color: var(--mp-cal); }
+
+/* Antes se enfrentaron */
+.mp-h2h {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mp-h2h-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 0;
+  border-top: 1px solid var(--mp-linea);
+  color: inherit;
+  text-decoration: none;
+}
+.mp-h2h li:first-child .mp-h2h-row { border-top: 0; padding-top: 0; }
+.mp-h2h-game {
+  font-family: var(--font-eyebrow);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+.mp-h2h-game b {
+  margin: 0 8px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 400;
+}
+.mp-h2h-row small { font-size: 12px; color: var(--mp-gris); }
+.mp-h2h-row:hover .mp-h2h-game { color: var(--flag); }
+
+/* Cómo llegar */
+.mp-venue-cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-bottom: 14px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+.mp-venue-name {
+  margin: 0 0 2px;
+  font-family: var(--font-eyebrow);
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+}
+.mp-venue-line {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--mp-gris);
+}
+.mp-venue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.mp-venue-actions:empty { display: none; }
+.mp-venue-contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--mp-gris);
+}
+.mp-venue-contact a { color: inherit; }
+
+/* También transmiten */
+.mp-media {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.mp-media-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 72px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.mp-media-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+  border-radius: 50%;
+  border: 2px solid rgba(243, 246, 241, 0.34);
+  background: var(--mp-noche-2);
+  font-family: var(--font-display);
+  font-size: 18px;
+}
+.mp-media-logo img { width: 100%; height: 100%; object-fit: cover; }
+.mp-media-item:hover .mp-media-logo { border-color: var(--flag); }
+.mp-media-name {
+  font-size: 11.5px;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--mp-gris);
+}
+
+/* La jornada */
+.mp-week {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mp-week-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--mp-linea);
+  color: inherit;
+  text-decoration: none;
+}
+.mp-week li:first-child .mp-week-row { border-top: 0; padding-top: 0; }
+.mp-week-row:hover .mp-week-teams { color: var(--flag); }
+.mp-week-teams {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+.mp-week-teams > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.mp-week-score {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: right;
+  font-family: var(--font-display);
+}
+.mp-week-score b {
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 22px;
+}
+.mp-week-when {
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: right;
+  color: var(--mp-gris);
+}
+.mp-week-live {
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--live);
+}
+.mp-week-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* Los equipos */
+.mp-teams {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.mp-team {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--mp-noche-2);
+}
+.mp-team-cover {
+  position: relative;
+  height: 128px;
+  background-color: var(--home);
+  background-position: center;
+  background-size: cover;
+}
+.mp-team--away .mp-team-cover { background-color: var(--away); }
+.mp-team-cover:not(.mp-team-cover--foto) {
+  background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0 16px, transparent 16px 32px);
+}
+.mp-team-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 20px 20px;
+}
+.mp-team-head {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: -30px;
+}
+.mp-team-head .mp-mark img { filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5)); }
+.mp-team-head > div { min-width: 0; padding-top: 38px; }
+.mp-team-role {
+  margin: 0;
+  font-family: var(--font-eyebrow);
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  color: var(--mp-gris);
+}
+.mp-team-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 23px;
+  font-weight: 400;
+  line-height: 1.15;
+}
+.mp-team-check { margin-left: 6px; font-size: 15px; color: var(--positive); }
+.mp-team-line {
+  margin: 12px 0 0;
+  font-size: 13.5px;
+  color: var(--mp-gris);
+}
+.mp-team-contact {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13.5px;
+  color: var(--mp-gris);
+}
+.mp-team-contact a { color: inherit; }
+.mp-team-contact a:hover,
+.mp-team-links a:hover { color: var(--flag); }
+.mp-team-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 12px 0 0;
+  font-size: 13.5px;
+}
+.mp-team-links a { color: var(--mp-cal); text-underline-offset: 3px; }
+.mp-team-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+/* Las dos ventanas que abre la página: necesitan más que los 480 px de siempre. */
+.modal:has(.flight-widget) { max-width: 720px; }
+.share-image-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+@media (max-width: 1000px) {
+  .mp-grid { grid-template-columns: minmax(0, 1fr); }
+  .mp-grid .mp-rail .mp-sec:first-child { border-top: 1px solid var(--mp-linea); }
+}
+@media (max-width: 760px) {
+  .mh { grid-template-columns: 32px minmax(0, 1fr) 32px; }
+  .mh-zone { border-right-width: 4px; }
+  .mh-zone--away { border-right-width: 0; border-left-width: 4px; }
+  .mh-field { padding: 12px 12px 48px; }
+  .mh-duel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas: "home away" "center center";
+    gap: 2px 6px;
+  }
+  .mh-team--home { grid-area: home; }
+  .mh-team--away { grid-area: away; }
+  .mh-center { grid-area: center; margin-top: 10px; }
+  .mh-team-line { font-size: 13px; }
+  .mh-yards { height: 36px; }
+  .mh-yards span { font-size: 24px; line-height: 36px; }
+  .mh-yards span:nth-child(even) { display: none; }
+  .mh-cta .btn { flex: 1 1 100%; }
+  .mp-wrap { padding: 0 16px; }
+  .mp-tools .btn { flex: 1 1 auto; }
+  .mp-tools-end { margin-left: 0; }
+  .mp-teams { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 520px) {
+  .mp-recents { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .mp-pick { min-height: 100px; font-size: 13px; }
+  .mp-pick--tie { padding: 12px 10px; }
+  .mh-round { font-size: 13px; }
+  .mh-round strong { flex-basis: 100%; }
+  .mh-round strong + span { margin-left: 0; }
+  /* "Inicio" ya está en el logo de arriba: sin él, la ruta cabe en un renglón. */
+  .mh-crumb a:first-of-type { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mh-helmet.is-listo { animation: none; }
+  .mh-live i { animation: none; }
 }

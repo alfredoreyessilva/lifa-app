@@ -5,13 +5,9 @@ import AuthModal from './AuthModal.jsx';
 
 const EMPTY_SUMMARY = { home: 0, away: 0, tie: 0, total: 0, myPick: null };
 
-// Widget de "¿quién gana?" — se usa tanto en las tarjetas de las listas de
-// partidos (dentro de CalendarViewer, que a su vez está adentro de un
-// <Link> que navega al partido) como en MatchPage (suelto, sin Link
-// alrededor). En los dos casos paramos la propagación de los clics, para
-// que votar no dispare de rebote la navegación de la tarjeta.
-export default function PredictionWidget({ matchId, homeTeam, awayTeam, weekLabel }) {
-  const isScrimmage = weekLabel === 'SCRIMMAGE';
+// Los votos de un partido y cómo votar. Lo usan las dos caras de "¿quién gana?":
+// el widget de las tarjetas (abajo) y MatchPoll, en la página del partido.
+export function usePrediction(matchId) {
   const { token } = useAuth();
   const [summary, setSummary] = useState(null);
   const [working, setWorking] = useState(false);
@@ -38,12 +34,38 @@ export default function PredictionWidget({ matchId, homeTeam, awayTeam, weekLabe
     }
   }
 
-  function handlePick(pick, e) {
+  function pick(value) {
+    if (working || summary?.myPick) return;
+    if (!token) { setPendingPick(value); setShowAuthModal(true); return; }
+    submitVote(value, token);
+  }
+
+  const authModal = showAuthModal ? (
+    <AuthModal
+      title="Inicia sesión para votar"
+      onClose={() => setShowAuthModal(false)}
+      onSuccess={(newToken) => {
+        setShowAuthModal(false);
+        if (pendingPick) submitVote(pendingPick, newToken);
+      }}
+    />
+  ) : null;
+
+  return { summary, working, pick, authModal };
+}
+
+// Widget de "¿quién gana?" para las tarjetas de las listas de partidos (dentro
+// de CalendarViewer, que a su vez está adentro de un <Link> que navega al
+// partido). Paramos la propagación de los clics para que votar no dispare de
+// rebote la navegación de la tarjeta.
+export default function PredictionWidget({ matchId, homeTeam, awayTeam, weekLabel }) {
+  const isScrimmage = weekLabel === 'SCRIMMAGE';
+  const { summary, working, pick, authModal } = usePrediction(matchId);
+
+  function handlePick(value, e) {
     e.preventDefault();
     e.stopPropagation();
-    if (working || summary?.myPick) return;
-    if (!token) { setPendingPick(pick); setShowAuthModal(true); return; }
-    submitVote(pick, token);
+    pick(value);
   }
 
   function stop(e) {
@@ -83,16 +105,7 @@ export default function PredictionWidget({ matchId, homeTeam, awayTeam, weekLabe
         </div>
       )}
 
-      {showAuthModal && (
-        <AuthModal
-          title="Inicia sesión para votar"
-          onClose={() => setShowAuthModal(false)}
-          onSuccess={(newToken) => {
-            setShowAuthModal(false);
-            if (pendingPick) submitVote(pendingPick, newToken);
-          }}
-        />
-      )}
+      {authModal}
     </div>
   );
 }

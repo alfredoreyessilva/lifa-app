@@ -713,6 +713,8 @@ lifa-app/
                               públicas y el árbol del panel),
                               matchPhase.js (de dónde sale la FASE de un partido:
                               phase_id, o derivada de week_label),
+                              matchContext.js (lo que rodea a un partido, a su
+                              fecha: ver "La página de un partido"),
                               standings.js (catálogo de desempates + motor de
                               ordenamiento; función pura, se prueba sin Postgres),
                               branchStandings.js (arma las tablas de una rama y
@@ -795,8 +797,12 @@ lifa-app/
                                  quien tenga el permiso `asistencia`. No son dos
                                  pantallas: lo que cambia es si se puede marcar
       components/
-        FlightSearchWidget.jsx   Botón "✈️ Vuelo" en MatchPage — despliega el
-                                 widget de búsqueda de Aviasales (ver "Monetización")
+        MatchHero.jsx            La portada de un partido: la cancha de noche, las
+                                 end zones y los dos cascos (ver "La página de un
+                                 partido"). Junto a ella, las secciones: MatchPoll,
+                                 MatchCompare, MatchVenue, MatchWeek y MatchTeamCard
+        FlightSearchWidget.jsx   Botón "Vuelo" de "Cómo llegar" — abre en una ventana
+                                 el widget de búsqueda de Aviasales (ver "Monetización")
         StandingsTable.jsx       Una tabla de posiciones. Solo pinta: el orden y
                                  los desempates ya vienen resueltos del backend
         StandingsView.jsx        Campeones + pestañas por nivel + las tablas.
@@ -806,6 +812,11 @@ lifa-app/
                                  (ver "Tabla de posiciones y modelo de competencia")
         (resto de components/), context/, api/
       utils/
+        teamPaint.js          De qué color va la end zone de un equipo y cómo se
+                              pone su logo: se lee del logo. Pura; el canvas vive
+                              en useTeamPaint.js
+        matchCompare.js       Los renglones de "Cara a cara" y la línea debajo
+                              de cada casco. Pura: no calcula ningún récord
         offlineQueue.js       La REGLA de la cola sin señal: qué se fusiona,
                               cuándo se reintenta, qué se enseña. Pura — la
                               cubre el CI (ver "Capturar sin señal")
@@ -930,7 +941,7 @@ Dos recorridos de punta a punta en `backend/tests/`. **Nunca contra producción*
 
 1. Inicio → grid de logos de ligas.
 2. Click en liga → página de la liga: portada, logo, nombre, descripción y pestañas (Categorías/Equipos/Sedes), todo dentro de un mismo panel.
-3. Click en categoría → calendario de partidos. Cada tarjeta de partido es un solo link hacia `/partidos/:id` (`MatchPage.jsx`), donde están todos los links de transmisión, todos los de boletos, la sede, la jornada, el botón de "avisarme de este partido" y compartir.
+3. Click en categoría → calendario de partidos. Cada tarjeta de partido es un solo link hacia `/partidos/:id` (`MatchPage.jsx`, ver "La página de un partido").
 
    El calendario se parte en **tramos por jornada**, cada uno con un encabezado (jornada, fechas y cuántos partidos) que se queda pegado bajo la barra de arriba mientras se desliza (`groupByJornada` en `utils/matchDisplay.js`). Tres decisiones:
    - **No se reordena.** Los tramos son partidos *consecutivos* de la misma jornada, en orden de fecha, que es como la afición busca qué sigue. Un partido reprogramado que cae entre otras jornadas forma su propio tramo con su etiqueta: la misma jornada puede salir dos veces, y es cierto. Reagruparlo lo pondría arriba de partidos que se juegan antes que él.
@@ -1017,9 +1028,150 @@ saltaba la fila con un error de Postgres, porque `matches.match_date` era
   los que siguen activos, que es lo correcto para un partido que todavía no
   se juega.
 
+## La página de un partido
+
+`/partidos/:id` es a donde llega cada link que circula por WhatsApp, y hasta el
+2026-11-04 era una tarjeta de 520 px con una docena de botones amarillos, encima
+de tres fichas sueltas sobre la cancha. Tenía todo y nada decía qué mirar
+primero. Se rehízo para que se lea como la página de un evento, sin pedirle a
+nadie que capture un dato nuevo: todo lo que enseña ya estaba en la base.
+
+### Lo que la ordena
+
+Tres preguntas de quien llega, y la respuesta a cada una en un solo lugar:
+
+- **¿Quién llega mejor?** La columna principal: "¿Quién gana?", "Cara a cara",
+  "Cómo llegan" y "Antes se enfrentaron".
+- **¿Cómo lo veo?** El botón de la portada, que dice a dónde lleva ("Ver partido
+  en YouTube"), y "También transmiten".
+- **¿Cómo llego?** "Cómo llegar": la sede, junto con Maps, Hotel y Vuelo, que
+  antes eran botones sueltos en la tarjeta.
+
+La portada cambia con el momento del partido: antes, la hora en grande con su
+cuenta regresiva; en vivo y al terminar, el marcador. Al terminar, además, se
+quitan Hotel, Vuelo y Boletos —el link de hotel se arma con la fecha del juego—,
+el botón de ver dice "Ver repetición", "Cómo llegan" pasa a "Cómo llegaron" y
+"¿Quién gana?" se vuelve "Así votó la afición". Mientras se puede votar, el
+resultado se ve hasta después de votar, para que no empuje el voto de nadie; ya
+cerrada la votación no hay voto que empujar.
+
+Hay **un solo botón amarillo**, el primero de la portada. Antes lo eran todos, y
+un botón amarillo entre doce no dice nada. Los demás van de contorno, y los
+emojis de los botones se cambiaron por iconos dibujados a mano
+(`MatchIcons.jsx`): cada teléfono pinta un emoji distinto.
+
+Debajo de la portada hay una sola placa, del verde de la cancha llevado casi a
+negro, en vez de tarjetas sobre el pasto. Es la misma decisión de la vitrina de
+una tienda, y aquí responde a la queja concreta: se leía como cosas juntas, no
+como una pantalla. El fondo de cancha se conserva en la portada, donde ya no es
+un fondo sino el tema.
+
+### La portada: dos cascos en medio campo
+
+La cancha vista de una end zone a la otra, de noche. Cada end zone va pintada del
+color de su equipo, con su nombre rotulado, y los dos cascos se encuentran en
+medio campo con el marcador entre ellos. La idea no se inventó: casi todos los
+logos de ONEFA son cascos, `away_logo_url` ya existía para que miraran hacia el
+otro lado (ver el bracket), y la portada que Zorros subió trae su propia end zone
+pintada. Es un encabezado que solo puede ser de futbol americano, y como cada
+partido trae sus colores, ninguno se ve igual a otro.
+
+El único movimiento de la página es la entrada de los cascos, y se vuelve a ver
+al pasar a otro partido. Con `prefers-reduced-motion` no hay animación.
+
+El nombre rotulado es decoración (`aria-hidden`): el legible va debajo del
+casco. La letra se mide contra la altura de la end zone con `container-type:
+size`, para que quepan igual "OSOS" y "AUTÉNTICOS TIGRES UANL".
+
+### El color sale del logo
+
+`teams.brand_color` manda, pero de 217 equipos solo uno lo capturó, y pedírselo a
+los demás es exactamente la clase de trabajo que nadie hace. En cambio, todos
+tienen logo y el color ya está ahí: `utils/teamPaint.js` lo lee en el navegador,
+de una copia de 96 px, al abrir la página (regla 4). Si un equipo cambia de logo,
+su cancha cambia sola.
+
+- **Se descarta lo que no dice nada del equipo:** el blanco del casco, el negro
+  de la careta y los grises del metal. Un logo puro blanco y negro no tiene color,
+  y se queda con el verde de la cancha.
+- **El peso es la saturación al cuadrado.** Contar pixeles dejaba a TECOS en rosa:
+  en su casco blanco, el filo suavizado entre el rojo y el blanco ocupa casi
+  tantos pixeles como el rojo.
+- **El color se ajusta al de una cancha pintada.** El de un casco trae el brillo
+  del metal: un dorado sale mostaza. Los amarillos se quedan claros porque
+  oscurecidos se vuelven café, y el nombre se escribe en la tinta que más
+  contraste tenga: un amarillo lleva letra oscura, como la end zone de Zorros. La
+  prueba exige 4.5:1 con cualquier color.
+- **Tres formas de poner un logo.** *Casco*: fondo transparente, directo sobre el
+  pasto. *Placa*: casi todo lleno con las esquinas redondeadas vacías, como los de
+  la LFA; va directo pero más chico, porque a tamaño de casco un cuadro lleno pesa
+  el doble. *Disco*: con fondo propio, un JPG sobre negro o sobre blanco, recortado
+  en círculo. Medido el 2026-11-04 en los 40 equipos de ONEFA y LFA: 29 cascos, 7
+  placas y 4 discos. De visitante son 26, 7 y 7: Borregos Puebla, Potros Salvajes,
+  Indios y Correcaminos son casco en casa, pero su logo de visitante es un JPG
+  sobre negro. Se arregla solo el día que suban esa versión en PNG.
+
+Es una imagen aparte de la que se ve, pedida con `crossOrigin`: un logo sin
+permisos para leerlo simplemente no se lee, y se queda en verde y en disco. Si se
+le pusiera a la imagen visible, ese logo no se vería.
+
+### "Cómo llegan" se lee a la fecha del partido
+
+`GET /leagues/matches/:id/context` dice con qué récord y en qué lugar llegó cada
+equipo, sus últimos cinco resultados, sus enfrentamientos anteriores y qué más se
+juega esa jornada. Nadie guarda nada de esto (regla 4).
+
+- **A la fecha del partido, no a la de hoy.** La tabla responde cómo va la
+  temporada; esta pantalla, cómo llegaron a ESTE juego. Con el récord de hoy, un
+  partido de la Jornada 2 diría que los dos llegaron 8-1, y un resultado de la
+  Jornada 9 aparecería entre sus "últimos resultados". `utils/matchContext.js`
+  recorta los partidos por fecha y `tablesOf()` vuelve a calcular las tablas.
+- **Es el mismo motor de la tabla.** No hay un segundo cálculo que pueda decir
+  otra cosa: `tablesOf()` es el ciclo que ya usaba la tabla pública. Para un
+  partido que no se ha jugado, el récord y el lugar son los de la tabla.
+- **Los playoffs cuentan como resultado, no como récord.** No suman a la tabla,
+  pero son lo último que jugó el equipo. Un scrimmage no cuenta para ninguno.
+- **Los enfrentamientos anteriores cruzan temporadas y ligas**, y solo de ligas
+  públicas: un cruce de hace dos años es justo lo que esa lista quiere contar.
+- **Va en su propia llamada.** Calcular las tablas de una rama no es gratis, y el
+  partido se pinta sin esperarlas. Si falla, o durante un despliegue en que Vercel
+  ya terminó y Render todavía no, solo faltan esas secciones.
+- **Una liga sin publicar responde 200 y vacío**, el mismo filtro que la tabla. El
+  partido se sigue viendo por su link, como siempre.
+
+"Cara a cara" marca quién va mejor solo donde la comparación es justa: en tablas
+distintas no hay ventaja que marcar, porque ser 2.º de un grupo no es mejor ni
+peor que ser 3.º de otro. Los resultados se dicen con una letra (G, P, E), no con
+verde y rojo: decir que alguien perdió no necesita pintarlo de rojo (regla 10).
+
+### Datos que faltan
+
+La página se arma con lo que haya y no guarda lugar para lo demás. De 58 equipos,
+1 tiene ciudad y 1 institución, y la LFA no tiene ninguna sede registrada, así que
+una ficha que reservara esos renglones saldría vacía casi siempre:
+
+- Sin sede registrada se usa `matches.venue`, el texto libre. Es lo único que
+  tiene la LFA, y la final del Tazón México no decía dónde se jugó aunque el dato
+  estuviera ahí.
+- Sin portada, la ficha del equipo lleva las franjas de su end zone.
+- Un partido terminado sin marcador dice "Marcador por capturar", no "VS".
+- En vivo se enseña el marcador si ya lo capturaron, y el que va abajo no se
+  apaga: eso es solo para el perdedor de un partido terminado.
+
+### Fuera de esta versión
+
+- **Nombres de jugadores.** Los líderes del partido viven en la página
+  Estadísticas, y el botón de la portada lleva ahí. Esta pantalla no enseña a
+  ningún jugador (regla 7).
+- **Un mapa dentro de la página.** Las sedes guardan un link corto de Google Maps,
+  sin coordenadas: embeberlo pide una llave de API o capturar coordenadas.
+- **El clima del partido.** Pide un servicio externo y las mismas coordenadas.
+- **La imagen de "Generar imagen"** conserva su diseño: es otra pieza, y va en una
+  ventana solo para no empujar los botones de la página.
+
 ## Monetización (afiliados de viaje)
 
-La plataforma monetiza mediante comisión de afiliado en dos accesos de `MatchPage`: 🏨 Hotel y ✈️ Vuelo. Ninguno de los dos vende nada directamente — ambos mandan al usuario a un tercero (Booking.com, Aviasales) que sí procesa la reserva y el pago; CFBAMX solo cobra comisión cuando esa reserva se completa.
+La plataforma monetiza mediante comisión de afiliado en dos accesos de "Cómo llegar", en `MatchPage`: Hotel y Vuelo. Ninguno de los dos vende nada directamente — ambos mandan al usuario a un tercero (Booking.com, Aviasales) que sí procesa la reserva y el pago; CFBAMX solo cobra comisión cuando esa reserva se completa.
 
 Todo corre a través de una sola cuenta de **Travelpayouts** (red de afiliados de viaje), sin necesidad de tener una empresa constituida — basta con RFC persona física con actividad empresarial para poder facturar la comisión más adelante.
 
@@ -1031,7 +1183,7 @@ Todo corre a través de una sola cuenta de **Travelpayouts** (red de afiliados d
 
 ### Vuelo — widget embebido de Aviasales
 
-- El botón "✈️ Vuelo" (`FlightSearchWidget.jsx`) despliega, dentro de la misma tarjeta del partido, el widget "Flights Search Form" de Aviasales (vía Travelpayouts) — el usuario busca y compara sin salir de la página; solo sale del sitio al momento de reservar.
+- El botón "Vuelo" (`FlightSearchWidget.jsx`) abre, en una ventana sobre la página del partido, el widget "Flights Search Form" de Aviasales (vía Travelpayouts) — el usuario busca y compara sin salir de la página; solo sale del sitio al momento de reservar.
 - El **destino** viene pre-cargado según la ciudad de la sede, resuelta a código IATA con el diccionario `IATA_BY_CITY` (`matchServices.js` — cubre las ciudades mexicanas con aeropuerto más comunes para sedes de ligas; si una sede real no aparece ahí, el botón de Vuelo no se muestra — nunca se manda un destino adivinado).
 - El **origen** no se pide — Aviasales lo detecta por la IP del usuario.
 - La **fecha** no se puede pre-cargar (este tipo de widget no lo soporta); se le muestra al usuario la fecha del partido como texto de referencia arriba del formulario, para que la ajuste ahí mismo.
@@ -3699,8 +3851,10 @@ distinta y ninguna sería "el ranking".
 
 ### Frontend
 
-- `PredictionWidget.jsx` — en `MatchCard` (cada tarjeta del calendario) y en
-  `MatchPage`. Si ya votaste enseña el porcentaje en vez de los botones.
+- `PredictionWidget.jsx` — en `MatchCard` (cada tarjeta del calendario). Si ya
+  votaste enseña el porcentaje en vez de los botones.
+- `MatchPoll.jsx` — los mismos votos (`usePrediction`) en la página del partido,
+  con espacio para enseñarlos. Ver "La página de un partido".
 - `CalendarRanking.jsx` y `PoolRanking.jsx` — dentro de `CalendarViewer`.
 - `PredictionStats.jsx` y `MiCartelera.jsx` — en `/panel` (`Dashboard.jsx`).
 - `PoolJoinPage.jsx` — `/quiniela/:code`, público, para abrir el link recibido.

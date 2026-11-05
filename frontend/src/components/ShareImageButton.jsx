@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import Modal from './Modal.jsx';
+import { IconoImagen } from './MatchIcons.jsx';
 import { generateMatchCard, SHARE_CARD_FORMATS } from '../utils/matchShareCard.js';
 import { buildMatchShareText } from '../utils/matchDisplay.js';
 
@@ -111,79 +113,65 @@ export default function ShareImageButton({ match, dateParts, matchStatus }) {
     setBlobByFormat({});
   }
 
-  if (status === 'idle' || status === 'generating') {
-    return (
+  // El botón se queda en su lugar mientras la imagen está abierta: la vista
+  // previa va en una ventana y no empuja la fila de botones de la página.
+  return (
+    <>
       <button
         className="btn btn-outline btn-sm"
         type="button"
         onClick={handleOpen}
         disabled={status === 'generating'}
       >
-        {status === 'generating' ? 'Generando imagen…' : '🖼️ Generar imagen'}
+        <IconoImagen />
+        {status === 'generating'
+          ? 'Generando imagen…'
+          : status === 'error' ? 'No se pudo generar, reintentar' : 'Generar imagen'}
       </button>
-    );
-  }
 
-  if (status === 'error') {
-    return (
-      <button className="btn btn-outline btn-sm" type="button" onClick={handleOpen}>
-        No se pudo generar, reintentar
-      </button>
-    );
-  }
+      {status === 'ready' && (
+        <Modal title="Imagen del partido" onClose={handleClose}>
+          <div className="share-image-panel">
+            <div style={{ display: 'flex', gap: 8 }}>
+              {Object.keys(SHARE_CARD_FORMATS).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`btn btn-sm ${activeFormat === key ? 'btn-flag' : 'btn-outline'}`}
+                  onClick={() => selectFormat(key)}
+                >
+                  {SHARE_CARD_FORMATS[key].label}
+                </button>
+              ))}
+            </div>
 
-  // status === 'ready' → mini panel de previsualización
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 12,
-        padding: 16,
-        background: 'rgba(0,0,0,0.15)',
-        borderRadius: 16,
-        marginTop: 12,
-        width: '100%',
-      }}
-    >
-      <div style={{ display: 'flex', gap: 8 }}>
-        {Object.keys(SHARE_CARD_FORMATS).map((key) => (
-          <button
-            key={key}
-            type="button"
-            className={`btn btn-sm ${activeFormat === key ? 'btn-flag' : 'btn-outline'}`}
-            onClick={() => selectFormat(key)}
-          >
-            {SHARE_CARD_FORMATS[key].label}
-          </button>
-        ))}
-      </div>
+            {previewUrl && (
+              <img
+                src={previewUrl}
+                alt="Vista previa"
+                style={{ maxWidth: 260, borderRadius: 12, border: '1px solid var(--line-strong)' }}
+              />
+            )}
 
-      {previewUrl && (
-        <img
-          src={previewUrl}
-          alt="Vista previa"
-          style={{ maxWidth: 260, borderRadius: 12, border: '1px solid var(--line-strong)' }}
-        />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="btn btn-flag btn-sm"
+                type="button"
+                onClick={handleNativeShare}
+                disabled={isSharing}
+              >
+                {isSharing ? 'Compartiendo…' : 'Compartir'}
+              </button>
+              <button className="btn btn-outline btn-sm" type="button" onClick={handleDownload}>
+                Descargar
+              </button>
+              <button className="btn btn-ghost btn-sm" type="button" onClick={handleClose}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
-
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button
-          className="btn btn-flag btn-sm"
-          type="button"
-          onClick={handleNativeShare}
-          disabled={isSharing}
-        >
-          {isSharing ? 'Compartiendo…' : 'Compartir'}
-        </button>
-        <button className="btn btn-outline btn-sm" type="button" onClick={handleDownload}>
-          Descargar
-        </button>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={handleClose}>
-          Cerrar
-        </button>
-      </div>
-    </div>
+    </>
   );
 }

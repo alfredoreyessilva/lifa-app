@@ -1,24 +1,20 @@
 import { useEffect } from 'react';
 import SubscribeButton from './SubscribeButton.jsx';
 
-export default function TeamInfoPanel({ team, leagueId, onClose, inline = false, roleLabel }) {
+export default function TeamInfoPanel({ team, leagueId, onClose }) {
   useEffect(() => {
-    if (inline) return;
     function onKey(e) {
       if (e.key === 'Escape') onClose();
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose, inline]);
+  }, [onClose]);
 
   const hasContact = team.city || team.institution || team.maps_url || team.contact_email || team.contact_phone;
   const hasLinks   = team.facebook_url || team.instagram_url || team.twitter_url || team.website_url;
 
   const card = (
-    <div
-      className={`team-profile-modal${inline ? ' team-profile-modal--inline' : ''}`}
-      onClick={inline ? undefined : (e) => e.stopPropagation()}
-    >
+    <div className="team-profile-modal" onClick={(e) => e.stopPropagation()}>
 
       {/* BANNER */}
       <div
@@ -29,8 +25,7 @@ export default function TeamInfoPanel({ team, leagueId, onClose, inline = false,
           backgroundPosition: 'center',
         } : {}}
       >
-        {roleLabel && <span className="team-profile-role">{roleLabel}</span>}
-        {!inline && <button className="team-profile-close" onClick={onClose}>✕</button>}
+        <button className="team-profile-close" onClick={onClose}>✕</button>
       </div>
 
       <div className="team-profile-logo-wrap">
@@ -127,8 +122,6 @@ export default function TeamInfoPanel({ team, leagueId, onClose, inline = false,
       </div>
     </div>
   );
-
-  if (inline) return card;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>

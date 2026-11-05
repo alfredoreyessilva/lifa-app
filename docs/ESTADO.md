@@ -4,7 +4,7 @@ Una foto de qué productos hay y a qué nivel está cada uno, para no tener que
 reconstruirla leyendo el README. Lo que falta vive en
 [`PENDIENTES.md`](PENDIENTES.md), con ID y prioridad; aquí solo se nombra.
 
-**Actualizado: 2026-11-01.** Cuando un producto cambia de nivel, su renglón se
+**Actualizado: 2026-11-04.** Cuando un producto cambia de nivel, su renglón se
 mueve en el mismo commit que lo movió.
 
 ## Los niveles
@@ -42,6 +42,7 @@ respaldos se resolvieron el 2026-09-23.
 |-|-|-|-|
 | Calendario, resultados y páginas públicas | **5** | 4 ligas públicas, 92 equipos, 168 partidos | PD-03 |
 | Predicciones y quinielas | **5** | 1,663 predicciones en el concurso de ONEFA (2026-09-23) | — |
+| La página de un partido (portada con los cascos, cara a cara, cómo llegan, cómo llegar, la jornada) | **3** | Verificada el 2026-11-04. El contexto, contra `desarrollo-local`: 60 partidos públicos sin un error, y el récord y el lugar de un partido futuro iguales a la tabla. Con los datos públicos de producción, `tablesOf()` reproduce las 59 filas publicadas de ONEFA y LFA. En el navegador, escritorio, celular y 320 px: antes, en vivo y al terminar, con cascos, placas y discos, sin logos y sin sede; dueño y tesorero, votar, las dos ventanas y el contexto fallando. Sin desplegar | — |
 | Tabla de posiciones | 4 | Verificada contra datos reales (2026-09-16). El Modo ONEFA ya está aplicado en producción: medido el 2026-11-01 en la API pública, con sus cuatro fases, la regla de cada conferencia y el título | PD-36, PD-41 |
 | Imagen de la tabla para compartir (publicación e historia) | 4 | Verificada el 2026-10-12 en el navegador contra `desarrollo-local`, con las tablas reales de ONEFA y LFA, en escritorio y celular. Desplegada ese día (`0db87a7`): en el sitio público se generó la de la conferencia NACIONAL con los datos de producción | — |
 | Bracket de los playoffs (al final del calendario, con su imagen) | 4 | Verificado el 2026-11-01. La siembra y los cruces, con los datos de producción leídos de la API pública y pasados por la misma función del backend: sale el bracket de la Nacional que publicó la liga. En el navegador contra `desarrollo-local` con ese bracket inyectado (allá ONEFA no tiene fases): escritorio, celular, la imagen en sus dos formatos y la vista previa del panel. Desplegado ese día (`293027c`): Render respondió la ruta nueva a los 74 s del push, con el mismo bracket que se había calculado antes; el sitio público ya lo enseña al final del calendario de ONEFA, y 14 Grandes espera a que termine su temporada | — |
@@ -75,7 +76,7 @@ respaldos se resolvieron el 2026-09-23.
 | Disponibilidad | ⚠️ Render gratuito: **41.5 s** en frío (medido 2026-09-23) | PD-03 |
 | Cron | ⚠️ Una llamada cada ~4 h (GitHub). El externo de antes ya no llama. Alcanza para la cobranza, no para los avisos de partido | PD-02 (P2) |
 | Monitoreo | Sentry en frontend y backend ✅ · caída del servicio ❌ | PD-12 |
-| Pruebas | **507 unitarias** (319 backend + 188 frontend) en el CI ✅ · **7 suites e2e** que se corren a mano | PD-11, PD-25 |
+| Pruebas | **545 unitarias** (334 backend + 211 frontend) en el CI ✅ · **7 suites e2e** que se corren a mano | PD-11, PD-25 |
 | Despliegue | Push a `main` = producción, sin protección ni espera al CI | PD-11 |
 | Seguridad | JWT obligatorio, límite de intentos en login y en el estado de cuenta público, CORS con lista, SQL parametrizado, candado contra producción, invitaciones que caducan a los 7 días ✅ · Recuperar la contraseña con un código por correo, que cierra las sesiones abiertas: verificado el 2026-10-17 contra `desarrollo-local` (`recuperar-contrasena.e2e.mjs` y navegador) y desplegado ese día (`ff73a8b`), pero **apagado en producción**: Render no tiene Resend y la ruta contesta 503 | PD-38, PD-20, PD-21 |
 | Páginas legales | ✅ Completas desde el 2026-09-19 | — |

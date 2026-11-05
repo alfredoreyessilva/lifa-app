@@ -49,7 +49,7 @@ function drawJornadaPill(ctx, text, rightX, centerY, theme) {
  * @param {{day:string, month:string, time:string, tzLabel:string}} dateParts - de getMatchParts()
  * @param {'scheduled'|'live'|'finished'} [status] - de getMatchStatus(match). Si el partido ya
  *   finalizó y trae marcador, se dibuja el marcador en vez de "VS"; si está en vivo, se dibuja
- *   "EN VIVO". Mismo criterio que MatchPage.jsx/MatchCard.jsx.
+ *   "EN VIVO". Mismo criterio que MatchCard.jsx.
  * @returns {Promise<Blob>}
  */
 export async function generateMatchCard(match, formatKey, dateParts, status) {
@@ -122,7 +122,7 @@ export async function generateMatchCard(match, formatKey, dateParts, status) {
   drawCircleBadge(ctx, awayImg, match.away_team, cx + badgeOffsetX, badgeY, badgeRadius, theme);
 
   // "VS" al centro — salvo que el partido ya tenga marcador (finished) o
-  // esté en curso (live), igual que se muestra en MatchPage.jsx/MatchCard.jsx.
+  // esté en curso (live), igual que se muestra en MatchCard.jsx.
   const hasScore = status === 'finished' && match.home_score != null && match.away_score != null;
   ctx.fillStyle = theme.flag;
   ctx.textAlign = 'center';
