@@ -28,7 +28,8 @@ entradas traen el post-mortem del bug que las provocó.
   repetían la tabla y el bracket, pasaron a `shareCardCommon.js`.
 
   **Verificación:** ver `docs/ESTADO.md`. Las decisiones están en el README, "La
-  imagen para compartir".
+  imagen para compartir". Desplegada ese día (`f340844`) y comprobada en el sitio
+  público.
 
 - **La página de un partido, rehecha (2026-11-04).** Lo pidió Alfredo: era una
   tarjeta con botones amarillos sobre tres fichas sueltas, "dispersa y recopilada
