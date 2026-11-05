@@ -45,7 +45,8 @@ entradas traen el post-mortem del bug que las provocó.
   (`inline` de `TeamInfoPanel` y `VenueInfoPanel`) y los estilos de la tarjeta.
 
   **Verificación:** ver `docs/ESTADO.md`. Las reglas de color, de "a la fecha" y de
-  "Cara a cara" están en `matchContext.test.mjs` y `matchPage.test.mjs`.
+  "Cara a cara" están en `matchContext.test.mjs` y `matchPage.test.mjs`. Desplegada
+  ese día (`9bb4555`) y comprobada contra la API y el sitio públicos.
 
 - **Del lado derecho del bracket, el logo de visitante (2026-11-01).** Lo pidió
   Alfredo al ver el bracket de la Nacional publicado: casi todos los escudos
