@@ -15,6 +15,20 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **La imagen de un partido, también en horizontal (2026-11-05).** Lo pidió Alfredo:
+  una tercera opción junto a Publicación e Historia, la más fiel a la forma de la
+  cancha y a la portada de la página, con la misma información que la publicación.
+  Mide 2160×960, la proporción real de un campo, con el acomodo de la computadora: un
+  casco de cada lado y la hora o el marcador en medio, y la liga centrada arriba. La
+  primera versión llevaba el logo de CFBAMX en la esquina y no llevaba récord: Alfredo
+  quitó lo primero y regresó lo segundo.
+
+  **Lo que se movió:** el formato vive en `matchShareCard.js` y no en `FORMATS`, porque
+  las demás imágenes pintan un botón por cada formato de esa lista y no saben dibujarla.
+  `bloqueDuelo` recibe sus medidas, y el marcador y "Marcador por capturar" se ajustan
+  al ancho que les toca, lo que en las verticales no cambia nada: comparadas con el
+  código anterior en 12 imágenes de 6 partidos, salen iguales byte por byte.
+
 - **La imagen de la tabla de posiciones, sobre la misma cancha que la de un partido
   (2026-11-05).** Lo pidió Alfredo: que se viera más profesional, con un estilo
   parecido a la imagen de los partidos. Era un panel oscuro sobre la cancha clara, y

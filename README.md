@@ -1164,15 +1164,35 @@ una ficha que reservara esos renglones saldría vacía casi siempre:
 
 ### La imagen para compartir
 
-**Generar imagen** es esta misma portada, en publicación (1080×1350) y en historia
-(1080×1920), dibujada en el navegador de quien la pide con canvas 2D
-(`utils/matchShareCard.js`). Hasta el 2026-11-04 fue otra pieza, con la cancha
-clara y los logos en círculo: lo que circulaba ya no se parecía a la página a la
-que llevaba.
+**Generar imagen** es esta misma portada, en publicación (1080×1350), en historia
+(1080×1920) y en horizontal (2160×960), dibujada en el navegador de quien la pide
+con canvas 2D (`utils/matchShareCard.js`). Hasta el 2026-11-04 fue otra pieza, con
+la cancha clara y los logos en círculo: lo que circulaba ya no se parecía a la
+página a la que llevaba.
 
-- **El acomodo es el del teléfono:** los cascos lado a lado y, debajo, la hora o
-  el marcador. Una imagen vertical es esa misma pantalla; con la hora en medio,
-  como en la computadora, los cascos saldrían a la mitad del tamaño.
+- **Las dos verticales llevan el acomodo del teléfono:** los cascos lado a lado y,
+  debajo, la hora o el marcador. Una imagen vertical es esa misma pantalla; con la
+  hora en medio, como en la computadora, los cascos saldrían a la mitad del tamaño.
+- **La horizontal es la cancha completa.** 2160×960 es la proporción real de un
+  campo, 120 yardas por 53⅓, y cada end zone mide sus 10 yardas. La portada en una
+  computadora sale casi igual (a 1440 px de ventana mide 1425×567 o 1425×628, según
+  lo que traiga el partido), así que aquí sí cabe su acomodo: un casco de cada lado
+  y la hora o el marcador en medio, con cascos de 536 px contra los 388 de la
+  publicación. La cancha llena toda la imagen, sin el pie oscuro de las verticales,
+  y la fila de la liga va centrada arriba.
+- **La horizontal no lleva el logo de CFBAMX.** Se probó en la esquina de arriba,
+  donde la página tiene las flechas, y Alfredo lo quitó. Lo que queda de la marca es
+  el balón amarillo de la fila de la liga.
+- **La horizontal dice lo mismo que la publicación**, con el récord y el lugar
+  debajo de cada nombre, o "Local" y "Visitante" si no hay. Se probó sin esa línea y
+  Alfredo la regresó. "Cara a cara" sigue siendo solo de la historia.
+- **La horizontal es solo de un partido.** `FORMATS`, en `shareCardCommon.js`, lo
+  comparten todas las imágenes y cada una pinta un botón por formato: agregarla ahí
+  le pondría "Horizontal" a la tabla, al bracket, al ranking y al jugador, que no la
+  saben dibujar. Por eso se suma en `matchShareCard.js`.
+- **Entre los cascos de la horizontal el espacio es justo:** el marcador, la fecha
+  y "Marcador por capturar" bajan de letra hasta caber, porque a su tamaño completo
+  un 88-48 ya rozaba las máscaras. En las verticales nunca hace falta.
 - **No puede decir otra cosa que la portada.** Los textos salen de las mismas
   funciones (`centroDelPartido`, `detalleDelPartido`, `sedeDelPartido`,
   `lineaDelEquipo`, `filasCaraACara`), y el color y la forma de cada logo, de la

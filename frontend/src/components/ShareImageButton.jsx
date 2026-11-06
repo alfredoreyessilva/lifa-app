@@ -9,7 +9,8 @@ import { buildMatchShareText } from '../utils/matchDisplay.js';
 // compartir, no una pantalla nueva.
 //
 // v1 a propósito NO tiene: selector de plantilla, subida de foto, ni IA.
-// Un solo diseño, la portada de la página, en dos formatos fijos (post / story).
+// Un solo diseño, la portada de la página, en tres formatos fijos (post / story /
+// landscape).
 export default function ShareImageButton({ match, dateParts, matchStatus, pinturas, contexto }) {
   const [status, setStatus] = useState('idle'); // idle | generating | ready | error
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -20,11 +21,12 @@ export default function ShareImageButton({ match, dateParts, matchStatus, pintur
   async function handleOpen() {
     setStatus('generating');
     try {
-      const [postBlob, storyBlob] = await Promise.all([
+      const [postBlob, storyBlob, landscapeBlob] = await Promise.all([
         generateMatchCard(match, 'post', dateParts, matchStatus, pinturas, contexto),
         generateMatchCard(match, 'story', dateParts, matchStatus, pinturas, contexto),
+        generateMatchCard(match, 'landscape', dateParts, matchStatus, pinturas, contexto),
       ]);
-      const blobs = { post: postBlob, story: storyBlob };
+      const blobs = { post: postBlob, story: storyBlob, landscape: landscapeBlob };
       setBlobByFormat(blobs);
       setPreviewUrl(URL.createObjectURL(blobs.post));
       setActiveFormat('post');
@@ -132,7 +134,7 @@ export default function ShareImageButton({ match, dateParts, matchStatus, pintur
       {status === 'ready' && (
         <Modal title="Imagen del partido" onClose={handleClose}>
           <div className="share-image-panel">
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
               {Object.keys(SHARE_CARD_FORMATS).map((key) => (
                 <button
                   key={key}
@@ -149,7 +151,11 @@ export default function ShareImageButton({ match, dateParts, matchStatus, pintur
               <img
                 src={previewUrl}
                 alt="Vista previa"
-                style={{ maxWidth: 260, borderRadius: 12, border: '1px solid var(--line-strong)' }}
+                style={{
+                  maxWidth: activeFormat === 'landscape' ? '100%' : 260,
+                  borderRadius: 12,
+                  border: '1px solid var(--line-strong)',
+                }}
               />
             )}
 
