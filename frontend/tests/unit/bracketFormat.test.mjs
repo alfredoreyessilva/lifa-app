@@ -7,8 +7,9 @@ import assert from 'node:assert/strict';
 
 import {
   mirrorColumns, roundShortName, gameStatus, seedOrigin, recordOf, bracketTitle,
-  hasTiedSeeds, isSingleTable, publishNote, seedOf, finalLabel, unplacedNote, logoForSide,
+  hasTiedSeeds, isSingleTable, publishNote, seedOf, finalLabel, unplacedNote, logoForSide, playedDay,
 } from '../../src/utils/bracketFormat.js';
+import { geometria, columnas, centroDe } from '../../src/utils/bracketShareCard.js';
 
 const p = (seed, extra = {}) => ({ team_id: 100 + seed, seed, name: `EQUIPO ${seed}`, logo_url: null, ...extra });
 const juego = (a, b, extra = {}) => ({ top: a, bottom: b, bye: false, match: null, corrected: false, winner_team_id: null, ...extra });
@@ -153,4 +154,74 @@ test('el nombre del bracket, las marcas y la nota de la vista previa', () => {
   assert.equal(publishNote({ ready: true }), '');
   assert.match(publishNote({ ready: false, regular_pending: 7 }), /faltan 7 partidos de temporada regular/);
   assert.match(publishNote({ ready: false, regular_pending: 1 }), /falta 1 partido de temporada regular/);
+});
+
+test('playedDay: el día en que se jugó, en el huso del partido, o nada', () => {
+  // Las 6 de la tarde del 6 en México ya son el 7 en UTC.
+  assert.equal(playedDay({ match: { match_date: '2026-11-07T00:00:00.000Z', timezone: 'America/Mexico_City' } }), '6 NOV');
+  assert.equal(playedDay({ match: { match_date: null } }), '');
+  assert.equal(playedDay(juego(null, null)), '');
+  assert.equal(playedDay(null), '');
+});
+
+// La imagen: las medidas son lo único de ella que se puede probar sin canvas.
+const FORMATOS = [['post', 1350], ['story', 1920]];
+
+test('imagen del bracket: las franjas y las end zones suman exactamente el alto', () => {
+  for (const [formato, alto] of FORMATOS) {
+    for (const rondas of [0, 1, 2, 3]) {
+      const g = geometria(formato, alto, rondas);
+      assert.equal(g.zonaArriba + g.alto + g.zonaAbajo, alto, `${formato} con ${rondas} rondas`);
+      assert.equal(g.alto, g.franja * g.franjas);
+    }
+  }
+});
+
+test('imagen del bracket: en una historia lo que sobra es de las end zones, no de la cancha', () => {
+  const g = geometria('story', 1920, 2);
+  assert.equal(g.franjas, 8);
+  assert.equal(g.franja, 160);
+  assert.ok(g.zonaArriba > 340);
+  assert.ok(g.zonaAbajo > 124);
+});
+
+test('imagen del bracket: las cajas de una mitad no se enciman ni se salen de la cancha', () => {
+  for (const [formato, alto] of FORMATOS) {
+    for (const rondas of [1, 2, 3]) {
+      const g = geometria(formato, alto, rondas);
+      const centros = [];
+      for (let c = 0; c < rondas; c++) {
+        for (let j = 0; j < 2 ** (rondas - 1 - c); j++) centros.push(centroDe(g, rondas, c, j));
+      }
+      centros.sort((a, b) => a - b);
+      assert.equal(centros.length, g.filas);
+      assert.ok(centros[0] - g.caja / 2 >= g.zonaArriba, 'la primera, abajo de la línea de gol');
+      assert.ok(centros.at(-1) + g.caja / 2 <= g.zonaArriba + g.alto, 'la última, arriba de la línea de gol');
+      centros.slice(1).forEach((y, i) => assert.ok(y - centros[i] >= g.caja, `${formato}, ${rondas} rondas, caja ${i}`));
+    }
+  }
+});
+
+test('imagen del bracket: cada cruce queda a media altura de los dos que lo alimentan, y la última ronda en la yarda 50', () => {
+  const g = geometria('post', 1350, 2);
+  assert.equal(centroDe(g, 2, 1, 0), g.zonaArriba + g.alto / 2);
+  assert.equal(centroDe(g, 2, 1, 0), (centroDe(g, 2, 0, 0) + centroDe(g, 2, 0, 1)) / 2);
+  const con16 = geometria('post', 1350, 3);
+  assert.equal(centroDe(con16, 3, 2, 0), con16.zonaArriba + con16.alto / 2);
+  assert.equal(centroDe(con16, 3, 1, 0), (centroDe(con16, 3, 0, 0) + centroDe(con16, 3, 0, 1)) / 2);
+  // Con una sola ronda antes de la final, todo va en la yarda 50.
+  const con4 = geometria('post', 1350, 1);
+  assert.equal(centroDe(con4, 1, 0, 0), con4.zonaArriba + con4.alto / 2);
+});
+
+test('imagen del bracket: tres columnas en espejo, sin pisarse y con la final en medio', () => {
+  const w = 1080;
+  for (const rondas of [0, 1, 2, 3]) {
+    const m = columnas(w, rondas);
+    assert.ok(Math.abs(m.xCentro + m.ancho / 2 - w / 2) <= 1, `final centrada con ${rondas} rondas`);
+    if (!rondas) continue;
+    assert.equal(m.xDerecha, w - m.xIzquierda - m.ancho, 'espejo');
+    assert.ok(m.xIzquierda + m.ancho < m.xCentro, 'la final empieza después de la mitad izquierda');
+    assert.ok(m.xCentro + m.ancho < m.xDerecha, 'y termina antes de la derecha');
+  }
 });

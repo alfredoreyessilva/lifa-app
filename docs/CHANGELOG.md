@@ -15,6 +15,43 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **La imagen del bracket, un bracket clásico sobre la cancha de pie (2026-11-05).** Lo
+  pidió Alfredo: más formal y profesional. Era la última imagen de competencia con la
+  pieza vieja, y al verla con el bracket real de la Nacional resultó que además perdía
+  datos: cortaba la hora de un partido en la publicación y la de los cuatro en la
+  historia, a un día de que empezaran los cuartos.
+
+  **Hubo dos versiones el mismo día.** La primera pintaba el bracket con cal, con un
+  equipo hacia cada lado de dos líneas y la siembra, el récord y el marcador alrededor de
+  un casco grande. Alfredo aprobó el fondo y regresó lo demás: *"no se distinguen las
+  cosas porque quedan muchos numeros amontonados, por ejemplo no es claro el asunto de
+  los marcadores"*. La que quedó es la forma de siempre: cada partido es una caja de dos
+  renglones, con siembra, casco, nombre y marcador, y los dos marcadores uno encima del
+  otro. La siembra es chica y gris, el marcador es lo más grande, y el récord se fue.
+  Sigue en espejo, en tres columnas de 318 px: los cruces de una mitad no comparten
+  altura, así que cada ronda va en el recodo del corchete que une a la anterior y la
+  última sale derecho a la final, sobre la yarda 50. Nombres de 17 a 24 px en la Nacional.
+
+  **La decisión de fondo:** las líneas van sólidas, como en cualquier bracket, aunque
+  este se reacomoda y el corchete no es un camino fijo. La primera versión las punteaba;
+  Alfredo pidió clásico, y lo que lo sigue diciendo es "Se reacomodan cada ronda", en el pie.
+
+  **Lo que se movió:** la cancha de pie —marco, end zones, líneas de yarda y cabecera—
+  salió de `standingsShareCard.js` a `shareCardField.js`, para que las dos imágenes
+  compartan una sola. `playedDay()`, nueva y con su prueba, da el día de un cruce jugado,
+  que la imagen escribe en vez de repetir "FINAL". `geometria()`, `columnas()` y
+  `centroDe()` se exportan para probarlas.
+
+  **Verificada** con el bracket público de la Nacional y, para lo que todavía no pasa,
+  con el `buildBracket()` real del backend: todas las etapas hasta el campeón, 14 Grandes
+  con sus datos reales, de 2 a 16 equipos, descansos, sin logos, siembras empatadas y
+  nombres larguísimos. Un detector sobre `fillText` no encontró en las 28 imágenes nada
+  recortado, encimado o fuera de la cancha, y por la página real funcionó en escritorio y
+  en tamaño de celular, sin errores. La imagen de la tabla no se movió: 10 imágenes iguales
+  píxel por píxel contra el código anterior, con el control viejo contra viejo en cero y
+  un control negativo que sí encuentra diferencias. Sin probar en un teléfono real ni en
+  Safari. Lo que encontró verla en todas sus etapas está en el README.
+
 - **La imagen de la tabla, una cancha de pie (2026-11-05).** Lo pidió Alfredo al ver la
   versión de ese mismo día: la cancha de arriba no hacía falta, le quitaba protagonismo
   a las cifras, y le quitaba neutralidad al medio al pintar la imagen con el primer

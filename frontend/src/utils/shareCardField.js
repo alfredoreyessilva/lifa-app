@@ -1,8 +1,9 @@
 // La cancha de noche de las imágenes para compartir: el pasto, las end zones, los
 // cascos y la letra con que se escriben. La imagen de un partido
-// (matchShareCard.js) la usa entera; la de la tabla de posiciones
-// (standingsShareCard.js) para su cancha de pie y usa de aquí las franjas de la end
-// zone, los cascos y la letra, para que las dos se reconozcan como la misma pieza.
+// (matchShareCard.js) usa la cancha acostada; la de la tabla de posiciones
+// (standingsShareCard.js) y la del bracket (bracketShareCard.js), la cancha de pie.
+// Los cascos, la letra y las end zones son los mismos, para que se reconozcan como
+// la misma pieza.
 //
 // Lo único repetido son los estilos de `.mh` en styles.css (end zones, pasto,
 // marcador), que en canvas se escriben a mano: si cambian allá, cambian aquí.
@@ -285,4 +286,138 @@ export function dibujarMarca(ctx, img, cx, y, alto, theme) {
   ctx.clip();
   drawImageContain(ctx, img, x, y, ancho, alto);
   ctx.restore();
+}
+
+// ── La cancha de pie ──
+//
+// Con una end zone arriba y otra abajo: la de arriba lleva el título y las etiquetas de
+// las columnas, y la de abajo, el pie. Lo que va entre las dos lo pone cada imagen.
+
+// Lo que la barra de Instagram tapa arriba de una historia.
+export const ARRIBA = { post: 26, story: 96 };
+export const ZONA_ABAJO = { post: 96, story: 124 };
+export const ALTO_MARCA = { post: 60, story: 76 };
+export const ALTO_CABEZA = { post: 38, story: 46 };
+
+// Lo que queda fuera de la cancha, la banda que la cierra y las marcas de cada yarda.
+export const MARGEN = 12;
+export const BANDA = 7;
+export const MARCA_YARDA = 13;
+export const PADDING_ZONA = 26;
+// Hasta dónde llega lo que se escribe sobre el pasto.
+export const ORILLA = MARGEN + BANDA + MARCA_YARDA + 8;
+// El casco de la portada de un partido, para el que están medidas las sombras.
+export const CASCO_DE_PORTADA = 388;
+
+const YARDAS_POR_FRANJA = 5;
+// Lo que miden la liga, el título y el detalle a escala 1, con sus huecos.
+const ALTO_CABECERA = 240;
+const HUECO_MAXIMO = 26;
+const PASTO = ['#155a37', '#0f482b'];
+const ZONA = '#0c2717';
+const MARCA_DE_YARDA = 'rgba(255, 255, 255, 0.42)';
+
+const entre = (v, min, max) => Math.max(min, Math.min(max, v));
+
+// La altura de las mayúsculas de una letra: con ella un texto se centra de verdad
+// en su renglón, y no el cuadro de la fuente.
+export function altoDeLetra(ctx, l) {
+  ponerLetra(ctx, l);
+  return ctx.measureText('H').actualBoundingBoxAscent;
+}
+
+// El corte alternado del pasto. `cancha` es { zonaArriba, franja, franjas }.
+export function dibujarFranjas(ctx, w, { zonaArriba: cuerpo, franja, franjas }) {
+  for (let i = 0; i < franjas; i++) {
+    ctx.fillStyle = PASTO[i % 2];
+    ctx.fillRect(MARGEN, cuerpo + i * franja, w - MARGEN * 2, franja);
+  }
+}
+
+// Las dos end zones son iguales siempre: de un color neutro, de nadie. Son de la
+// imagen, no del primer lugar ni de ningún equipo.
+export function dibujarEndZones(ctx, w, h, { zonaArriba, zonaAbajo }) {
+  const zonas = [
+    { y: MARGEN, alto: zonaArriba - MARGEN },
+    { y: h - zonaAbajo, alto: zonaAbajo - MARGEN },
+  ];
+  for (const { y, alto } of zonas) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(MARGEN, y, w - MARGEN * 2, alto);
+    ctx.clip();
+    ctx.fillStyle = ZONA;
+    ctx.fillRect(MARGEN, y, w - MARGEN * 2, alto);
+    franjasDeEndZone(ctx, MARGEN, y, w - MARGEN * 2, alto);
+    ctx.restore();
+  }
+  ctx.fillStyle = CAL;
+  ctx.fillRect(MARGEN, zonaArriba - GOL, w - MARGEN * 2, GOL);
+  ctx.fillRect(MARGEN, h - zonaAbajo, w - MARGEN * 2, GOL);
+}
+
+// Las líneas de yarda, una entre cada dos franjas de banda a banda, y las marcas de
+// cada yarda pegadas a las dos bandas.
+export function dibujarLineasDeYarda(ctx, w, { zonaArriba: cuerpo, franja, franjas }, color) {
+  const xCampo = MARGEN + BANDA;
+  const anchoCampo = w - xCampo * 2;
+  ctx.fillStyle = color;
+  for (let i = 1; i < franjas; i++) ctx.fillRect(xCampo, cuerpo + i * franja - 2, anchoCampo, 3);
+
+  ctx.fillStyle = MARCA_DE_YARDA;
+  for (let i = 0; i < franjas; i++) {
+    for (let yarda = 1; yarda < YARDAS_POR_FRANJA; yarda++) {
+      const y = cuerpo + i * franja + (yarda * franja) / YARDAS_POR_FRANJA - 1;
+      ctx.fillRect(xCampo, y, MARCA_YARDA, 2);
+      ctx.fillRect(w - xCampo - MARCA_YARDA, y, MARCA_YARDA, 2);
+    }
+  }
+}
+
+// Las bandas cierran la cancha, end zones incluidas.
+export function dibujarBandas(ctx, w, h) {
+  ctx.fillStyle = CAL;
+  ctx.fillRect(MARGEN, MARGEN, BANDA, h - MARGEN * 2);
+  ctx.fillRect(w - MARGEN - BANDA, MARGEN, BANDA, h - MARGEN * 2);
+  ctx.fillRect(MARGEN, MARGEN, w - MARGEN * 2, BANDA);
+  ctx.fillRect(MARGEN, h - MARGEN - BANDA, w - MARGEN * 2, BANDA);
+}
+
+function bloqueTitulo(ctx, texto, detalle, ancho, escala, theme) {
+  const letraTitulo = (size) => letra(400, size, theme.fontDisplay, 0.02);
+  const lTitulo = letraTitulo(tallaQueCabe(ctx, [texto], ancho, Math.round(100 * escala), 44, letraTitulo));
+  const letraDetalle = (size) => letra(500, size, theme.fontEyebrow, 0.04);
+  const lDetalle = letraDetalle(tallaQueCabe(ctx, [detalle], ancho, Math.round(31 * escala), 20, letraDetalle));
+  const altoTitulo = altoDeLetra(ctx, lTitulo);
+  const altoDetalle = detalle ? altoDeLetra(ctx, lDetalle) + Math.round(18 * escala) : 0;
+
+  return {
+    alto: altoTitulo + altoDetalle,
+    pintar(cx, y) {
+      escribir(ctx, texto, cx, y + altoTitulo, lTitulo, '#ffffff');
+      if (detalle) {
+        ponerLetra(ctx, lDetalle);
+        escribir(ctx, ellipsize(ctx, detalle, ancho), cx, y + altoTitulo + altoDetalle, lDetalle, 'rgba(255, 255, 255, 0.86)');
+      }
+    },
+  };
+}
+
+// La end zone de arriba: la liga, el título y el detalle, y abajo de ellos queda el
+// lugar de las etiquetas de las columnas. `g` trae { arriba, cabeza, zonaArriba }.
+export function dibujarCabecera(ctx, w, g, { header, logo, titulo, detalle }, theme) {
+  const { arriba, cabeza, zonaArriba } = g;
+  const disponible = zonaArriba - GOL - cabeza - arriba;
+  const ancho = w - (MARGEN + BANDA + PADDING_ZONA) * 2;
+  const escala = entre(disponible / ALTO_CABECERA, 0.6, 1.1);
+  const liga = header.league || 'CFBAMX';
+  const torneo = [header.tournament, header.year].filter(Boolean).join(' ');
+  const fila = bloqueLiga(ctx, liga, torneo, logo, ancho, theme, escala);
+  const bloque = bloqueTitulo(ctx, titulo, detalle, ancho, escala, theme);
+
+  const sobra = Math.max(0, disponible - fila.alto - bloque.alto);
+  const hueco = Math.min(HUECO_MAXIMO, sobra / 3);
+  const inicio = arriba + (sobra - hueco) / 2;
+  fila.pintar(w / 2, inicio);
+  bloque.pintar(w / 2, inicio + fila.alto + hueco);
 }

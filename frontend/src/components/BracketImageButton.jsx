@@ -6,8 +6,8 @@ import { bracketTitle } from '../utils/bracketFormat.js';
 // StandingsImageButton.jsx: canvas 2D en el navegador, publicación e historia,
 // compartir nativo y, si el navegador no puede compartir archivos, descargar.
 //
-// `header` es lo que el bracket no sabe de sí mismo: { tournament, context
-// ("categoría · rama"), leagueLogo }.
+// `header` es lo que el bracket no sabe de sí mismo: { league, tournament, year,
+// context ("categoría · rama"), leagueLogo }.
 export default function BracketImageButton({ bracket, header = {} }) {
   const [status, setStatus] = useState('idle'); // idle | generating | ready | error
   const [previewUrl, setPreviewUrl] = useState(null);

@@ -1,252 +1,422 @@
-// Genera la imagen del bracket de los playoffs de una conferencia, para
-// compartir. README, "El bracket de los playoffs".
+// La imagen del bracket de los playoffs de una conferencia: un bracket clásico sobre la
+// misma cancha de pie de la imagen de la tabla. README, "La imagen del bracket".
 //
-// Mismo principio que la imagen de la tabla (standingsShareCard.js): todo lo
-// que dice viene tal cual de GET /leagues/branches/:id/bracket —la siembra,
-// los cruces reacomodados, los marcadores y el campeón ya los resolvió el
-// backend—; aquí solo se dibuja, con canvas 2D en el navegador de quien la
-// pide. El acomodo en espejo y cómo se escribe cada cruce salen de
-// utils/bracketFormat.js, el mismo archivo que usa la página.
+// Cada partido es una caja de dos renglones, con los marcadores uno encima del otro,
+// que es lo que se viene a leer. Sigue en espejo: la mitad del 1 a la izquierda, la del
+// 2 a la derecha y la final al centro, sobre la yarda 50. Cinco columnas de cajas no
+// caben en una imagen vertical con un nombre legible, pero los cruces de una mitad
+// tampoco comparten altura: van en una sola columna ancha, y cada ronda queda en el
+// recodo del corchete que une a la anterior.
 //
-// La imagen de guía que pasó Alfredo lleva solo escudos. Esta lleva también los
-// nombres: circula sin la página al lado, y no todos los equipos tienen escudo
-// (los que no, salen con iniciales).
+// Mismo principio que las otras tarjetas: todo lo que dice viene tal cual de GET
+// /leagues/branches/:id/bracket —la siembra, los cruces reacomodados, los marcadores
+// y el campeón ya los resolvió el backend—; aquí solo se dibuja, con canvas 2D en el
+// navegador de quien la pide. El acomodo en espejo y cómo se escribe cada cruce salen
+// de utils/bracketFormat.js, el mismo archivo que usa la página.
 
 import {
-  FORMATS, readTheme, ensureFonts, loadImage, loadImageWithin, drawBallIcon, drawBackground,
-  fitText, roundRect, drawImageContain, ellipsize, initials, wrapLines,
-  BRAND_LOGO_SRC, BRAND_LOGO_RATIO,
+  FORMATS, readTheme, ensureFonts, loadImage, loadImageWithin, ellipsize,
+  BRAND_LOGO_SRC,
 } from './shareCardCommon.js';
+import {
+  NOCHE, CAL, GRIS, GOL, letra, ponerLetra, escribir, medir, tallaQueCabe, altoDeLetra,
+  dibujarCasco, dibujarMarca, dibujarFranjas, dibujarEndZones, dibujarLineasDeYarda, dibujarBandas, dibujarCabecera,
+  ARRIBA, ZONA_ABAJO, ALTO_MARCA, MARGEN, BANDA, ORILLA, PADDING_ZONA, CASCO_DE_PORTADA,
+} from './shareCardField.js';
 import { imagenAjustada } from './imagenes.js';
-import { cutoffLabel } from './standingsFormat.js';
-import { mirrorColumns, roundShortName, gameStatus, bracketTitle, hasTiedSeeds, finalLabel, logoForSide } from './bracketFormat.js';
+import { pinturaDelLogo } from './useTeamPaint.js';
+import { cutoffLabel, splitName, tableDetail } from './standingsFormat.js';
+import {
+  mirrorColumns, roundShortName, gameStatus, playedDay, hasTiedSeeds, logoForSide,
+} from './bracketFormat.js';
 
+// Un escudo que no llega en este tiempo sale con iniciales: una imagen con un
+// logo de menos es mejor que un botón que se queda en "Generando imagen…".
 const LOGO_TIMEOUT_MS = 8000;
-const HEAD_H = 46;
-const LEGEND_H = 58;
-const MAX_BOX_H = 196;
-const COL_GAP = 10;
+
+// El alto mínimo de la end zone de arriba, la del título.
+const ZONA_ARRIBA = { post: 214, story: 310 };
+// Una franja no pasa de esto: el ancho no crece en una historia, así que más alto ya
+// no lleva nada más grande sino aire. Lo que sobra es de las end zones.
+const FRANJA_MAXIMA = 160;
+const FRANJAS_MINIMAS = 8;
+
+// Lo que separa a las cajas de las líneas de gol y entre ellas, como mínimo.
+const AIRE_CANCHA = 24;
+const HUECO_MINIMO = 12;
+// La tira de arriba de una caja, con la ronda y la fecha, y el renglón de cada equipo.
+const ALTO_TIRA = { post: 34, story: 38 };
+const RENGLON_MAXIMO = { post: 100, story: 118 };
+// Lo que hay entre dos columnas: ahí corre el corchete.
+const HUECO_COLUMNAS = 22;
+const CENTRO_SOLO = 420;
+
+const LINEA = 3;
+const BORDE = 2;
+const DIVISION = 2;
+const PADDING_CAJA = 7;
+const SEPARACION_CASCO = 6;
+const BARRA_GANADOR = 6;
+// La copa y lo que la separa de la final.
+const COPA_MAXIMA = 136;
+const AIRE_COPA = 18;
+
+const YARDA_DE_FONDO = 'rgba(255, 255, 255, 0.11)';
+const PLACA = 'rgba(8, 28, 17, 0.92)';
+const PLACA_VACIA = 'rgba(8, 28, 17, 0.5)';
+const CELDA_MARCADOR = 'rgba(255, 255, 255, 0.07)';
+const DIVISOR = 'rgba(243, 246, 241, 0.24)';
+const LINEA_VACIA = 'rgba(243, 246, 241, 0.6)';
 const LIVE = '#ff5252';
+const LIVE_EN_TIRA = '#c62828';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
-// Pill amarilla con el nombre del bracket ("CONFERENCIA NACIONAL"). Devuelve su
-// alto.
-function drawPill(ctx, text, cx, top, maxWidth, theme) {
-  ctx.save();
-  ctx.font = `700 26px ${theme.fontEyebrow}`;
-  ctx.letterSpacing = '2px';
-  const padX = 26;
-  const label = ellipsize(ctx, text, maxWidth - padX * 2);
-  const pillW = ctx.measureText(label).width + padX * 2;
-  const pillH = 48;
-  roundRect(ctx, cx - pillW / 2, top, pillW, pillH, pillH / 2);
-  ctx.fillStyle = theme.flag;
-  ctx.fill();
-  ctx.fillStyle = theme.fieldDeep;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(label, cx, top + pillH / 2 + 1);
-  ctx.restore();
-  return pillH;
-}
+// ── Las medidas ──
 
-function drawHeader(ctx, w, h, theme, header, bracket, cornerEdge) {
-  const cx = w / 2;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
+// La cancha llena lo que dejan las end zones; si una franja llega a su tope, lo que
+// sobra se lo quedan las dos. Franjas y end zones suman exactamente el alto. `rondas`
+// son las que hay antes de la final, y `filas`, cuántas cajas van una debajo de otra
+// en cada mitad.
+export function geometria(formatKey, h, rondas) {
+  const tira = ALTO_TIRA[formatKey];
+  const franjas = Math.max(FRANJAS_MINIMAS, 2 ** (rondas + 1));
+  const cancha = h - ZONA_ARRIBA[formatKey] - ZONA_ABAJO[formatKey];
+  const franja = Math.floor(Math.min((FRANJA_MAXIMA * FRANJAS_MINIMAS) / franjas, cancha / franjas));
+  const alto = franja * franjas;
+  const zonaAbajo = ZONA_ABAJO[formatKey] + Math.floor((cancha - alto) * 0.4);
+  const zonaArriba = h - zonaAbajo - alto;
 
-  let y = h * 0.038;
-  ctx.fillStyle = theme.flag;
-  ctx.font = `700 30px ${theme.fontEyebrow}`;
-  ctx.letterSpacing = '3px';
-  ctx.fillText('PLAYOFFS', cx, y);
-  ctx.letterSpacing = '0px';
-  y += 34 + 40;
-
-  const hero = (header.tournament || 'CFBAMX').toUpperCase();
-  const heroMax = w - 2 * (cornerEdge + 16);
-  const heroSize = fitText(ctx, hero, heroMax, 62, theme.fontDisplay, 30);
-  ctx.fillStyle = theme.ink;
-  ctx.font = `700 ${heroSize}px ${theme.fontDisplay}`;
-  ctx.fillText(ellipsize(ctx, hero, heroMax), cx, y);
-  y += heroSize * 0.32 + 24;
-
-  if (header.context) {
-    ctx.fillStyle = theme.inkDim;
-    ctx.font = `500 24px ${theme.fontBody}`;
-    ctx.fillText(ellipsize(ctx, header.context, w * 0.86), cx, y);
-    y += 34;
-  }
-
-  const scope = bracketTitle(bracket).toUpperCase();
-  if (scope) {
-    y += 6;
-    y += drawPill(ctx, scope, cx, y, w * 0.8, theme);
-  }
-  return y + 24;
-}
-
-// La letra más grande con la que TODOS los nombres caben en dos renglones sin
-// recortar, para que las cajas se vean parejas. El que ni a la mínima cabe no
-// arrastra a los demás: se recorta.
-function nameFontSize(ctx, names, maxW, base, min, family) {
-  const cabe = (name, size) => {
-    ctx.font = `600 ${size}px ${family}`;
-    const lines = wrapLines(ctx, name, maxW, 2);
-    return !lines.some((l) => l.endsWith('…'));
+  const filas = Math.max(1, 2 ** rondas - 1);
+  const porCaja = (alto - AIRE_CANCHA * 2 - HUECO_MINIMO * (filas - 1)) / filas;
+  const renglon = Math.floor(Math.min(RENGLON_MAXIMO[formatKey], (porCaja - tira) / 2));
+  return {
+    arriba: ARRIBA[formatKey],
+    cabeza: 0,
+    tira, franjas, franja, alto, zonaArriba, zonaAbajo, filas, renglon,
+    caja: tira + renglon * 2,
   };
-  const medibles = names.filter((n) => cabe(n, min));
+}
+
+// Tres columnas iguales: una por mitad y la final. Con más rondas el hueco crece, porque
+// por ahí corre un corchete por cada una.
+export function columnas(w, rondas) {
+  if (!rondas) {
+    const xCentro = (w - CENTRO_SOLO) / 2;
+    return { ancho: CENTRO_SOLO, hueco: 0, xIzquierda: xCentro, xDerecha: xCentro, xCentro };
+  }
+  const hueco = HUECO_COLUMNAS + Math.max(0, rondas - 2) * 12;
+  const ancho = Math.floor((w - ORILLA * 2 - hueco * 2) / 3);
+  return { ancho, hueco, xIzquierda: ORILLA, xDerecha: w - ORILLA - ancho, xCentro: Math.round((w - ancho) / 2) };
+}
+
+// El centro de un cruce. Las rondas de una mitad se intercalan en una sola columna, como
+// en el árbol de un bracket: cada cruce a media altura de los dos que lo alimentan, y
+// la última ronda en la yarda 50, a la altura de la final.
+export function centroDe(g, rondas, c, j) {
+  if (g.filas === 1) return g.zonaArriba + g.alto / 2;
+  const paso = (g.alto - AIRE_CANCHA * 2 - g.caja) / (g.filas - 1);
+  return g.zonaArriba + AIRE_CANCHA + g.caja / 2 + ((2 * j + 1) * 2 ** c - 1) * paso;
+}
+
+// ── Las letras ──
+
+// El nombre va en una línea si cabe; si no, en dos parejas: "PUMAS FES / ACATLÁN UNAM".
+function lineasDeNombre(ctx, nombre, l, maxW) {
+  if (medir(ctx, nombre, l) <= maxW) return [nombre];
+  return splitName(nombre, (t) => medir(ctx, t, l));
+}
+
+// La letra más grande con la que caben TODOS los nombres, para que las cajas se vean
+// parejas. El que ni a la mínima cabe no arrastra a los demás: se recorta.
+function tallaDeNombres(ctx, nombres, maxW, base, min, letraDe) {
+  const ocupa = (n, l) => Math.max(...lineasDeNombre(ctx, n, l, maxW).map((t) => medir(ctx, t, l)));
+  const medibles = nombres.filter((n) => ocupa(n, letraDe(min)) <= maxW);
   let size = base;
-  while (size > min && medibles.some((n) => !cabe(n, size))) size -= 1;
+  while (size > min && medibles.some((n) => ocupa(n, letraDe(size)) > maxW)) size -= 1;
   return size;
 }
 
-function drawLogo(ctx, img, name, cx, cy, size, theme) {
-  if (img) {
-    drawImageContain(ctx, img, cx - size / 2, cy - size / 2, size, size);
-    return;
-  }
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.14)';
-  ctx.fill();
-  ctx.fillStyle = theme.ink;
-  ctx.font = `600 ${Math.round(size * 0.36)}px ${theme.fontEyebrow}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(initials(name), cx, cy + 1);
-  ctx.restore();
+// Las letras de una caja. La siembra es chica y gris, y el marcador es lo más grande: son
+// las dos cifras del renglón y no se pueden confundir. Las celdas miden lo que ocupa su
+// cifra más ancha, igual que las columnas de la tabla, y el nombre se queda con el resto.
+function piezaDe(ctx, cifras, ancho, renglon, theme) {
+  const { nombres, siembras, marcadores } = cifras;
+  const siembra = letra(600, Math.round(clamp(renglon * 0.22, 15, 22)), theme.fontEyebrow);
+  const marcador = letra(400, Math.round(clamp(renglon * 0.46, 24, 46)), theme.fontDisplay);
+  const anchoDe = (textos, l) => Math.ceil(Math.max(0, ...textos.map((t) => medir(ctx, t, l))));
+  const anchoSiembra = anchoDe(siembras, siembra) + 8;
+  const anchoMarcador = anchoDe(['00', ...marcadores], marcador) + 10 + BARRA_GANADOR;
+  const casco = Math.round(Math.min(renglon - 14, ancho * 0.185));
+  const anchoNombre = ancho - PADDING_CAJA * 2 - anchoSiembra - casco - SEPARACION_CASCO * 2 - anchoMarcador;
+
+  const letraNombre = (size) => letra(400, size, theme.fontDisplay, 0.01);
+  const talla = tallaDeNombres(ctx, nombres, anchoNombre, Math.round(clamp(renglon * 0.34, 16, 34)), 14, letraNombre);
+  const nombre = letraNombre(talla);
+  const altoNombre = altoDeLetra(ctx, nombre);
+  return {
+    nombre, siembra, marcador, casco, anchoSiembra, anchoMarcador, anchoNombre, altoNombre,
+    interlinea: altoNombre + Math.round(talla * 0.24),
+    altoSiembra: altoDeLetra(ctx, siembra),
+    altoMarcador: altoDeLetra(ctx, marcador),
+  };
 }
 
-// Una caja de equipo: siembra arriba a la izquierda, marcador arriba a la
-// derecha, escudo al centro y el nombre abajo. El ganador lleva marco amarillo
-// y el que perdió va atenuado, como en la página.
-function drawTeamBox(ctx, p, box, opts) {
-  const { x, y, w, h } = box;
-  const { theme, logos, state, nameSize, tiedIds, placeholder, side = null } = opts;
+// ── Un partido ──
 
+const siembraDe = (p, tiedIds) => `${p.seed ?? '–'}${tiedIds.has(p.team_id) ? '*' : ''}`;
+const llevaMarcador = (p) => Boolean(p) && p.score !== null && p.score !== undefined;
+
+function estadoDe(p, game) {
+  if (!p || !game?.winner_team_id) return '';
+  return p.team_id === game.winner_team_id ? 'ganador' : 'perdedor';
+}
+
+// Lo que va en la tira de un cruce: "6 NOV · 3:00 P.M.", "EN VIVO", y el día en que se
+// jugó: con el marcador a la vista, "FINAL" en cada caja solo estorba.
+function fechaDelCruce(game) {
+  const st = gameStatus(game);
+  if (st.kind === 'bye' || st.kind === 'pending') return '';
+  if (st.kind === 'unscheduled') return 'POR CONFIRMAR';
+  return (st.kind === 'final' ? playedDay(game) || st.label : st.label).toUpperCase();
+}
+
+// Un cruce que todavía no se arma es una caja punteada con el nombre de su ronda. La
+// final se llena de una en una, y esa ya no llega aquí: es una caja con un lugar vacío.
+function dibujarCajaVacia(ctx, caja, { g, theme }) {
+  const { x, y, w, ronda } = caja;
+  const alto = g.caja;
+  ctx.fillStyle = PLACA_VACIA;
+  ctx.fillRect(x, y, w, alto);
   ctx.save();
-  if (state === 'loser') ctx.globalAlpha = 0.45;
-  roundRect(ctx, x, y, w, h, 14);
-  ctx.fillStyle = 'rgba(255,255,255,0.07)';
-  ctx.fill();
-  ctx.lineWidth = state === 'winner' ? 4 : 2;
-  ctx.strokeStyle = state === 'winner' ? theme.flag : 'rgba(255,255,255,0.18)';
-  ctx.stroke();
+  ctx.setLineDash([9, 8]);
+  ctx.lineWidth = BORDE;
+  ctx.strokeStyle = LINEA_VACIA;
+  ctx.strokeRect(x + BORDE / 2, y + BORDE / 2, w - BORDE, alto - BORDE);
+  ctx.restore();
+  const l = letra(500, Math.round(clamp(g.renglon * 0.28, 16, 26)), theme.fontEyebrow, 0.06);
+  escribir(ctx, ronda, x + w / 2, y + alto / 2 + altoDeLetra(ctx, l) / 2, l, GRIS);
+}
+
+// Un renglón: la siembra en la orilla, el casco, el nombre y el marcador en su celda,
+// del lado por donde sigue el bracket. La mitad derecha es el espejo de la izquierda.
+function dibujarRenglon(ctx, p, r, opts) {
+  const { x, y, w, h, lado } = r;
+  const { d, theme, estado, pieza, placeholder } = opts;
+  const espejo = lado === 'right';
+  const midY = y + h / 2;
+  // Las cosas se miden desde la orilla: `dentro` lo lleva hacia el otro lado.
+  const orilla = espejo ? x + w : x;
+  const dentro = (dx) => (espejo ? orilla - dx : orilla + dx);
+  const alinear = espejo ? 'right' : 'left';
+
+  // La celda del marcador va siempre: es el lugar donde cae el resultado.
+  const xCelda = espejo ? x : x + w - pieza.anchoMarcador;
+  ctx.fillStyle = CELDA_MARCADOR;
+  ctx.fillRect(xCelda, y, pieza.anchoMarcador, h);
+  ctx.fillStyle = DIVISOR;
+  ctx.fillRect(espejo ? x + pieza.anchoMarcador - DIVISION : xCelda, y, DIVISION, h);
+
+  if (estado === 'ganador') {
+    ctx.fillStyle = theme.flag;
+    ctx.fillRect(espejo ? x : x + w - BARRA_GANADOR, y, BARRA_GANADOR, h);
+  }
 
   if (!p) {
-    ctx.fillStyle = theme.inkDim;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = placeholder ? `600 ${Math.round(nameSize * 0.9)}px ${theme.fontEyebrow}` : `700 ${Math.round(h * 0.3)}px ${theme.fontEyebrow}`;
-    ctx.fillText(placeholder ? placeholder.toUpperCase() : '?', x + w / 2, y + h / 2 + 2);
-    ctx.restore();
+    if (!placeholder) return;
+    const l = letra(500, 22, theme.fontEyebrow, 0.04);
+    const xTexto = dentro(PADDING_CAJA + pieza.anchoSiembra + pieza.casco + SEPARACION_CASCO * 2);
+    escribir(ctx, placeholder.toUpperCase(), xTexto, midY + altoDeLetra(ctx, l) / 2, l, GRIS, alinear);
     return;
   }
 
-  const pad = Math.round(clamp(w * 0.07, 7, 12));
-  const seedSize = Math.round(clamp(h * 0.14, 17, 26));
-  ctx.textBaseline = 'top';
-  ctx.textAlign = 'left';
-  ctx.fillStyle = theme.flag;
-  ctx.font = `700 ${seedSize}px ${theme.fontEyebrow}`;
-  ctx.fillText(`${p.seed ?? '–'}${tiedIds.has(p.team_id) ? '*' : ''}`, x + pad, y + pad - 2);
+  ctx.save();
+  if (estado === 'perdedor') ctx.globalAlpha = 0.5;
 
-  if (p.score !== null && p.score !== undefined) {
-    ctx.textAlign = 'right';
-    ctx.fillStyle = theme.ink;
-    ctx.font = `700 ${Math.round(seedSize * 1.35)}px ${theme.fontEyebrow}`;
-    ctx.fillText(String(p.score), x + w - pad, y + pad - 4);
+  const seed = siembraDe(p, d.tiedIds);
+  escribir(ctx, seed, dentro(PADDING_CAJA), midY + pieza.altoSiembra / 2, pieza.siembra, GRIS, alinear);
+
+  const cx = dentro(PADDING_CAJA + pieza.anchoSiembra + SEPARACION_CASCO + pieza.casco / 2);
+  const url = logoForSide(p, lado);
+  dibujarCasco(ctx, d.logos.get(url), p.name, d.formas.get(url) || 'disco', cx, midY, pieza.casco, theme, (pieza.casco / CASCO_DE_PORTADA) * 2);
+
+  const xNombre = dentro(PADDING_CAJA + pieza.anchoSiembra + pieza.casco + SEPARACION_CASCO * 2);
+  const lineas = lineasDeNombre(ctx, p.name, pieza.nombre, pieza.anchoNombre);
+  const primera = midY + pieza.altoNombre / 2 - (pieza.interlinea * (lineas.length - 1)) / 2;
+  lineas.forEach((texto, i) => {
+    ponerLetra(ctx, pieza.nombre);
+    escribir(ctx, ellipsize(ctx, texto, pieza.anchoNombre), xNombre, primera + i * pieza.interlinea, pieza.nombre, '#ffffff', alinear);
+  });
+
+  if (llevaMarcador(p)) {
+    const color = estado === 'ganador' ? theme.flag : CAL;
+    // Se centra en lo que deja la barra del ganador, gane o no: las cifras de una caja
+    // quedan una encima de la otra.
+    const xMarcador = xCelda + pieza.anchoMarcador / 2 + (espejo ? BARRA_GANADOR / 2 : -BARRA_GANADOR / 2);
+    escribir(ctx, String(p.score), xMarcador, midY + pieza.altoMarcador / 2, pieza.marcador, color);
+  }
+  ctx.restore();
+}
+
+function dibujarCruce(ctx, game, caja, opts) {
+  const { x, y, w, lado, ronda, pieza, lTira } = caja;
+  const { g, theme } = opts;
+  if (!game?.top && !game?.bottom) {
+    dibujarCajaVacia(ctx, caja, opts);
+    return;
   }
 
-  // Escudo y nombre, centrados en lo que queda debajo de la siembra.
-  const nameLineH = Math.round(nameSize * 1.12);
-  const nameBlock = nameLineH * 2;
-  const top = y + pad + seedSize * 0.6;
-  const bottom = y + h - pad;
-  const logoSize = Math.max(24, Math.min(w * 0.5, bottom - top - nameBlock - 8));
-  const logoCy = top + (bottom - top - nameBlock - 6) / 2;
-  drawLogo(ctx, logos.get(logoForSide(p, side)), p.name, x + w / 2, logoCy, logoSize, theme);
+  ctx.fillStyle = PLACA;
+  ctx.fillRect(x, y, w, g.caja);
 
-  ctx.font = `600 ${nameSize}px ${theme.fontEyebrow}`;
-  ctx.fillStyle = theme.ink;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const lines = wrapLines(ctx, p.name, w - pad * 2, 2);
-  const firstY = bottom - nameBlock + nameLineH / 2 + (lines.length === 1 ? nameLineH / 2 : 0);
-  lines.forEach((l, i) => ctx.fillText(l, x + w / 2, firstY + i * nameLineH));
-  ctx.restore();
-}
-
-// "vs", la fecha, "EN VIVO" o "FINAL", entre las dos cajas de un cruce.
-function drawStatusLine(ctx, game, cx, cy, maxW, theme, size) {
+  // La tira: la ronda hacia la orilla y la fecha hacia adentro.
   const st = gameStatus(game);
-  if (st.kind === 'bye') return;
-  const text = st.kind === 'pending' || st.kind === 'unscheduled' ? 'VS' : st.label.toUpperCase();
-  ctx.save();
-  ctx.font = `600 ${size}px ${theme.fontEyebrow}`;
-  ctx.letterSpacing = '1px';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = st.kind === 'live' ? LIVE : st.kind === 'final' || st.kind === 'pending' || st.kind === 'unscheduled' ? theme.flag : theme.inkDim;
-  ctx.fillText(ellipsize(ctx, text, maxW), cx, cy);
-  ctx.restore();
+  const espejo = lado === 'right';
+  const base = y + g.tira / 2 + altoDeLetra(ctx, lTira.ronda) / 2;
+  ctx.fillStyle = CAL;
+  ctx.fillRect(x, y, w, g.tira);
+  escribir(ctx, ronda, espejo ? x + w - PADDING_CAJA : x + PADDING_CAJA, base, lTira.ronda, NOCHE, espejo ? 'right' : 'left');
+  escribir(ctx, fechaDelCruce(game), espejo ? x + PADDING_CAJA : x + w - PADDING_CAJA, base, lTira.fecha, st.kind === 'live' ? LIVE_EN_TIRA : NOCHE, espejo ? 'left' : 'right');
+
+  const yRenglon = y + g.tira;
+  const base2 = { d: opts.d, theme, pieza };
+  dibujarRenglon(ctx, game.top, { x, y: yRenglon, w, h: g.renglon, lado }, { ...base2, estado: estadoDe(game.top, game), placeholder: 'Por definir' });
+  dibujarRenglon(ctx, game.bottom, { x, y: yRenglon + g.renglon, w, h: g.renglon, lado }, { ...base2, estado: estadoDe(game.bottom, game), placeholder: game.bye ? 'Descansa' : 'Por definir' });
+  ctx.fillStyle = DIVISOR;
+  ctx.fillRect(x, yRenglon + g.renglon - DIVISION / 2, w, DIVISION);
+
+  ctx.lineWidth = BORDE;
+  ctx.strokeStyle = CAL;
+  ctx.strokeRect(x + BORDE / 2, y + BORDE / 2, w - BORDE, g.caja - BORDE);
 }
 
-// Un trofeo sencillo, con figuras: un emoji en canvas depende de la fuente de
-// cada sistema.
-function drawTrophy(ctx, cx, top, size, theme) {
+// ── Las líneas ──
+
+function lineaH(ctx, x1, x2, y) {
+  ctx.fillRect(Math.min(x1, x2), Math.round(y - LINEA / 2), Math.abs(x2 - x1), LINEA);
+}
+function lineaV(ctx, x, y1, y2) {
+  ctx.fillRect(Math.round(x - LINEA / 2), Math.min(y1, y2), LINEA, Math.abs(y2 - y1));
+}
+
+// El corchete que une dos cruces, con el que sigue en el recodo; la última ronda sale
+// derecho a la final.
+function dibujarConexiones(ctx, { g, d }) {
+  const { cols, medidas, rondas } = d;
+  ctx.fillStyle = CAL;
+  for (const lado of ['left', 'right']) {
+    const izquierda = lado === 'left';
+    const hacia = izquierda ? 1 : -1;
+    const borde = izquierda ? medidas.xIzquierda + medidas.ancho : medidas.xDerecha;
+    const finalista = izquierda ? medidas.xCentro : medidas.xCentro + medidas.ancho;
+    const columna = izquierda ? cols.left : cols.right;
+    columna.forEach((col, c) => {
+      if (c === rondas - 1) {
+        lineaH(ctx, borde, finalista, centroDe(g, rondas, c, 0));
+        return;
+      }
+      const riel = borde + hacia * Math.round((medidas.hueco * (c + 1)) / rondas);
+      col.games.forEach((_, j) => {
+        if (j % 2) return;
+        const cyA = centroDe(g, rondas, c, j);
+        const cyB = centroDe(g, rondas, c, j + 1);
+        lineaH(ctx, borde, riel, cyA);
+        lineaH(ctx, borde, riel, cyB);
+        lineaV(ctx, riel, cyA - LINEA / 2, cyB + LINEA / 2);
+      });
+    });
+  }
+}
+
+// ── El campeón ──
+
+// La copa con cal: el contorno, sin relleno, como todo lo que está pintado en la cancha.
+function dibujarCopa(ctx, cx, top, alto, color) {
+  const anchoCopa = alto * 0.56;
+  const altoCopa = alto * 0.5;
   ctx.save();
-  ctx.fillStyle = theme.flag;
-  ctx.strokeStyle = theme.flag;
-  const cupW = size * 0.62;
-  const cupH = size * 0.5;
-  const cupTop = top;
-  // Copa
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(3, alto * 0.035);
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(cx - cupW / 2, cupTop);
-  ctx.lineTo(cx + cupW / 2, cupTop);
-  ctx.quadraticCurveTo(cx + cupW / 2, cupTop + cupH, cx, cupTop + cupH);
-  ctx.quadraticCurveTo(cx - cupW / 2, cupTop + cupH, cx - cupW / 2, cupTop);
+  ctx.moveTo(cx - anchoCopa / 2, top);
+  ctx.lineTo(cx + anchoCopa / 2, top);
+  ctx.bezierCurveTo(cx + anchoCopa / 2, top + altoCopa * 0.72, cx + anchoCopa * 0.22, top + altoCopa, cx, top + altoCopa);
+  ctx.bezierCurveTo(cx - anchoCopa * 0.22, top + altoCopa, cx - anchoCopa / 2, top + altoCopa * 0.72, cx - anchoCopa / 2, top);
   ctx.closePath();
-  ctx.fill();
-  // Asas
-  ctx.lineWidth = Math.max(3, size * 0.06);
-  ctx.beginPath();
-  ctx.arc(cx - cupW / 2, cupTop + cupH * 0.3, cupW * 0.2, Math.PI * 0.5, Math.PI * 1.5);
   ctx.stroke();
+
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(cx + s * anchoCopa * 0.5, top + altoCopa * 0.12);
+    ctx.bezierCurveTo(cx + s * anchoCopa * 0.86, top + altoCopa * 0.1, cx + s * anchoCopa * 0.82, top + altoCopa * 0.62, cx + s * anchoCopa * 0.36, top + altoCopa * 0.74);
+    ctx.stroke();
+  }
+
   ctx.beginPath();
-  ctx.arc(cx + cupW / 2, cupTop + cupH * 0.3, cupW * 0.2, -Math.PI * 0.5, Math.PI * 0.5);
+  ctx.moveTo(cx, top + altoCopa);
+  ctx.lineTo(cx, top + alto * 0.76);
+  ctx.moveTo(cx - alto * 0.17, top + alto * 0.76);
+  ctx.lineTo(cx + alto * 0.17, top + alto * 0.76);
+  ctx.lineTo(cx + alto * 0.24, top + alto * 0.9);
+  ctx.lineTo(cx - alto * 0.24, top + alto * 0.9);
+  ctx.closePath();
   ctx.stroke();
-  // Pie y base
-  ctx.fillRect(cx - size * 0.05, cupTop + cupH, size * 0.1, size * 0.2);
-  roundRect(ctx, cx - size * 0.25, cupTop + cupH + size * 0.2, size * 0.5, size * 0.12, 4);
-  ctx.fill();
   ctx.restore();
-  return size * 0.82;
 }
 
-function drawLegend(ctx, items, cx, y, theme, maxW) {
-  ctx.save();
-  ctx.font = `500 20px ${theme.fontBody}`;
-  ctx.fillStyle = theme.inkDim;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(ellipsize(ctx, items.join('  ·  '), maxW), cx, y);
-  ctx.restore();
+// La copa va encima de la final, y se encoge con lo que le quede hasta la línea de gol.
+function dibujarCampeon(ctx, w, techo, campeon, { g, d, theme }) {
+  const cx = w / 2;
+  const letraCampeon = (size) => letra(400, size, theme.fontDisplay, 0.01);
+  const lNombre = campeon?.name ? letraCampeon(tallaQueCabe(ctx, [campeon.name], d.medidas.ancho, 38, 22, letraCampeon)) : null;
+  const leyenda = 46;
+  const nombre = lNombre ? 54 : 0;
+  const alto = clamp(techo - g.zonaArriba - AIRE_CANCHA - AIRE_COPA - leyenda - nombre, 50, COPA_MAXIMA);
+  const arriba = techo - AIRE_COPA - nombre - leyenda - alto;
+  dibujarCopa(ctx, cx, arriba, alto, theme.flag);
+  escribir(ctx, 'CAMPEÓN', cx, arriba + alto + 40, letra(500, 30, theme.fontEyebrow, 0.08), theme.flag);
+  if (lNombre) {
+    ponerLetra(ctx, lNombre);
+    escribir(ctx, ellipsize(ctx, campeon.name, d.medidas.ancho), cx, arriba + alto + 94, lNombre, '#ffffff');
+  }
+}
+
+// ── La end zone de abajo ──
+
+// El pie: la fecha de corte, la marca y lo que hace falta para leer el bracket. Solo lo
+// que aparece: sin rondas que reacomodar, explicarlo es ruido.
+function dibujarPie(ctx, w, h, g, formatKey, d, theme) {
+  const { bracket, date, marca, rondas } = d;
+  const top = h - g.zonaAbajo + GOL;
+  const alto = g.zonaAbajo - GOL - MARGEN - BANDA;
+  const midY = top + alto / 2;
+  const orilla = MARGEN + BANDA + PADDING_ZONA;
+  const l = letra(500, formatKey === 'story' ? 22 : 20, theme.fontBody);
+  const alturaDe = (renglones, i) => midY + altoDeLetra(ctx, l) / 2 + (i - (renglones.length - 1) / 2) * 28;
+
+  dibujarMarca(ctx, marca, w / 2, top + (alto - ALTO_MARCA[formatKey]) / 2, ALTO_MARCA[formatKey], theme);
+
+  const izquierda = [cutoffLabel(date)];
+  if (hasTiedSeeds(bracket)) izquierda.push('* Siembra sin decidir');
+  izquierda.forEach((t, i) => escribir(ctx, t, orilla, alturaDe(izquierda, i), l, GRIS, 'left'));
+
+  const derecha = ['El mejor sembrado es local'];
+  if (rondas > 1) derecha.push('Se reacomodan cada ronda');
+  derecha.forEach((t, i) => escribir(ctx, t, w - orilla, alturaDe(derecha, i), l, GRIS, 'right'));
 }
 
 /**
  * Genera la imagen de un bracket.
  * @param {object} bracket  uno de `brackets` de GET /leagues/branches/:id/bracket
  * @param {'post'|'story'} formatKey
- * @param {{header?:{tournament?:string, context?:string, leagueLogo?:string}, date?:Date}} options
+ * @param {{header?:{league?:string, tournament?:string, year?:number, context?:string, leagueLogo?:string}, date?:Date}} options
  * @returns {Promise<Blob>}
  */
 export async function generateBracketCard(bracket, formatKey, { header = {}, date = new Date() } = {}) {
   const format = FORMATS[formatKey] || FORMATS.post;
+  const clave = FORMATS[formatKey] ? formatKey : 'post';
   const theme = readTheme();
   const { width: w, height: h } = format;
 
@@ -259,185 +429,86 @@ export async function generateBracketCard(bracket, formatKey, { header = {}, dat
   // entrado por un partido capturado.
   const equipos = new Map();
   for (const s of bracket.seeds || []) equipos.set(s.team_id, s);
-  for (const r of bracket.rounds || []) {
-    for (const g of r.games) for (const p of [g.top, g.bottom]) if (p && !equipos.has(p.team_id)) equipos.set(p.team_id, p);
-  }
-  const ids = [...equipos.keys()];
-  const cols = mirrorColumns(bracket);
+  const participantes = (bracket.rounds || []).flatMap((r) => r.games.flatMap((game) => [game.top, game.bottom])).filter(Boolean);
+  for (const p of participantes) if (!equipos.has(p.team_id)) equipos.set(p.team_id, p);
 
-  // Los escudos que se van a pintar, cada uno una vez: el de siempre de todos
-  // (el campeón lo lleva aunque venga del lado derecho) y el de visitante de
-  // los que salen del lado derecho, igual que en la página.
-  const derecha = [
-    ...cols.right.flatMap((c) => c.games.flatMap((g) => [g.top, g.bottom])),
-    cols.final?.right,
-  ];
+  const cols = mirrorColumns(bracket);
+  const rondas = cols.left.length;
+  const g = geometria(clave, h, rondas);
+  const medidas = columnas(w, rondas);
+
+  // Los escudos que se van a pintar, cada uno una vez: el de siempre de todos y el de
+  // visitante de los que salen de la mitad derecha, igual que en la página.
+  const derecha = cols.right.flatMap((c) => c.games.flatMap((game) => [game.top, game.bottom]));
   const urls = [...new Set([
-    ...ids.map((id) => equipos.get(id).logo_url),
+    ...[...equipos.values()].map((p) => p.logo_url),
     ...derecha.map((p) => logoForSide(p, 'right')),
   ].filter(Boolean))];
 
   await ensureFonts();
-  const [leagueImg, brandImg, ...imgs] = await Promise.all([
+  const [logoLiga, marca, ...resto] = await Promise.all([
     loadImageWithin(imagenAjustada(header.leagueLogo, 240), LOGO_TIMEOUT_MS),
     loadImage(BRAND_LOGO_SRC),
     ...urls.map((u) => loadImageWithin(imagenAjustada(u, 200), LOGO_TIMEOUT_MS)),
+    // De la lectura del logo solo importa cómo se pone sobre el pasto.
+    ...urls.map((u) => pinturaDelLogo(u, null, LOGO_TIMEOUT_MS)),
   ]);
-  const logos = new Map(urls.map((u, i) => [u, imgs[i]]));
+  const logos = new Map(urls.map((u, i) => [u, resto[i]]));
+  const formas = new Map(urls.map((u, i) => [u, resto[urls.length + i].forma]));
 
-  drawBackground(ctx, w, h, theme);
-
-  const cornerX = w * 0.055;
-  const cornerY = h * 0.022;
-  const cornerBox = w * 0.11;
-  drawBallIcon(ctx, cornerX, cornerY, w * 0.075, theme);
-  if (leagueImg) drawImageContain(ctx, leagueImg, w - cornerX - cornerBox, cornerY, cornerBox, cornerBox);
-
-  const headerBottom = drawHeader(ctx, w, h, theme, header, bracket, cornerX + cornerBox);
-
-  const brandW = w * 0.2;
-  const brandH = brandW / BRAND_LOGO_RATIO;
-  const brandY = h - h * 0.026 - brandH;
-
-  // --- Geometría ---
-  const sideCols = cols.left.length;              // rondas antes de la final, por lado
-  const slots = Math.max(1, (bracket.size || 2) / 2); // cajas de la primera ronda, por lado
-
-  const panelX = 28;
-  const panelW = w - panelX * 2;
-  const padX = 14;
-  const innerX = panelX + padX;
-  const innerW = panelW - padX * 2;
-
-  // El centro (trofeo y campeón) es un poco más ancho que una columna.
-  const CENTER_UNITS = 1.35;
-  const units = sideCols * 2 + 2 + CENTER_UNITS;
-  const gaps = sideCols * 2 + 2;
-  const colW = (innerW - COL_GAP * gaps) / units;
-  const centerW = colW * CENTER_UNITS;
-
-  const available = brandY - 24 - headerBottom;
-  const treeMax = available - HEAD_H - LEGEND_H;
-  // Cada caja de la primera ronda tiene su renglón; entre las dos de un cruce
-  // va la línea del estado.
-  const slotH = treeMax / slots;
-  const boxH = Math.min(MAX_BOX_H, slotH * 0.8);
-  const treeH = Math.min(treeMax, (boxH / 0.8) * slots);
-  const panelH = HEAD_H + treeH + LEGEND_H;
-  const panelY = headerBottom + Math.max(0, available - panelH) / 2;
-  const treeY = panelY + HEAD_H;
-
-  const nameSize = nameFontSize(
-    ctx,
-    ids.map((id) => equipos.get(id).name || ''),
-    colW - 2 * clamp(colW * 0.07, 7, 12),
-    Math.round(clamp(boxH * 0.12, 15, 22)),
-    13,
-    theme.fontEyebrow,
-  );
-  const statusSize = Math.round(clamp(boxH * 0.1, 14, 19));
   const tiedIds = new Set((bracket.seeds || []).filter((s) => s.tied).map((s) => s.team_id));
+  const pieza = piezaDe(ctx, {
+    nombres: [...equipos.values()].map((p) => p.name || ''),
+    siembras: [...equipos.values()].map((p) => siembraDe(p, tiedIds)),
+    marcadores: participantes.filter(llevaMarcador).map((p) => String(p.score)),
+  }, medidas.ancho, g.renglon, theme);
 
-  // Panel opaco: translúcido, las rayas de la cancha cruzarían las cajas.
-  roundRect(ctx, panelX, panelY, panelW, panelH, 24);
-  ctx.fillStyle = theme.fieldDeep;
-  ctx.fill();
-  ctx.fillStyle = 'rgba(0,0,0,0.24)';
-  ctx.fill();
+  // Todas las tiras van con la misma letra, la que hace caber a la fecha más larga.
+  const nombreDeRonda = (ronda) => roundShortName(ronda?.name).toUpperCase();
+  const cruces = [...cols.left, ...cols.right].flatMap((c) => c.games);
+  if (cols.final?.game) cruces.push({ ...cols.final.game, top: cols.final.left, bottom: cols.final.right });
+  const nombres = [...cols.left.map((c) => nombreDeRonda(c.round)), ...(cols.final ? [nombreDeRonda(cols.final.round)] : [])];
+  const letraTira = (peso) => (size) => letra(peso, size, theme.fontEyebrow, 0.03);
+  const fechas = cruces.map(fechaDelCruce).filter(Boolean);
+  const lRonda = letraTira(600)(Math.round(clamp(g.tira * 0.6, 15, 22)));
+  const paraFecha = medidas.ancho - PADDING_CAJA * 2 - 14 - Math.max(0, ...nombres.map((n) => medir(ctx, n, lRonda)));
+  const lTira = { ronda: lRonda, fecha: letraTira(500)(tallaQueCabe(ctx, fechas, paraFecha, Math.round(clamp(g.tira * 0.62, 15, 23)), 12, letraTira(500))) };
 
-  // Columnas de izquierda a derecha: rondas del lado izquierdo, final
-  // izquierda, centro, final derecha, rondas del lado derecho (al revés).
-  const columnas = [
-    ...cols.left.map((c) => ({ kind: 'round', col: c, side: 'left' })),
-    { kind: 'final', side: 'left' },
-    { kind: 'center' },
-    { kind: 'final', side: 'right' },
-    ...[...cols.right].reverse().map((c) => ({ kind: 'round', col: c, side: 'right' })),
-  ];
+  const datos = { bracket, date, marca, cols, medidas, rondas, logos, formas, tiedIds };
+  const opts = { g, d: datos, theme };
 
-  let x = innerX;
-  const boxOpts = (p, g, side = null) => ({
-    theme, logos, nameSize, tiedIds, side,
-    state: !p || !g?.winner_team_id ? '' : p.team_id === g.winner_team_id ? 'winner' : 'loser',
-  });
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = NOCHE;
+  ctx.fillRect(0, 0, w, h);
+  dibujarFranjas(ctx, w, g);
+  dibujarEndZones(ctx, w, h, g);
+  dibujarLineasDeYarda(ctx, w, g, YARDA_DE_FONDO);
+  dibujarBandas(ctx, w, h);
 
-  for (const c of columnas) {
-    const cw = c.kind === 'center' ? centerW : colW;
-    const cx = x + cw / 2;
-
-    // Cabeza de la columna
-    ctx.save();
-    ctx.fillStyle = theme.flag;
-    ctx.font = `700 19px ${theme.fontEyebrow}`;
-    ctx.letterSpacing = '2px';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const head = c.kind === 'round' ? roundShortName(c.col.round.name) : c.kind === 'final' ? 'Final' : '';
-    if (head) ctx.fillText(ellipsize(ctx, head.toUpperCase(), cw), cx, panelY + HEAD_H / 2 + 2);
-    ctx.restore();
-
-    if (c.kind === 'round') {
-      const games = c.col.games;
-      const gameH = treeH / games.length;
-      games.forEach((g, i) => {
-        const gy = treeY + i * gameH;
-        const topCy = gy + gameH * 0.25;
-        const botCy = gy + gameH * 0.75;
-        drawTeamBox(ctx, g.top, { x, y: topCy - boxH / 2, w: cw, h: boxH }, boxOpts(g.top, g, c.side));
-        drawTeamBox(ctx, g.bottom, { x, y: botCy - boxH / 2, w: cw, h: boxH }, { ...boxOpts(g.bottom, g, c.side), placeholder: g.bye ? 'Descansa' : null });
-        drawStatusLine(ctx, g, cx, gy + gameH / 2, cw, theme, statusSize);
-      });
-    } else if (c.kind === 'final' && cols.final) {
-      const p = c.side === 'left' ? cols.final.left : cols.final.right;
-      drawTeamBox(ctx, p, { x, y: treeY + treeH / 2 - boxH / 2, w: cw, h: boxH }, boxOpts(p, cols.final.game, c.side));
-    } else if (c.kind === 'center' && cols.final) {
-      const trophySize = Math.min(cw * 0.55, treeH * 0.16);
-      let y = treeY + treeH * 0.5 - boxH * 0.5 - trophySize * 0.9 - 30;
-      y += drawTrophy(ctx, cx, Math.max(treeY + 8, y), trophySize, theme) + 14;
-
-      ctx.save();
-      ctx.fillStyle = theme.flag;
-      ctx.font = `700 20px ${theme.fontEyebrow}`;
-      ctx.letterSpacing = '2px';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('CAMPEÓN', cx, treeY + treeH / 2 - boxH / 2 - 18);
-      ctx.restore();
-
-      const champ = bracket.champion;
-      drawTeamBox(ctx, champ ? { ...champ, score: null } : null, { x: x + 4, y: treeY + treeH / 2 - boxH / 2, w: cw - 8, h: boxH }, { ...boxOpts(null, null), state: champ ? 'winner' : '' });
-
-      // Bajo el campeón, en qué va la final: la misma frase que en la página.
-      const st = gameStatus(cols.final.game);
-      ctx.save();
-      ctx.font = `600 ${statusSize}px ${theme.fontEyebrow}`;
-      ctx.letterSpacing = '1px';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = st.kind === 'live' ? LIVE : theme.flag;
-      ctx.fillText(ellipsize(ctx, finalLabel(st).toUpperCase(), cw), cx, treeY + treeH / 2 + boxH / 2 + 26);
-      ctx.restore();
-    }
-
-    x += cw + COL_GAP;
+  dibujarConexiones(ctx, opts);
+  for (const lado of ['left', 'right']) {
+    const columna = lado === 'left' ? cols.left : cols.right;
+    const x = lado === 'left' ? medidas.xIzquierda : medidas.xDerecha;
+    columna.forEach((col, c) => col.games.forEach((game, j) => {
+      const y = Math.round(centroDe(g, rondas, c, j) - g.caja / 2);
+      dibujarCruce(ctx, game, { x, y, w: medidas.ancho, lado, ronda: nombreDeRonda(col.round), pieza, lTira }, opts);
+    }));
+  }
+  if (cols.final) {
+    // Los finalistas van en la misma caja, sin lado: el de la mitad izquierda arriba.
+    const y = Math.round(g.zonaArriba + g.alto / 2 - g.caja / 2);
+    const game = { ...cols.final.game, top: cols.final.left, bottom: cols.final.right };
+    dibujarCruce(ctx, game, { x: medidas.xCentro, y, w: medidas.ancho, lado: null, ronda: nombreDeRonda(cols.final.round), pieza, lTira }, opts);
+    dibujarCampeon(ctx, w, y, bracket.champion, opts);
   }
 
-  // --- Pie del panel ---
-  const legendTop = panelY + HEAD_H + treeH;
-  ctx.fillStyle = 'rgba(255,255,255,0.12)';
-  ctx.fillRect(panelX, legendTop, panelW, 2);
-  const legend = [cutoffLabel(date), 'El mejor sembrado es local', 'Se reacomodan cada ronda'];
-  if (hasTiedSeeds(bracket)) legend.push('* sin decidir');
-  drawLegend(ctx, legend, w / 2, legendTop + LEGEND_H / 2 + 1, theme, panelW - 32);
-
-  if (brandImg) {
-    const bx = (w - brandW) / 2;
-    ctx.save();
-    roundRect(ctx, bx, brandY, brandW, brandH, 16);
-    ctx.clip();
-    drawImageContain(ctx, brandImg, bx, brandY, brandW, brandH);
-    ctx.restore();
-  }
+  dibujarCabecera(ctx, w, g, {
+    header,
+    logo: logoLiga,
+    titulo: 'PLAYOFFS',
+    detalle: tableDetail({ level: 'conference', scope_name: bracket.title }, header.context),
+  }, theme);
+  dibujarPie(ctx, w, h, g, clave, datos, theme);
 
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png', 0.95));
 }

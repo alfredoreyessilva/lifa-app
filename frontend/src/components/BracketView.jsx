@@ -15,7 +15,7 @@ import {
 // final al centro); en el teléfono, ronda por ronda, porque siete columnas con
 // nombres no caben en 360 px.
 //
-// `shareImage` enciende "Generar imagen" ({ tournament, context, leagueLogo });
+// `shareImage` enciende "Generar imagen" ({ league, tournament, year, context, leagueLogo });
 // la vista previa del panel no lo pasa. `note` es lo que el panel dice de un
 // bracket que todavía no se publica.
 export default function BracketView({ bracket, shareImage = null, note = null }) {

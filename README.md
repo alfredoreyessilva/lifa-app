@@ -819,9 +819,9 @@ lifa-app/
                               de cada casco. Pura: no calcula ningún récord
         matchShareCard.js     "Generar imagen" de un partido: su portada, dibujada
                               en canvas (ver "La imagen para compartir")
-        shareCardField.js     La cancha de noche de la imagen de un partido, y lo
-                              que comparte con la de la tabla: end zones, cascos
-                              y letra
+        shareCardField.js     La cancha de noche: la acostada de la imagen de un
+                              partido, la de pie de la tabla y del bracket, y lo
+                              que comparten: end zones, cascos y letra
         offlineQueue.js       La REGLA de la cola sin señal: qué se fusiona,
                               cuándo se reintenta, qué se enseña. Pura — la
                               cubre el CI (ver "Capturar sin señal")
@@ -3489,7 +3489,8 @@ frontend/src/utils/
                                       una cancha de pie, con piezas de shareCardField.js.
   bracketFormat.js                    Qué va en cada lado del espejo y cómo se escribe
                                       cada cruce. PURO: lo comparten la página y la imagen.
-  bracketShareCard.js                 El dibujo de la imagen del bracket.
+  bracketShareCard.js                 El dibujo de la imagen del bracket: un bracket
+                                      clásico sobre la misma cancha de pie.
 ```
 
 ### Endpoints
@@ -3726,9 +3727,10 @@ veía ninguna prueba:
   tabla. Si se agrega, va aparte: el primer lugar no siempre es el campeón.
 - **Todas las tablas de un nivel en una sola imagen** (los tres grupos de ONEFA
   juntos).
-- **Las imágenes del bracket y del ranking de predicciones** siguen con la pieza
-  anterior, la cancha clara con panel. Se dejaron afuera porque no se pidieron;
-  cuando se hagan, la cancha ya está en `utils/shareCardField.js`.
+- **La imagen del ranking de predicciones** sigue con la pieza anterior, la cancha
+  clara con panel. Se dejó afuera porque no se pidió; cuando se haga, la cancha ya
+  está en `utils/shareCardField.js`. La del bracket se pasó el 2026-11-05: ver "La
+  imagen del bracket".
 - El botón **Compartir** no se ejercitó en Playwright, porque abre el panel
   nativo del sistema. Es el mismo código que el del ranking, que ya está en
   producción.
@@ -3846,9 +3848,8 @@ cuántos partidos faltan: es una proyección que cambia cada jornada.
   un equipo del lado derecho puede jugar la semifinal en la columna izquierda,
   y ahí mira a la derecha como todos los de ese lado.
 - **Generar imagen**, en publicación (1080×1350, el tamaño de la imagen de
-  guía) e historia (1080×1920), con el estilo de las demás imágenes de CFBAMX
-  (lo eligió Alfredo el 2026-11-01). Lleva los nombres y no solo los escudos:
-  la imagen circula sin la página al lado.
+  guía) e historia (1080×1920). Lleva los nombres y no solo los escudos: la
+  imagen circula sin la página al lado. Ver "La imagen del bracket", abajo.
 
 **Verificado (2026-11-01).** La siembra se probó con las tablas reales de los
 grupos de la Nacional (`tests/unit/bracket.test.mjs`), y el armado completo
@@ -3882,6 +3883,92 @@ Lo que encontró verlo, y no veía ninguna prueba:
 - **El bracket fijo**, ver arriba.
 - **Una imagen con las dos conferencias juntas.** Como la tabla: una por
   conferencia.
+
+### La imagen del bracket
+
+Lo pidió Alfredo el 2026-11-05: que se viera más formal y profesional. La versión de
+antes era la pieza previa a la cancha de noche —verde claro con rayas, cajas redondeadas,
+una pill amarilla y siete `?`— y al verla con el bracket real resultó que además perdía
+datos: cortaba la hora de un partido en la publicación ("7 NOV · 12:00 P…") y la de los
+cuatro en la historia. Ahora es un **bracket clásico sobre la misma cancha de pie de la
+imagen de la tabla**: el marco de cal, las dos end zones de color fijo y la letra viven en
+`utils/shareCardField.js`, y lo que va entre las dos end zones lo pone cada imagen.
+
+- **Cada partido es una caja de dos renglones, y el resultado se lee ahí.** Siembra,
+  casco, nombre y marcador, con los dos marcadores uno encima del otro. Es la decisión
+  que manda en esta imagen, y salió de corregir la primera versión de ese mismo día, que
+  ponía un equipo hacia cada lado de dos líneas, con la siembra, el récord y el marcador
+  alrededor de un casco grande. Alfredo aprobó el fondo y regresó lo demás: *"no se
+  distinguen las cosas porque quedan muchos numeros amontonados, por ejemplo no es claro
+  el asunto de los marcadores"*. Tenía razón: los dos marcadores de un partido quedaban a
+  más de 200 px de distancia. Un bracket es para saber quién jugó contra quién y cómo
+  quedó, y esa forma no se reinventa.
+- **Las dos cifras de un renglón no se pueden confundir.** La siembra es chica y gris, en
+  la orilla, y el marcador es lo más grande de la caja, en su propia celda, del lado por
+  donde sigue el bracket. El récord se fue por lo mismo: era la tercera cifra junto al
+  casco. Sigue en la página.
+- **La celda del marcador va siempre**, aunque esté vacía: es el lugar donde cae el
+  resultado, y así la imagen del jueves y la del domingo tienen el mismo acomodo.
+- **El ganador se marca en un solo lugar:** su marcador y una barra junto a él, en
+  amarillo; el que pierde queda atenuado, como en la página. Es lo único amarillo de una
+  caja y es lo mismo para todos: la imagen no se personaliza con ningún equipo (ver la
+  tabla, arriba).
+- **Sigue en espejo, ahora en tres columnas.** Cinco columnas de cajas con renglones no
+  dejan un nombre legible en 1080 px. Pero los cruces de una mitad no comparten altura,
+  así que van en una sola columna de 318 px, y cada ronda queda en el recodo del corchete
+  que une a la anterior (`centroDe`): es el árbol de siempre, plegado para una imagen
+  vertical. La semifinal sale derecho a la final, sobre la yarda 50. La mitad derecha es
+  el espejo de la izquierda, con el logo de visitante, y la final no tiene lado: lleva el
+  de siempre.
+- **Las líneas van sólidas, y la leyenda dice lo que ellas no pueden.** Este bracket se
+  reacomoda: con sorpresas, un equipo cambia de lado y el ganador del 1–8 no juega contra
+  el del 4–5, así que el corchete no es un camino fijo. La primera versión las punteaba
+  para no afirmar un cruce que nadie ha decidido; Alfredo pidió un bracket clásico y van
+  como en cualquiera. Lo que sigue diciendo que no es un camino fijo es "Se reacomodan
+  cada ronda", en el pie.
+- **Un cruce que todavía no se arma es una caja punteada con el nombre de su ronda**, sin
+  `?`. Punteado quiere decir "todavía no se sabe", y al armarse se vuelve una caja como
+  las demás.
+- **La tira de arriba lleva la ronda y la fecha**, en una sola letra para toda la imagen,
+  la que hace caber a la más larga: ninguna hora se corta. Un cruce jugado dice su día
+  ("6 NOV") y no "FINAL", que repetido siete veces se confunde con la ronda. El en vivo va
+  en rojo, y un cruce sin partido capturado dice "POR CONFIRMAR".
+- **La letra del nombre sale del nombre más largo**, porque todas las cajas llevan la
+  misma: 24 px en la Nacional, donde manda SALVAJES UAEM, y 31 en 14 Grandes, contra 17 de
+  antes. Si cabe en una línea va en una; si no, en dos parejas ("PUMAS FES / ACATLÁN
+  UNAM"). El casco mide 59 px: es más chico que los 131 de la primera versión, a cambio de
+  que el nombre y el marcador se lean. La celda de la siembra y la del marcador miden lo
+  que ocupa su cifra más ancha, igual que las columnas de la tabla.
+- **La copa va encima de la final**, en contorno, pintada con cal como todo lo demás. Al
+  terminar la final abajo sale el nombre del campeón, y se encoge si hace falta para no
+  pisar la línea de gol.
+- **La leyenda explica solo lo que aparece:** en un bracket de 4 o de 2 no hay nada que
+  reacomodar y esa línea no sale. El aviso del asterisco va debajo de la fecha de corte.
+
+Lo que encontró verla en todas sus etapas, y no veía ninguna prueba: los marcadores de
+dos dígitos tocaban la barra del ganador, la yarda 50 pasaba por detrás del texto de las
+cajas vacías, y medir la letra enseñó que el primer acomodo dejaba los nombres de la
+Nacional en 21 px: las celdas tenían holgura que le devolvió 3 px al nombre sin tocar el
+marcador. De la primera versión quedó otra lección: con el campeón, la copa se salía de la
+cancha. Nada de eso se ve en el bracket de hoy, que todavía no tiene un partido jugado.
+
+**Verificada (2026-11-05)** con el bracket público de la Nacional, leído en solo lectura,
+y con el `buildBracket()` real del backend para armar lo que todavía no pasa: cuartos a
+medias con uno en vivo, semifinales reacomodadas, una semifinal jugada, la final y el
+campeón; 14 Grandes con sus nombres y logos reales; 2, 4, 6 con descansos, 12 y 16
+equipos; sin logos, con siembras empatadas y con nombres larguísimos. Un detector sobre
+`fillText` comprobó en las 28 imágenes que nada se recorta, se encima ni se sale de la
+cancha. Por la página real, en escritorio y en tamaño de celular: generar, cambiar de
+formato, descargar y cerrar, sin errores en consola. Como la cancha pasó de
+`standingsShareCard.js` a `shareCardField.js`, la imagen de la tabla se comparó contra la
+de antes en las 5 tablas de ONEFA y los dos formatos: 10 imágenes iguales píxel por píxel,
+con el control viejo contra viejo en cero y un control negativo que sí encuentra
+diferencias. Sin probar en un teléfono real ni en Safari, y el botón **Compartir** abre el
+panel nativo del sistema, así que no se ejercitó.
+
+**Fuera de esta versión:** el récord y de dónde viene cada sembrado ("1.º de BAJÍO",
+"Comodín"), que la página sí enseña. Entrarían como texto chico debajo del nombre, y
+habría que verlo: son justo las cifras que estorbaban.
 
 ## Predicciones y quinielas
 

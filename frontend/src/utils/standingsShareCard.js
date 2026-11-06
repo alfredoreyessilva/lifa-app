@@ -20,8 +20,9 @@ import {
   BRAND_LOGO_SRC,
 } from './shareCardCommon.js';
 import {
-  NOCHE, CAL, GRIS, GOL, letra, ponerLetra, escribir, medir, tallaQueCabe,
-  dibujarCasco, franjasDeEndZone, bloqueLiga, dibujarMarca,
+  NOCHE, CAL, GRIS, GOL, letra, ponerLetra, escribir, medir, altoDeLetra,
+  dibujarCasco, dibujarMarca, dibujarFranjas, dibujarEndZones, dibujarLineasDeYarda, dibujarBandas, dibujarCabecera,
+  ARRIBA, ZONA_ABAJO, ALTO_MARCA, ALTO_CABEZA, MARGEN, BANDA, ORILLA, PADDING_ZONA, CASCO_DE_PORTADA,
 } from './shareCardField.js';
 import { imagenAjustada } from './imagenes.js';
 import { pinturaDelLogo } from './useTeamPaint.js';
@@ -33,16 +34,9 @@ import {
 // logo de menos es mejor que un botón que se queda en "Generando imagen…".
 const LOGO_TIMEOUT_MS = 8000;
 
-// Lo que la barra de Instagram tapa arriba de una historia.
-const ARRIBA = { post: 26, story: 96 };
-// El alto mínimo de cada end zone: lo justo para lo que lleva escrito. La de arriba
-// es la del título y las etiquetas de las columnas; la de abajo, la del pie.
+// El alto mínimo de la end zone de arriba, la del título y las etiquetas de las
+// columnas: lo justo para lo que lleva escrito.
 const ZONA_ARRIBA = { post: 220, story: 330 };
-const ZONA_ABAJO = { post: 96, story: 124 };
-const ALTO_MARCA = { post: 60, story: 76 };
-const ALTO_CABEZA = { post: 38, story: 46 };
-// Lo que miden la liga, el título y el detalle a escala 1, con sus huecos.
-const ALTO_CABECERA = 240;
 // Un renglón no pasa de esto: el ancho de la imagen no crece con él, así que más
 // alto ya no lleva letra más grande sino aire. Lo que sobra es de las end zones,
 // salvo en una tabla de muy pocos equipos: la cancha nunca se queda con menos de
@@ -52,16 +46,6 @@ const CANCHA_MINIMA = 0.75;
 // Desde este alto un nombre largo puede ir en dos líneas.
 const RENGLON_DOBLE = 66;
 
-// Lo que queda fuera de la cancha, la banda que la cierra y las marcas de cada yarda.
-const MARGEN = 12;
-const BANDA = 7;
-const MARCA_YARDA = 13;
-const YARDAS_POR_RENGLON = 5;
-const HUECO_MAXIMO = 26;
-const PADDING_ZONA = 26;
-// El casco de la portada de un partido, para el que están medidas las sombras.
-const CASCO_DE_PORTADA = 388;
-
 const SEPARACION_MINIMA = 14;
 const CIFRA_MINIMA = 22;
 const CIFRA_MAXIMA = 44;
@@ -70,129 +54,17 @@ const CIFRA_MAXIMA = 44;
 const NOMBRE_LEGIBLE = 26;
 const NOMBRE_JUNTO_A_CIFRA = 0.9;
 
-const PASTO = ['#155a37', '#0f482b'];
-const ZONA = '#0c2717';
 const LINEA_DE_YARDA = 'rgba(255, 255, 255, 0.55)';
-const MARCA_DE_YARDA = 'rgba(255, 255, 255, 0.42)';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
-// La altura de las mayúsculas de una letra: con ella un texto se centra de verdad
-// en su renglón, y no el cuadro de la fuente.
-function altoDeLetra(ctx, l) {
-  ponerLetra(ctx, l);
-  return ctx.measureText('H').actualBoundingBoxAscent;
-}
-
-// ── La cancha ──
-
-// Cada equipo es una franja de pasto: el corte alternado de una cancha de verdad
-// es también lo que guía el ojo a lo largo del renglón, sin cuadrícula.
-function dibujarFranjas(ctx, w, g) {
-  const { zonaArriba: cuerpo, renglon, franjas } = g;
-  for (let i = 0; i < franjas; i++) {
-    ctx.fillStyle = PASTO[i % 2];
-    ctx.fillRect(MARGEN, cuerpo + i * renglon, w - MARGEN * 2, renglon);
-  }
-}
-
-// Las dos end zones son iguales para toda tabla: de un color neutro, de nadie. Son
-// de la imagen, no del primer lugar ni de ningún equipo.
-function dibujarEndZones(ctx, w, h, g) {
-  const { zonaArriba, zonaAbajo } = g;
-  const zonas = [
-    { y: MARGEN, alto: zonaArriba - MARGEN },
-    { y: h - zonaAbajo, alto: zonaAbajo - MARGEN },
-  ];
-  for (const { y, alto } of zonas) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(MARGEN, y, w - MARGEN * 2, alto);
-    ctx.clip();
-    ctx.fillStyle = ZONA;
-    ctx.fillRect(MARGEN, y, w - MARGEN * 2, alto);
-    franjasDeEndZone(ctx, MARGEN, y, w - MARGEN * 2, alto);
-    ctx.restore();
-  }
-  ctx.fillStyle = CAL;
-  ctx.fillRect(MARGEN, zonaArriba - GOL, w - MARGEN * 2, GOL);
-  ctx.fillRect(MARGEN, h - zonaAbajo, w - MARGEN * 2, GOL);
-}
-
-// Las líneas de yarda: una entre cada dos equipos, de banda a banda, y las marcas de
-// cada yarda pegadas a las dos bandas.
-function dibujarLineas(ctx, w, g) {
-  const { zonaArriba: cuerpo, renglon, franjas } = g;
-  const xCampo = MARGEN + BANDA;
-  const anchoCampo = w - xCampo * 2;
-  ctx.fillStyle = LINEA_DE_YARDA;
-  for (let i = 1; i < franjas; i++) ctx.fillRect(xCampo, cuerpo + i * renglon - 2, anchoCampo, 3);
-
-  ctx.fillStyle = MARCA_DE_YARDA;
-  for (let i = 0; i < franjas; i++) {
-    for (let yarda = 1; yarda < YARDAS_POR_RENGLON; yarda++) {
-      const y = cuerpo + i * renglon + (yarda * renglon) / YARDAS_POR_RENGLON - 1;
-      ctx.fillRect(xCampo, y, MARCA_YARDA, 2);
-      ctx.fillRect(w - xCampo - MARCA_YARDA, y, MARCA_YARDA, 2);
-    }
-  }
-}
-
-// Las bandas cierran la cancha, end zones incluidas. La izquierda va en amarillo en
-// los renglones de los que clasifican.
-function dibujarBandas(ctx, w, h, g, d, theme) {
+// Los renglones de los que clasifican llevan la banda izquierda en amarillo.
+function marcarClasificados(ctx, g, d, theme) {
   const { zonaArriba: cuerpo, renglon } = g;
-  ctx.fillStyle = CAL;
-  ctx.fillRect(MARGEN, MARGEN, BANDA, h - MARGEN * 2);
-  ctx.fillRect(w - MARGEN - BANDA, MARGEN, BANDA, h - MARGEN * 2);
-  ctx.fillRect(MARGEN, MARGEN, w - MARGEN * 2, BANDA);
-  ctx.fillRect(MARGEN, h - MARGEN - BANDA, w - MARGEN * 2, BANDA);
-
   ctx.fillStyle = theme.flag;
   d.rows.forEach((r, i) => {
     if (rowQualifies(r, d.qualifyingCount)) ctx.fillRect(MARGEN, cuerpo + i * renglon, BANDA, renglon);
   });
-}
-
-// ── La end zone de arriba ──
-
-function bloqueTitulo(ctx, detalle, ancho, escala, theme) {
-  const texto = 'TABLA DE POSICIONES';
-  const letraTitulo = (size) => letra(400, size, theme.fontDisplay, 0.02);
-  const lTitulo = letraTitulo(tallaQueCabe(ctx, [texto], ancho, Math.round(100 * escala), 44, letraTitulo));
-  const letraDetalle = (size) => letra(500, size, theme.fontEyebrow, 0.04);
-  const lDetalle = letraDetalle(tallaQueCabe(ctx, [detalle], ancho, Math.round(31 * escala), 20, letraDetalle));
-  const altoTitulo = altoDeLetra(ctx, lTitulo);
-  const altoDetalle = detalle ? altoDeLetra(ctx, lDetalle) + Math.round(18 * escala) : 0;
-
-  return {
-    alto: altoTitulo + altoDetalle,
-    pintar(cx, y) {
-      escribir(ctx, texto, cx, y + altoTitulo, lTitulo, '#ffffff');
-      if (detalle) {
-        ponerLetra(ctx, lDetalle);
-        escribir(ctx, ellipsize(ctx, detalle, ancho), cx, y + altoTitulo + altoDetalle, lDetalle, 'rgba(255, 255, 255, 0.86)');
-      }
-    },
-  };
-}
-
-function dibujarCabecera(ctx, w, g, d, theme) {
-  const { header, table, logos } = d;
-  const { arriba, cabeza, zonaArriba } = g;
-  const disponible = zonaArriba - GOL - cabeza - arriba;
-  const ancho = w - (MARGEN + BANDA + PADDING_ZONA) * 2;
-  const escala = clamp(disponible / ALTO_CABECERA, 0.6, 1.1);
-  const liga = header.league || 'CFBAMX';
-  const torneo = [header.tournament, header.year].filter(Boolean).join(' ');
-  const fila = bloqueLiga(ctx, liga, torneo, logos.league, ancho, theme, escala);
-  const titulo = bloqueTitulo(ctx, tableDetail(table, header.context), ancho, escala, theme);
-
-  const sobra = Math.max(0, disponible - fila.alto - titulo.alto);
-  const hueco = Math.min(HUECO_MAXIMO, sobra / 3);
-  const inicio = arriba + (sobra - hueco) / 2;
-  fila.pintar(w / 2, inicio);
-  titulo.pintar(w / 2, inicio + fila.alto + hueco);
 }
 
 // ── La tabla ──
@@ -259,15 +131,14 @@ function dibujarTabla(ctx, w, g, d, theme) {
   const { zonaArriba: cuerpo, cabeza, renglon, tallaLugar, casco } = g;
   const n = rows.length;
   const xCampo = MARGEN + BANDA;
-  const inicioFila = xCampo + MARCA_YARDA + 8;
-  const xFin = w - inicioFila;
+  const xFin = w - ORILLA;
 
   // El lugar va pintado sobre el pasto, donde una cancha lleva sus números.
   const lLugar = letra(400, tallaLugar, theme.fontDisplay);
   const altoLugar = altoDeLetra(ctx, lLugar);
   const anchoLugar = Math.ceil(Math.max(0, ...rows.map((r) => medir(ctx, String(r.rank), lLugar))));
-  const xLugar = inicioFila + anchoLugar / 2;
-  const xCasco = inicioFila + anchoLugar + 6 + casco / 2;
+  const xLugar = ORILLA + anchoLugar / 2;
+  const xCasco = ORILLA + anchoLugar + 6 + casco / 2;
   const xTexto = xCasco + casco / 2 + 10;
 
   const letraNombre = (size) => letra(400, size, theme.fontDisplay, 0.01);
@@ -337,7 +208,7 @@ function dibujarTabla(ctx, w, g, d, theme) {
     ctx.fillStyle = 'rgba(255, 210, 63, 0.1)';
     ctx.fillRect(col.fin - col.ancho - separacion / 2, yCabeza, col.ancho + separacion, cabeza + GOL + renglon * n);
   }
-  dibujarLineas(ctx, w, g);
+  dibujarLineasDeYarda(ctx, w, { ...g, franja: g.renglon }, LINEA_DE_YARDA);
 
   const baseCabeza = yCabeza + cabeza / 2 + altoDeLetra(ctx, letras.cabeza) / 2;
   escribir(ctx, 'Equipo', xTexto, baseCabeza, letras.cabeza, GRIS, 'left');
@@ -501,11 +372,17 @@ export async function generateStandingsCard(table, formatKey, { usesPoints = fal
   ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = NOCHE;
   ctx.fillRect(0, 0, w, h);
-  dibujarFranjas(ctx, w, g);
+  dibujarFranjas(ctx, w, { ...g, franja: g.renglon });
   dibujarEndZones(ctx, w, h, g);
   dibujarTabla(ctx, w, g, datos, theme);
-  dibujarBandas(ctx, w, h, g, datos, theme);
-  dibujarCabecera(ctx, w, g, datos, theme);
+  dibujarBandas(ctx, w, h);
+  marcarClasificados(ctx, g, datos, theme);
+  dibujarCabecera(ctx, w, g, {
+    header,
+    logo: datos.logos.league,
+    titulo: 'TABLA DE POSICIONES',
+    detalle: tableDetail(table, header.context),
+  }, theme);
   dibujarPie(ctx, w, h, g, clave, datos, theme);
 
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png', 0.95));

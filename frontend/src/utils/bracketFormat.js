@@ -90,6 +90,13 @@ export function gameStatus(game, now = Date.now()) {
   return { kind: 'scheduled', label: porDefinir ? 'Fecha por definir' : `${day} ${month} · ${time}` };
 }
 
+// El día en que se jugó un cruce: "6 NOV". La imagen lo escribe en vez de "Final",
+// que entre siete marcadores ya no dice nada y se confunde con la ronda.
+export function playedDay(game) {
+  const { day, month, porDefinir } = getMatchParts(game?.match?.match_date, game?.match?.timezone);
+  return porDefinir ? '' : `${day} ${month}`;
+}
+
 // Lo que va bajo el campeón, al centro: en qué va la final. No es la línea de
 // un cruce cualquiera —ahí "vs" tiene sentido, aquí no—. En la página la final
 // ya jugada es una liga para verla (`link`); en la imagen solo dice "Final".
