@@ -59,6 +59,16 @@ export async function orgTieneMiembros(organizationId) {
   return Number(count) > 0;
 }
 
+// La misma pregunta, del lado de Postgres, para una lista: la pestaña
+// Organizaciones del admin decide con esto qué equipos de liga enseña. Va junto
+// a la de arriba para que sigan siendo una sola respuesta.
+export function orgTieneMiembrosSql(aliasOrganizacion = 'o') {
+  return `EXISTS (
+    SELECT 1 FROM organization_members om
+    WHERE om.organization_id = ${aliasOrganizacion}.id AND om.status = 'active'
+  )`;
+}
+
 // ¿Puede esta persona ver la página de esta organización (y su catálogo)?
 // Una privada no existe para el público, igual que una liga oculta: la ven
 // quienes la administran y el admin de la plataforma. `user` es el de

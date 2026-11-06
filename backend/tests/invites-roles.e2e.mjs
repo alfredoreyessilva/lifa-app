@@ -795,6 +795,80 @@ ok((await call(`/admin/organizations/${MEDIA}/publish`, { method: 'PUT', token: 
 // Que la suite no deje un medio de prueba en el home de la rama cada vez que corre.
 ok((await call(`/admin/organizations/${MEDIA}/unpublish`, { method: 'PUT', token: PLAT2 })).data.is_public === false,
   'y Ocultar lo deja privado otra vez');
+
+console.log('\n=== 19. Un equipo de liga llega a la pestaña Organizaciones cuando se entrega ===');
+// README, "Un equipo de liga entra a la lista cuando se entrega" (2026-11-06).
+// Hasta ese día el filtro preguntaba por `teams.league_id`, que se queda puesta
+// para siempre, y un equipo entregado no tenía cómo verificarse.
+const enOrganizaciones = async (id) => (await call('/admin/organizations', { token: PLAT2 })).data.find((o) => o.id === id);
+
+const tm5 = await call(`/manage/leagues/${LEAGUE}/teams`, { method: 'POST', token: LIGA, body: { name: `Equipo Por Entregar ${stamp}` } });
+const TEAM5 = tm5.data.team?.id ?? tm5.data.id;
+const { rows: [{ organization_id: ORG5 }] } = await pool.query('SELECT organization_id FROM teams WHERE id=$1', [TEAM5]);
+ok(!(await enOrganizaciones(ORG5)), 'sin entregar no sale: lo administra su liga');
+
+const entrega5 = await call(`/invites/teams/${TEAM5}`, { method: 'POST', token: LIGA });
+ok(entrega5.status === 201, 'la liga genera la entrega', `=${entrega5.status}`);
+ok(!(await enOrganizaciones(ORG5)), 'y generar el link todavía no lo entrega');
+
+const claim5 = await call(`/invites/${entrega5.data.token}/claim`, { method: 'POST', token: MEDIO });
+ok(claim5.status === 200, 'alguien reclama el link', `=${claim5.status}`);
+const filaEntregado = await enOrganizaciones(ORG5);
+ok(filaEntregado?.is_verified === false, 'ya entregado sí sale, sin verificar', JSON.stringify(filaEntregado)?.slice(0, 120));
+ok(filaEntregado?.league_id === LEAGUE && filaEntregado?.league_name === `Liga Roles ${stamp}`,
+  'con la liga que lo creó, que es lo que lo distingue de uno independiente',
+  JSON.stringify({ l: filaEntregado?.league_id, n: filaEntregado?.league_name }));
+
+// El equipo edita su nombre y su logo en `teams`, y no se copian a su
+// organización: la fila tiene que enseñar los de hoy, no los del día que nació.
+const LOGO5 = 'https://example.com/logo-entregado.png';
+const editar5 = await call(`/manage/teams/${TEAM5}`, { method: 'PUT', token: MEDIO, body: { name: `Equipo Entregado ${stamp}`, logo_url: LOGO5 } });
+ok(editar5.status === 200, 'su dueño le cambia el nombre y le pone logo', `=${editar5.status}`);
+const { rows: [orgSinCopiar] } = await pool.query('SELECT name, logo_url FROM organizations WHERE id=$1', [ORG5]);
+ok(orgSinCopiar.logo_url === null, 'su organización sigue sin logo: esa es la trampa', JSON.stringify(orgSinCopiar));
+const filaEditada = await enOrganizaciones(ORG5);
+ok(filaEditada?.name === `Equipo Entregado ${stamp}` && filaEditada?.logo_url === LOGO5,
+  'y la fila enseña el nombre y el logo del equipo', JSON.stringify({ n: filaEditada?.name, l: filaEditada?.logo_url }));
+
+// El botón "Ver" abre la ficha del equipo con lo que trae esta lista, que es solo
+// del admin. La página de una organización es pública y no mira si la liga lo es,
+// así que ahí no debe llegar nada de esto: esta liga de la suite ni siquiera está
+// publicada.
+const CONTACTO5 = `equipo${stamp}@example.com`;
+await call(`/manage/teams/${TEAM5}`, { method: 'PUT', token: MEDIO, body: { city: 'Monterrey', contact_email: CONTACTO5 } });
+const fichaEntregado = (await enOrganizaciones(ORG5))?.team;
+ok(fichaEntregado?.id === TEAM5 && fichaEntregado?.name === `Equipo Entregado ${stamp}` && fichaEntregado?.logo_url === LOGO5,
+  '"Ver" trae la ficha del equipo, con su nombre y su logo de hoy', JSON.stringify(fichaEntregado)?.slice(0, 140));
+ok(fichaEntregado?.contact_email === CONTACTO5 && !!fichaEntregado?.city, 'y lo que llenó en su perfil', JSON.stringify({ c: fichaEntregado?.contact_email, ciudad: fichaEntregado?.city }));
+const { rows: [ligaDe5] } = await pool.query('SELECT is_public FROM leagues WHERE id=$1', [LEAGUE]);
+const paginaPublica5 = await call(`/organizations/${ORG5}`);
+ok(ligaDe5.is_public === false && paginaPublica5.status === 200 && !JSON.stringify(paginaPublica5.data).includes(CONTACTO5),
+  'la página pública de su organización NO trae el contacto de un equipo de liga privada', JSON.stringify({ liga: ligaDe5.is_public, s: paginaPublica5.status }));
+ok(!(await enOrganizaciones(ORG4))?.team, 'una organización sin equipo no trae ficha: "Ver" sigue siendo su link');
+
+ok((await call('/admin/organizations', { token: LIGA })).status === 403, 'la lista es solo del admin de la plataforma: su liga no la abre');
+ok((await call(`/admin/organizations/${ORG5}/verify`, { method: 'PUT', token: LIGA })).status === 403, 'y tampoco lo verifica');
+ok((await call(`/admin/organizations/${ORG5}/verify`, { method: 'PUT', token: MEDIO })).status === 403, 'ni su dueño se verifica solo');
+
+const verificar5 = await call(`/admin/organizations/${ORG5}/verify`, { method: 'PUT', token: PLAT2 });
+ok(verificar5.status === 200 && verificar5.data.is_verified === true, 'Marcar verificada funciona con un equipo entregado', `=${verificar5.status}`);
+ok((await enOrganizaciones(ORG5))?.is_verified === true, 'y la fila ya lo dice');
+const suEquipo5 = (await call('/auth/me', { token: MEDIO })).data.teams?.find((t) => t.id === TEAM5);
+ok(suEquipo5?.is_verified === true, 'y su equipo ya trae la insignia en su panel', JSON.stringify({ v: suEquipo5?.is_verified }));
+ok((await call(`/admin/organizations/${ORG5}/publish`, { method: 'PUT', token: PLAT2 })).status === 400,
+  'verificarlo no lo vuelve publicable desde aquí: sigue siendo un equipo');
+const quitar5 = await call(`/admin/organizations/${ORG5}/unverify`, { method: 'PUT', token: PLAT2 });
+ok(quitar5.status === 200 && quitar5.data.is_verified === false, 'Quitar verificación también', `=${quitar5.status}`);
+ok(!!(await enOrganizaciones(ORG5)), 'y sigue en la lista: entregado es de ida');
+
+// Lo que ya estaba no se movió: un independiente sigue saliendo, sin liga.
+const indep5 = await call('/manage/teams', { method: 'POST', token: MEDIO, body: { name: `Independiente ${stamp}` } });
+const { rows: [{ organization_id: ORGINDEP }] } = await pool.query('SELECT organization_id FROM teams WHERE id=$1', [indep5.data.id ?? indep5.data.team?.id]);
+const filaIndep = await enOrganizaciones(ORGINDEP);
+ok(!!filaIndep && filaIndep.league_id === null && filaIndep.league_name === null, 'uno independiente sigue saliendo, sin liga', JSON.stringify(filaIndep)?.slice(0, 120));
+ok(filaIndep?.team?.id === (indep5.data.id ?? indep5.data.team?.id), 'y su "Ver" también abre su ficha de equipo', JSON.stringify(filaIndep?.team)?.slice(0, 80));
+ok((await call('/admin/organizations', { token: PLAT2 })).data.every((o) => o.type !== 'league'), 'y las ligas siguen sin salir aquí: tienen su pestaña');
+
 await pool.query("UPDATE users SET role='rep' WHERE id=$1", [idPlat]);
 
 

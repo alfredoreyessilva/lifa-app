@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import Modal from '../components/Modal.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
 
 export default function AdminPanel() {
   const { token } = useAuth();
@@ -869,11 +870,16 @@ const ORG_TYPE_LABELS = {
   store: 'Tienda / proveedor',
   clinic: 'Clínica',
   brand: 'Marca',
-  // Solo entran aquí los equipos INDEPENDIENTES (sin liga) — ver
-  // GET /admin/organizations. Un equipo de liga se administra desde el
-  // panel de su propia liga, no desde esta pestaña.
+  // Entran aquí los equipos INDEPENDIENTES (sin liga) y los ENTREGADOS por su
+  // liga, que traen `league_id` y otra etiqueta (ver esEquipoEntregado). Uno de
+  // liga sin entregar no sale: lo administra su liga desde su panel. Ver
+  // GET /admin/organizations.
   team: 'Equipo independiente',
 };
+
+function esEquipoEntregado(org) {
+  return org.type === 'team' && org.league_id != null;
+}
 
 function OrganizationsTab({ token }) {
   const [orgs, setOrgs] = useState([]);
@@ -958,18 +964,21 @@ function OrganizationsTab({ token }) {
                 <div className="who">
                   {org.name}
                   <span className="tag" style={{ marginLeft: 8 }}>
-                    {ORG_TYPE_LABELS[org.type] || org.type}
+                    {esEquipoEntregado(org) ? 'Equipo entregado' : ORG_TYPE_LABELS[org.type] || org.type}
                   </span>
                   {/* Un equipo independiente decide solo si sale en el home
-                      (show_on_platform): aquí se ve, pero no tiene botón. */}
+                      (show_on_platform): aquí se ve, pero no tiene botón. A uno
+                      entregado no le aplica: sale si su liga es pública. */}
                   {org.type === 'team' ? (
-                    <span
-                      className="tag"
-                      title="Lo decide el equipo desde su panel"
-                      style={{ marginLeft: 8, color: org.show_on_platform ? 'var(--field)' : 'var(--ink-dim)', borderColor: org.show_on_platform ? 'var(--field)' : 'var(--line-strong)' }}
-                    >
-                      {org.show_on_platform ? 'En el home' : 'Fuera del home'}
-                    </span>
+                    !esEquipoEntregado(org) && (
+                      <span
+                        className="tag"
+                        title="Lo decide el equipo desde su panel"
+                        style={{ marginLeft: 8, color: org.show_on_platform ? 'var(--field)' : 'var(--ink-dim)', borderColor: org.show_on_platform ? 'var(--field)' : 'var(--line-strong)' }}
+                      >
+                        {org.show_on_platform ? 'En el home' : 'Fuera del home'}
+                      </span>
+                    )
                   ) : (
                     <span className="tag" style={{ marginLeft: 8, color: org.is_public ? 'var(--field)' : 'var(--ink-dim)', borderColor: org.is_public ? 'var(--field)' : 'var(--line-strong)' }}>
                       {org.is_public ? 'Pública' : 'Privada'}
@@ -981,7 +990,10 @@ function OrganizationsTab({ token }) {
                     </span>
                   )}
                 </div>
-                <div className="info">{org.country_name || 'Sin país'}</div>
+                <div className="info">
+                  {org.country_name || 'Sin país'}
+                  {esEquipoEntregado(org) && ` · ${org.league_name}`}
+                </div>
               </div>
             </div>
             <div className="row-actions">
@@ -1009,12 +1021,30 @@ function OrganizationsTab({ token }) {
                   {org.plan === 'pro' ? '⚙️ Plan Pro' : 'Activar Pro'}
                 </button>
               )}
-              <a href={`/panel/organizacion/${org.id}`} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
-                Ver
-              </a>
+              {/* El perfil de un equipo vive en `teams`, no en su organización:
+                  /panel/organizacion/:id le enseñaría lo que quedó ahí el día que
+                  nació. El link se queda para una organización sin equipo, que
+                  no tiene ficha que abrir (PD-42). */}
+              {org.team ? (
+                <button className="btn btn-outline btn-sm" onClick={() => setModal({ type: 'team-profile', org })}>
+                  Ver
+                </button>
+              ) : (
+                <a href={`/panel/organizacion/${org.id}`} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
+                  Ver
+                </a>
+              )}
             </div>
           </div>
         ))
+      )}
+
+      {modal?.type === 'team-profile' && (
+        <TeamInfoPanel
+          team={{ ...modal.org.team, is_verified: modal.org.is_verified }}
+          leagueId={modal.org.league_id}
+          onClose={() => setModal(null)}
+        />
       )}
 
       {modal?.type === 'plan-org' && (

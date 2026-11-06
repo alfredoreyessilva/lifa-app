@@ -15,6 +15,35 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Un equipo de liga llega a la pestaña Organizaciones cuando se entrega (2026-11-06).**
+  Lo pidió Alfredo: al entregar un equipo creado por una liga no había dónde verificarlo,
+  porque `GET /admin/organizations` descartaba todo equipo con `teams.league_id`, una
+  columna que se queda puesta para siempre. Ahora la pregunta es si ya se administra solo,
+  con la misma respuesta que usa el resto de la entrega (`orgTieneMiembrosSql`, junto a
+  `orgTieneMiembros()`). Uno sin entregar sigue fuera: lo administra su liga.
+
+  Su fila dice "Equipo entregado" y el nombre de su liga, sin "En el home" ni "Fuera del
+  home", que no le aplican. Y al medirlo salió otro detalle: `PUT /manage/teams/:id` edita
+  el nombre y el logo en `teams` sin copiarlos a `organizations`, y la pestaña leía de ahí.
+  Ahora los lee de `teams`, sin reescribir filas; también para los independientes.
+
+  **El botón "Ver" de un equipo enseña su ficha real (PD-43, nació y se cerró ese día).**
+  Abría `/panel/organizacion/:id`, que arma la ficha con lo que quedó en `organizations`:
+  el nombre y el logo de cuando nació, y "Todavía no agregó su información" con el perfil
+  lleno, justo al ir a verificarlo. Ahora abre `TeamInfoPanel` encima de la lista, con los
+  datos que trae `GET /admin/organizations`. No se arregló en `GET /organizations/:id`
+  porque es público y no mira si la liga del equipo lo es: publicaría el contacto de
+  equipos de ligas privadas.
+
+  Verificado contra `desarrollo-local`: `invites-roles.e2e.mjs` (238 comprobaciones, 25
+  nuevas en la sección 19, con la frontera de la ruta pública), con el SQL de antes y el
+  nuevo comparados en solo lectura (entran exactamente los 68 equipos entregados, no sale
+  nadie, ninguno de los 136 sin entregar aparece y ninguna fila que ya estaba cambió), y en
+  el navegador, escritorio y 390 px: marcar y quitar la verificación desde la fila, y "Ver"
+  en un equipo entregado y en GRIZZLIES, que abre con su portada, contacto, redes e
+  insignia y se cierra con Escape y con la X. Queda abierto un pendiente de esa pestaña que
+  ya existía: PD-42. Ver README, "Un equipo de liga entra a la lista cuando se entrega".
+
 - **La imagen del bracket, un bracket clásico sobre la cancha de pie (2026-11-05).** Lo
   pidió Alfredo: más formal y profesional. Era la última imagen de competencia con la
   pieza vieja, y al verla con el bracket real de la Nacional resultó que además perdía

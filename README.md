@@ -5301,7 +5301,7 @@ otra organización, y sin que le falte ninguna función por no tener liga.
 |-|-|-|
 | `POST` | `/manage/teams` | Registra un equipo sin liga — crea `teams` + `organizations` + `organization_members` de un jalón. Owner = quien lo registra, de inmediato (a diferencia de un equipo de liga, que nace sin representante hasta que alguien reclama una invitación). |
 | `PUT` | `/manage/teams/:id` | Ahora también acepta `country_id`/`description` (se guardan en la organización del equipo) y `show_on_platform`. |
-| `GET` | `/admin/organizations` | Ya incluye a los equipos **independientes** (antes excluía `type = 'team'` por completo) — verificables con el mismo botón `is_verified` que medio/tienda/clínica/marca. Desde el 2026-10-29 es el único botón que tienen ahí: no se publican desde esa pestaña (ver "Organizaciones: publicar y verificar"). Un equipo de liga sigue sin aparecer aquí (se administra desde el panel de su liga). |
+| `GET` | `/admin/organizations` | Ya incluye a los equipos **independientes** (antes excluía `type = 'team'` por completo) — verificables con el mismo botón `is_verified` que medio/tienda/clínica/marca. Desde el 2026-10-29 es el único botón que tienen ahí: no se publican desde esa pestaña (ver "Organizaciones: publicar y verificar"). Un equipo de liga aparece aquí desde que se entrega; antes lo administra su liga desde su panel. |
 | `GET` | `/leagues/all-teams` | Suma, además del roster de ligas públicas, a los equipos independientes con `show_on_platform = TRUE`. |
 | `GET` | `/billing/teams/:id/statement` | Un equipo sin liga no tiene relación de cobranza con nadie — regresa un estado de cuenta vacío en vez de tronar. |
 
@@ -5560,6 +5560,52 @@ del home" para que se vea, sin botón.
 con `teams.show_on_platform`; publicar u ocultar uno de esos por aquí contesta
 400, porque escribir la columna dejaría una fila que dice lo que no hace.
 
+### Un equipo de liga entra a la lista cuando se entrega
+
+**Decidido el 2026-11-06, a pedido de Alfredo.** Un equipo creado por una liga
+no salía en la pestaña Organizaciones ni después de entregado, así que no había
+cómo verificarlo. El filtro preguntaba por `teams.league_id`, que se queda
+puesta para siempre, y su razón era que a ese equipo lo administra su liga desde
+su panel: justo lo que deja de ser cierto al entregarlo.
+
+Ahora la pregunta es la misma que decide todo lo demás de un equipo entregado:
+si hay alguien en `organization_members` (`orgTieneMiembrosSql`, junto a
+`orgTieneMiembros()`, en `utils/orgMembers.js`).
+
+| Equipo | En la pestaña Organizaciones |
+|-|-|
+| De liga, sin entregar | No sale: lo administra su liga |
+| De liga, entregado | Sale, con "Marcar verificada" |
+| Independiente | Sale, con "Marcar verificada" |
+
+- **Lo que cuenta es que alguien reclame el link**, no que la liga lo genere:
+  hasta ese momento el equipo sigue siendo de su liga. Y "entregado" es de ida,
+  así que no sale de la lista. La excepción es la puerta de `DELETE
+  /admin/users/:id` (ver "Quién puede eliminar un equipo"): sin miembros vuelve
+  a quedar fuera, y conserva su insignia.
+- **Es el mismo botón y la misma columna** que para un equipo independiente:
+  `organizations.is_verified`, que todas las lecturas de un equipo ya traían de
+  su organización, así que la palomita sale sola en su ficha, en su panel y en
+  la página de un partido. Tampoco se publica desde aquí.
+- **Su fila dice "Equipo entregado" y el nombre de la liga que lo creó**
+  (`teams.league_id`), no "Equipo independiente". No lleva "En el home" ni
+  "Fuera del home": `show_on_platform` solo aplica a un equipo sin liga, y uno
+  de liga sale en el home si su liga es pública.
+- **El nombre y el logo de un equipo se leen de `teams`** (regla 4), también
+  para uno independiente. `PUT /manage/teams/:id` los edita ahí y no los copia a
+  `organizations`, así que la fila enseñaba el logo del día que nació el
+  equipo, o ninguno: de los 201 equipos de liga de `desarrollo-local`, 12 tenían
+  otro logo en su organización. Justo la fila donde hay que reconocerlo.
+- **"Ver" abre la ficha del equipo (`TeamInfoPanel`), la misma que ve el
+  público**, encima de la lista y con lo que trae `team` en `GET
+  /admin/organizations`; también para uno independiente. Antes abría
+  `/panel/organizacion/:id`, que le enseñaba lo que quedó en `organizations`: el
+  nombre y el logo de cuando nació, y "Todavía no agregó su información" con el
+  perfil lleno. No se arregló allá porque `GET /organizations/:id` es público y
+  no mira si la liga del equipo lo es: pegarle los datos de `teams` publicaría el
+  contacto de los equipos de una liga privada. Una organización que se quedó sin
+  equipo (PD-42) no tiene ficha que abrir y conserva el link.
+
 ### Las que ya existían
 
 Columna nueva, sin reusar la vieja (regla 4): `is_verified` sigue diciendo lo
@@ -5581,7 +5627,7 @@ que crea la columna, que en ese mismo paso queda `NOT NULL DEFAULT FALSE`.
 | PUT | `/admin/organizations/:id/publish` | Admin — publica (400 si es liga o equipo) |
 | PUT | `/admin/organizations/:id/unpublish` | Admin — oculta (ídem) |
 | PUT | `/admin/organizations/:id/verify` y `/unverify` | Admin — solo la insignia; ya no publica |
-| GET | `/admin/organizations` | Admin — trae `is_public` y, de un equipo, `show_on_platform` |
+| GET | `/admin/organizations` | Admin — trae `is_public` y, de un equipo, `show_on_platform`, `league_id`, `league_name` y `team`, con lo que enseña su ficha. Un equipo de liga solo sale ya entregado |
 | GET | `/organizations` | **Público** — el directorio: solo publicadas, con `is_verified` para la palomita y `CAMPOS_DE_FICHA` para la ficha |
 | PUT | `/organizations/:id` | Dueño o administrador de la organización, o el admin — edita nombre, país, logo, descripción, sitio web, portada, redes y contacto (400 si es liga o equipo) |
 | GET | `/organizations/:id` | Público si está publicada; si no, quien la administra o el admin (404 a los demás) |

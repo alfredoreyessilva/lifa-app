@@ -29,7 +29,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | **P1** | Hoy no daña, pero frena el siguiente paso: la primera liga que cobre, la prueba en cancha, el siguiente cliente |
 | **P2** | Deuda y pulido. Se toma cuando hay tiempo o cuando se toca ese archivo |
 
-## Índice (2026-11-01)
+## Índice (2026-11-06)
 
 | ID | P | Qué | Tipo |
 |-|-|-|-|
@@ -64,6 +64,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-33 | P2 | Los recordatorios de cobranza esconden su error y pierden el día | código |
 | PD-36 | P2 | En el celular, la tabla de posiciones se desliza de lado, y el README dice que cabe | código |
 | PD-41 | P2 | En el celular, las pestañas del modal de competencia se salen de lado | código |
+| PD-42 | P2 | Borrar un equipo deja su organización, y sale en Organizaciones como "Equipo independiente" | código |
 
 ---
 
@@ -610,6 +611,25 @@ Encontrado el 2026-10-25 al revisar el Modo ONEFA a 390 px; ya pasaba antes y
 no lo toca ese cambio. Las cuatro pestañas (Fases, Formato, Títulos, Vista
 previa) no caben a lo ancho del modal: "Vista previa" queda fuera y el modal
 entero se desliza de lado. El panel del Modo ONEFA sí cabe.
+
+### PD-42 · Borrar un equipo deja su organización, y sale en Organizaciones como "Equipo independiente"
+
+Encontrado el 2026-11-06 al revisar la pestaña Organizaciones del panel admin.
+Borrar un equipo quita la fila de `teams` y deja la de `organizations` sin equipo.
+Pasa por dos caminos: `DELETE /manage/teams/:id`, con el que una liga elimina un
+equipo sin entregar, y `DELETE /admin/leagues/:id`, porque `teams.league_id` es
+`ON DELETE CASCADE` y se lleva a todos sus equipos, entregados incluidos (el mismo
+borrado de PD-06). Como `GET /admin/organizations` une con `LEFT JOIN`, esa
+organización cuenta como "sin liga" y sale con la etiqueta "Equipo independiente",
+"Fuera del home" y un botón para verificar algo que ya no existe.
+
+Medido en `desarrollo-local` en solo lectura: 18 organizaciones así (el borrado de
+la sección 16 de `invites-roles.e2e.mjs` deja una en cada corrida). **En producción
+no se ha medido.**
+
+Salidas: filtrarlas al leer (`t.id IS NOT NULL`, una condición) o borrar la
+organización junto con el equipo. Lo segundo pide revisar antes qué más la
+referencia.
 
 ---
 

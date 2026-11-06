@@ -4,6 +4,7 @@ import { authRequired } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { HOY_MX } from '../utils/sqlDates.js';
 import { TIPOS_PUBLICABLES } from '../utils/orgVisibility.js';
+import { orgTieneMiembrosSql } from '../utils/orgMembers.js';
 
 const router = express.Router();
 
@@ -359,20 +360,39 @@ router.put('/leagues/:id/unverify', authRequired, adminRequired, asyncHandler(as
 // "Organizaciones: publicar y verificar", 2026-10-29). Un medio necesita los
 // dos para autoasignarse a partidos.
 //
-// Los equipos de liga se excluyen a propósito (su liga ya los administra
-// desde su propio panel) — pero un equipo INDEPENDIENTE (sin liga, ver
-// POST /manage/teams) sí entra aquí: es exactamente el mismo mecanismo de
-// verificación de identidad que cualquier otra organización, porque no
-// tiene una liga que lo respalde. Publicarlo no: si sale en el home lo decide
-// el propio equipo (`show_on_platform`), y viaja aquí solo para que se vea.
+// Un equipo de liga se excluye a propósito mientras su liga lo administra desde
+// su propio panel. Desde que se entrega ya se administra solo (2026-11-06), y
+// entra aquí igual que un equipo INDEPENDIENTE (sin liga, ver POST /manage/teams):
+// es exactamente el mismo mecanismo de verificación de identidad que cualquier
+// otra organización. Publicarlo no: si sale en el home lo decide el propio
+// equipo (`show_on_platform`), y viaja aquí solo para que se vea.
+//
+// El nombre y el logo de un equipo se leen de `teams`: ahí los edita (PUT
+// /manage/teams/:id), y no se copian a `organizations`. Van después de `o.*` a
+// propósito: de dos columnas con el mismo nombre, en la fila queda la última.
+//
+// `team` es lo que enseña su ficha (`TeamInfoPanel`), para el botón "Ver": las
+// columnas de las lecturas públicas de un equipo en `routes/leagues.js`. Viaja
+// aquí, y no en `GET /organizations/:id`, porque aquella ruta es pública y no mira
+// si la liga del equipo lo es: publicaría el contacto de una liga privada.
 router.get('/organizations', authRequired, adminRequired, asyncHandler(async (req, res) => {
   const orgs = await db.prepare(`
-    SELECT o.*, c.name AS country_name, t.show_on_platform AS show_on_platform
+    SELECT o.*, c.name AS country_name, t.show_on_platform AS show_on_platform,
+           COALESCE(t.name, o.name) AS name, COALESCE(t.logo_url, o.logo_url) AS logo_url,
+           t.league_id AS league_id, l.name AS league_name,
+           CASE WHEN t.id IS NOT NULL THEN json_build_object(
+             'id', t.id, 'name', t.name, 'logo_url', t.logo_url, 'cover_url', t.cover_url,
+             'city', t.city, 'institution', t.institution, 'maps_url', t.maps_url,
+             'contact_email', t.contact_email, 'contact_phone', t.contact_phone,
+             'facebook_url', t.facebook_url, 'instagram_url', t.instagram_url,
+             'twitter_url', t.twitter_url, 'website_url', t.website_url
+           ) END AS team
     FROM organizations o
     LEFT JOIN countries c ON c.id = o.country_id
     LEFT JOIN teams t ON t.organization_id = o.id
+    LEFT JOIN leagues l ON l.id = t.league_id
     WHERE o.type NOT IN ('league', 'team')
-       OR (o.type = 'team' AND t.league_id IS NULL)
+       OR (o.type = 'team' AND (t.league_id IS NULL OR ${orgTieneMiembrosSql('o')}))
     ORDER BY o.is_verified ASC, o.type, o.name
   `).all();
   res.json(orgs);
