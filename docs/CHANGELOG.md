@@ -60,6 +60,12 @@ entradas traen el post-mortem del bug que las provocó.
   lo más 1 px, y 7 px con el botón en teléfono) y el foco en ella. Abierto de nuevo y por la
   página de la liga se queda en 0. El botón no sale con la temporada terminada, al arrancarla ni
   sin lista, y "Ver bracket" sigue exacto.
+
+  Desplegado ese día (`0c503ad`): CI verde, Vercel de inmediato y Render a los 51 s. En el sitio
+  público, con su API real, en escritorio y en tamaño de celular: las 145 tarjetas de ONEFA
+  pintadas, atrás y "Ver calendario completo" llegan a su tarjeta, "Ir a lo próximo" llega al
+  partido marcado "Próximo", y Posiciones, la portada de un partido, las tres temporadas de la
+  LFA, PFL y la ruta por categoría abren sin un error de JavaScript y sin desborde lateral.
   `getMatchParts` y `fechaLarga` contra el código anterior: 28,640 casos sin diferencia. Sin
   probar en un teléfono real ni en Safari.
 
