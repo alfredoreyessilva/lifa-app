@@ -15,6 +15,35 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **La página de una liga (2026-11-06).** Lo pidió Alfredo: que se viera más profesional y
+  que los botones de contacto estuvieran a la vista. En una computadora la primera pantalla
+  de ONEFA era solo la foto: el nombre quedaba abajo del doblez, los equipos a 1,500 px, los
+  calendarios detrás de una pestaña cerrada y los contactos en una ventana que se abría
+  tocando el logo, sin que nada lo dijera. Ahora el encabezado es una tarjeta del calendario
+  a escala de portada, con el logo, el nombre, los contactos y la portada entera; abajo, los
+  calendarios a la vista y los equipos en la franja del filtro "Equipo". La ventana del logo
+  se fue, y con ella `.league-info-*`, porque todo lo suyo ya está en la página. El porqué
+  está en la sección "La página de una liga" del README.
+
+  Dos cosas salieron de medir y no de ver. Con portadas falsas de 2.6:1 y verticales, y con
+  un nombre larguísimo, la primera versión recortaba hasta 62 % de la portada: de ahí el
+  `contain` en todos los casos y `encabezadoApilado`. Y el contraste contra 906 colores
+  con `pinturaDeZona` encontró que el 48 % de color inicial dejaba el texto gris reprobado
+  en 4 de cada 10 logos: de ahí el 34 %, y que la nota vaya en cal.
+
+  De paso, `linkDeWhatsApp`: el "55 5541 1027" que ONEFA capturó, como lo pide el
+  formulario, armaba `wa.me/5555411027`, un número de Brasil. Diez dígitos son un número de
+  México y llevan su 52. `FiltroEquipo` salió de `CalendarViewer.jsx` a `TeamStrip.jsx`.
+
+  Verificada en el navegador con los datos públicos de las 4 ligas, leídos en solo lectura,
+  y con 7 casos alterados solo en memoria (portada 2.6:1 y vertical, imagen rota, verificada,
+  7 redes, nombre larguísimo, liga vacía), en 9 anchos de 1280 a 320: 99 mediciones sin nada
+  fuera del panel ni scroll de lado. Los contactos, las fichas de equipo y de sede, Compartir,
+  el teclado, entrar y regresar de un calendario y pasar de una liga a otra, por la página
+  real. El filtro "Equipo" sale idéntico al sitio público en sus 34 tarjetas, con el control
+  negativo en verde, y el panel del torneo no se movió. Las 4 ligas, también en la compilación
+  real, sin errores en consola. 21 pruebas nuevas en `leagueDisplay.test.mjs`.
+
 - **El calendario: cada partido es una cancha (2026-11-06).** Lo pidió Alfredo: que las
   tarjetas parecieran los campos horizontales de la página de un partido, y que la vista
   se viera más profesional. Cada tarjeta es ahora la portada en chico, con los mismos

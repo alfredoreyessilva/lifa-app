@@ -2540,7 +2540,7 @@ button.league-card {
   box-shadow: 0 0 0 1px var(--mp-linea);
 }
 
-/* Los equipos, cada uno en su franja de cancha (FiltroEquipo). */
+/* Los equipos, cada uno en su franja de cancha (TeamStrip). */
 .filter-grid--equipos {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 }
@@ -2858,14 +2858,6 @@ button.league-card {
   line-height: 1.2;
 }
 
-.category-card-sub {
-  font-family: var(--font-eyebrow);
-  font-size: 11px;
-  color: var(--flag);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .category-card-arrow {
   font-size: 16px;
   color: var(--ink-dim);
@@ -2932,35 +2924,6 @@ button.league-card {
   border-width: 3px;
 }
 
-/* ---------- Tarjeta de información de la liga ---------- */
-.league-info-panel {
-  background: var(--card);
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  width: 100%;
-  max-width: 440px;
-  max-height: 88vh;
-  overflow-y: auto;
-  margin: 20px;
-}
-
-.league-info-banner {
-  height: 140px;
-  background: linear-gradient(135deg, var(--field-deep) 0%, var(--field) 100%);
-  border-radius: 16px 16px 0 0;
-  position: relative;
-  flex-shrink: 0;
-}
-.league-info-banner--full {
-  height: auto;
-}
-.league-info-banner-img {
-  display: block;
-  width: 100%;
-  height: auto;
-  border-radius: 16px 16px 0 0;
-}
-
 .league-page-cover-img {
   display: block;
   width: 100%;
@@ -2997,68 +2960,291 @@ button.league-card {
 @media (max-width: 640px) {
   .league-header-panel { --cal-pad: 12px; }
 }
-.league-verified-note {
-  margin-top: 12px;
-}
-.league-verified-note p {
-  font-size: 13px;
-  color: var(--ink-dim);
-  margin: 6px 0 0;
-}
-.league-verified-note--verified p {
-  color: var(--ink);
-}
-.tab-bar--panel {
-  margin: 20px 20px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+
+/* ---------- La página de una liga ----------
+   README, "La página de una liga". El encabezado es una tarjeta del calendario a
+   escala de portada: la end zone con el nombre rotulado, la línea de gol y la
+   portada. El caso base es el apilado (teléfonos, tabletas, y lo que dice
+   encabezadoApilado), y de lado es la excepción del final del bloque. */
+.lp-hero {
+  /* La portada no se recorta: su espacio se mide con su propia proporción, y la
+     altura baja para que un flyer ancho quepa completo en el 60 % del panel.
+     --ancho es el ancho del panel. */
+  --ancho: min(1032px, 100vw - 48px);
+  --alto: min(340px, var(--ancho) * 0.6 / var(--proporcion, 1.5));
+  display: flex;
+  flex-direction: column-reverse;
 }
 
-.league-info-logo-wrap {
-  display: flex;
-  justify-content: flex-start;
-  padding: 20px 20px 0;
+.lp-hero-zona {
+  position: relative;
+  container-type: inline-size;
+  min-width: 0;
+  padding: 18px var(--cal-pad) 14px;
+  border-top: 6px solid var(--mp-cal);
+  /* El color de la liga, pero siempre de noche. El 34 % está medido: es lo que
+     deja leer la letra de cal sobre la end zone de cualquier logo, incluido el
+     amarillo puro, que es el peor (5.37:1). Con 48 % ese mismo daba 3.45:1. */
+  background-color: color-mix(in srgb, var(--home) 34%, var(--mp-noche));
+  transition: background-color 0.25s ease;
+}
+.lp-hero--sin-portada .lp-hero-zona { border-top: 0; }
+.lp-hero-zona::before,
+.lp-hero-zona::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.lp-hero-zona::before {
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0 16px, transparent 16px 32px);
+}
+.lp-hero-zona::after {
+  background: linear-gradient(to bottom, rgba(5, 15, 10, 0.34), transparent 38%, rgba(5, 15, 10, 0.5));
+}
+.lp-hero-zona > * {
   position: relative;
   z-index: 1;
 }
 
-.league-info-body {
-  padding: 12px 20px 24px;
+.lp-hero-marca {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
+.lp-hero .mh-helmet {
+  flex: 0 0 auto;
+  width: 84px;
+}
+.lp-hero .mh-helmet.is-listo { animation: none; }
+.lp-hero .mh-helmet img { filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.5)); }
+.lp-hero .mh-helmet--placa img { width: 92%; height: 92%; }
+.lp-hero .mh-helmet--disco img {
+  width: 92%;
+  height: 92%;
+  box-shadow: 0 0 0 3px var(--mp-cal), 0 8px 16px rgba(0, 0, 0, 0.45);
+  filter: none;
+}
+.lp-hero .mh-helmet-initials { font-size: 30px; }
 
-.league-info-name {
+/* --len (leagueDisplay.js) deja que la letra llene su renglón, sea "LFA" o el
+   nombre completo de una liga. El 98px es lo que ocupan el logo y su espacio. */
+.lp-hero h1 {
+  min-width: 0;
+  margin: 0;
   font-family: var(--font-display);
-  font-size: 22px;
-  color: var(--ink);
-  margin: 0 0 4px;
-  letter-spacing: 0.02em;
+  font-size: 56px;
+  font-size: clamp(32px, (100cqw - 98px) / (var(--len) * 0.5), 96px);
+  font-weight: 400;
+  line-height: 1.04;
+  letter-spacing: 0.01em;
+  color: var(--mp-cal);
+  overflow-wrap: anywhere;
 }
-
-.league-info-section {
-  border-top: 1px solid var(--line);
-  padding-top: 14px;
-  margin-top: 14px;
-}
-
-.league-info-section-title {
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  color: var(--flag);
-  text-transform: uppercase;
+.lp-hero-desc {
+  max-width: 62ch;
+  margin: 12px 0 0;
   font-family: var(--font-eyebrow);
-  margin-bottom: 10px;
+  font-size: 16px;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  color: var(--mp-cal);
+}
+.lp-hero-region {
+  margin: 2px 0 0;
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(243, 246, 241, 0.86);
 }
 
-.league-info-teams {
+.lp-contact {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.lp-contact .btn {
+  min-height: 40px;
+  padding: 8px 13px;
+  background: rgba(5, 15, 10, 0.42);
+  font-size: 12px;
+}
+.lp-contact-icon { flex-shrink: 0; }
+.lp-contact .btn-ghost {
+  padding-inline: 6px;
+  background: none;
+  color: var(--mp-cal);
+}
+.lp-contact .btn-ghost:hover { color: var(--flag); }
+
+/* El gris de la noche (--mp-gris) sobre la end zone de un logo claro baja a 3:1. */
+.lp-hero-nota {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(243, 246, 241, 0.86);
+}
+.lp-hero-nota b {
+  margin-right: 4px;
+  font-family: var(--font-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--mp-cal);
 }
 
-.league-info-team {
+/* Nunca se recorta: `contain` en todos los casos. Apilada cabe entera a lo ancho,
+   y el tope es para una portada vertical o una tableta, donde una foto 4:3 mediría
+   más que la pantalla. Lo que sobra a sus lados lo llena ella misma, difuminada:
+   dos barras negras parecen un error. */
+.lp-hero-portada {
+  position: relative;
+  width: 100%;
+  aspect-ratio: var(--proporcion, 1.5);
+  max-height: 420px;
+  overflow: hidden;
+  background: var(--mp-noche);
+}
+.lp-hero-portada::before {
+  content: '';
+  position: absolute;
+  inset: -32px;
+  background: var(--portada) center / cover;
+  filter: blur(24px) brightness(0.5);
+}
+.lp-hero-portada img {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.lp-hero .lp-hero-cancha { display: none; }
+
+.lp-section { padding: 0 var(--cal-pad); }
+.lp-section:last-child { padding-bottom: 24px; }
+.lp-section .section-head {
+  margin: 22px 0 14px;
+  padding-bottom: 10px;
+  border-bottom-color: var(--mp-linea);
+}
+.lp-section .filter-grid { margin-bottom: 0; }
+.lp-section .filter-card { text-decoration: none; }
+.lp-vacio {
+  margin: 0;
+  font-size: 14px;
+  color: var(--mp-gris);
+}
+
+/* Los calendarios son lo que más se viene a buscar: la misma franja de un
+   equipo, más grande, y el único amarillo de la página. */
+.lp-calendarios {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+  gap: 10px;
+}
+.lp-cal {
+  grid-template-columns: 22px minmax(0, 1fr);
+  min-height: 84px;
+  text-decoration: none;
+}
+.lp-cal .mh-field {
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 16px;
+  background-image:
+    radial-gradient(60% 140% at 0% 50%, color-mix(in srgb, var(--home) 30%, transparent), transparent 80%),
+    linear-gradient(to bottom, rgba(6, 22, 13, 0.3), rgba(6, 22, 13, 0.62)),
+    repeating-linear-gradient(to right, transparent 0 calc(10% - 2px), rgba(255, 255, 255, 0.12) calc(10% - 2px) 10%),
+    repeating-linear-gradient(to right, #17653c 0 10%, #125432 10% 20%);
+}
+.lp-cal-name {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(21px, 3.4vw, 28px);
+  line-height: 1.12;
+  letter-spacing: 0.01em;
+}
+.lp-cal .btn {
+  position: relative;
+  flex-shrink: 0;
+}
+.lp-cal:hover .btn { background: #ffe066; }
+.lp-anteriores { margin-top: 10px; }
+
+/* Equipos y sedes comparten el mismo lugar: con 34 equipos en un teléfono, las
+   sedes quedarían a tres metros de pulgar. */
+.lp-tabs {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  gap: 22px;
+}
+.lp-tabs button {
+  position: relative;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  color: var(--mp-gris);
+  cursor: pointer;
+}
+.lp-tabs button:hover { color: var(--mp-cal); }
+.lp-tabs button[aria-pressed='true'] { color: var(--paper); }
+.lp-tabs button[aria-pressed='true']::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 -11px;
+  height: 2px;
+  background: var(--flag);
+}
+
+.lp-hero a:focus-visible,
+.lp-hero button:focus-visible,
+.lp-tabs button:focus-visible {
+  outline: 2px solid var(--flag);
+  outline-offset: 2px;
+}
+
+@media (min-width: 1000px) {
+  .lp-hero:not(.lp-hero--apilada) {
+    flex-direction: row;
+    min-height: var(--alto);
+  }
+  .lp-hero:not(.lp-hero--apilada) .lp-hero-zona {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-top: 0;
+    border-right: 6px solid var(--mp-cal);
+  }
+  .lp-hero:not(.lp-hero--apilada) .lp-hero-portada {
+    flex: 0 0 auto;
+    width: min(60%, var(--alto) * var(--proporcion, 1.5));
+    aspect-ratio: auto;
+    max-height: none;
+  }
+  .lp-hero:not(.lp-hero--apilada) .lp-hero-portada img {
+    position: absolute;
+    inset: 0;
+  }
+  .lp-hero:not(.lp-hero--apilada) .lp-hero-cancha {
+    display: block;
+    flex: 0 0 34%;
+    padding: 0;
+  }
+  .lp-hero-cancha .mh-yards span { font-size: 15px; }
+  .lp-hero .mh-helmet { width: 104px; }
+  .lp-hero h1 { font-size: clamp(36px, (100cqw - 120px) / (var(--len) * 0.5), 112px); }
+}
+.tab-bar--panel {
+  margin: 20px 20px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 /* ---------------------------------------------------------------------- */

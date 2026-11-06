@@ -65,6 +65,8 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-36 | P2 | En el celular, la tabla de posiciones se desliza de lado, y el README dice que cabe | código |
 | PD-41 | P2 | En el celular, las pestañas del modal de competencia se salen de lado | código |
 | PD-42 | P2 | Borrar un equipo deja su organización, y sale en Organizaciones como "Equipo independiente" | código |
+| PD-43 | P2 | El recordatorio de WhatsApp a un tutor no le pone el 52 a un número de diez dígitos | código |
+| PD-44 | P2 | La página de un torneo se quedó con su portada gigante y sus tarjetas verdes | código |
 
 ---
 
@@ -630,6 +632,27 @@ no se ha medido.**
 Salidas: filtrarlas al leer (`t.id IS NOT NULL`, una condición) o borrar la
 organización junto con el equipo. Lo segundo pide revisar antes qué más la
 referencia.
+
+### PD-43 · El recordatorio de WhatsApp a un tutor no le pone el 52 a un número de diez dígitos
+
+Salió el 2026-11-06 al arreglar el WhatsApp de la página de una liga. `whatsappReminderUrl`
+(`TeamFinancesSection.jsx`) deja solo los dígitos de `tutor_phone` y los pega en `wa.me`.
+Un número de diez dígitos sale sin lada de país, y WhatsApp lo lee como de otro país.
+
+Es P2 porque el formulario sí pide el número completo (su ejemplo es `5215512345678`), así
+que solo falla si alguien captura diez dígitos a mano, y porque hay 0 filas de padrón en
+producción. Se arregla con `linkDeWhatsApp` (`utils/leagueDisplay.js`), que ya hace esa
+cuenta; solo hay que agregarle el `?text=`.
+
+### PD-44 · La página de un torneo se quedó con su portada gigante y sus tarjetas verdes
+
+Lo mismo que tenía la página de una liga antes del 2026-11-06, en `TournamentPage.jsx`. Medido
+ese día en el sitio público: en el TAZÓN MÉXICO 2025 de la LFA, el único de los 5 torneos con
+imagen (`tournaments.logo_url`), la portada mide 1032×689 px y el nombre del torneo empieza a
+822 px. Sin calendario abierto, la lista de equipos sigue con `TeamCard`, las tarjetas verdes.
+
+Es P2 porque afecta a un solo torneo. Los equipos se resuelven con `TeamStrip`; la portada
+puede seguir la regla de "La página de una liga" (entera y sin estirar).
 
 ---
 

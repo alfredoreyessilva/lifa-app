@@ -1,134 +1,71 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
-import TeamCard from '../components/TeamCard.jsx';
+import LeagueHero from '../components/LeagueHero.jsx';
+import TeamStrip from '../components/TeamStrip.jsx';
 import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
 import VenueCard from '../components/VenueCard.jsx';
 import VenueInfoPanel from '../components/VenueInfoPanel.jsx';
 import Loading from '../components/Loading.jsx';
+import { calendariosDeLiga, equiposEnOrden } from '../utils/leagueDisplay.js';
+import { useTeamPaint } from '../utils/useTeamPaint.js';
 
-function initials(name) {
-  return (name || '')
-    .split(' ')
-    .filter((w) => w.length > 2 || /^[A-ZÁÉÍÓÚÑ]/.test(w))
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase();
-}
+// La página pública de una liga. A quien llega le contesta tres cosas sin tener
+// que tocar nada: de quién es (el encabezado, con sus contactos), cuándo se
+// juega (los calendarios) y quién juega (los equipos). README, "La página de
+// una liga".
 
-function LeagueInfoPanel({ league, onClose }) {
-  useEffect(() => {
-    function onKey(e) { if (e.key === 'Escape') onClose(); }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+function Calendarios({ torneos }) {
+  const { vigentes, anteriores } = calendariosDeLiga(torneos);
 
-  const teams   = league.teams || [];
-  const socials = [
-    { key: 'whatsapp',      label: 'WhatsApp',    href: league.whatsapp?.startsWith('http') ? league.whatsapp : league.whatsapp ? `https://wa.me/${league.whatsapp.replace(/\D/g, '')}` : null },
-    { key: 'facebook_url',  label: 'Facebook',    href: league.facebook_url },
-    { key: 'instagram_url', label: 'Instagram',   href: league.instagram_url },
-    { key: 'twitter_url',   label: 'X / Twitter', href: league.twitter_url },
-    { key: 'youtube_url',   label: 'YouTube',     href: league.youtube_url },
-    { key: 'tiktok_url',    label: 'TikTok',      href: league.tiktok_url },
-    { key: 'website_url',   label: 'Sitio web',   href: league.website_url },
-  ].filter((s) => s.href);
+  if (vigentes.length === 0) {
+    return <p className="lp-vacio">Esta liga aún no ha publicado sus calendarios.</p>;
+  }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="league-info-panel" onClick={(e) => e.stopPropagation()}>
-        {league.cover_url ? (
-          <div className="league-info-banner league-info-banner--full">
-            <img src={league.cover_url} alt="" className="league-info-banner-img" />
-            <button className="team-profile-close" onClick={onClose}>✕</button>
-          </div>
-        ) : (
-          <div className="league-info-banner">
-            <button className="team-profile-close" onClick={onClose}>✕</button>
-          </div>
-        )}
-
-        <div className="league-info-logo-wrap">
-          <div className="league-logo" style={{ width: 72, height: 72, fontSize: 22, border: '3px solid var(--field)', flexShrink: 0 }}>
-            {league.logo_url ? <img src={league.logo_url} alt={league.name} /> : initials(league.name)}
-          </div>
-        </div>
-
-        <div className="league-info-body">
-          <h3 className="league-info-name">{league.name}</h3>
-          {league.state && <p style={{ fontSize: 13, color: 'var(--flag)', margin: '0 0 8px', fontFamily: 'var(--font-eyebrow)', letterSpacing: '0.08em' }}>{league.state}</p>}
-          {league.description && <p style={{ fontSize: 13, color: 'var(--ink-dim)', margin: '0 0 16px', lineHeight: 1.5 }}>{league.description}</p>}
-
-          {socials.length > 0 && (
-            <div className="league-info-section">
-              <div className="league-info-section-title">Contacto y redes</div>
-              <div className="team-info-links">
-                {socials.map((s) => (
-                  <a key={s.key} href={s.href} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
-                    {s.label}
-                  </a>
-                ))}
-              </div>
+    <>
+      <div className="lp-calendarios">
+        {vigentes.map((t) => (
+          <Link key={t.id} to={`/torneos/${t.id}`} className="filter-team lp-cal">
+            <div className="mh-zone mh-zone--home" aria-hidden="true" />
+            <div className="mh-field">
+              <p className="lp-cal-name">{t.name} {t.year}</p>
+              <span className="btn btn-flag btn-sm">Ver calendario</span>
             </div>
-          )}
-
-          {teams.length > 0 && (
-            <div className="league-info-section">
-              <div className="league-info-section-title">Equipos registrados</div>
-              <div className="league-info-teams">
-                {teams.map((team) => (
-                  <div key={team.id} className="league-info-team">
-                    <div className="league-logo" style={{ width: 44, height: 44, fontSize: 13, flexShrink: 0 }}>
-                      {team.logo_url ? <img src={team.logo_url} alt={team.name} /> : initials(team.name)}
-                    </div>
-                    <span style={{ fontSize: 11, color: 'var(--ink-dim)', textAlign: 'center', lineHeight: 1.3, maxWidth: 60 }}>{team.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {socials.length === 0 && teams.length === 0 && (
-            <p style={{ color: 'var(--ink-dim)', fontSize: 13, textAlign: 'center' }}>Esta liga aún no ha agregado información de contacto.</p>
-          )}
-        </div>
+          </Link>
+        ))}
       </div>
-    </div>
+
+      {anteriores.length > 0 && (
+        <div className="filter-grid lp-anteriores">
+          {anteriores.map((t) => (
+            <Link key={t.id} to={`/torneos/${t.id}`} className="filter-card">
+              <span className="filter-card-label">{t.name}</span>
+              <span className="filter-card-count">{t.year}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
 export default function LeaguePage() {
   const { slug } = useParams();
-  const [league, setLeague]                 = useState(null);
-  const [teams,  setTeams]                  = useState(null);
-  const [venues, setVenues]                 = useState(null);
-  const [error,  setError]                  = useState('');
-  const [tab,    setTab]                    = useState(null);
-  const [copied, setCopied]                 = useState(false);
-  const [showLeagueInfo, setShowLeagueInfo] = useState(false);
-  const [selectedTeam,   setSelectedTeam]   = useState(null);
-  const [selectedVenue,  setSelectedVenue]  = useState(null);
-  const navigate = useNavigate();
-
-  function copyLink() {
-    navigator.clipboard.writeText(window.location.href).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
-
-  function handleTeamClick(team) {
-    setSelectedTeam((prev) => (prev?.id === team.id ? null : team));
-  }
-
-  function handleVenueClick(venue) {
-    setSelectedVenue((prev) => (prev?.id === venue.id ? null : venue));
-  }
+  const [league, setLeague]               = useState(null);
+  const [teams,  setTeams]                = useState(null);
+  const [venues, setVenues]               = useState(null);
+  const [error,  setError]                = useState('');
+  const [verSedes, setVerSedes]           = useState(false);
+  const [selectedTeam,  setSelectedTeam]  = useState(null);
+  const [selectedVenue, setSelectedVenue] = useState(null);
+  // La end zone de la liga sale de su logo, igual que la de un equipo: nadie
+  // captura un color, y si cambia de logo su página cambia sola.
+  const pintura = useTeamPaint(league?.logo_url, null, { alInstante: true });
 
   useEffect(() => {
     setLeague(null); setTeams(null); setVenues(null); setError('');
-    setTab(null); setSelectedTeam(null); setSelectedVenue(null); setShowLeagueInfo(false);
+    setVerSedes(false); setSelectedTeam(null); setSelectedVenue(null);
     api.getLeague(slug).then(setLeague).catch((e) => setError(e.message));
     api.getTeams(slug).then(setTeams).catch(() => setTeams([]));
     api.getVenues(slug).then(setVenues).catch(() => setVenues([]));
@@ -148,156 +85,75 @@ export default function LeaguePage() {
 
   if (!league) return <div className="container"><Loading /></div>;
 
-  const leagueWithTeams = { ...league, teams: teams || [] };
+  // Sin sedes no hay nada que elegir, y una pestaña vacía solo le enseña al
+  // visitante lo que a la liga le falta capturar.
+  const haySedes = (venues || []).length > 0;
+  const enSedes  = verSedes && haySedes;
+  const zona = {
+    '--home': pintura.fondo,
+    '--home-ink': pintura.tinta,
+    '--away': pintura.fondo,
+    '--away-ink': pintura.tinta,
+  };
 
   return (
     <div className="container">
       <div className="crumb"><Link to="/">Inicio</Link> / {league.name}</div>
 
-      <div className="league-header-panel">
-        {league.cover_url && (
-          <img src={league.cover_url} alt="" className="league-page-cover-img" />
-        )}
+      <div className="league-header-panel" style={zona}>
+        <LeagueHero league={league} pintura={pintura} />
 
-        <div className="league-header-panel-body">
-          <button
-            className="league-logo-btn"
-            onClick={() => setShowLeagueInfo(true)}
-            title="Ver información de la liga"
-            style={{ width: 96, height: 96, margin: '0 auto 20px', fontSize: 30 }}
-          >
-            <div className="league-logo" style={{ width: '100%', height: '100%', fontSize: 30 }}>
-              {league.logo_url ? <img src={league.logo_url} alt={league.name} /> : initials(league.name)}
-            </div>
-          </button>
-
-          <h1 style={{ fontSize: 'clamp(32px, 6vw, 56px)' }}>{league.name}</h1>
-          {league.description && <p>{league.description}</p>}
-
-          {league.is_verified ? (
-            <div className="league-verified-note league-verified-note--verified">
-              <span className="tag" style={{ color: 'var(--field)', borderColor: 'var(--field)' }}>Liga verificada ✓</span>
-              <p>Espacio administrado oficialmente por la liga.</p>
-            </div>
-          ) : (
-            <div className="league-verified-note">
-              <p>Este espacio aún no es administrado oficialmente por la liga.</p>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginTop: 12 }}>
-            <button className="btn btn-outline btn-sm" onClick={copyLink}>
-              {copied ? '✓ Link copiado' : 'Compartir esta liga'}
-            </button>
-          </div>
-        </div>
-
-        <div className="tab-bar tab-bar--panel">
-          <button className={`tab-btn ${tab === 'torneos' ? 'active' : ''}`} onClick={() => setTab((t) => (t === 'torneos' ? null : 'torneos'))}>CALENDARIOS</button>
-          <button className={`tab-btn ${tab === 'sedes'      ? 'active' : ''}`} onClick={() => setTab((t) => (t === 'sedes' ? null : 'sedes'))}>Sedes</button>
-        </div>
-
-        <div className="league-header-panel-body league-header-panel-body--content">
-
-      {tab === 'torneos' && (
-        <>
+        <section className="lp-section">
           <div className="section-head">
-            <h2>Campeonatos</h2>
-            <span className="count">{(league.tournaments || []).length}</span>
+            <h2>Calendarios</h2>
           </div>
-          {(league.tournaments || []).length === 0 ? (
-            <div className="empty-state">
-              <h3>Sin campeonatos todavía</h3>
-              <p>Esta liga aún no ha publicado sus campeonatos.</p>
+          <Calendarios torneos={league.tournaments} />
+        </section>
+
+        <section className="lp-section">
+          <div className="section-head">
+            {haySedes ? (
+              <h2 className="lp-tabs">
+                <button type="button" aria-pressed={!enSedes} onClick={() => setVerSedes(false)}>Equipos</button>
+                <button type="button" aria-pressed={enSedes} onClick={() => setVerSedes(true)}>Sedes</button>
+              </h2>
+            ) : (
+              <h2>Equipos</h2>
+            )}
+            <span className="count">{enSedes ? venues.length : teams ? teams.length : ''}</span>
+          </div>
+
+          {enSedes ? (
+            <div className="filter-grid">
+              {venues.map((venue) => (
+                <VenueCard key={venue.id} venue={venue} onClick={() => setSelectedVenue(venue)} />
+              ))}
             </div>
+          ) : !teams ? (
+            <div className="loading">Cargando…</div>
+          ) : teams.length === 0 ? (
+            <p className="lp-vacio">Esta liga aún no ha publicado sus equipos.</p>
           ) : (
-            <div className="category-grid">
-              {league.tournaments.map((t) => (
-                <button key={t.id} className="category-card" onClick={() => navigate(`/torneos/${t.id}`)}>
-                  <div className="category-card-name">{t.name}</div>
-                  <div className="category-card-sub">{t.year}</div>
-                  <div className="category-card-arrow">→</div>
-                </button>
+            <div className="filter-grid filter-grid--equipos">
+              {equiposEnOrden(teams).map((team) => (
+                <TeamStrip
+                  key={team.id}
+                  name={team.name}
+                  logo={team.logo_url}
+                  verified={team.is_verified}
+                  onClick={() => setSelectedTeam(team)}
+                />
               ))}
             </div>
           )}
-        </>
-      )}
-
-          {tab === 'sedes' && (
-            <>
-              <div className="section-head">
-                <h2>Sedes</h2>
-                <span className="count">{venues ? venues.length : ''}</span>
-              </div>
-              {!venues ? (
-                <div className="loading">Cargando…</div>
-              ) : venues.length === 0 ? (
-                <div className="empty-state">
-                  <h3>Sin sedes todavía</h3>
-                  <p>Esta liga aún no ha publicado sus sedes.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="team-grid">
-                    {venues.map((venue) => (
-                      <VenueCard
-                        key={venue.id}
-                        venue={venue}
-                        isSelected={selectedVenue?.id === venue.id}
-                        onClick={() => handleVenueClick(venue)}
-                      />
-                    ))}
-                  </div>
-                  {selectedVenue && (
-                    <VenueInfoPanel
-                      venue={selectedVenue}
-                      onClose={() => setSelectedVenue(null)}
-                    />
-                  )}
-                </>
-              )}
-            </>
-          )}
-          <>
-            <div className="section-head" style={{ marginTop: 28 }}>
-              <h2>Equipos</h2>
-              <span className="count">{teams ? teams.length : ''}</span>
-              </div>
-              {!teams ? (
-                <div className="loading">Cargando…</div>
-              ) : teams.length === 0 ? (
-                <div className="empty-state">
-                  <h3>Sin equipos todavía</h3>
-                  <p>Esta liga aún no ha publicado sus equipos.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="team-grid">
-                    {teams.map((team) => (
-                      <TeamCard
-                        key={team.id}
-                        team={team}
-                        isSelected={selectedTeam?.id === team.id}
-                        onClick={() => handleTeamClick(team)}
-                      />
-                    ))}
-                  </div>
-                  {selectedTeam && (
-                    <TeamInfoPanel
-                      team={selectedTeam}
-                      leagueId={league.id}
-                      onClose={() => setSelectedTeam(null)}
-                    />
-                  )}
-                </>
-              )}
-            </>
-        </div>
+        </section>
       </div>
 
-      {showLeagueInfo && (
-        <LeagueInfoPanel league={leagueWithTeams} onClose={() => setShowLeagueInfo(false)} />
+      {selectedTeam && (
+        <TeamInfoPanel team={selectedTeam} leagueId={league.id} onClose={() => setSelectedTeam(null)} />
+      )}
+      {selectedVenue && (
+        <VenueInfoPanel venue={selectedVenue} onClose={() => setSelectedVenue(null)} />
       )}
     </div>
   );

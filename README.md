@@ -801,6 +801,11 @@ lifa-app/
                                  end zones y los dos cascos (ver "La página de un
                                  partido"). Junto a ella, las secciones: MatchPoll,
                                  MatchCompare, MatchVenue, MatchWeek y MatchTeamCard
+        LeagueHero.jsx           El encabezado de una liga: end zone, línea de gol y
+                                 portada sin recortar (ver "La página de una liga")
+        LeagueContacts.jsx       Sus botones de contacto, con el logo de cada red
+        TeamStrip.jsx            Un equipo en su franja de cancha. La comparten la
+                                 página de una liga y el filtro "Equipo" del calendario
         FlightSearchWidget.jsx   Botón "Vuelo" de "Cómo llegar" — abre en una ventana
                                  el widget de búsqueda de Aviasales (ver "Monetización")
         StandingsTable.jsx       Una tabla de posiciones. Solo pinta: el orden y
@@ -812,6 +817,9 @@ lifa-app/
                                  (ver "Tabla de posiciones y modelo de competencia")
         (resto de components/), context/, api/
       utils/
+        leagueDisplay.js      Lo que la página de una liga dice de ella: contactos,
+                              región, calendarios, orden de equipos y cuándo se apila.
+                              Pura
         teamPaint.js          De qué color va la end zone de un equipo y cómo se
                               pone su logo: se lee del logo. Pura; el canvas vive
                               en useTeamPaint.js
@@ -945,7 +953,7 @@ Dos recorridos de punta a punta en `backend/tests/`. **Nunca contra producción*
 **Público (sin cuenta):**
 
 1. Inicio → grid de logos de ligas.
-2. Click en liga → página de la liga: portada, logo, nombre, descripción y pestañas (Categorías/Equipos/Sedes), todo dentro de un mismo panel.
+2. Click en liga → página de la liga: el encabezado con su portada y sus contactos, los calendarios y los equipos, todo dentro de un mismo panel (ver "La página de una liga").
 3. Click en categoría → calendario de partidos. Cada tarjeta de partido es un solo link hacia `/partidos/:id` (`MatchPage.jsx`, ver "La página de un partido").
 
    El calendario se parte en **tramos por jornada**, cada uno con un encabezado (jornada, fechas y cuántos partidos) que se queda pegado bajo la barra de arriba mientras se desliza (`groupByJornada` en `utils/matchDisplay.js`). Tres decisiones:
@@ -1366,6 +1374,115 @@ hasta arriba: quien revisaba la Jornada 9 partido por partido volvía a empezar 
 - **El ranking y la quiniela siguen en el verde de `--card`,** sobre el panel nuevo.
 - **Sin probar en un teléfono real ni en Safari.** `content-visibility` llegó a Safari en la 18:
   antes se ignora, y solo se pierde lo rápido.
+
+## La página de una liga
+
+`/ligas/:slug` (`LeaguePage.jsx`) es a donde llega quien busca una liga, y antes era
+una foto. En una computadora la portada de ONEFA ocupaba 1032×774 px: el nombre de la
+liga quedaba abajo del doblez, los equipos empezaban a 1,500 px y los calendarios
+estaban detrás de una pestaña cerrada. Los contactos vivían en una ventana que se abría
+tocando el logo, y nada decía que el logo se podía tocar.
+
+### Lo que la ordena
+
+Tres preguntas de quien llega, con la respuesta a la vista y sin tocar nada:
+
+- **¿De quién es esto?** El encabezado: logo, nombre, qué es y dónde juega.
+- **¿Cómo los contacto?** Los botones, junto al nombre.
+- **¿Cuándo se juega y quién juega?** Los calendarios y los equipos, justo abajo.
+
+En una computadora las tres caben en la primera pantalla: el calendario empieza a
+563 px. Todo lo que traía la ventana del logo ya está en la página, así que la ventana
+se fue: dos lugares para lo mismo son uno de más.
+
+### El encabezado es una tarjeta del calendario
+
+La misma cancha, a escala de portada (`LeagueHero.jsx`): la end zone con el nombre
+rotulado, la línea de gol y la portada de la liga. Pasar de la liga a su calendario no
+cambia de idioma. El nombre va en Anton, lo más grande que quepa (`--len`, de
+`largoDelNombre`); antes salía en Inter, porque la página nunca le puso fuente a su
+`h1`.
+
+El color de la end zone sale del logo de la liga, con la misma lectura que el de un
+equipo (`useTeamPaint`): nadie captura nada, y si la liga cambia de logo su página
+cambia sola. No va contra que CFBAMX sea un medio neutral: en su página, la liga es el
+único protagonista y no hay nadie frente a quien tomar partido.
+
+Ese color va al **34 %** sobre el verde noche, y no es a ojo. Medido contra 906 colores
+con la misma `pinturaDeZona` de la app, a 48 % la letra de cal bajaba a 3.45:1 sobre un
+logo amarillo, y el gris de `--mp-gris` reprobaba en 4 de cada 10 colores. A 34 % la cal
+da 5.37:1 en el peor caso. Por eso la nota y la región van en cal al 86 % (4.45:1 en el
+peor, a media altura, y la nota va sobre el oscurecido de abajo) y no en gris, y el
+sello de "Liga verificada" no va en amarillo: sobre un logo amarillo se pierde, y
+competiría con el único amarillo de la página.
+
+### La portada no se recorta
+
+Una portada puede ser una foto o un flyer con texto hasta las orillas, como la de PFL,
+y no hay forma de saber cuál es. Un banner recortado le habría cortado el "KICK OFF 03
+OCT". Así que su espacio se mide con su propia proporción: `onLoad` la lee y la pasa al
+CSS en `--proporcion`. De lado mide 340 px de alto, o menos si es tan ancha que no
+cabría en el 60 % del panel.
+
+- **Además se ve más nítida.** `routes/upload.js` limita toda imagen a 800 px, y antes
+  se estiraban a 1032. De lado ahora se pintan a 453, 509 y 619 px de ancho.
+- **De lado solo si cabe** (`encabezadoApilado`): con pantalla de 1000 px o más, portada
+  de hasta 2:1 y nombre y descripción cortos. La portada de Facebook, 2.6:1, se haría
+  tira; un nombre largo estiraría el encabezado y dejaría la portada nadando en su
+  columna. Lo demás va apilado: la portada de orilla a orilla y el texto debajo.
+- **`object-fit: contain` en todos los casos.** La regla es de verdad, no casi: si el
+  texto crece más que la portada, o en una tableta, donde una foto 4:3 mediría más que
+  la pantalla, la imagen se queda entera y lo que sobra lo llena ella misma, difuminada
+  (`imagenAjustada` a 64 px). Dos barras negras parecen un error.
+- **Sin portada, o con el link roto,** queda la cancha de noche vacía. En un teléfono no
+  aporta nada y se quita.
+
+### Los contactos
+
+Los botones llevan el logo de cada red (`LeagueContacts.jsx`), en un solo color: se
+reconocen antes de leerse, y ninguna grita más que otra. El orden es el de quien viene a
+contactar: WhatsApp, sitio web y luego las redes. Una liga sin contactos no enseña nada:
+a un visitante no le sirve saber qué le falta capturar a la liga.
+
+`linkDeWhatsApp` arregla un bug viejo que estos botones habrían dejado a la vista:
+`wa.me` necesita la lada de país y el formulario pide diez dígitos ("Ej. 5512345678"),
+así que el "55 5541 1027" de ONEFA armaba un número de Brasil. Diez dígitos son un número
+de México y se les pone el 52. Lo que no sea http(s) no llega al `href`, aunque ya esté en
+la base.
+
+La nota "Este espacio aún no es administrado oficialmente por la liga" se queda, más
+chica, debajo de los botones. Importa más que antes: con los contactos a la vista, alguien
+podría creer que esta es la página oficial.
+
+### Calendarios, equipos y sedes
+
+- **Los calendarios no van en una pestaña.** Son lo que más se viene a buscar. La temporada
+  más reciente va en una franja de cancha con el único amarillo de la página, "Ver
+  calendario", y las anteriores en recuadros (`calendariosDeLiga`). Dos torneos del mismo
+  año son los dos la temporada vigente. La pestaña decía "Calendarios" y su título
+  "Campeonatos": ahora la cosa tiene un solo nombre.
+- **Cada equipo va en la franja del filtro "Equipo" del calendario** (`TeamStrip.jsx`, la
+  misma pieza). Las tarjetas verdes eran de otra app sobre el panel nuevo, y el casco va
+  sobre el pasto, sin recortarlo en un círculo. Todos llevan el mismo trato.
+- **El orden es con acentos** (`equiposEnOrden`): el `ORDER BY` de la API manda "ÁGUILAS"
+  después de "ZORROS". Es el mismo orden del filtro.
+- **Equipos y sedes comparten lugar.** Son dos títulos que se eligen, para que en un
+  teléfono las sedes no queden abajo de 34 equipos. Sin sedes capturadas no hay qué
+  elegir: LFA y PFL ya no enseñan un "Sin sedes todavía".
+- **Cada sede es el recuadro del filtro "Sede".** Solo 7 de las 33 de ONEFA tienen foto, y
+  una cuadrícula con unas cuantas fotos se ve dispareja: la foto se queda en su ficha.
+- **"12 estados".** La región se dice como la capturó la liga, pero doce estados no caben
+  en un renglón: con más de tres se dice cuántos son (`regionDeLiga`), y la lista completa
+  queda en el `title`.
+
+### Fuera de esta versión
+
+- **La lista de estados no se alcanza en un teléfono:** el `title` solo sale con cursor.
+- **El tope de 800 px de `routes/upload.js`** se nota solo en una portada apilada en una
+  computadora, que se estira a 1032. Subirlo cambia también los logos, que pasan por ahí.
+- **La página de un torneo** se quedó con su portada y sus tarjetas de antes (PD-44).
+- **Sin probar en un teléfono real ni en Safari.** `cqw` y `color-mix` llegaron a Safari
+  en la 16: antes, el nombre se queda en 56 px y la end zone en el verde noche del panel.
 
 ## Monetización (afiliados de viaje)
 

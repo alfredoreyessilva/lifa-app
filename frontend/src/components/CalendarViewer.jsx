@@ -3,11 +3,10 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { getMatchStatus, partidoProximo, partidoSiguiente } from '../utils/matchStatus.js';
 import { groupByJornada, jornadaDateRange, ordenarCalendario } from '../utils/matchDisplay.js';
 import { shareLink } from '../utils/share.js';
-import { useTeamPaint } from '../utils/useTeamPaint.js';
 import MatchCard from './MatchCard.jsx';
 import CalendarRanking from './CalendarRanking.jsx';
 import PoolRanking from './PoolRanking.jsx';
-import { Casco } from './MatchField.jsx';
+import TeamStrip from './TeamStrip.jsx';
 import { IconoMapa } from './MatchIcons.jsx';
 import { matchInConference } from '../utils/matchScope.js';
 
@@ -455,12 +454,11 @@ export default function CalendarViewer({
               {equipos.length === 0
                 ? <div className="empty-state"><p>No hay equipos en este calendario.</p></div>
                 : equipos.map((eq) => (
-                    <FiltroEquipo
-                      key={eq.name}
-                      equipo={eq}
-                      count={matches.filter((m) => m.home_team === eq.name || m.away_team === eq.name).length}
-                      onClick={() => selectFilter(eq.name)}
-                    />
+                    <TeamStrip key={eq.name} name={eq.name} logo={eq.logo} color={eq.color} onClick={() => selectFilter(eq.name)}>
+                      <div className="filter-card-count">
+                        {partidos(matches.filter((m) => m.home_team === eq.name || m.away_team === eq.name).length)}
+                      </div>
+                    </TeamStrip>
                   ))}
             </div>
           )}
@@ -578,32 +576,6 @@ export default function CalendarViewer({
         />
       )}
     </div>
-  );
-}
-
-// Cada equipo en su franja de cancha, con su end zone a un lado. El casco va
-// sobre el pasto y no sobre el color del equipo: un casco rojo sobre rojo
-// desaparece. Todos llevan el mismo trato (README, "El calendario").
-function FiltroEquipo({ equipo, count, onClick }) {
-  const pintura = useTeamPaint(equipo.logo, equipo.color, { alInstante: true });
-  const zona = {
-    '--home': pintura.fondo,
-    '--home-ink': pintura.tinta,
-    '--away': pintura.fondo,
-    '--away-ink': pintura.tinta,
-  };
-
-  return (
-    <button type="button" className="filter-team" style={zona} onClick={onClick}>
-      <div className="mh-zone mh-zone--home" aria-hidden="true" />
-      <div className="mh-field">
-        <Casco lado="home" nombre={equipo.name} logo={equipo.logo} pintura={pintura} ancho={120} alt="" loading="lazy" />
-        <div className="filter-team-text">
-          <div className="filter-team-name">{equipo.name}</div>
-          <div className="filter-card-count">{partidos(count)}</div>
-        </div>
-      </div>
-    </button>
   );
 }
 
