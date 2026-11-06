@@ -148,15 +148,6 @@ export function tableDetail(table, context) {
   ].filter(Boolean).join(', ');
 }
 
-// Quién va primero de verdad: el de la cancha pintada en la imagen. Nadie, si
-// todavía no se juega, y nadie si el primer lugar es un empate que el reglamento
-// no resolvió: la tabla lo marca con asterisco, y la portada no puede coronar a uno
-// de los dos.
-export function tableLeader(table) {
-  const first = table.rows?.[0];
-  return first && first.played > 0 && !first.unresolved_tie ? first : null;
-}
-
 // Un nombre largo en dos líneas parejas: "PUMAS FES / ACATLÁN UNAM", y no "PUMAS
 // FES ACATLÁN / UNAM", que obligaría a la columna a medir casi lo mismo que en una
 // sola. `mide` dice cuánto ocupa un texto con la letra que se va a usar, y `extra`,

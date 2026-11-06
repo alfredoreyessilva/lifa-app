@@ -1,7 +1,8 @@
 // La cancha de noche de las imágenes para compartir: el pasto, las end zones, los
-// cascos y la letra con que se escriben. La usan la imagen de un partido
-// (matchShareCard.js) y la de la tabla de posiciones (standingsShareCard.js), para
-// que las dos se reconozcan como la misma pieza.
+// cascos y la letra con que se escriben. La imagen de un partido
+// (matchShareCard.js) la usa entera; la de la tabla de posiciones
+// (standingsShareCard.js) para su cancha de pie y usa de aquí las franjas de la end
+// zone, los cascos y la letra, para que las dos se reconozcan como la misma pieza.
 //
 // Lo único repetido son los estilos de `.mh` en styles.css (end zones, pasto,
 // marcador), que en canvas se escriben a mano: si cambian allá, cambian aquí.
@@ -121,7 +122,7 @@ export function franjasDeEndZone(ctx, x, y, w, h) {
 }
 
 // La sombra que hunde a la end zone contra el borde de la imagen.
-export function sombraDeEndZone(ctx, x, y, w, h, lado) {
+function sombraDeEndZone(ctx, x, y, w, h, lado) {
   const [desde, hasta] = lado === 'home' ? [x, x + w] : [x + w, x];
   const sombraLado = ctx.createLinearGradient(desde, 0, hasta, 0);
   sombraLado.addColorStop(0, 'rgba(5, 15, 10, 0.42)');

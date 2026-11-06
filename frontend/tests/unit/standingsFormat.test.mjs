@@ -11,8 +11,9 @@ import assert from 'node:assert/strict';
 import {
   pct, recordLabel, rowQualifies, scopeLabel, cutoffLabel,
   imageColumns, cellText, tableMarks, goalAverageLabel, showsGoalAverage,
-  tableDetail, tableLeader, splitName,
+  tableDetail, splitName,
 } from '../../src/utils/standingsFormat.js';
+import { geometria } from '../../src/utils/standingsShareCard.js';
 import { PINTURA_NEUTRA, pinturaDeZona } from '../../src/utils/teamPaint.js';
 import { pinturaDelLogo } from '../../src/utils/useTeamPaint.js';
 
@@ -172,19 +173,45 @@ test('el detalle de la imagen nombra la tabla y la categoría, como la portada d
   assert.equal(tableDetail({ level: 'branch', scope_name: null }, null), '');
 });
 
-test('la cancha es del primer lugar solo si de verdad hay primer lugar', () => {
-  const lider = fila({ rank: 1 });
-  assert.equal(tableLeader({ rows: [lider, fila({ team_id: 2, rank: 2 })] }), lider);
+const FORMATOS = [['post', 1350], ['story', 1920]];
 
-  // Si nadie ha jugado, el primero de la lista solo es el primero del abecedario.
-  assert.equal(tableLeader({ rows: [fila({ played: 0 }), fila({ team_id: 2, played: 0 })] }), null);
-  // Un empate que el reglamento no resolvió no tiene ganador en la portada.
-  assert.equal(tableLeader({ rows: [fila({ unresolved_tie: true }), fila({ team_id: 2, unresolved_tie: true })] }), null);
-  // Un empate más abajo no le quita el lugar al líder.
-  const conEmpateAbajo = { rows: [lider, fila({ team_id: 2, rank: 2, unresolved_tie: true })] };
-  assert.equal(tableLeader(conEmpateAbajo), lider);
-  assert.equal(tableLeader({ rows: [] }), null);
-  assert.equal(tableLeader({}), null);
+test('la cancha llena la imagen: de una línea de gol a la otra no sobra ni falta un pixel', () => {
+  for (const [formato, alto] of FORMATOS) {
+    for (let equipos = 0; equipos <= 40; equipos += 1) {
+      const g = geometria(formato, alto, equipos);
+      assert.equal(g.zonaArriba + g.renglon * g.franjas + g.zonaAbajo, alto, `${formato} con ${equipos}`);
+      assert.ok(Number.isInteger(g.renglon), `${formato} con ${equipos}`);
+    }
+  }
+});
+
+test('la cancha es lo principal de la imagen, tenga los equipos que tenga', () => {
+  for (const [formato, alto] of FORMATOS) {
+    for (let equipos = 1; equipos <= 40; equipos += 1) {
+      const g = geometria(formato, alto, equipos);
+      assert.ok(g.renglon * g.franjas > alto * 0.55, `${formato} con ${equipos}`);
+      // La end zone de arriba lleva el título: nunca se queda con más que la cancha.
+      assert.ok(g.zonaArriba < g.renglon * g.franjas, `${formato} con ${equipos}`);
+    }
+  }
+});
+
+test('un renglón más alto va creciendo hasta su tope; lo que sobra es de las end zones', () => {
+  // Con 19 equipos, la tabla más larga de hoy, las end zones se quedan en su mínimo.
+  const larga = geometria('post', 1350, 19);
+  assert.equal(larga.renglon, 54);
+  assert.ok(larga.zonaArriba - 220 < 19, 'solo lo que no alcanza para otro pixel de renglón');
+
+  // Con 6 equipos el renglón llega a su tope y las end zones crecen, las dos.
+  const corta = geometria('story', 1920, 6);
+  assert.equal(corta.renglon, 230);
+  assert.ok(corta.zonaArriba > 330 && corta.zonaAbajo > 124);
+});
+
+test('el casco y el lugar crecen con el renglón, pero con tope', () => {
+  assert.ok(geometria('post', 1350, 19).casco < geometria('post', 1350, 8).casco);
+  assert.equal(geometria('story', 1920, 6).casco, 110);
+  assert.equal(geometria('post', 1350, 30).casco, 40);
 });
 
 test('un nombre largo se parte en dos líneas parejas', () => {

@@ -15,6 +15,31 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **La imagen de la tabla, una cancha de pie (2026-11-05).** Lo pidió Alfredo al ver la
+  versión de ese mismo día: la cancha de arriba no hacía falta, le quitaba protagonismo
+  a las cifras, y le quitaba neutralidad al medio al pintar la imagen con el primer
+  lugar; si iba a parecer una cancha, tenía que ser una cancha vertical, con las end
+  zones arriba y abajo y los renglones de los equipos como sus líneas. Eso es ahora:
+  cada equipo es una franja de pasto, lo que los separa es una línea de yarda, y las
+  dos end zones son de un color fijo y llevan el título y el pie. La columna pintada
+  del color de cada equipo también se fue, porque a la izquierda de esta cancha hay una
+  banda, no una end zone: el color lo pone el casco.
+
+  **Lo que se movió:** sin portada, `tableLeader()` se fue con su prueba y
+  `sombraDeEndZone` dejó de exportarse. `geometria()` se exporta para probarla: que
+  renglones y end zones sumen exactamente el alto, que la cancha sea lo principal con
+  cualquier número de equipos y los topes del renglón y del casco. Las cifras ya pueden
+  llegar a 44 px, y al crecer enseñaron un error de la regla anterior: un nombre que no
+  cabía ni a la mínima dejaba de contar, las cifras no cedían y salía "P…". La regla
+  ahora mira cuántos nombres se recortan y que no se vean chicos junto a sus cifras.
+
+  **Verificada** con las 9 tablas públicas de producción, leídas en solo lectura, en
+  los dos formatos: un detector sobre `fillText` comprobó en las 18 imágenes que ningún
+  nombre se recorta, ningún texto se encima y nada se sale de la cancha. Con los datos
+  alterados solo en memoria, 20 imágenes de los casos que no traen, y por la página real
+  en escritorio y celular. Cifras de la Nacional: de 25 a 28 px. Sin probar en un
+  teléfono real ni en Safari.
+
 - **La imagen de un partido, también en horizontal (2026-11-05).** Lo pidió Alfredo:
   una tercera opción junto a Publicación e Historia, la más fiel a la forma de la
   cancha y a la portada de la página, con la misma información que la publicación.

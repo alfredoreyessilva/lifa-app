@@ -819,8 +819,9 @@ lifa-app/
                               de cada casco. Pura: no calcula ningún récord
         matchShareCard.js     "Generar imagen" de un partido: su portada, dibujada
                               en canvas (ver "La imagen para compartir")
-        shareCardField.js     La cancha de noche que comparten la imagen de un
-                              partido y la de la tabla: pasto, end zones, cascos
+        shareCardField.js     La cancha de noche de la imagen de un partido, y lo
+                              que comparte con la de la tabla: end zones, cascos
+                              y letra
         offlineQueue.js       La REGLA de la cola sin señal: qué se fusiona,
                               cuándo se reintenta, qué se enseña. Pura — la
                               cubre el CI (ver "Capturar sin señal")
@@ -3484,8 +3485,8 @@ frontend/src/components/
 frontend/src/utils/
   standingsFormat.js                  Cómo se escribe cada cifra y qué columnas lleva la
                                       imagen. PURO: lo comparten la tabla y la imagen.
-  standingsShareCard.js               El dibujo de la imagen (canvas 2D, en el navegador),
-                                      sobre la cancha de shareCardField.js.
+  standingsShareCard.js               El dibujo de la imagen (canvas 2D, en el navegador):
+                                      una cancha de pie, con piezas de shareCardField.js.
   bracketFormat.js                    Qué va en cada lado del espejo y cómo se escribe
                                       cada cruce. PURO: lo comparten la página y la imagen.
   bracketShareCard.js                 El dibujo de la imagen del bracket.
@@ -3613,40 +3614,59 @@ la dibuja en el navegador con canvas 2D, en publicación (1080×1350) y en histo
 (1080×1920), y la comparte o la descarga. No toca el backend: dibuja el mismo
 `GET /leagues/branches/:id/standings` que pinta la pestaña, sin recalcular nada.
 
-Desde el 2026-11-05 es la misma pieza que la imagen de un partido: la cancha de
-noche, las end zones pintadas, los cascos y la letra de su portada, que viven en
-`utils/shareCardField.js`. Antes fue un panel oscuro sobre la cancha clara, y ya no
-se parecía a lo que circula de cada partido.
+La imagen es **una cancha de pie, vista desde arriba**, con una end zone arriba y
+otra abajo. Con la imagen de un partido comparte el pasto de noche, las franjas de
+las end zones, los cascos y la letra, que viven en `utils/shareCardField.js`: se
+reconoce como la misma pieza sin estar armada igual.
 
-- **La tabla es parte de la cancha, no un panel encima.** La end zone de la
-  izquierda baja por toda la tabla, partida en un bloque del color de cada equipo
-  con su lugar y su casco, y la línea de gol sigue de corrido. Las franjas se pintan
-  una sola vez sobre todos los colores, para que se lea como una sola end zone. Es
-  lo que hace que esta imagen se reconozca sin leerla.
-- **La cancha de arriba es del líder**, como un estadio se pinta con el nombre de
-  su equipo en las dos end zones. Se midió el color de la liga, que sería lo
-  obvio, y no sirve: LFA, ONEFA y PFL salen verdes, y una end zone verde sobre pasto
-  verde pierde justo lo que hace fuerte a la portada. Si nadie ha jugado, o el primer
-  lugar es un empate sin resolver, no hay a quién pintarle la cancha (`tableLeader()`):
-  es de la liga, con su color y su nombre.
-- **Lo que sobra de cancha va a media cancha.** En una tabla corta entra el casco
-  del líder con su récord, con la misma línea que lleva debajo en la página de un
-  partido; sin líder, el logo de la liga, que es lo que un estadio pinta ahí. Si no
-  le alcanza para verse, no va: en publicación, de 9 equipos para arriba toda la
-  imagen es de la tabla.
-- **El alto del renglón sale de cuántos equipos hay, no de cuánto cabe.** El ancho
-  es el mismo en los dos formatos, así que en la historia un renglón más alto no
-  lleva letra más grande, solo aire; la primera versión lo llenó todo y las cifras
-  grandes le quitaron lugar a los nombres. Lo que sobra es mejor cancha.
+La versión anterior, del mismo 2026-11-05, ponía encima de la tabla una cancha
+acostada como la de un partido, con las end zones del primer lugar y su casco en
+medio. Alfredo la quitó por dos razones que siguen mandando aquí: le quitaba
+protagonismo a las cifras y le quitaba neutralidad al medio.
+
+- **Las cifras son lo que se viene a ver.** De una línea de gol a la otra no hay
+  más que equipos y sus cifras: ninguna portada, ningún casco a media cancha.
+- **La imagen no se personaliza con ningún equipo.** CFBAMX es un medio, y una tabla
+  pintada del color del primer lugar toma partido. Las dos end zones son de un color
+  fijo, el mismo en toda tabla, y el primer lugar se escribe igual que el último. El
+  color de cada equipo lo pone su casco y nada más. Tampoco van del color de la liga:
+  se midió, y LFA, ONEFA y PFL salen verdes; una end zone verde sobre pasto verde no
+  se distingue.
+- **La tabla es la cancha, no va encima de ella.** Cada equipo es una franja de pasto,
+  así que el corte alternado de una cancha de verdad es a la vez la cebra de la tabla,
+  y lo que separa a un equipo del siguiente es una línea de yarda, de banda a banda.
+  Las marcas de cada yarda van pegadas a las dos bandas, cuatro por renglón. Es lo que
+  hace que esta imagen se reconozca sin leerla.
+- **No lleva números de yardas.** En una tabla cada número es un dato, y un "30"
+  pintado junto al 5.º lugar solo confunde. Donde la cancha lleva sus números va el
+  lugar de cada equipo.
+- **A la izquierda de esta cancha hay una banda, no una end zone.** Por eso se fue la
+  columna pintada del color de cada equipo que traía la versión anterior: los cascos
+  van directo sobre el pasto, como en la portada de un partido, y lo que se gana a lo
+  ancho es de las cifras.
+- **Lo demás va en las end zones.** Arriba, la liga, el título, el detalle y, pegadas a
+  la línea de gol, las etiquetas de las columnas. Abajo, la fecha de corte, la marca
+  y la leyenda.
+- **La cancha llena la imagen, y el alto del renglón sale de cuántos equipos hay**
+  (`geometria()`, con sus pruebas): de 54 px con los 19 de la Nacional a 170 con 6, en
+  publicación. Un renglón no pasa de 170 px en publicación ni de 230 en historia,
+  porque el ancho es el mismo en los dos formatos y más alto ya no lleva letra más
+  grande sino aire; lo que sobra lo reparten las dos end zones. La excepción son las
+  tablas de cuatro equipos o menos: la cancha se queda siempre con tres cuartos de lo
+  que hay entre las end zones, o el título volvería a comerse la imagen.
 - **Cada columna mide lo que ocupa su cifra más ancha**, contra los datos de esa
   tabla, en vez de un ancho fijo calibrado para la peor. Con eso PUMAS FES ACATLÁN
-  UNAM cabe en una sola línea entre las diez columnas de la Nacional, con cifras de
-  25 px y nombres de 29; la versión anterior traía 17 y 20 en renglones de 41 px.
-- **Las cifras ceden antes que el nombre.** Bajan de letra hasta que el nombre más
-  largo se lee, y desde 66 px de renglón un nombre puede ir en dos líneas parejas
-  (`splitName()`): "PUMAS FES / ACATLÁN UNAM". La pill de comodín cuenta al partir, y
-  si no cabe junto al nombre va sola abajo. Solo el que ni así cabe se recorta con
-  "…".
+  UNAM cabe en una sola línea entre las diez columnas de la Nacional, con cifras y
+  nombres de 28 px en renglones de 54; la primera versión de esta imagen traía 17 y
+  20 en renglones de 41.
+- **Las cifras crecen con el renglón hasta 44 px, y ceden ante el nombre.** Bajan de
+  letra hasta que todos los nombres caben sin recortarse y miden al menos nueve
+  décimas de la cifra, para que en un renglón alto el nombre no se vea chico: 44 px
+  en la LFA y la PFL, y de 31 a 33 en los grupos de ONEFA, que llevan diez columnas.
+  Desde 66 px de renglón un nombre puede ir en dos líneas parejas (`splitName()`):
+  "PUMAS FES / ACATLÁN UNAM". La pill de comodín cuenta al partir, y si no cabe junto
+  al nombre va sola abajo. Solo el que ni con la letra más chica cabe se recorta con
+  "…", y no arrastra a los demás.
 - **Lleva todas las columnas de la tabla en pantalla**, en el mismo orden: JJ,
   G, P, E si hubo empates, PTS o %, el récord dentro de la conferencia o el
   grupo, PF, PC, DIF, AVG si el reglamento de la tabla usa el goal average, y
@@ -3656,8 +3676,8 @@ se parecía a lo que circula de cada partido.
 - **Una imagen por tabla, no una por rama.** En una rama por conferencias cada
   conferencia lleva su botón: las dos de ONEFA juntas son 33 renglones, que en
   un celular no se leen. Y es como las publican las ligas.
-- **Lo que la tabla marca, la imagen también**: la línea de cal va en amarillo en
-  los renglones de los que clasifican, una raya amarilla cruza la tabla en el corte
+- **Lo que la tabla marca, la imagen también**: la banda izquierda va en amarillo en
+  los renglones de los que clasifican, la línea de yarda del corte es la raya amarilla
   —la que en la tele marca hasta dónde hay que llegar—, y siguen la pill de comodín,
   el asterisco del empate que el reglamento no resolvió y el renglón atenuado del que
   no ha jugado. Callarlo haría pasar por resuelto un empate que no lo está —la misma
@@ -3668,9 +3688,10 @@ se parecía a lo que circula de cada partido.
 - **Nombra la tabla completa**: "Conferencia NACIONAL", "Grupo CENTRO". En la
   página basta "NACIONAL" porque la pestaña de arriba dice "Por conferencia";
   la imagen viaja sin esa pestaña.
-- **El color de cada equipo es el de la página de su partido**: la misma lectura del
-  logo (`pinturaDelLogo`) y `teams.brand_color` manda, por eso la tabla ahora lo trae
-  en cada renglón.
+- **Cada casco se pone como en la página de su partido**: directo sobre el pasto, en
+  placa o en disco, según la misma lectura del logo (`pinturaDelLogo`). De esa lectura
+  la imagen solo usa la forma; `brand_color` sigue viajando en cada renglón de la tabla
+  y hoy nadie lo lee ahí.
 - **Los escudos se piden a Cloudinary al tamaño en que se pintan**
   (`imagenAjustada`), y el que no llega en 8 s sale con iniciales: una imagen
   con un logo de menos es mejor que un botón atorado en "Generando imagen…".
@@ -3684,20 +3705,20 @@ Lo que encontró verla en el navegador con las tablas reales de producción, y n
 veía ninguna prueba:
 
 1. La primera versión de la cancha recortaba "PUMAS FES ACA…" en las historias y en
-   los grupos: las cifras crecían con el renglón sin ver el ancho. De ahí salieron
-   las dos reglas de arriba, la del alto y la de las cifras.
+   los grupos: las cifras crecían con el renglón sin ver el ancho. Y la cancha de pie
+   volvió a tropezar ahí, peor: en los grupos de ONEFA, con renglones de 150 px y
+   cifras de 44, ningún nombre cabía ni a la mínima, un nombre que no cabe dejaba de
+   contar para la regla, las cifras no cedían y salía "P…". Por eso la regla ya mira
+   cuántos nombres se recortan, y no solo de qué tamaño quedan.
 2. Al partir un nombre sin contar la pill de comodín quedaba "BÚHOS GUI…": la línea
    de abajo era la larga, y era la que llevaba la pill. Y "LOBOS UADEC", que solo se
    parte de una manera, seguía recortado hasta que la pill pudo ir sola abajo: eso
    salió al revisar las 9 tablas públicas, no las 4 de la primera vuelta.
-3. Un casco del color de su propia pintura se perdía, como el dorado de Pumas o el
-   amarillo de Auténticos. Los renglones llevan el doble de sombra que les tocaría
-   por tamaño.
-4. Con una conferencia de nombre larguísimo, la línea debajo del líder se salía de
-   la cancha.
-5. Sin líder quedaba una cancha enorme y vacía, y por eso va el logo de la liga.
-6. Con todas las marcas a la vez, la pill de comodín de un equipo le quitaba ancho
+3. Con todas las marcas a la vez, la pill de comodín de un equipo le quitaba ancho
    al nombre de todos. Cada renglón descuenta solo lo suyo.
+4. Con 6 equipos y el primer tope del renglón, la end zone de arriba de una historia
+   medía 516 px: era otra vez la portada, ahora vacía. De ahí salieron el tope de hoy
+   y el mínimo de cancha para las tablas de cuatro equipos o menos.
 
 **Fuera de esta versión:**
 
