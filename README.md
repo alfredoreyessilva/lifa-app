@@ -3963,8 +3963,9 @@ formato, descargar y cerrar, sin errores en consola. Como la cancha pasó de
 `standingsShareCard.js` a `shareCardField.js`, la imagen de la tabla se comparó contra la
 de antes en las 5 tablas de ONEFA y los dos formatos: 10 imágenes iguales píxel por píxel,
 con el control viejo contra viejo en cero y un control negativo que sí encuentra
-diferencias. Sin probar en un teléfono real ni en Safari, y el botón **Compartir** abre el
-panel nativo del sistema, así que no se ejercitó.
+diferencias. Desplegada ese día, y en el sitio público salió en sus dos formatos, en
+escritorio y en tamaño de celular, sin errores. Sin probar en un teléfono real ni en
+Safari, y el botón **Compartir** abre el panel nativo del sistema, así que no se ejercitó.
 
 **Fuera de esta versión:** el récord y de dónde viene cada sembrado ("1.º de BAJÍO",
 "Comodín"), que la página sí enseña. Entrarían como texto chico debajo del nombre, y

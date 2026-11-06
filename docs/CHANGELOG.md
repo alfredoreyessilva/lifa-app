@@ -49,8 +49,11 @@ entradas traen el post-mortem del bug que las provocó.
   recortado, encimado o fuera de la cancha, y por la página real funcionó en escritorio y
   en tamaño de celular, sin errores. La imagen de la tabla no se movió: 10 imágenes iguales
   píxel por píxel contra el código anterior, con el control viejo contra viejo en cero y
-  un control negativo que sí encuentra diferencias. Sin probar en un teléfono real ni en
-  Safari. Lo que encontró verla en todas sus etapas está en el README.
+  un control negativo que sí encuentra diferencias. Lo que encontró verla en todas sus
+  etapas está en el README. Desplegada ese día (`5dbbdfe`), con el CI verde: en el sitio
+  público salió el bracket de la Nacional en sus dos formatos, en escritorio y en tamaño
+  de celular, con los datos de producción y sin errores, y la imagen de la tabla sigue
+  igual. Sin probar en un teléfono real ni en Safari.
 
 - **La imagen de la tabla, una cancha de pie (2026-11-05).** Lo pidió Alfredo al ver la
   versión de ese mismo día: la cancha de arriba no hacía falta, le quitaba protagonismo
