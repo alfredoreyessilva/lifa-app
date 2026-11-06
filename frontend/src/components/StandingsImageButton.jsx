@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { generateStandingsCard, SHARE_CARD_FORMATS } from '../utils/standingsShareCard.js';
 import { scopeLabel } from '../utils/standingsFormat.js';
+import { IconoImagen } from './MatchIcons.jsx';
 
 // Botón "Generar imagen" de UNA tabla de posiciones: cada conferencia o grupo
 // lleva el suyo, porque una imagen con dos tablas de 18 equipos no se lee en
@@ -120,7 +121,7 @@ export default function StandingsImageButton({ table, usesPoints, header = {} })
         onClick={handleOpen}
         disabled={status === 'generating'}
       >
-        {status === 'generating' ? 'Generando imagen…' : '🖼️ Generar imagen'}
+        {status === 'generating' ? 'Generando imagen…' : <><IconoImagen /> Generar imagen</>}
       </button>
     );
   }

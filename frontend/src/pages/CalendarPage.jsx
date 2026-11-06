@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import Loading from '../components/Loading.jsx';
+import CalendarHead from '../components/CalendarHead.jsx';
 import CalendarViewer from '../components/CalendarViewer.jsx';
 
 // Calendario público de una Categoría (modelo viejo: categoría directo de
@@ -47,13 +48,16 @@ export default function CalendarPage() {
           TournamentPage para que el calendario luzca consistente sin
           importar por dónde se llegue. */}
       <div className="league-header-panel">
-        <div className="league-header-panel-body">
-          <h1 style={{ fontSize: 'clamp(32px, 6vw, 56px)' }}>{category.name}</h1>
-        </div>
+        <CalendarHead
+          titulo={category.name}
+          detalle={[category.league_name, category.tournament_name].filter(Boolean).join(', ')}
+          logo={category.league_logo_url}
+        />
         <div className="league-header-panel-body league-header-panel-body--content">
           <CalendarViewer
             matches={matches}
             title={category.name}
+            mostrarTitulo={false}
             rankingHeader={{
               tournament: category.tournament_name || category.name,
               context: category.tournament_name ? category.name : null,

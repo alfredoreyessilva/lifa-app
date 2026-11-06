@@ -1234,6 +1234,139 @@ página a la que llevaba.
   sin coordenadas: embeberlo pide una llave de API o capturar coordenadas.
 - **El clima del partido.** Pide un servicio externo y las mismas coordenadas.
 
+## El calendario
+
+`/torneos/:id` y `/categorias/:id/calendario`, el del modelo viejo, son a donde llega
+casi todo el que abre la app. Hasta el 2026-11-06 se leían como un listado: tarjetas
+verdes con el logo recortado en círculo, tres botones amarillos en cada una por jugarse
+y 876 px de encabezados antes del primer partido, con dos barras de pestañas seguidas
+que decían "Calendario". Se rehízo con lo que ya tenía la página de un partido, sin pedirle
+a nadie un dato nuevo. Es la misma pantalla en las dos rutas: `CalendarViewer`.
+
+### Cada partido es su portada, en chico
+
+La tarjeta (`MatchCard.jsx`) es la cancha de noche de la portada: una end zone del
+color de cada equipo con su nombre rotulado, los dos cascos, y entre ellos la hora o el
+marcador. Mide 120 yardas por 53⅓, con 10 de end zone de cada lado, la proporción de un
+campo real: 488 × 217 en una computadora y 319 × 142 en un teléfono. Esa proporción es
+un piso: si un nombre muy largo no cabe, la cancha crece en vez de recortarlo.
+
+- **La cancha es una sola.** La tarjeta usa los mismos `.mh-*` y las mismas piezas
+  (`MatchField.jsx`) que `MatchHero`, y solo les cambia la medida. Lo que va entre los
+  cascos se decide igual que en la portada (`centroDelPartido`), así que un partido
+  terminado sin marcador dice "Marcador por capturar" en los dos lados, y en vivo se ve
+  el marcador si ya lo capturaron. La tarjeta anterior decía "VS" en el primer caso y
+  escondía el marcador en el segundo.
+- **Se mide contra sí misma, no contra la ventana.** Con unidades de contenedor (`cqi`)
+  es la misma en dos columnas, en una, en un teléfono y en Mi Cartelera, sin un juego de
+  tamaños por pantalla.
+- **Debajo va una placa con lo que no es del duelo:** a qué pertenece, la sede y el "¿Quién
+  gana?". La jornada no se repite donde el encabezado ya la está diciendo; se ve en la
+  vista por equipo, que es donde hace falta, y en Mi Cartelera.
+- **La sede es la de `sedeDelPartido`,** con el texto libre de respaldo: es lo único que
+  tiene la LFA, y su tarjeta no decía dónde se jugaba.
+- **El voto va afuera del link.** La tarjeta era un `<a>` con botones adentro, que no es
+  HTML válido y obligaba a detener la navegación en cada clic. Votar sigue siendo lo mismo
+  que en la portada: el resultado se ve hasta después de votar.
+- **Los dos colores van parejos.** Es la misma excepción de la imagen de un partido: en
+  una pieza de dos equipos, los dos son los protagonistas. El partido siguiente lleva el
+  filo amarillo, y el de en vivo, el rojo; ningún equipo lleva un trato que otro no tenga.
+- **`teams.brand_color` también manda aquí.** Por eso viaja en las tres listas
+  (`home_brand_color`, `away_brand_color`): sin él, el único equipo que lo capturó saldría
+  de un color en su tarjeta y de otro en su partido.
+
+### Lo demás se queda callado
+
+Para que la tarjeta sea lo que se recuerde:
+
+- **Una sola barra de pestañas:** Calendario, Posiciones, Ranking de predicciones y
+  Quiniela entre amigos. Posiciones llega como una prop de `CalendarViewer` (`posiciones`)
+  y la tabla se sigue pidiendo solo al abrirla, una vez por rama.
+- **El encabezado se hizo chico.** El primer partido subió de 876 a 511 px en una
+  computadora y de 940 a 547 en un teléfono, donde antes quedaba abajo del doblez.
+- **"Compartir este torneo" solo sale cuando no hay calendario abierto.** Con el
+  calendario abierto ya está "Compartir calendario", que lleva ese mismo link más el filtro
+  que se esté viendo.
+- **El panel dejó el negro por el verde noche** de la página de un partido. Lo comparte con
+  la página de una liga, y cambió también allá: pasar de una a otra no debe cambiar de
+  tono. Los `--mp-*` se subieron a `:root` para que los dos los lean.
+- **El amarillo es para lo seleccionado y para lo que sigue.** Es la misma regla del botón
+  de la portada: "Ver bracket" y los botones del voto pasaron a contorno, porque tres
+  botones amarillos en cada tarjeta por jugarse no dicen nada.
+- **Sin emojis en esta pantalla, salvo el trofeo del bracket.** Cada teléfono pinta uno
+  distinto. La sede lleva su icono dibujado, y grupos y conferencias no llevan ninguno.
+- **Los encabezados de jornada son una línea de cal**, de orilla a orilla del panel, no una
+  caja: eran 19 cajas verdes en una temporada.
+- **Las jornadas son una franja de cancha,** cada una una banda de podado con su número
+  pintado como una yarda. Con el número ya no hace falta repetir "Jornada 3" abajo.
+- **Cada equipo es una franja con su end zone a un lado** y el casco sobre el pasto. El
+  recuadro no va completo de su color porque el color sale del casco: uno rojo sobre rojo
+  desaparece.
+- **Anton tiene un solo peso.** El negrita de un título lo inventa el navegador y la letra
+  sale embarrada, como con sombra. Pasaba en "Calendarios" y en el título del bracket.
+
+### Una temporada son 145 canchas
+
+La primera versión tardaba 553 ms en pintar "Calendario completo", contra los 140–168 de la
+tarjeta anterior, medidos en la compilación real y en una computadora. Quedó en **91 ms**:
+más rápida que antes, con 60% más elementos en la página.
+
+- **`content-visibility: auto`.** Las tarjetas fuera de pantalla no se calculan, y eso quitó
+  unos 300 ms de estilos. Su altura es estimada hasta que se calculan, y por eso "Ver bracket"
+  brinca en vez de deslizarse: el deslizamiento las iba calculando al pasar, el destino se
+  le movía y en un teléfono se quedaba 900 px antes del bracket. Al brincar, las de en medio
+  no se tocan, y sostener el destino 400 ms absorbe lo que empujan las de alrededor al
+  calcularse (`llevarA`). Se midió 4 veces en escritorio y 4 en teléfono: siempre 8 px bajo
+  el topbar. Bajar de 500 en 500 px no brinca.
+- **Un `Intl.DateTimeFormat` por idioma, zona y opciones** (`formato()` en `matchDisplay.js`).
+  `toLocaleString()` arma uno nuevo en cada llamada, y cada tarjeta pedía nueve. Con el caché,
+  `getMatchParts` es 37 veces más rápida, y el repintado de cada 30 s sale más barato. Se
+  comparó contra el código anterior en 40 zonas y tres años de fechas: 28,640 casos y ninguna
+  diferencia.
+- **Un logo ya leído se pinta desde el primer cuadro** (`useTeamPaint(…, { alInstante: true })`).
+  Sin esto, cada cambio de filtro regresaba las tarjetas al verde por un instante. La portada
+  no lo usa: al pasar de un partido a otro quiere ese instante, porque es lo que le da su
+  entrada a los cascos.
+- **El logo se pide al tamaño en que se ve,** y solo el de lo que está en pantalla. La tarjeta
+  anterior bajaba los 66 originales de una temporada al abrir la página.
+
+### Regresar a la tarjeta, e ir a lo que sigue
+
+Una temporada mide 24,000 px y la lista va en orden de fecha a propósito, así que abre en la
+Jornada 0 aunque ya vayan en los playoffs. Y hasta el 2026-11-06, regresar de un partido llevaba
+hasta arriba: quien revisaba la Jornada 9 partido por partido volvía a empezar cada vez.
+
+- **Regresar lleva a la tarjeta del partido,** centrada, con el foco y con el filtro que había.
+  No se restaura el pixel, porque al regresar la lista se vuelve a pintar y lo que no está en
+  pantalla tiene altura estimada. Se llega con `llevarA`, igual que a "Ver bracket".
+- **El dato vive en el historial, no en un guardado aparte.** Al abrir una tarjeta,
+  `recordarPartido` lo deja en el `location.state` de la entrada del calendario, antes de que el
+  link abra el partido. Por eso el botón de atrás cae ahí, y por eso un calendario abierto de
+  nuevo, por la liga o por un link compartido, se queda arriba: es otra entrada, sin ese dato.
+  Los dos `setSearchParams` que corren al montarse pasan el `state`: sin eso lo borrarían antes
+  de que lleguen los partidos.
+- **Con las flechas de la portada se regresa al que se abrió,** porque cada partido es una entrada
+  del historial, y atrás va pasando por ellos hasta el calendario.
+- **"Ver calendario completo" y la ruta de arriba de la portada hacen lo mismo con el partido que
+  se está viendo.** Así también sirven a quien llegó por un link de WhatsApp: cae en la tarjeta
+  de ese partido y no en la Jornada 0.
+- **"Ir a lo próximo" lleva a lo que sigue en la lista que se está viendo.** Viendo un equipo, al
+  siguiente de ese equipo. Si algo se está jugando, va primero y el botón dice "Ir al partido en
+  vivo" (`partidoSiguiente`). No sale si no hay nada por jugarse, si no hay lista a la vista o si
+  lo que sigue ya está en la primera fila. Es el único botón amarillo de la pantalla, porque
+  es justo lo que el amarillo quiere decir aquí.
+- **Un programado con fecha pasada ya no se lleva el "Próximo".** En una categoría sin estado
+  automático un partido se queda programado para siempre, y el aviso amarillo salía en uno de
+  hace semanas (`partidoProximo`).
+
+### Fuera de esta versión
+
+- **Un partido suelto deja media fila vacía.** Pasa cuando uno reprogramado forma su propio
+  tramo: es cierto, y se prefirió a estirar la tarjeta y perder la proporción.
+- **El ranking y la quiniela siguen en el verde de `--card`,** sobre el panel nuevo.
+- **Sin probar en un teléfono real ni en Safari.** `content-visibility` llegó a Safari en la 18:
+  antes se ignora, y solo se pierde lo rápido.
+
 ## Monetización (afiliados de viaje)
 
 La plataforma monetiza mediante comisión de afiliado en dos accesos de "Cómo llegar", en `MatchPage`: Hotel y Vuelo. Ninguno de los dos vende nada directamente — ambos mandan al usuario a un tercero (Booking.com, Aviasales) que sí procesa la reserva y el pago; CFBAMX solo cobra comisión cuando esa reserva se completa.

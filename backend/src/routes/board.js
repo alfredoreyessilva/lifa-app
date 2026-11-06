@@ -77,7 +77,9 @@ router.get('/', authRequired, asyncHandler(async (req, res) => {
       l.slug AS league_slug,
       th.logo_url AS home_logo_url,
       -- El NULLIF no sobra: ver GET /leagues/matches/:matchId.
-      COALESCE(NULLIF(ta.away_logo_url, ''), ta.logo_url) AS away_logo_url
+      COALESCE(NULLIF(ta.away_logo_url, ''), ta.logo_url) AS away_logo_url,
+      th.brand_color AS home_brand_color,
+      ta.brand_color AS away_brand_color
     FROM matches m
     LEFT JOIN categories c ON c.id = m.category_id
     LEFT JOIN leagues l    ON l.id = c.league_id

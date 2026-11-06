@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { generateRankingCard, SHARE_CARD_FORMATS } from '../utils/rankingShareCard.js';
+import { IconoImagen } from './MatchIcons.jsx';
 
 // Botón "Generar imagen" para la pestaña "Ranking de predicciones".
 // Mismo mecanismo que ShareImageButton.jsx (partido) y PlayerShareButton.jsx
@@ -102,7 +103,7 @@ export default function RankingImageButton({ ranking, header = {} }) {
         onClick={handleOpen}
         disabled={status === 'generating'}
       >
-        {status === 'generating' ? 'Generando imagen…' : '🖼️ Generar imagen'}
+        {status === 'generating' ? 'Generando imagen…' : <><IconoImagen /> Generar imagen</>}
       </button>
     );
   }

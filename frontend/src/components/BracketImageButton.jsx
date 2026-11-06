@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { generateBracketCard, SHARE_CARD_FORMATS } from '../utils/bracketShareCard.js';
 import { bracketTitle } from '../utils/bracketFormat.js';
+import { IconoImagen } from './MatchIcons.jsx';
 
 // Botón "Generar imagen" de UN bracket (una conferencia). Mismo mecanismo que
 // StandingsImageButton.jsx: canvas 2D en el navegador, publicación e historia,
@@ -111,7 +112,7 @@ export default function BracketImageButton({ bracket, header = {} }) {
   if (status === 'idle' || status === 'generating') {
     return (
       <button className="btn btn-outline btn-sm" type="button" onClick={handleOpen} disabled={status === 'generating'}>
-        {status === 'generating' ? 'Generando imagen…' : '🖼️ Generar imagen'}
+        {status === 'generating' ? 'Generando imagen…' : <><IconoImagen /> Generar imagen</>}
       </button>
     );
   }

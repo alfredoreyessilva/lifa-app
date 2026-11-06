@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { getMatchStatus } from '../utils/matchStatus.js';
-import { getMatchParts, initials, groupByJornada, jornadaDateRange, ordenarCalendario } from '../utils/matchDisplay.js';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { getMatchStatus, partidoProximo, partidoSiguiente } from '../utils/matchStatus.js';
+import { groupByJornada, jornadaDateRange, ordenarCalendario } from '../utils/matchDisplay.js';
 import { shareLink } from '../utils/share.js';
+import { useTeamPaint } from '../utils/useTeamPaint.js';
 import MatchCard from './MatchCard.jsx';
 import CalendarRanking from './CalendarRanking.jsx';
 import PoolRanking from './PoolRanking.jsx';
+import { Casco } from './MatchField.jsx';
+import { IconoMapa } from './MatchIcons.jsx';
 import { matchInConference } from '../utils/matchScope.js';
 
-// Visor de calendario reutilizable: el bloque "Ver por: completo / jornada /
-// equipo / sede / grupo" + las tarjetas de partido. Antes vivía solo dentro
+// Visor de calendario reutilizable: las pestañas, el bloque "Ver por: completo /
+// jornada / equipo / sede / grupo" + las tarjetas de partido. Antes vivía solo dentro
 // de CalendarPage.jsx (calendario por categoría, modelo viejo); se sacó a
 // su propio componente para poder usarlo también en el calendario público
 // de una Rama dentro de un Torneo, sin repetir esta lógica dos veces.
@@ -17,6 +20,29 @@ import { matchInConference } from '../utils/matchScope.js';
 // El padre (CalendarPage.jsx, o la pantalla de Torneo) sigue siendo
 // responsable del <div className="container">, el breadcrumb, y de pedirle
 // los `matches` al backend — este componente solo pinta y filtra.
+
+const partidos = (n) => `${n} partido${n !== 1 ? 's' : ''}`;
+
+// Lleva a un elemento y lo sostiene ahí un momento. Las tarjetas fuera de pantalla
+// no se calculan (content-visibility) y su altura es estimada: un salto suave las
+// iba calculando al pasar y el destino se le movía, y en un teléfono "Ver bracket"
+// se quedaba 900 px antes. De un brinco las de en medio no se tocan, y sostenerlo
+// corrige lo que empujan las de alrededor al calcularse.
+function llevarA(elemento, block) {
+  const hasta = performance.now() + 400;
+  const ajustar = () => {
+    elemento.scrollIntoView({ block });
+    if (performance.now() < hasta) requestAnimationFrame(ajustar);
+  };
+  ajustar();
+}
+
+function llevarAlPartido(id) {
+  const tarjeta = document.getElementById(`partido-${id}`);
+  if (!tarjeta) return;
+  llevarA(tarjeta, 'center');
+  tarjeta.querySelector('a')?.focus({ preventScroll: true });
+}
 
 function getJornadas(matches) {
   const seen = new Set();
@@ -35,18 +61,20 @@ function getJornadas(matches) {
     });
 }
 
+// El logo de local manda: el de visitante mira hacia el otro lado, y en la lista
+// de equipos los cascos saldrían encontrados según quién jugó primero de qué.
 function getEquipos(matches) {
-  const seen    = new Set();
-  const equipos = [];
+  const equipos = new Map();
   for (const m of matches) {
-    for (const { name, logo } of [
-      { name: m.home_team, logo: m.home_logo_url },
-      { name: m.away_team, logo: m.away_logo_url },
-    ]) {
-      if (!seen.has(name)) { seen.add(name); equipos.push({ name, logo }); }
+    const local = equipos.get(m.home_team);
+    if (!local || local.deVisita) {
+      equipos.set(m.home_team, { name: m.home_team, logo: m.home_logo_url, color: m.home_brand_color });
+    }
+    if (!equipos.has(m.away_team)) {
+      equipos.set(m.away_team, { name: m.away_team, logo: m.away_logo_url, color: m.away_brand_color, deVisita: true });
     }
   }
-  return equipos.sort((a, b) => a.name.localeCompare(b.name));
+  return [...equipos.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // Solo toma en cuenta sedes reales (creadas desde el panel y asignadas a un
@@ -121,7 +149,7 @@ function getConferencias(matches) {
 // Texto del botón "Compartir" según la vista y selección actuales.
 // Devuelve null cuando el botón debe estar oculto.
 function getShareLabel(view, selected) {
-  if (view === 'completo') return 'Compartir calendario completo';
+  if (view === 'completo') return 'Compartir calendario';
   if (!selected) return null; // Oculto: estás viendo la lista de opciones (equipos/sedes/jornadas) sin elegir ninguna
   if (view === 'jornada') {
     const label = /^\d+$/.test(selected) ? `Jornada ${selected}` : selected;
@@ -153,6 +181,12 @@ export default function CalendarViewer({
   // botón que baja hasta él, porque con 141 partidos el final queda lejos.
   footer = null,
   footerJumpLabel = null,
+  // { onOpen, contenido }: la pestaña Posiciones, que solo existe en un torneo
+  // con equipos inscritos. Va aquí, entre las demás, para que la pantalla tenga
+  // una sola barra: eran dos, una encima de la otra, y las dos decían "Calendario".
+  posiciones = null,
+  // CalendarPage ya dice la categoría en su encabezado: sería decirla dos veces.
+  mostrarTitulo = true,
 }) {
   const footerRef = useRef(null);
   // Segunda barrera contra partidos duplicados (además de la que ya se
@@ -172,6 +206,8 @@ export default function CalendarViewer({
   }));
 
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // La vista y la selección se inicializan desde la URL, para que un link
   // compartido abra directamente en el mismo filtro que tenía quien lo compartió.
@@ -208,14 +244,30 @@ export default function CalendarViewer({
       if (view === 'grupo' && selected && subJornada) params.set('jornada', subJornada);
       if (tab === 'ranking') params.set('tab', 'ranking');
       return params;
-    }, { replace: true });
+    }, { replace: true, state: location.state });
   }, [view, selected, subJornada, tab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Regresar al calendario lleva a la tarjeta del partido del que se viene: con 145
+  // partidos, regresar a la Jornada 0 era perder el lugar. El dato vive en el
+  // historial: lo deja recordarPartido en esta entrada, o el link de la página del
+  // partido en la nueva. Por eso un calendario abierto de nuevo no se mueve de arriba.
+  useEffect(() => {
+    if (location.state?.partido) llevarAlPartido(location.state.partido);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function changeView(v) { setView(v); setSelected(null); setSubJornada(null); setCopied(false); }
 
   function selectFilter(value) { setSelected(value); setSubJornada(null); setCopied(false); }
 
   function clearSelection() { setSelected(null); setSubJornada(null); setCopied(false); }
+
+  function abrirPosiciones() { setTab('posiciones'); posiciones.onOpen(); }
+
+  // Va en la entrada del calendario, antes de que el link abra el partido: así el
+  // botón de atrás del navegador cae aquí sabiendo de dónde se fue.
+  function recordarPartido(id) {
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: { partido: id } });
+  }
 
   // Usa la misma ventanita nativa de compartir (WhatsApp, Mensajes, etc.)
   // que ya usa el botón de compartir partido, en vez de solo copiar el link.
@@ -235,7 +287,7 @@ export default function CalendarViewer({
   // que siguen en "scheduled" y arrancan exactamente a esa misma hora
   // comparten el estado "Próximo" — no solo el primero de la lista. Uno con
   // fecha por definir nunca es "Próximo": no se sabe cuándo es.
-  const nextMatch = matches.find(m => m.match_date && getMatchStatus(m) === 'scheduled');
+  const nextMatch = partidoProximo(matches, now);
   const nextMatchTime = nextMatch ? new Date(nextMatch.match_date).getTime() : null;
   const nextMatchIds = new Set(
     nextMatchTime === null
@@ -292,10 +344,20 @@ export default function CalendarViewer({
     ? `Compartir calendario de ${shareSelected} — ${subJornadaLabel}`
     : getShareLabel(view, shareSelected);
 
+  // "Ir a lo próximo": la lista abre en la Jornada 0 aunque la temporada vaya en los
+  // playoffs. Solo hay lista con "Calendario completo" o algo elegido, y si lo que
+  // sigue está en la primera fila, el botón no llevaría a ningún lado.
+  const enLista = view === 'completo' || selected ? filteredMatches : [];
+  const siguiente = partidoSiguiente(enLista, now);
+  const hayQueBajar = siguiente && enLista.indexOf(siguiente) >= 2;
+
   return (
     <div>
-      <div className="tab-bar tab-bar--panel" style={{ marginBottom: 20 }}>
+      <div className="tab-bar calendar-tabs">
         <button className={`tab-btn ${tab === 'calendario' ? 'active' : ''}`} onClick={() => setTab('calendario')}>Calendario</button>
+        {posiciones && (
+          <button className={`tab-btn ${tab === 'posiciones' ? 'active' : ''}`} onClick={abrirPosiciones}>Posiciones</button>
+        )}
         <button className={`tab-btn ${tab === 'ranking'    ? 'active' : ''}`} onClick={() => setTab('ranking')}>Ranking de predicciones</button>
         <button className={`tab-btn ${tab === 'quiniela'   ? 'active' : ''}`} onClick={() => setTab('quiniela')}>Quiniela entre amigos</button>
       </div>
@@ -303,35 +365,42 @@ export default function CalendarViewer({
       {tab === 'calendario' && (
       <>
       <div className="calendar-header">
-        <h2>{title}</h2>
-        <div className="calendar-view-bar">
-          <span className="calendar-view-label">Ver por:</span>
+        <div>
+          {mostrarTitulo && <h2>{title}</h2>}
+          <span className="calendar-count">{partidos(matches.length)}</span>
+        </div>
+        <div className="calendar-actions">
+          {hayQueBajar && (
+            <button type="button" className="btn btn-flag btn-sm" onClick={() => llevarAlPartido(siguiente.id)}>
+              {getMatchStatus(siguiente, now) === 'live' ? 'Ir al partido en vivo' : 'Ir a lo próximo'}
+            </button>
+          )}
+          {footer && footerJumpLabel && (
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => llevarA(footerRef.current, 'start')}
+            >
+              {footerJumpLabel}
+            </button>
+          )}
+          {shareLabel && (
+            <button className="btn btn-outline btn-sm" onClick={() => handleShareCalendar(shareLabel)}>
+              {copied ? '✓ Link copiado' : shareLabel}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="calendar-view-bar">
+        <span className="calendar-view-label">Ver por</span>
+        <div className="calendar-view-options" role="group" aria-label="Ver por">
           {VIEWS.map((v) => (
             <button key={v} className={`calendar-view-btn${view === v ? ' active' : ''}`} onClick={() => changeView(v)}>
               {VIEW_LABELS[v]}
             </button>
           ))}
         </div>
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span className="count">{matches.length} partidos</span>
-          {footer && footerJumpLabel && (
-            <button
-              type="button"
-              className="btn btn-flag btn-sm"
-              onClick={() => footerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-            >
-              🏆 {footerJumpLabel}
-            </button>
-          )}
-        </span>
-        {shareLabel && (
-          <button className="btn btn-outline btn-sm" onClick={() => handleShareCalendar(shareLabel)}>
-            {copied ? '✓ Link copiado' : shareLabel}
-          </button>
-        )}
       </div>
 
       {matches.length === 0 ? (
@@ -341,34 +410,34 @@ export default function CalendarViewer({
         </div>
       ) : (
         <>
-          {view === 'completo' && <MatchGrid matches={matches} nextMatchIds={nextMatchIds} />}
+          {view === 'completo' && <MatchGrid matches={matches} nextMatchIds={nextMatchIds} onAbrir={recordarPartido} />}
 
           {/* A diferencia de las otras vistas, los recuadros de jornada se
               quedan arriba al abrir una: así se brinca de la 3 a la 4 sin
               regresar, que es como se recorre un calendario semana a semana.
               Por eso aquí no hay "← Todas las jornadas". */}
           {view === 'jornada' && (
-            <div className="filter-grid">
+            <div className={`filter-grid${jornadas.length > 0 ? ' filter-grid--jornadas' : ''}`}>
               {jornadas.length === 0
                 ? <div className="empty-state"><p>Ningún partido tiene jornada asignada.</p></div>
                 : jornadas.map((j) => {
                     const count = matches.filter((m) => m.week_label === j.key).length;
                     const isActive = selected === j.key;
-                    const num = j.key.replace(/\D/g, '');
                     return (
-                      <button key={j.key} className={`filter-card${isActive ? ' active' : ''}`} aria-pressed={isActive} onClick={() => selectFilter(j.key)}>
+                      <button
+                        key={j.key}
+                        className={`filter-card${isActive ? ' active' : ''}`}
+                        aria-pressed={isActive}
+                        aria-label={`${j.label}, ${partidos(count)}`}
+                        onClick={() => selectFilter(j.key)}
+                      >
                         {/* Una jornada con nombre (SCRIMMAGE, SEMIFINAL, FINAL)
                             no tiene número que poner en grande: el nombre
                             toma su lugar, una sola vez. */}
-                        {num ? (
-                          <>
-                            <div className="filter-card-num">{num}</div>
-                            <div className="filter-card-label">{j.label}</div>
-                          </>
-                        ) : (
-                          <div className="filter-card-num filter-card-num--name">{j.label}</div>
-                        )}
-                        <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
+                        {/^\d+$/.test(j.key)
+                          ? <div className="filter-card-num">{j.key}</div>
+                          : <div className="filter-card-num filter-card-num--name">{j.label}</div>}
+                        <div className="filter-card-count">{partidos(count)}</div>
                       </button>
                     );
                   })}
@@ -376,34 +445,30 @@ export default function CalendarViewer({
           )}
           {view === 'jornada' && selected && (
             <>
-              <div className="filter-selected-title">{/^\d+$/.test(selected) ? `Jornada ${selected}` : selected}</div>
-              <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} />
+              <h3 className="filter-selected-title">{/^\d+$/.test(selected) ? `Jornada ${selected}` : selected}</h3>
+              <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} onAbrir={recordarPartido} />
             </>
           )}
 
           {view === 'equipo' && !selected && (
-            <div className="filter-grid">
+            <div className={`filter-grid${equipos.length > 0 ? ' filter-grid--equipos' : ''}`}>
               {equipos.length === 0
                 ? <div className="empty-state"><p>No hay equipos en este calendario.</p></div>
-                : equipos.map((eq) => {
-                    const count = matches.filter((m) => m.home_team === eq.name || m.away_team === eq.name).length;
-                    return (
-                      <button key={eq.name} className="filter-card" onClick={() => selectFilter(eq.name)}>
-                        <div className="filter-card-logo">
-                          {eq.logo ? <img src={eq.logo} alt={eq.name} /> : <span>{initials(eq.name)}</span>}
-                        </div>
-                        <div className="filter-card-label">{eq.name}</div>
-                        <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
-                      </button>
-                    );
-                  })}
+                : equipos.map((eq) => (
+                    <FiltroEquipo
+                      key={eq.name}
+                      equipo={eq}
+                      count={matches.filter((m) => m.home_team === eq.name || m.away_team === eq.name).length}
+                      onClick={() => selectFilter(eq.name)}
+                    />
+                  ))}
             </div>
           )}
           {view === 'equipo' && selected && (
             <>
               <button className="filter-back" onClick={clearSelection}>← Todos los equipos</button>
-              <div className="filter-selected-title">{selected}</div>
-              <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} byJornada={false} />
+              <h3 className="filter-selected-title">{selected}</h3>
+              <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} onAbrir={recordarPartido} byJornada={false} />
             </>
           )}
 
@@ -415,9 +480,8 @@ export default function CalendarViewer({
                     const count = matches.filter((m) => m.venue_id === sede.id).length;
                     return (
                       <button key={sede.id} className="filter-card" onClick={() => selectFilter(String(sede.id))}>
-                        <div className="filter-card-icon">📍</div>
-                        <div className="filter-card-label">{sede.name}</div>
-                        <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
+                        <div className="filter-card-label"><IconoMapa />{sede.name}</div>
+                        <div className="filter-card-count">{partidos(count)}</div>
                       </button>
                     );
                   })}
@@ -426,8 +490,8 @@ export default function CalendarViewer({
           {view === 'sede' && selected && (
             <>
               <button className="filter-back" onClick={clearSelection}>← Todas las sedes</button>
-              <div className="filter-selected-title">📍 {selectedSedeName}</div>
-              <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} />
+              <h3 className="filter-selected-title"><IconoMapa />{selectedSedeName}</h3>
+              <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} onAbrir={recordarPartido} />
             </>
           )}
 
@@ -439,9 +503,8 @@ export default function CalendarViewer({
                     const count = matches.filter((m) => m.group_id === grupo.id || m.group_id_2 === grupo.id).length;
                     return (
                       <button key={grupo.id} className="filter-card" onClick={() => selectFilter(String(grupo.id))}>
-                        <div className="filter-card-icon">🏆</div>
                         <div className="filter-card-label">{grupo.name}</div>
-                        <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
+                        <div className="filter-card-count">{partidos(count)}</div>
                       </button>
                     );
                   })}
@@ -450,7 +513,7 @@ export default function CalendarViewer({
           {view === 'grupo' && selected && (
             <>
               <button className="filter-back" onClick={clearSelection}>← Todos los grupos</button>
-              <div className="filter-selected-title">🏆 {selectedGrupoName}</div>
+              <h3 className="filter-selected-title">{selectedGrupoName}</h3>
 
               {jornadasInGroup.length > 0 && (
                 <div className="field" style={{ marginBottom: 20 }}>
@@ -466,7 +529,7 @@ export default function CalendarViewer({
                 </div>
               )}
 
-              <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} />
+              <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} onAbrir={recordarPartido} />
             </>
           )}
 
@@ -478,9 +541,8 @@ export default function CalendarViewer({
                     const count = matches.filter((m) => matchInConference(m, conf.id)).length;
                     return (
                       <button key={conf.id} className="filter-card" onClick={() => selectFilter(String(conf.id))}>
-                        <div className="filter-card-icon">🏈</div>
                         <div className="filter-card-label">{conf.name}</div>
-                        <div className="filter-card-count">{count} partido{count !== 1 ? 's' : ''}</div>
+                        <div className="filter-card-count">{partidos(count)}</div>
                       </button>
                     );
                   })}
@@ -489,16 +551,18 @@ export default function CalendarViewer({
           {view === 'conferencia' && selected && (
             <>
               <button className="filter-back" onClick={clearSelection}>← Todas las conferencias</button>
-              <div className="filter-selected-title">🏈 {selectedConferenciaName}</div>
-              <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} />
+              <h3 className="filter-selected-title">{selectedConferenciaName}</h3>
+              <MatchGrid matches={filteredMatches} nextMatchIds={nextMatchIds} onAbrir={recordarPartido} />
             </>
           )}
         </>
       )}
 
-      {footer && <div ref={footerRef}>{footer}</div>}
+      {footer && <div ref={footerRef} className="calendar-footer">{footer}</div>}
       </>
       )}
+
+      {tab === 'posiciones' && posiciones?.contenido}
 
       {tab === 'ranking' && (
         <CalendarRanking
@@ -517,18 +581,44 @@ export default function CalendarViewer({
   );
 }
 
+// Cada equipo en su franja de cancha, con su end zone a un lado. El casco va
+// sobre el pasto y no sobre el color del equipo: un casco rojo sobre rojo
+// desaparece. Todos llevan el mismo trato (README, "El calendario").
+function FiltroEquipo({ equipo, count, onClick }) {
+  const pintura = useTeamPaint(equipo.logo, equipo.color, { alInstante: true });
+  const zona = {
+    '--home': pintura.fondo,
+    '--home-ink': pintura.tinta,
+    '--away': pintura.fondo,
+    '--away-ink': pintura.tinta,
+  };
+
+  return (
+    <button type="button" className="filter-team" style={zona} onClick={onClick}>
+      <div className="mh-zone mh-zone--home" aria-hidden="true" />
+      <div className="mh-field">
+        <Casco lado="home" nombre={equipo.name} logo={equipo.logo} pintura={pintura} ancho={120} alt="" loading="lazy" />
+        <div className="filter-team-text">
+          <div className="filter-team-name">{equipo.name}</div>
+          <div className="filter-card-count">{partidos(count)}</div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
 // Con más de una jornada en la lista, cada tramo lleva su encabezado, que se
 // queda pegado bajo la barra de arriba mientras se desliza por sus partidos.
 // Una sola jornada (o ninguna capturada) se pinta como antes: el encabezado
 // no diría nada que la pantalla no diga ya. La vista "Equipo" lo apaga —
 // ahí hay un partido por jornada y cada tarjeta ya dice la suya.
-function MatchGrid({ matches, nextMatchIds, byJornada = true }) {
+function MatchGrid({ matches, nextMatchIds, onAbrir, byJornada = true }) {
   if (matches.length === 0) return <div className="empty-state"><p>No hay partidos en esta selección.</p></div>;
   const groups = byJornada ? groupByJornada(matches) : [];
   if (groups.length < 2) {
     return (
       <div className="match-grid">
-        {matches.map((m) => <MatchCard key={m.id} match={m} isNext={!!nextMatchIds?.has(m.id)} />)}
+        {matches.map((m) => <MatchCard key={m.id} match={m} isNext={!!nextMatchIds?.has(m.id)} onAbrir={onAbrir} />)}
       </div>
     );
   }
@@ -539,11 +629,12 @@ function MatchGrid({ matches, nextMatchIds, byJornada = true }) {
           <header className="jornada-head">
             <h3 className="jornada-head-title">{g.label}</h3>
             <span className="jornada-head-meta">
-              {jornadaDateRange(g.matches)} · {g.matches.length} partido{g.matches.length !== 1 ? 's' : ''}
+              <span>{jornadaDateRange(g.matches)}</span>
+              <span>{partidos(g.matches.length)}</span>
             </span>
           </header>
           <div className="match-grid">
-            {g.matches.map((m) => <MatchCard key={m.id} match={m} isNext={!!nextMatchIds?.has(m.id)} />)}
+            {g.matches.map((m) => <MatchCard key={m.id} match={m} isNext={!!nextMatchIds?.has(m.id)} onAbrir={onAbrir} />)}
           </div>
         </section>
       ))}

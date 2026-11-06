@@ -15,6 +15,54 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El calendario: cada partido es una cancha (2026-11-06).** Lo pidió Alfredo: que las
+  tarjetas parecieran los campos horizontales de la página de un partido, y que la vista
+  se viera más profesional. Cada tarjeta es ahora la portada en chico, con los mismos
+  `.mh-*` (`MatchField.jsx`) y la proporción real de un campo. Debajo, una placa con el
+  alcance, la sede y el "¿Quién gana?", que salió del link porque un botón dentro de un `<a>`
+  no es HTML válido. Alrededor: una sola barra de pestañas (eran dos, y las dos decían
+  "Calendario"), el verde noche en vez del negro, el amarillo solo para lo seleccionado y lo
+  que sigue, las jornadas como una franja de cancha, cada equipo con su end zone y sin
+  emojis. La LFA ya dice dónde se juega, con el texto libre de `sedeDelPartido`. El porqué
+  está en la sección "El calendario" del README.
+
+  `GET /leagues/tournaments/:id/public`, `GET /leagues/categories/:id/matches` y
+  `GET /board` mandan `home_brand_color` y `away_brand_color`, para que el color de la tarjeta
+  sea el de la portada.
+
+  **Regresar de un partido lleva a su tarjeta, y hay un botón a lo que sigue.** También lo
+  pidió Alfredo: regresar llevaba hasta arriba, y con 145 partidos eso era perder el lugar. Ahora
+  el botón de atrás cae en la tarjeta del partido que se abrió, y "Ver calendario completo" y la
+  ruta de arriba de la portada, en la del partido que se está viendo. El dato vive en el
+  historial, así que un calendario abierto de nuevo se queda arriba. "Ir a lo próximo" lleva a lo
+  que sigue en la lista a la vista, y a lo que se está jugando si hay algo en vivo. De paso, un
+  programado con fecha pasada ya no se lleva el aviso de "Próximo".
+
+  **Lo que encontró medirlo.** La primera versión pintaba "Calendario completo" en 553 ms
+  contra 140–168 de la anterior, y una primera medición decía 1 ms porque leía el DOM antes
+  de que React lo cambiara: `.click()` se aplica en una microtarea. Con `content-visibility`
+  y un solo `Intl.DateTimeFormat` por zona quedó en 91 ms. Eso abrió una regresión que solo
+  salió probándola: "Ver bracket" se quedaba 911 px antes del bracket en un teléfono, porque el
+  deslizamiento movía su propio destino. Ahora brinca y sostiene el destino 400 ms.
+
+  Verificado en el navegador con los datos públicos de producción (ONEFA, LFA y la ruta vieja
+  por categoría), en 1280, 820, 768, 375 y 320 px y en la compilación real: en vivo con y sin
+  marcador, 100-99, sin marcador, fecha por definir, sin logos, nombres de 58 caracteres, scrimmage,
+  sin jornada, con `brand_color` y ya votado; el flujo de votar con y sin sesión sin que navegue;
+  Posiciones, Ranking y Quiniela; Mi Cartelera, y varias ramas con su "← Volver", simulados. Un
+  detector sobre el DOM no encontró texto encimado, nada fuera de la tarjeta ni desborde de la
+  página; solo 2 px sobre los números de yarda, que son decoración. Las tres consultas,
+  en una sesión de solo lectura contra `desarrollo-local`: 466 filas idénticas a las de antes
+  salvo las dos columnas, y con un color simulado llega en los 7 partidos del equipo. El regreso,
+  en la compilación real y en los dos tamaños: atrás a media temporada y casi al final, ida y
+  vuelta por el historial, con filtro, tras pasar a otros partidos con las flechas, desde "Ver
+  calendario completo", desde la ruta de arriba y en la ruta vieja, con la tarjeta centrada (a
+  lo más 1 px, y 7 px con el botón en teléfono) y el foco en ella. Abierto de nuevo y por la
+  página de la liga se queda en 0. El botón no sale con la temporada terminada, al arrancarla ni
+  sin lista, y "Ver bracket" sigue exacto.
+  `getMatchParts` y `fechaLarga` contra el código anterior: 28,640 casos sin diferencia. Sin
+  probar en un teléfono real ni en Safari.
+
 - **Un equipo de liga llega a la pestaña Organizaciones cuando se entrega (2026-11-06).**
   Lo pidió Alfredo: al entregar un equipo creado por una liga no había dónde verificarlo,
   porque `GET /admin/organizations` descartaba todo equipo con `teams.league_id`, una

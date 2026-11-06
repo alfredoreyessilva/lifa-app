@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useParams, useSearchParams, Link } from 'react-router-dom';
+import { useLocation, useParams, useSearchParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
+import CalendarHead from '../components/CalendarHead.jsx';
 import TeamCard from '../components/TeamCard.jsx';
 import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
 import Loading from '../components/Loading.jsx';
@@ -26,6 +27,7 @@ export default function TournamentPage() {
   // pasos de elegir categoría y rama. Se queda en la URL mientras esté elegida,
   // para que el link que se comparte la conserve.
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const ramaDelLink = Number(searchParams.get('rama')) || null;
 
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
@@ -33,10 +35,8 @@ export default function TournamentPage() {
   const [selectedTeam,       setSelectedTeam]       = useState(null);
   const [copied, setCopied] = useState(false);
 
-  // Pestaña Calendario/Posiciones y la tabla ya pedida. La tabla se trae solo
-  // cuando alguien abre esa pestaña (y se guarda por rama, para no volver a
-  // pedirla al ir y venir entre las dos).
-  const [view, setView] = useState('calendar');
+  // La tabla ya pedida. Se trae solo cuando alguien abre la pestaña Posiciones (y
+  // se guarda por rama, para no volver a pedirla al ir y venir entre pestañas).
   const [standings, setStandings] = useState({});
   const [standingsError, setStandingsError] = useState('');
   // Los brackets de playoffs, por rama, igual que la tabla: se piden una vez y
@@ -46,7 +46,7 @@ export default function TournamentPage() {
   useEffect(() => {
     setData(null); setError('');
     setSelectedCategoryId(null); setSelectedBranchId(ramaDelLink); setSelectedTeam(null);
-    setView('calendar'); setStandings({}); setStandingsError(''); setBrackets({});
+    setStandings({}); setStandingsError(''); setBrackets({});
     api.getTournamentPublic(tournamentId).then(setData).catch((e) => setError(e.message));
   }, [tournamentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -56,7 +56,7 @@ export default function TournamentPage() {
       if (selectedBranchId) params.set('rama', String(selectedBranchId));
       else params.delete('rama');
       return params;
-    }, { replace: true });
+    }, { replace: true, state: location.state }); // ahí va a qué partido se regresa
   }, [selectedBranchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function copyLink() {
@@ -184,7 +184,6 @@ export default function TournamentPage() {
   ) : null;
 
   function openStandings(branchId) {
-    setView('standings');
     if (!branchId || standings[branchId]) return;
     setStandingsError('');
     api.getBranchStandings(branchId)
@@ -193,7 +192,6 @@ export default function TournamentPage() {
   }
 
   function goBack() {
-    setView('calendar');
     if (categories.length === 1) {
       setSelectedBranchId(null);
     } else if (branchId && branchesAll.filter((b) => b.category_id === categoryId).length > 1) {
@@ -219,26 +217,31 @@ export default function TournamentPage() {
           <img src={tournament.logo_url} alt="" className="league-page-cover-img" />
         )}
 
-        <div className="league-header-panel-body">
-          <h1 style={{ fontSize: 'clamp(32px, 6vw, 56px)' }}>{tournament.name}</h1>
-          <p style={{ color: 'var(--ink-dim)' }}>{tournament.year}</p>
-
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginTop: 12 }}>
+        <CalendarHead
+          titulo={tournament.name}
+          detalle={[tournament.league_name, tournament.year].filter(Boolean).join(' ')}
+          logo={tournament.league_logo_url}
+        >
+          {/* Con el calendario abierto ya está "Compartir calendario", que lleva
+              este mismo link más el filtro que se esté viendo. */}
+          {mode !== 'calendar' && (
             <button className="btn btn-outline btn-sm" onClick={copyLink}>
               {copied ? '✓ Link copiado' : 'Compartir este torneo'}
             </button>
-          </div>
-        </div>
+          )}
+        </CalendarHead>
 
         <div className="league-header-panel-body league-header-panel-body--content">
-          <div className="section-head">
-            <h2>Calendarios</h2>
-          </div>
+          {mode !== 'calendar' && (
+            <div className="section-head">
+              <h2>Calendarios</h2>
+            </div>
+          )}
 
           {mode === 'pick-category' && (
             <div className="category-grid">
               {options.map((c) => (
-                <button key={c.id} className="category-card" onClick={() => { setSelectedCategoryId(c.id); setView('calendar'); }}>
+                <button key={c.id} className="category-card" onClick={() => setSelectedCategoryId(c.id)}>
                   <div className="category-card-name">{c.name}</div>
                   <div className="category-card-arrow">→</div>
                 </button>
@@ -249,14 +252,14 @@ export default function TournamentPage() {
           {mode === 'pick-branch' && (
             <>
               {categories.length > 1 && (
-                <button className="filter-back" onClick={() => { setSelectedCategoryId(null); setSelectedBranchId(null); setView('calendar'); }}>
+                <button className="filter-back" onClick={() => { setSelectedCategoryId(null); setSelectedBranchId(null); }}>
                   ← Todas las categorías
                 </button>
               )}
               {infoLabel && <div className="filter-selected-title">{infoLabel}</div>}
               <div className="category-grid">
                 {options.map((b) => (
-                  <button key={b.id} className="category-card" onClick={() => { setSelectedBranchId(b.id); setView('calendar'); }}>
+                  <button key={b.id} className="category-card" onClick={() => setSelectedBranchId(b.id)}>
                     <div className="category-card-name">{b.name}</div>
                     <div className="category-card-arrow">→</div>
                   </button>
@@ -274,39 +277,6 @@ export default function TournamentPage() {
               {/* La pestaña de posiciones solo existe si la rama tiene equipos
                   inscritos: sin inscripción no hay a quién ordenar. Las ramas
                   vienen ya filtradas así desde el backend. */}
-              {activeBranchId && (data.branches || []).some((b) => b.id === activeBranchId) && (
-                <div className="tab-bar">
-                  <button
-                    className={`tab-btn ${view === 'calendar' ? 'active' : ''}`}
-                    onClick={() => setView('calendar')}
-                  >
-                    Calendario
-                  </button>
-                  <button
-                    className={`tab-btn ${view === 'standings' ? 'active' : ''}`}
-                    onClick={() => openStandings(activeBranchId)}
-                  >
-                    Posiciones
-                  </button>
-                </div>
-              )}
-
-              {view === 'standings' ? (
-                standingsError ? (
-                  <div className="empty-state">
-                    <h3>No pudimos cargar la tabla</h3>
-                    <p>{standingsError}</p>
-                  </div>
-                ) : standings[activeBranchId] ? (
-                  <StandingsView
-                    data={standings[activeBranchId]}
-                    emptyText="Esta rama todavía no tiene tabla de posiciones publicada."
-                    shareImage={shareHeader}
-                  />
-                ) : (
-                  <Loading />
-                )
-              ) : (
               <CalendarViewer
                 matches={matchesToShow}
                 title={infoLabel || tournament.name}
@@ -320,8 +290,24 @@ export default function TournamentPage() {
                 emptyText="Este torneo aún no tiene partidos programados."
                 footer={bracketFooter}
                 footerJumpLabel={bracketData?.brackets?.length ? 'Ver bracket' : null}
+                posiciones={activeBranchId && (data.branches || []).some((b) => b.id === activeBranchId) ? {
+                  onOpen: () => openStandings(activeBranchId),
+                  contenido: standingsError ? (
+                    <div className="empty-state">
+                      <h3>No pudimos cargar la tabla</h3>
+                      <p>{standingsError}</p>
+                    </div>
+                  ) : standings[activeBranchId] ? (
+                    <StandingsView
+                      data={standings[activeBranchId]}
+                      emptyText="Esta rama todavía no tiene tabla de posiciones publicada."
+                      shareImage={shareHeader}
+                    />
+                  ) : (
+                    <Loading />
+                  ),
+                } : null}
               />
-              )}
             </>
           )}
         </div>

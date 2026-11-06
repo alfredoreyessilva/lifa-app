@@ -18,6 +18,9 @@ const SIN_LEER = Object.freeze({ color: null, forma: 'disco' });
 // vez por sesión. Se guarda la promesa para que dos lecturas seguidas no bajen
 // dos veces la misma imagen.
 const leidos = new Map();
+// Las lecturas que ya terminaron, para quien no quiere esperar ni un cuadro (ver
+// `alInstante`, abajo): una promesa, aunque ya esté resuelta, contesta tarde.
+const terminados = new Map();
 
 function leer(url) {
   if (leidos.has(url)) return leidos.get(url);
@@ -40,6 +43,7 @@ function leer(url) {
     img.src = imagenAjustada(url, 96);
   });
   leidos.set(url, promesa);
+  promesa.then((leido) => terminados.set(url, leido));
   return promesa;
 }
 
@@ -65,19 +69,25 @@ export function pinturaDelLogo(logoUrl, brandColor, ms) {
 
 // `listo` es para que el casco no salte de forma al terminar de leerse: se
 // enseña hasta que se sabe cómo va.
-export function useTeamPaint(logoUrl, brandColor) {
-  const [leido, setLeido] = useState(null);
+//
+// `alInstante` es para las listas: un logo ya leído se pinta desde el primer
+// cuadro. Sin esto, cada cambio de filtro del calendario regresaría sus tarjetas
+// al verde por un instante. La portada no lo usa: al pasar de un partido a otro
+// quiere ese instante, porque es lo que le da su entrada a los cascos.
+export function useTeamPaint(logoUrl, brandColor, { alInstante = false } = {}) {
+  const inicial = () => {
+    if (!logoUrl) return SIN_LEER;
+    return alInstante ? terminados.get(logoUrl) ?? null : null;
+  };
+  const [leido, setLeido] = useState(inicial);
 
   useEffect(() => {
     let vigente = true;
-    setLeido(null);
-    if (!logoUrl) {
-      setLeido(SIN_LEER);
-      return undefined;
-    }
+    setLeido(inicial());
+    if (!logoUrl) return undefined;
     leer(logoUrl).then((r) => { if (vigente) setLeido(r); });
     return () => { vigente = false; };
-  }, [logoUrl]);
+  }, [logoUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return pintar(leido, brandColor);
 }

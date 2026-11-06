@@ -448,6 +448,8 @@ router.get('/categories/:categoryId/matches', asyncHandler(async (req, res) => {
       th.logo_url AS home_logo_url,
       -- El NULLIF no sobra: ver GET /matches/:matchId.
       COALESCE(NULLIF(ta.away_logo_url, ''), ta.logo_url) AS away_logo_url,
+      th.brand_color AS home_brand_color,
+      ta.brand_color AS away_brand_color,
       v.name        AS venue_name,
       v.institution AS venue_institution,
       v.address     AS venue_address,
@@ -1177,6 +1179,8 @@ router.get('/tournaments/:tournamentId/public', asyncHandler(async (req, res) =>
       th.logo_url   AS home_logo_url,
       -- El NULLIF no sobra: ver GET /matches/:matchId.
       COALESCE(NULLIF(ta.away_logo_url, ''), ta.logo_url) AS away_logo_url,
+      th.brand_color AS home_brand_color,
+      ta.brand_color AS away_brand_color,
       v.name        AS venue_name,
       v.institution AS venue_institution,
       v.address     AS venue_address,

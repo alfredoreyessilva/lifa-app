@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { imagenAjustada } from '../utils/imagenes.js';
 import {
-  centroDelPartido, cuentaRegresiva, detalleDelPartido, initials, rondaDelPartido, torneoDelPartido,
+  centroDelPartido, cuentaRegresiva, detalleDelPartido, rondaDelPartido, torneoDelPartido,
 } from '../utils/matchDisplay.js';
 import { lineaDelEquipo } from '../utils/matchCompare.js';
+import { Casco, EndZone, Marcador, Yardas } from './MatchField.jsx';
 import { IconoAnterior, IconoMapa, IconoSiguiente } from './MatchIcons.jsx';
 
 // La portada de un partido: la cancha de noche, vista de una end zone a la otra.
@@ -13,50 +14,15 @@ import { IconoAnterior, IconoMapa, IconoSiguiente } from './MatchIcons.jsx';
 // (README, "La página de un partido"). La cancha es la misma idea del fondo de
 // la app, llevada a la escala de un evento.
 
-const YARDAS = [10, 20, 30, 40, 50, 40, 30, 20, 10];
-
-// El nombre rotulado es decoración: el mismo nombre, legible, va debajo del
-// casco. `--len` es lo que deja que la letra llene la end zone sin salirse, sea
-// "OSOS" o "AUTÉNTICOS TIGRES UANL".
-function EndZone({ lado, nombre }) {
-  return (
-    <div className={`mh-zone mh-zone--${lado}`} aria-hidden="true">
-      <span className="mh-zone-name" style={{ '--len': Math.max((nombre || '').length, 7) }}>{nombre}</span>
-    </div>
-  );
-}
-
 function Equipo({ lado, nombre, logo, pintura, datos }) {
-  const clase = [
-    'mh-helmet',
-    `mh-helmet--${lado}`,
-    pintura.listo ? `is-listo mh-helmet--${pintura.forma}` : '',
-  ].filter(Boolean).join(' ');
   const linea = lineaDelEquipo(datos);
 
   return (
     <div className={`mh-team mh-team--${lado}`}>
-      <div className={clase}>
-        {logo
-          ? <img src={imagenAjustada(logo, 640)} alt={`Logo de ${nombre}`} width="320" height="320" />
-          : <span className="mh-helmet-initials">{initials(nombre)}</span>}
-      </div>
+      <Casco lado={lado} nombre={nombre} logo={logo} pintura={pintura} />
       <p className="mh-team-name">{nombre}</p>
       <p className="mh-team-line">{linea || (lado === 'home' ? 'Local' : 'Visitante')}</p>
     </div>
-  );
-}
-
-// Al terminar, el perdedor se apaga. En vivo no: el que va abajo sigue jugando.
-function Marcador({ match, terminado }) {
-  const local = Number(match.home_score);
-  const visita = Number(match.away_score);
-  return (
-    <p className="mh-score" aria-label={`${match.home_team} ${local}, ${match.away_team} ${visita}`}>
-      <span className={terminado && local < visita ? 'is-out' : ''}>{local}</span>
-      <i aria-hidden="true" />
-      <span className={terminado && visita < local ? 'is-out' : ''}>{visita}</span>
-    </p>
   );
 }
 
@@ -149,9 +115,7 @@ export default function MatchHero({
       <EndZone lado="home" nombre={match.home_team} />
 
       <div className="mh-field">
-        <div className="mh-yards" aria-hidden="true">
-          {YARDAS.map((y, i) => <span key={i} style={{ left: `${(i + 1) * 10}%` }}>{y}</span>)}
-        </div>
+        <Yardas />
 
         <div className="mh-bar">
           {/* El breadcrumb solo cuelga del nivel más alto que se conoce: si el
@@ -167,8 +131,8 @@ export default function MatchHero({
             <Link to="/">Inicio</Link>
             {match.league_slug && <Link to={`/ligas/${match.league_slug}`}>{match.league_name}</Link>}
             {match.tournament_id
-              ? <Link to={`/torneos/${match.tournament_id}`}>{torneo}</Link>
-              : match.category_id && <Link to={`/categorias/${match.category_id}/calendario`}>{match.category_name}</Link>}
+              ? <Link to={`/torneos/${match.tournament_id}`} state={{ partido: match.id }}>{torneo}</Link>
+              : match.category_id && <Link to={`/categorias/${match.category_id}/calendario`} state={{ partido: match.id }}>{match.category_name}</Link>}
           </nav>
 
           {/* Partido anterior y siguiente del mismo calendario. También con las

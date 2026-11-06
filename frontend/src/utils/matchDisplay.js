@@ -44,6 +44,21 @@ export const TZ_LABELS = {
   'America/Sao_Paulo':              'Hora Brasil',
 };
 
+// Armar un Intl.DateTimeFormat es lo más caro de pintar una tarjeta, y
+// toLocaleString() arma uno nuevo en cada llamada: el calendario de ONEFA son 145
+// tarjetas que además se repintan cada 30 s. Aquí se arma uno solo por idioma,
+// zona y opciones (README, "El calendario").
+const formatos = new Map();
+function formato(idioma, opciones) {
+  const llave = `${idioma} ${JSON.stringify(opciones)}`;
+  let armado = formatos.get(llave);
+  if (!armado) {
+    armado = new Intl.DateTimeFormat(idioma, opciones);
+    formatos.set(llave, armado);
+  }
+  return armado;
+}
+
 // Sin fecha (match_date en null) es "fecha por definir" (README, "Partidos con
 // fecha por definir"): se devuelven las partes vacías con `porDefinir`, y cada
 // pantalla lo dice a su manera. `new Date(null)` daría el 31 de diciembre de
@@ -52,9 +67,9 @@ export function getMatchParts(isoString, tz) {
   if (!isoString) return { day: '', month: '', time: '', tzLabel: '', porDefinir: true };
   const zone       = tz || DEFAULT_TZ;
   const date       = new Date(isoString);
-  const dayStr     = date.toLocaleString('es-MX', { timeZone: zone, day: 'numeric' });
-  const monthIndex = Number(date.toLocaleString('en-US', { timeZone: zone, month: 'numeric' })) - 1;
-  const time       = date.toLocaleTimeString('es-MX', { timeZone: zone, hour: 'numeric', minute: '2-digit' });
+  const dayStr     = formato('es-MX', { timeZone: zone, day: 'numeric' }).format(date);
+  const monthIndex = Number(formato('en-US', { timeZone: zone, month: 'numeric' }).format(date)) - 1;
+  const time       = formato('es-MX', { timeZone: zone, hour: 'numeric', minute: '2-digit' }).format(date);
   const tzLabel    = TZ_LABELS[zone] || zone;
   return { day: dayStr, month: MESES[monthIndex], time, tzLabel, porDefinir: false };
 }
@@ -173,14 +188,28 @@ export function jornadaDateRange(allMatches) {
 export function fechaLarga(isoString, tz, ahora = Date.now()) {
   if (!isoString) return '';
   const timeZone = tz || DEFAULT_TZ;
-  const partes = new Intl.DateTimeFormat('es-MX', {
+  const partes = formato('es-MX', {
     timeZone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   }).formatToParts(new Date(isoString));
   const de = (tipo) => partes.find((p) => p.type === tipo)?.value || '';
   const dia = de('weekday');
   const fecha = `${dia.charAt(0).toUpperCase()}${dia.slice(1)} ${de('day')} de ${de('month')}`;
-  const anioDeHoy = new Intl.DateTimeFormat('es-MX', { timeZone, year: 'numeric' }).format(new Date(ahora));
+  const anioDeHoy = formato('es-MX', { timeZone, year: 'numeric' }).format(new Date(ahora));
   return de('year') === anioDeHoy ? fecha : `${fecha} de ${de('year')}`;
+}
+
+// "Sáb 7 nov": la fecha de la tarjeta del calendario, en la zona del partido. En
+// una tarjeta no cabe "Miércoles 30 de septiembre", y sin el día de la semana un
+// calendario no dice lo que más se le pregunta: si es sábado o domingo. Sin año:
+// el calendario es de una temporada y su año ya está en el encabezado.
+export function fechaCorta(isoString, tz) {
+  if (!isoString) return '';
+  const timeZone = tz || DEFAULT_TZ;
+  const { day, month } = getMatchParts(isoString, timeZone);
+  const dia = formato('es-MX', { timeZone, weekday: 'short' })
+    .format(new Date(isoString))
+    .replace('.', '');
+  return `${dia.charAt(0).toUpperCase()}${dia.slice(1)} ${day} ${month.toLowerCase()}`;
 }
 
 // Qué partido es dentro de la competencia. Casi siempre, su jornada. La fase

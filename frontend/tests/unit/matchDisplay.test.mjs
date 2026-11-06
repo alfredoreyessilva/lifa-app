@@ -10,6 +10,7 @@ import {
   DEFAULT_TZ,
   TZ_LABELS,
   getMatchParts,
+  fechaCorta,
   initials,
   jornadaLabel,
   groupByJornada,
@@ -88,6 +89,44 @@ test('getMatchParts con una zona desconocida muestra la zona en crudo', () => {
   // es exactamente lo que la prueba del cruce de listas evita que pase.
   const parts = getMatchParts('2026-09-17T01:00:00.000Z', 'America/Bogota');
   assert.ok(parts.tzLabel);
+});
+
+// El formato se arma una vez por idioma, zona y opciones: ir y venir entre zonas
+// no puede regresar el de la zona anterior.
+test('getMatchParts no confunde las zonas al reusar sus formatos', () => {
+  const instante = '2026-11-08T05:30:00.000Z';
+  for (let i = 0; i < 2; i++) {
+    assert.equal(getMatchParts(instante, 'America/Mexico_City').time, '11:30 p.m.');
+    assert.equal(getMatchParts(instante, 'America/Mexico_City').day, '7');
+    assert.equal(getMatchParts(instante, 'America/New_York').time, '12:30 a.m.');
+    assert.equal(getMatchParts(instante, 'America/New_York').day, '8');
+  }
+});
+
+// ── fechaCorta ───────────────────────────────────────────────────────────
+
+test('fechaCorta dice el día de la semana, en la zona del partido', () => {
+  assert.equal(fechaCorta('2026-11-07T21:00:00.000Z', 'America/Mexico_City'), 'Sáb 7 nov');
+  // Mismo instante, otro día: el de la sede es el que importa.
+  assert.equal(fechaCorta('2026-11-08T05:00:00.000Z', 'America/Mexico_City'), 'Sáb 7 nov');
+  assert.equal(fechaCorta('2026-11-08T05:00:00.000Z', 'America/New_York'), 'Dom 8 nov');
+});
+
+test('fechaCorta cae a la zona del centro si no le dan ninguna', () => {
+  assert.equal(fechaCorta('2026-11-08T03:00:00.000Z'), 'Sáb 7 nov');
+  assert.equal(fechaCorta('2026-11-08T03:00:00.000Z', null), 'Sáb 7 nov');
+});
+
+test('fechaCorta no deja el punto de la abreviatura, en ningún día de la semana', () => {
+  for (let dia = 2; dia <= 8; dia++) {
+    const fecha = fechaCorta(`2026-11-0${dia}T18:00:00.000Z`, 'America/Mexico_City');
+    assert.match(fecha, /^[A-ZÁÉÍÓÚ][a-záéíóú]{2} \d nov$/);
+  }
+});
+
+test('fechaCorta de un partido sin fecha es vacía: la tarjeta dice "Fecha por definir"', () => {
+  assert.equal(fechaCorta(null, 'America/Mexico_City'), '');
+  assert.equal(fechaCorta(undefined), '');
 });
 
 // ── initials ─────────────────────────────────────────────────────────────

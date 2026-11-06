@@ -63,7 +63,7 @@ export default function MatchWeek({ match, contexto }) {
             Ver los {partidos.length}
           </button>
         )}
-        {calendario && <Link to={calendario} className="btn btn-outline btn-sm">Ver calendario completo</Link>}
+        {calendario && <Link to={calendario} state={{ partido: match.id }} className="btn btn-outline btn-sm">Ver calendario completo</Link>}
       </div>
     </section>
   );

@@ -11,7 +11,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getMatchStatus, isMatchPast, isMatchLiveOrPast } from '../../src/utils/matchStatus.js';
+import {
+  getMatchStatus, isMatchPast, isMatchLiveOrPast, partidoProximo, partidoSiguiente,
+} from '../../src/utils/matchStatus.js';
 
 const HORA = 3600000;
 
@@ -124,4 +126,51 @@ test('sin fecha, el automático no lo mueve: new Date(null) es 1970 y lo daba po
   assert.equal(getMatchStatus({ ...sinFecha, status: 'finished' }), 'finished');
   assert.equal(isMatchPast(sinFecha), false);
   assert.equal(isMatchLiveOrPast(sinFecha), false);
+});
+
+// ── Lo que sigue en un calendario (README, "El calendario") ───────────────
+
+test('partidoProximo es el primero que falta por jugarse, en el orden de la lista', () => {
+  const auto = { auto_status_enabled: true, auto_status_window_hours: 3 };
+  const jugado = partido(-48, auto);
+  const siguiente = partido(5, auto);
+  const despues = partido(50, auto);
+  assert.equal(partidoProximo([jugado, siguiente, despues]), siguiente);
+});
+
+test('partidoProximo se salta el programado con fecha pasada: sin automático se queda así para siempre', () => {
+  const viejo = partido(-200, { auto_status_enabled: false });
+  const siguiente = partido(5, { auto_status_enabled: false });
+  assert.equal(getMatchStatus(viejo), 'scheduled');
+  assert.equal(partidoProximo([viejo, siguiente]), siguiente);
+});
+
+test('partidoProximo ignora la fecha por definir: no se sabe cuándo es', () => {
+  const sinFecha = { match_date: null, status: 'scheduled', auto_status_enabled: true };
+  const siguiente = partido(5, { auto_status_enabled: true });
+  assert.equal(partidoProximo([sinFecha, siguiente]), siguiente);
+});
+
+test('partidoProximo sin nada por jugarse es null: el botón no sale', () => {
+  assert.equal(partidoProximo([]), null);
+  assert.equal(partidoProximo([partido(-48, { status: 'finished' })]), null);
+  assert.equal(partidoSiguiente([]), null);
+  assert.equal(partidoSiguiente([partido(-48, { status: 'finished' })]), null);
+});
+
+test('partidoSiguiente prefiere lo que se está jugando sobre lo que falta', () => {
+  const siguiente = partido(5, { auto_status_enabled: true });
+  const manual = partido(9, { status: 'live' });
+  const porReloj = partido(-1, { auto_status_enabled: true, auto_status_window_hours: 3 });
+  assert.equal(partidoSiguiente([siguiente, manual]), manual);
+  assert.equal(partidoSiguiente([siguiente, porReloj]), porReloj);
+  assert.equal(partidoSiguiente([siguiente]), siguiente);
+});
+
+test('partidoSiguiente respeta el reloj que le pasan, como getMatchStatus', () => {
+  const ahora = Date.parse('2026-11-07T12:00:00.000Z');
+  const hoy = { match_date: '2026-11-07T18:00:00.000Z', status: 'scheduled', auto_status_enabled: true, auto_status_window_hours: 3 };
+  assert.equal(partidoSiguiente([hoy], ahora), hoy);
+  assert.equal(partidoSiguiente([hoy], Date.parse('2026-11-07T19:00:00.000Z')), hoy);
+  assert.equal(partidoSiguiente([hoy], Date.parse('2026-11-08T12:00:00.000Z')), null);
 });

@@ -4,7 +4,7 @@ Una foto de qué productos hay y a qué nivel está cada uno, para no tener que
 reconstruirla leyendo el README. Lo que falta vive en
 [`PENDIENTES.md`](PENDIENTES.md), con ID y prioridad; aquí solo se nombra.
 
-**Actualizado: 2026-11-05.** Cuando un producto cambia de nivel, su renglón se
+**Actualizado: 2026-11-06.** Cuando un producto cambia de nivel, su renglón se
 mueve en el mismo commit que lo movió.
 
 ## Los niveles
@@ -40,7 +40,7 @@ respaldos se resolvieron el 2026-09-23.
 
 | Producto | Nivel | Evidencia | Qué lo detiene |
 |-|-|-|-|
-| Calendario, resultados y páginas públicas | **5** | 4 ligas públicas, 92 equipos, 168 partidos | PD-03 |
+| Calendario, resultados y páginas públicas | **5** | 4 ligas públicas, 92 equipos, 168 partidos. Las tarjetas como cancha del 2026-11-06 están verificadas en el navegador con los datos públicos de producción y **todavía no están desplegadas** | PD-03 |
 | Predicciones y quinielas | **5** | 1,663 predicciones en el concurso de ONEFA (2026-09-23) | — |
 | La página de un partido (portada con los cascos, cara a cara, cómo llegan, cómo llegar, la jornada) | 4 | Verificada el 2026-11-04. El contexto, contra `desarrollo-local`: 60 partidos públicos sin un error, y el récord y el lugar de un partido futuro iguales a la tabla. Con los datos públicos de producción, `tablesOf()` reproduce las 59 filas publicadas de ONEFA y LFA. En el navegador, escritorio, celular y 320 px: antes, en vivo y al terminar, con cascos, placas y discos, sin logos y sin sede; dueño y tesorero, votar, las dos ventanas y el contexto fallando. Desplegada ese día (`9bb4555`): Render respondió la ruta nueva a los 64 s de empezar a mirar, y en la API pública el récord, la racha y el lugar de Leones UAMN contra Zorros CETYS son los de la tabla publicada. El sitio público ya la enseña, sin errores en consola, en escritorio y celular, con los 5 enfrentamientos anteriores de la final de la LFA. Sin probar en un teléfono real, ni "También transmiten" con un medio asignado | — |
 | Imagen de un partido para compartir (la misma portada, en publicación, historia y horizontal) | 4; la horizontal, 3 | La horizontal (2160×960) se agregó el 2026-11-05 y **todavía no está en producción**: verificada en el navegador por la página real con un partido de LFA terminado y uno de ONEFA por jugarse, y con los datos alterados solo en memoria en 12 casos (en vivo, sin marcador, fecha por definir, sin logos, disco y placa, nombres larguísimos, sin sede ni ronda, final de playoff, marcadores de 3 cifras); la ventana, también en tamaño de celular. Publicación e historia no cambiaron: comparadas con el código anterior en 12 imágenes de 6 partidos, salen iguales byte por byte, con el control viejo contra viejo en cero. La tabla sigue generando la suya, sin el botón nuevo. Verificada el 2026-11-04 en el navegador con los partidos públicos de producción, leídos en solo lectura y alterados solo en la respuesta para los casos que no traen: antes, en vivo, al terminar, sin marcador y con fecha por definir; con cascos, placas, discos y sin logos; nombres y sedes larguísimos, y sin contexto. La portada de la página, de donde salieron sus textos, dice lo mismo que el sitio público en 5 partidos de ONEFA y LFA, y las imágenes de la tabla y del bracket se siguen generando. Desplegada ese día (`f340844`): CI verde, y en el sitio público salieron las dos imágenes de un partido por jugarse y de uno terminado, con los datos de producción, en escritorio y en tamaño de celular, sin errores; las de la tabla y del bracket también. Sin probar en un teléfono real ni en Safari | — |
@@ -77,7 +77,7 @@ respaldos se resolvieron el 2026-09-23.
 | Disponibilidad | ⚠️ Render gratuito: **41.5 s** en frío (medido 2026-09-23) | PD-03 |
 | Cron | ⚠️ Una llamada cada ~4 h (GitHub). El externo de antes ya no llama. Alcanza para la cobranza, no para los avisos de partido | PD-02 (P2) |
 | Monitoreo | Sentry en frontend y backend ✅ · caída del servicio ❌ | PD-12 |
-| Pruebas | **566 unitarias** (334 backend + 232 frontend) en el CI ✅ · **7 suites e2e** que se corren a mano | PD-11, PD-25 |
+| Pruebas | **577 unitarias** (334 backend + 243 frontend) en el CI ✅ · **7 suites e2e** que se corren a mano | PD-11, PD-25 |
 | Despliegue | Push a `main` = producción, sin protección ni espera al CI | PD-11 |
 | Seguridad | JWT obligatorio, límite de intentos en login y en el estado de cuenta público, CORS con lista, SQL parametrizado, candado contra producción, invitaciones que caducan a los 7 días ✅ · Recuperar la contraseña con un código por correo, que cierra las sesiones abiertas: verificado el 2026-10-17 contra `desarrollo-local` (`recuperar-contrasena.e2e.mjs` y navegador) y desplegado ese día (`ff73a8b`), pero **apagado en producción**: Render no tiene Resend y la ruta contesta 503 | PD-38, PD-20, PD-21 |
 | Páginas legales | ✅ Completas desde el 2026-09-19 | — |

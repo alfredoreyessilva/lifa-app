@@ -1,85 +1,128 @@
 import { Link } from 'react-router-dom';
 import { getMatchStatus } from '../utils/matchStatus.js';
-import { getMatchParts, initials } from '../utils/matchDisplay.js';
+import {
+  centroDelPartido, fechaCorta, getMatchParts, rondaDelPartido, sedeDelPartido,
+} from '../utils/matchDisplay.js';
+import { matchScopeLabel } from '../utils/matchScope.js';
+import { useTeamPaint } from '../utils/useTeamPaint.js';
+import { Casco, EndZone, Marcador, Yardas } from './MatchField.jsx';
+import { IconoMapa } from './MatchIcons.jsx';
 import PredictionWidget from './PredictionWidget.jsx';
 
-export function TeamBadge({ name, logoUrl }) {
+function Equipo({ lado, nombre, logo, pintura }) {
   return (
-    <div className="match-card-team">
-      <div className="match-card-logo">
-        {logoUrl ? <img src={logoUrl} alt={name} /> : <span>{initials(name)}</span>}
-      </div>
-      <div className="match-card-team-name">{name}</div>
+    <div className="mc-team">
+      <Casco lado={lado} nombre={nombre} logo={logo} pintura={pintura} ancho={240} alt="" loading="lazy" />
+      <p className="mc-team-name">{nombre}</p>
     </div>
   );
 }
 
-// La tarjeta completa es un solo link hacia la página del partido
-// (/partidos/:id), que ya trae todo junto: links de transmisión, boletos,
-// ubicación, notificaciones y compartir. Se usa tanto en las listas de
-// calendario (CalendarViewer) como en Mi Cartelera — misma tarjeta en los
-// dos lugares, no una parecida.
-export default function MatchCard({ match, isNext = false }) {
-  const { day, month, time, tzLabel, porDefinir } = getMatchParts(match.match_date, match.timezone);
-  const status      = getMatchStatus(match);
-  const isFinished  = status === 'finished';
-  const isLive      = status === 'live';
+// Lo que va entre los cascos es lo mismo que en la portada, y se decide igual
+// (centroDelPartido): antes del juego la hora, durante y después el marcador.
+function Centro({ match, status, parts, isNext }) {
+  const centro = centroDelPartido(match, status, parts);
+  const fecha = parts.porDefinir ? centro.fecha : fechaCorta(match.match_date, match.timezone);
+  const linea = fecha && <p className="mc-date">{fecha}</p>;
 
-  // Preferimos la sede real (registrada en el panel); si el partido es viejo
-  // y todavía no se le ha asignado una, mostramos el texto libre de respaldo.
-  const venueLabel = match.venue_name;
-  const groupLabel = match.group_name_2 ? `${match.group_name} vs ${match.group_name_2}` : match.group_name;
+  if (centro.momento === 'live') {
+    return (
+      <div className="mc-center">
+        <p className="mh-live"><i aria-hidden="true" />En vivo</p>
+        {centro.hayMarcador ? <Marcador match={match} /> : <p className="mc-vs">VS</p>}
+        {linea}
+      </div>
+    );
+  }
+
+  if (centro.momento === 'finished') {
+    return (
+      <div className="mc-center">
+        <p className="mc-state">Finalizado</p>
+        {centro.hayMarcador
+          ? <Marcador match={match} terminado />
+          : <p className="mc-pending">Marcador por capturar</p>}
+        {linea}
+      </div>
+    );
+  }
+
+  if (centro.momento === 'porDefinir') {
+    return (
+      <div className="mc-center">
+        <p className="mc-vs">VS</p>
+        {linea}
+      </div>
+    );
+  }
 
   return (
-    <Link
-      to={`/partidos/${match.id}`}
-      className={`match-card-new${isNext ? ' match-card-new--next' : ''}${isLive ? ' match-card-new--live' : ''}`}
-    >
-      <div className="match-card-header">
-        <div className="match-card-datetime">
-          {porDefinir ? (
-            <>
-              <span className="match-card-date">Fecha</span>
-              <span className="match-card-time">Por definir</span>
-            </>
-          ) : (
-            <>
-              <span className="match-card-date">{day} {month}</span>
-              <span className="match-card-time">{time}</span>
-              <span className="match-card-tz">{tzLabel}</span>
-            </>
-          )}
-        </div>
-        <div className="match-card-status">
-          {isNext && !isLive && <span className="tag" style={{ color: 'var(--flag)', borderColor: 'var(--flag)' }}>Próximo</span>}
-          {isLive     && <span className="tag live">🔴 En vivo</span>}
-          {isFinished && <span className="tag finished">Finalizado</span>}
-        </div>
-      </div>
+    <div className="mc-center">
+      {isNext && <p className="mc-state mc-state--next">Próximo</p>}
+      {linea}
+      <p className="mh-clock">{centro.cifra}{centro.sufijo && <small> {centro.sufijo}</small>}</p>
+      <p className="mc-tz">{centro.zona}</p>
+    </div>
+  );
+}
 
-      <div className="match-card-body">
-        <TeamBadge name={match.home_team} logoUrl={match.home_logo_url} />
-        <div className="match-card-score">
-          {isFinished && match.home_score !== null
-            ? <><span>{match.home_score}</span><span className="match-card-score-sep">—</span><span>{match.away_score}</span></>
-            : isLive
-              ? <span className="match-card-score-live">EN VIVO</span>
-              : <span className="match-card-score-vs">VS</span>}
+// La portada de la página del partido, en chico: la cancha de noche con la
+// proporción de un campo real y una end zone del color de cada equipo. Debajo,
+// en una placa, lo que no es del duelo: a qué pertenece, dónde se juega y el
+// "¿Quién gana?". Se usa en el calendario (CalendarViewer) y en Mi Cartelera:
+// la misma tarjeta en los dos lugares, no una parecida.
+//
+// La cancha y su placa son un solo link hacia /partidos/:id. El voto va afuera:
+// un botón dentro de un link no es HTML válido, y en cada clic había que
+// detener la navegación a mano.
+//
+// `onAbrir` avisa antes de abrir el partido: con eso el calendario recuerda a qué
+// tarjeta regresar. El id de la tarjeta es a donde llega.
+export default function MatchCard({ match, isNext = false, onAbrir }) {
+  const parts = getMatchParts(match.match_date, match.timezone);
+  const status = getMatchStatus(match);
+  const local = useTeamPaint(match.home_logo_url, match.home_brand_color, { alInstante: true });
+  const visita = useTeamPaint(match.away_logo_url, match.away_brand_color, { alInstante: true });
+
+  const ronda = rondaDelPartido(match);
+  const alcance = matchScopeLabel(match);
+  const sede = sedeDelPartido(match);
+  const clase = ['mc', isNext && 'mc--next', status === 'live' && 'mc--live'].filter(Boolean).join(' ');
+  const pintura = {
+    '--home': local.fondo,
+    '--home-ink': local.tinta,
+    '--away': visita.fondo,
+    '--away-ink': visita.tinta,
+  };
+
+  return (
+    <article id={`partido-${match.id}`} className={clase} style={pintura}>
+      <Link to={`/partidos/${match.id}`} className="mc-link" onClick={() => onAbrir?.(match.id)}>
+        <div className="mh">
+          <EndZone lado="home" nombre={match.home_team} />
+          <div className="mh-field">
+            <Yardas />
+            <div className="mc-duel">
+              <Equipo lado="home" nombre={match.home_team} logo={match.home_logo_url} pintura={local} />
+              <Centro match={match} status={status} parts={parts} isNext={isNext} />
+              <Equipo lado="away" nombre={match.away_team} logo={match.away_logo_url} pintura={visita} />
+            </div>
+          </div>
+          <EndZone lado="away" nombre={match.away_team} />
         </div>
-        <TeamBadge name={match.away_team} logoUrl={match.away_logo_url} />
-      </div>
+
+        {(ronda || alcance || sede) && (
+          <div className="mc-meta">
+            {ronda && <span className="mc-ronda">{ronda}</span>}
+            {alcance && <span>{alcance}</span>}
+            {sede && <span className="mc-sede"><IconoMapa />{sede}</span>}
+          </div>
+        )}
+      </Link>
 
       {status === 'scheduled' && (
         <PredictionWidget matchId={match.id} homeTeam={match.home_team} awayTeam={match.away_team} weekLabel={match.week_label} />
       )}
-
-      {(venueLabel || match.week_label || groupLabel) && (
-        <div className="match-card-meta">
-          {match.week_label && <span>{/^\d+$/.test(match.week_label) ? `Jornada ${match.week_label}` : match.week_label}</span>}
-          {groupLabel && <span>{groupLabel}</span>}
-          {venueLabel && <span>{venueLabel}</span>}
-        </div>
-      )}
-    </Link>
+    </article>
   );
 }

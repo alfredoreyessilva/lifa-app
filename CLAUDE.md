@@ -27,7 +27,7 @@ frontend/public/sw.js   Service worker: push + que la app abra SIN SEÑAL.
 ```
 
 Dónde buscar antes de preguntar: **README** tiene una sección por dominio
-(La página de un partido · Cobranza · Cuotas del club · Tabla de posiciones ·
+(La página de un partido · El calendario · Cobranza · Cuotas del club · Tabla de posiciones ·
 Predicciones y quinielas · Roster · Roster público y pase de lista ·
 Estadísticas por jugada · Capturar sin señal · Equipos independientes · Playbook
 del equipo · Organizaciones: publicar y verificar · Transmisiones · Tiendas y bot

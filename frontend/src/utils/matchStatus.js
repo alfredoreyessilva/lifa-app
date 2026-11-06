@@ -43,6 +43,21 @@ export function getMatchStatus(match, now = Date.now()) {
   return 'finished';                        // ya pasó la ventana automática
 }
 
+// El primero que falta por jugarse. Uno programado con fecha pasada no cuenta: en
+// una categoría sin estado automático se queda así para siempre, y "Próximo"
+// saldría en un partido de hace semanas.
+export function partidoProximo(matches, now = Date.now()) {
+  return matches.find((m) => m.match_date
+    && getMatchStatus(m, now) === 'scheduled'
+    && new Date(m.match_date).getTime() > now) || null;
+}
+
+// A dónde lleva el botón del calendario: lo que se está jugando y, si no hay nada,
+// lo que sigue.
+export function partidoSiguiente(matches, now = Date.now()) {
+  return matches.find((m) => getMatchStatus(m, now) === 'live') || partidoProximo(matches, now);
+}
+
 // Sin fecha, ni pasó ni arrancó.
 export function isMatchPast(match) {
   if (!match.match_date) return false;

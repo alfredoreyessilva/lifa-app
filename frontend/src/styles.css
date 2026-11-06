@@ -18,10 +18,8 @@
      Las fichas de equipo y de sede
      (.team-profile-modal) van en negro, no en el verde de --card: sobre el
      fondo de cancha una tarjeta verde casi no se despega, y el amarillo de
-     --flag en sus botones pierde fuerza. Las tarjetas del calendario
-     (.match-grid) y el grid de equipos/sedes siguen en verde: ahí la tarjeta
-     es un elemento de la lista, no la pantalla. Las portadas sin imagen
-     (.team-profile-banner) tampoco cambian — ahí el verde es el contenido.
+     --flag en sus botones pierde fuerza. Las portadas sin imagen
+     (.team-profile-banner) no cambian — ahí el verde es el contenido.
      La vista previa del editor (.team-editor-preview) usa el mismo negro a
      propósito: dice "así se ve tu ficha", así que tiene que verse igual. */
   --card-open: #101211;
@@ -41,6 +39,16 @@
   --sf-ink: #18201b;
   --sf-ink-dim: #5d6862;
   --sf-line: #e2e6e2;
+
+  /* ---- La noche de la cancha ----
+     La placa de la página de un partido y del calendario: el verde de CFBAMX
+     llevado casi a negro, con la cal de las líneas como color de la letra. */
+  --mp-noche: #0a1f13;
+  --mp-noche-2: #102b1b;
+  --mp-noche-3: #17392a;
+  --mp-cal: #f3f6f1;
+  --mp-gris: #aabdb0;
+  --mp-linea: rgba(243, 246, 241, 0.14);
 
   --font-display: 'Anton', sans-serif;
   --font-eyebrow: 'Oswald', sans-serif;
@@ -2003,31 +2011,38 @@ button.league-card {
   }
 }
 
-/* ---------- Match card nueva (tipo marcador) ---------- */
+/* ---------- El calendario (CalendarViewer) ----------
+   README, "El calendario". Cada partido es la portada de su página en chico, y
+   lo demás se queda callado para que esa sea la pieza que se recuerda. El
+   amarillo es solo para lo seleccionado y para lo que sigue. */
 .match-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   padding-bottom: 64px;
 }
 
-/* ---------- Calendario partido en jornadas (CalendarViewer) ----------
-   Cada jornada es su propia cuadrícula: con una sola, el partido 15 de una
+/* Cada jornada es su propia cuadrícula: con una sola, el partido 15 de una
    jornada quedaba en la misma fila que el primero de la siguiente. El
-   encabezado se pega bajo el topbar (--topbar-h lo publica TopBar.jsx) y
-   lo empuja fuera el de la jornada siguiente, así que al deslizar siempre
-   dice en qué jornada va uno. Mismo verde translúcido que el topbar: pegados,
-   se leen como una sola barra. */
+   encabezado se pega bajo el topbar (--topbar-h lo publica TopBar.jsx) y lo
+   empuja fuera el de la jornada siguiente, así que al deslizar siempre dice en
+   qué jornada va uno. Es una línea de cal de orilla a orilla del panel, no una
+   caja: eran 19 cajas verdes en una temporada. */
 .jornada-list {
   padding-bottom: 64px;
 }
 
 .jornada-section + .jornada-section {
-  margin-top: 32px;
+  margin-top: 36px;
 }
 
 .jornada-section .match-grid {
   padding-bottom: 0;
+}
+
+/* "Ver bracket" lleva hasta aquí: sin esto, el principio queda bajo el topbar. */
+.calendar-footer {
+  scroll-margin-top: calc(var(--topbar-h, 64px) + 8px);
 }
 
 .jornada-head {
@@ -2038,357 +2053,496 @@ button.league-card {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 14px;
-  padding: 10px 14px;
-  background: rgba(47, 122, 53, 0.92);
+  margin: 0 calc(var(--cal-pad, 0px) * -1) 16px;
+  padding: 10px var(--cal-pad, 0px) 7px;
+  background: rgba(10, 31, 19, 0.94);
   backdrop-filter: blur(8px);
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--flag);
-  border-radius: 8px;
+  border-bottom: 2px solid rgba(243, 246, 241, 0.42);
 }
 
 .jornada-head-title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 400;
-  letter-spacing: 0.03em;
-  color: var(--ink);
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  color: var(--mp-cal);
   text-transform: uppercase;
 }
 
 .jornada-head-meta {
+  display: flex;
+  gap: 14px;
   font-family: var(--font-eyebrow);
-  font-size: 12px;
-  letter-spacing: 0.12em;
-  color: var(--ink-dim);
-  text-transform: uppercase;
+  font-size: 14px;
+  letter-spacing: 0.03em;
+  color: var(--mp-gris);
   white-space: nowrap;
 }
 
-@media (max-width: 640px) {
-  .jornada-head {
-    padding: 8px 12px;
-  }
-
-  .jornada-head-title {
-    font-size: 18px;
-  }
-
-  .jornada-head-meta {
-    font-size: 11px;
-    letter-spacing: 0.08em;
-  }
-}
-
-.match-card-new {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 16px;
+/* La tarjeta se mide contra sí misma (cqi) y no contra la ventana: es la misma
+   en dos columnas, en una, en un teléfono y en Mi Cartelera. Reusa los .mh-* de
+   la portada y aquí solo les cambia la medida, para que la cancha sea una. */
+.mc {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--mp-noche-2);
+  box-shadow: 0 0 0 1px var(--mp-linea);
+  color: var(--mp-cal);
+  transition: box-shadow 0.15s ease;
+  /* Una temporada son 145 canchas: las que no están en pantalla no se calculan.
+     Sin esto, abrir "Calendario completo" costaba 300 ms de estilos en una
+     computadora. La altura es la de una tarjeta sin voto, para que la barra de
+     desplazamiento y el salto a "Ver bracket" no se muevan. */
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto calc(min(488px, (100vw - 104px) / 2) / 2.25 + 34px);
 }
+.mc:hover { box-shadow: 0 0 0 1px rgba(243, 246, 241, 0.5); }
+.mc--next,
+.mc--next:hover { box-shadow: 0 0 0 2px var(--flag); }
+.mc--live,
+.mc--live:hover { box-shadow: 0 0 0 2px var(--live); }
 
-/* La tarjeta del calendario es un <Link> (se renderiza como <a>): se le quita
-   el azul/subrayado por defecto del navegador. */
-a.match-card-new {
-  text-decoration: none;
+.mc-link {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   color: inherit;
-  cursor: pointer;
+  text-decoration: none;
+}
+.mc-link:focus-visible {
+  outline: 2px solid var(--flag);
+  outline-offset: -2px;
 }
 
-.match-card-new:hover {
-  background: var(--card-hover);
-  border-color: var(--line-strong);
+/* 120 yardas por 53⅓, con 10 yardas de end zone de cada lado: un campo real. Es
+   un piso, no un corsé: con overflow visible la cancha crece si un nombre muy
+   largo no cabe, en vez de recortarlo. El que redondea las esquinas es .mc. */
+.mc .mh {
+  flex: 1 1 auto;
+  grid-template-columns: 8.33% minmax(0, 1fr) 8.33%;
+  aspect-ratio: 9 / 4;
+  overflow: visible;
+}
+.mc .mh-zone {
+  border-right-width: 3px;
+  transition: background-color 0.25s ease;
+}
+.mc .mh-zone--away {
+  border-right-width: 0;
+  border-left-width: 3px;
+}
+.mc .mh-zone::before,
+.filter-team .mh-zone::before {
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0 7px, transparent 7px 14px);
+}
+.mc .mh-field {
+  justify-content: center;
+  padding: 2cqi 1.6cqi clamp(16px, 4cqi, 22px);
+}
+.mc .mh-yards {
+  bottom: 3px;
+  height: 15px;
+}
+.mc .mh-yards span {
+  font-size: clamp(10px, 2.8cqi, 15px);
+  line-height: 15px;
 }
 
-.match-card-new--next {
-  border-color: var(--flag);
+.mc-duel {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(24cqi, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 1.2cqi;
 }
-
-.match-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.match-card-datetime {
+.mc-team {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  align-items: center;
+  min-width: 0;
+  text-align: center;
+}
+.mc-team-name {
+  margin: 1px 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(12.5px, 3.5cqi, 19px);
+  line-height: 1.14;
+  letter-spacing: 0.01em;
+  text-wrap: balance;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
 }
 
-.match-card-date {
+/* En una lista no hay entrada de cascos: serían 290 a la vez. */
+.mc .mh-helmet,
+.filter-team .mh-helmet {
+  transition: opacity 0.2s ease;
+}
+.mc .mh-helmet { width: min(100%, 23cqi); }
+.mc .mh-helmet.is-listo,
+.filter-team .mh-helmet.is-listo { animation: none; }
+.mc .mh-helmet img,
+.filter-team .mh-helmet img { filter: drop-shadow(0 5px 5px rgba(0, 0, 0, 0.5)); }
+.mc .mh-helmet--disco img,
+.filter-team .mh-helmet--disco img {
+  box-shadow: 0 0 0 2px var(--mp-cal), 0 6px 12px rgba(0, 0, 0, 0.5);
+  filter: none;
+}
+.mc .mh-helmet-initials,
+.filter-team .mh-helmet-initials {
+  border-width: 2px;
+  font-size: clamp(16px, 5cqi, 26px);
+}
+
+.mc-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.mc-center p { margin: 0; }
+.mc-date {
   font-family: var(--font-eyebrow);
-  font-size: 12px;
-  letter-spacing: 0.1em;
-  color: var(--ink-dim);
-  text-transform: uppercase;
-}
-
-.match-card-time {
-  font-family: var(--font-eyebrow);
-  font-size: 13px;
-  color: var(--flag);
-  font-weight: 600;
-}
-
-.match-card-tz {
-  font-size: 10px;
-  color: var(--ink-dim);
+  font-size: clamp(12px, 3cqi, 16px);
   letter-spacing: 0.03em;
 }
-
-.match-card-status {
-  flex-shrink: 0;
+.mc .mh-clock {
+  font-size: clamp(26px, 9.6cqi, 52px);
+  line-height: 1.08;
+  white-space: nowrap;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.65);
 }
-
-.match-card-body {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 0;
+.mc .mh-clock small { font-size: 0.32em; }
+.mc-tz {
+  font-size: clamp(10px, 2.3cqi, 12px);
+  color: rgba(255, 255, 255, 0.76);
 }
-
-.match-card-team {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  text-align: center;
+.mc .mh-score {
+  font-size: clamp(32px, 11.4cqi, 62px);
+  line-height: 1.08;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.65);
 }
-
-.match-card-logo {
-  width: 88px;
-  height: 88px;
-  border-radius: 50%;
-  background: var(--field);
-  border: 2px solid var(--line-strong);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.mc-vs {
   font-family: var(--font-display);
-  font-size: 22px;
-  color: var(--flag);
-  overflow: hidden;
-  flex-shrink: 0;
+  font-size: clamp(22px, 7cqi, 38px);
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.9);
 }
-
-.match-card-logo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.match-card-team-name {
+.mc-state {
   font-family: var(--font-eyebrow);
-  font-size: 12px;
+  font-size: clamp(11.5px, 2.7cqi, 14px);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.86);
+}
+.mc-state--next { color: var(--flag); }
+.mc .mh-live {
+  gap: 6px;
+  padding: 1px 9px;
+  font-size: clamp(11px, 2.6cqi, 13px);
+}
+.mc .mh-live i {
+  width: 6px;
+  height: 6px;
+}
+.mc-pending {
+  max-width: 26cqi;
+  margin: 3px 0 !important;
+  font-family: var(--font-display);
+  font-size: clamp(13px, 3.4cqi, 18px);
+  line-height: 1.15;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+/* La placa de abajo: lo que no es del duelo. La jornada solo se dice donde el
+   encabezado de arriba no la está diciendo ya. */
+.mc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1px 12px;
+  padding: 7px 12px;
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--mp-gris);
+}
+.mc-ronda { color: var(--mp-cal); }
+.jornada-section .mc-ronda,
+.filter-grid--jornadas ~ .match-grid .mc-ronda { display: none; }
+.mc-sede {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  margin-left: auto;
+}
+.mc-sede .mp-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.mc-vote {
+  padding: 9px 12px 11px;
+  border-top: 1px solid var(--mp-linea);
+}
+.mc-vote--open {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+.mc-vote-title {
+  margin: 0;
+  font-family: var(--font-eyebrow);
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.mc-picks {
+  display: grid;
+  flex: 1 1 250px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 6px;
+  min-width: 0;
+}
+.mc-picks.is-working { opacity: 0.6; }
+.mc-pick {
+  min-width: 0;
+  min-height: 40px;
+  padding: 5px 8px;
+  border: 1px solid var(--mp-linea);
+  border-bottom: 3px solid var(--home);
+  border-radius: 5px;
+  background: var(--mp-noche-3);
+  color: var(--mp-cal);
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--ink);
-  line-height: 1.3;
-  max-width: 110px;
+  line-height: 1.15;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.mc-pick--away { border-bottom-color: var(--away); }
+.mc-pick--tie {
+  border-bottom-color: var(--mp-gris);
+  color: var(--mp-gris);
+}
+.mc-pick:hover:not(:disabled) {
+  background: #21493a;
+  border-color: rgba(243, 246, 241, 0.4);
+}
+.mc-pick--home:hover:not(:disabled) { border-bottom-color: var(--home); }
+.mc-pick--away:hover:not(:disabled) { border-bottom-color: var(--away); }
+.mc-pick:disabled { cursor: default; }
+.mc-pick:focus-visible {
+  outline: 2px solid var(--flag);
+  outline-offset: 1px;
+}
+.mc-vote-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--mp-gris);
+}
+.mc-vote .mp-poll-bar { height: 10px; }
+.mc-vote .mp-poll-legend {
+  gap: 8px;
+  margin-top: 6px;
+}
+.mc-vote .mp-poll-item {
+  font-size: 12px;
+  line-height: 1.2;
+}
+.mc-vote .mp-poll-item b { font-size: 20px; }
+.mc-vote .mc-vote-note { margin-top: 5px; }
+
+/* En un teléfono el renglón es de los tres botones: "PANTERAS GES 21" a 13 px
+   dejaba el 21 solo en otro renglón. */
+@container (max-width: 380px) {
+  .mc-picks { gap: 5px; }
+  .mc-pick {
+    padding: 5px 6px;
+    font-size: 12px;
+    letter-spacing: 0.01em;
+  }
 }
 
-.match-card-score {
+@media (max-width: 720px) {
+  .match-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .mc { contain-intrinsic-block-size: auto calc((100vw - 56px) / 2.25 + 34px); }
+}
+
+@media (max-width: 640px) {
+  .jornada-head-title { font-size: 21px; }
+  .jornada-head-meta {
+    gap: 10px;
+    font-size: 13px;
+  }
+  .calendar-header h2 { font-size: 22px; }
+  .calendar-tabs .tab-btn {
+    margin-right: 14px;
+    padding: 10px 2px;
+  }
+}
+
+/* ---------- Encabezado de un calendario ---------- */
+.cal-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 10px 14px;
+  padding: 24px var(--cal-pad, 20px) 2px;
+}
+.cal-head-logo {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  object-fit: contain;
+}
+.cal-head-text {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.cal-head h1 {
+  margin: 0;
   font-family: var(--font-display);
-  font-size: 28px;
-  color: var(--paper);
+  font-size: clamp(30px, 5vw, 44px);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: 0.01em;
+  color: var(--mp-cal);
+}
+.cal-head p {
+  margin: 2px 0 0;
+  font-family: var(--font-eyebrow);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  color: var(--mp-gris);
+}
+
+/* Las cuatro pestañas no caben en un teléfono: la barra se desliza. */
+.calendar-tabs {
+  margin: 0 0 20px;
+  overflow-x: auto;
+  border-bottom-color: var(--mp-linea);
+  scrollbar-width: none;
+}
+.calendar-tabs .tab-btn {
+  flex-shrink: 0;
   white-space: nowrap;
 }
 
-.match-card-score-sep {
-  color: var(--ink-dim);
-  font-size: 20px;
-}
-
-.match-card-score-vs {
-  font-family: var(--font-eyebrow);
-  font-size: 13px;
-  letter-spacing: 0.2em;
-  color: var(--ink-dim);
-}
-
-.match-card-meta {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  font-size: 11px;
-  color: var(--ink-dim);
-  padding-top: 4px;
-  border-top: 1px solid var(--line);
-}
-
-.prediction-widget {
-  padding: 10px 0;
-  border-top: 1px solid var(--line);
-  margin-top: 4px;
-}
-.prediction-widget-label {
-  font-family: var(--font-eyebrow);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  color: var(--ink-dim);
-  text-align: center;
-  margin-bottom: 8px;
-}
-.prediction-widget-note {
-  font-size: 11px;
-  color: var(--flag);
-  text-align: center;
-  margin: -4px 0 8px;
-}
-.prediction-widget-buttons {
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-.prediction-widget-results {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.prediction-bar {
-  position: relative;
-  height: 26px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  overflow: hidden;
-}
-.prediction-bar-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  transition: width 0.3s ease;
-}
-.prediction-bar--mine .prediction-bar-fill {
-  background: var(--flag);
-  opacity: 0.35;
-}
-.prediction-bar-label {
-  position: relative;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 10px;
-  font-size: 12px;
-}
-.prediction-bar--mine .prediction-bar-label {
-  color: var(--paper);
-  font-weight: 600;
-}
-.prediction-widget-total {
-  text-align: center;
-  font-size: 11px;
-  color: var(--ink-dim);
-  margin-top: 2px;
-}
-
-/* Los botones dentro de la tarjeta del calendario van en amarillo (flag) */
-.match-card-new .btn {
-  background: var(--flag);
-  color: #1a1300;
-  border-color: var(--flag);
-}
-.match-card-new .btn:hover {
-  background: #ffe066;
-  border-color: #ffe066;
-  color: #1a1300;
-}
-
-/* Móvil: 1 columna */
-@media (max-width: 640px) {
-  .match-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .match-card-logo {
-    width: 64px;
-    height: 64px;
-    font-size: 16px;
-  }
-
-  .match-card-score {
-    font-size: 22px;
-  }
-
-  .match-card-team-name {
-    font-size: 11px;
-    max-width: 90px;
-  }
-
-}
-
-/* ---------- Filtros de calendario ---------- */
 .calendar-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
-  margin: 24px 0 16px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin: 0 0 14px;
 }
-
 .calendar-header h2 {
   margin: 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  color: var(--mp-cal);
+}
+.calendar-count {
+  font-family: var(--font-eyebrow);
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  color: var(--mp-gris);
+}
+.calendar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .calendar-view-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 24px;
 }
-
 .calendar-view-label {
-  font-size: 13px;
-  color: var(--ink-dim);
-  white-space: nowrap;
-}
-
-.calendar-view-btn {
-  padding: 5px 12px;
-  border-radius: 20px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--ink-dim);
-  font-size: 12px;
   font-family: var(--font-eyebrow);
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  color: var(--mp-gris);
   white-space: nowrap;
 }
-
-.calendar-view-btn:hover {
-  background: var(--card-hover);
-  color: var(--ink);
+.calendar-view-options {
+  display: inline-flex;
+  gap: 2px;
+  min-width: 0;
+  padding: 3px;
+  overflow-x: auto;
+  border-radius: 6px;
+  background: var(--mp-noche-2);
+  box-shadow: inset 0 0 0 1px var(--mp-linea);
+  scrollbar-width: none;
 }
-
+.calendar-view-btn {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--mp-gris);
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.calendar-view-btn:hover { color: var(--mp-cal); }
+.calendar-view-btn:focus-visible {
+  outline: 2px solid var(--flag);
+  outline-offset: -2px;
+}
 .calendar-view-btn.active {
   background: var(--flag);
-  border-color: var(--flag);
-  color: var(--field-deep);
+  color: #1a1300;
   font-weight: 600;
 }
 
-/* Grid de cuadros de filtro (jornadas, equipos, sedes) */
+/* Grid de cuadros de filtro (sedes, grupos, conferencias) */
 .filter-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
   margin-bottom: 32px;
+}
+
+/* Las jornadas son una franja de cancha: cada una, una banda de podado con su
+   número pintado como una yarda. Con flex y no con grid para que la última fila
+   de un teléfono se estire en vez de dejar un hueco. */
+.filter-grid--jornadas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  overflow: hidden;
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--mp-linea);
+}
+
+/* Los equipos, cada uno en su franja de cancha (FiltroEquipo). */
+.filter-grid--equipos {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 }
 
 /* El título y los tres botones de "Registrar…" no caben en un renglón en un
@@ -2509,96 +2663,135 @@ a.match-card-new {
 }
 
 .filter-card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 16px 10px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 11px 14px;
+  border: 1px solid var(--mp-linea);
+  border-radius: 6px;
+  background: var(--mp-noche-2);
+  color: var(--mp-cal);
+  text-align: left;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.filter-card:hover {
+  border-color: rgba(243, 246, 241, 0.42);
+  background: var(--mp-noche-3);
+}
+.filter-card:focus-visible,
+.filter-team:focus-visible {
+  outline: 2px solid var(--flag);
+  outline-offset: 2px;
+}
+.filter-card-label {
+  display: flex;
+  gap: 6px;
+  font-family: var(--font-eyebrow);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+}
+.filter-card-label .mp-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--mp-gris);
+}
+.filter-card-count {
+  font-size: 12px;
+  color: var(--mp-gris);
+}
+
+.filter-grid--jornadas .filter-card {
+  flex: 1 1 68px;
+  align-items: center;
+  gap: 0;
+  padding: 8px 4px 7px;
+  border: 0;
+  border-right: 2px solid rgba(255, 255, 255, 0.24);
+  border-radius: 0;
+  background: #125432;
   text-align: center;
 }
-
-.filter-card:hover {
-  background: var(--card-hover);
-  border-color: var(--flag);
+.filter-grid--jornadas .filter-card:nth-child(even) { background: #17653c; }
+.filter-grid--jornadas .filter-card:last-child { border-right: 0; }
+.filter-grid--jornadas .filter-card:hover { background: #1f7a4a; }
+.filter-grid--jornadas .filter-card:focus-visible { outline-offset: -4px; }
+/* La jornada abierta, cuando los recuadros se quedan arriba de sus partidos. */
+.filter-grid--jornadas .filter-card.active {
+  background: var(--flag);
+  color: #1a1300;
 }
-
-/* La jornada abierta, cuando los recuadros se quedan arriba de sus partidos.
-   El segundo pixel del borde va en la sombra para que el recuadro no crezca. */
-.filter-card.active {
-  background: var(--card-hover);
-  border-color: var(--flag);
-  box-shadow: inset 0 0 0 1px var(--flag);
-}
-
+.filter-grid--jornadas .filter-card .filter-card-count { color: rgba(255, 255, 255, 0.8); }
+.filter-grid--jornadas .filter-card.active .filter-card-count { color: #1a1300; }
 .filter-card-num {
   font-family: var(--font-display);
-  font-size: 28px;
-  color: var(--flag);
-  line-height: 1;
+  font-size: 30px;
+  line-height: 1.08;
 }
-
-/* El nombre de una jornada sin número (SCRIMMAGE) a 28 px se salía del
-   recuadro. A 14 px "SCRIMMAGE" mide 63 px y cabe en el recuadro más angosto
-   (90 px, 68 por dentro); a 15 px cabía sin un pixel de sobra. Si un nombre
-   más largo no cabe, se parte en vez de salirse. La altura mínima es la del
-   número más su etiqueta (28 + 6 + 14), para que "N partidos" quede a la
-   altura del de los recuadros vecinos. */
+/* El nombre de una jornada sin número (SCRIMMAGE) a 30 px no cabe. La altura
+   mínima es la del número, para que "N partidos" quede a la altura de los
+   recuadros vecinos, y lo que no quepa se parte en vez de salirse. */
+.filter-grid--jornadas .filter-card:has(.filter-card-num--name) { flex-basis: 84px; }
 .filter-card-num--name {
-  font-size: 14px;
-  line-height: 1.15;
-  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
   max-width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  hyphens: auto;
+  font-size: 15px;
+  line-height: 1.1;
   overflow-wrap: anywhere;
+  hyphens: auto;
 }
 
-.filter-card-logo {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: var(--field);
-  border: 2px solid var(--line-strong);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-display);
-  font-size: 13px;
-  color: var(--flag);
+.filter-team {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  min-height: 72px;
+  padding: 0;
   overflow: hidden;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  box-shadow: 0 0 0 1px var(--mp-linea);
+  color: var(--mp-cal);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
 }
-
-.filter-card-logo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.filter-team:hover { box-shadow: 0 0 0 1px rgba(243, 246, 241, 0.6); }
+.filter-team .mh-zone {
+  border-right-width: 2px;
+  transition: background-color 0.25s ease;
 }
-
-.filter-card-icon {
-  font-size: 24px;
-  line-height: 1;
+.filter-team .mh-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 6px;
+  background-image:
+    radial-gradient(50% 120% at 0% 50%, color-mix(in srgb, var(--home) 34%, transparent), transparent 80%),
+    linear-gradient(to bottom, rgba(6, 22, 13, 0.3), rgba(6, 22, 13, 0.62)),
+    repeating-linear-gradient(to right, #17653c 0 25%, #125432 25% 50%);
 }
-
-.filter-card-label {
-  font-family: var(--font-eyebrow);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ink);
-  letter-spacing: 0.03em;
-  line-height: 1.3;
+.filter-team .mh-helmet {
+  flex-shrink: 0;
+  width: 60px;
 }
-
-.filter-card-count {
-  font-size: 10px;
-  color: var(--ink-dim);
+.filter-team-text {
+  position: relative;
+  min-width: 0;
 }
+.filter-team-name {
+  font-family: var(--font-display);
+  font-size: 16px;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+}
+.filter-team .filter-card-count { color: rgba(255, 255, 255, 0.8); }
 
 /* Botón volver y título de selección */
 .filter-back {
@@ -2618,30 +2811,16 @@ a.match-card-new {
 }
 
 .filter-selected-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
   font-family: var(--font-display);
-  font-size: 20px;
-  color: var(--ink);
-  margin-bottom: 20px;
-  letter-spacing: 0.02em;
-}
-
-/* Responsive móvil */
-@media (max-width: 640px) {
-  .calendar-header {
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .calendar-view-bar {
-    width: 100%;
-    overflow-x: auto;
-    padding-bottom: 4px;
-    flex-wrap: nowrap;
-  }
-
-  .filter-grid {
-    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-  }
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  color: var(--mp-cal);
 }
 
 /* ---------- Categorías en grid de cuadros ---------- */
@@ -2730,20 +2909,6 @@ a.match-card-new {
     grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   }
 }
-/* Tarjeta en vivo */
-.match-card-new--live {
-  border-color: var(--live);
-  box-shadow: 0 0 0 1px var(--live);
-}
-
-.match-card-score-live {
-  font-family: var(--font-eyebrow);
-  font-size: 11px;
-  letter-spacing: 0.15em;
-  color: var(--live);
-  animation: pulse-live 1.5s ease-in-out infinite;
-}
-
 @keyframes pulse-live {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
@@ -2803,7 +2968,8 @@ a.match-card-new {
 }
 
 .league-header-panel {
-  background: #000;
+  --cal-pad: 20px;
+  background: var(--mp-noche);
   border-radius: 16px;
   /* clip y no hidden: recorta la portada igual, pero no vuelve al panel un
      contenedor de scroll — con hidden, el encabezado de jornada del
@@ -2819,8 +2985,17 @@ a.match-card-new {
   text-align: center;
 }
 .league-header-panel-body--content {
-  padding: 20px 20px 28px;
+  padding: 20px var(--cal-pad) 28px;
   text-align: left;
+}
+/* Anton solo tiene un peso: el negrita de un h2 lo inventa el navegador y la
+   letra sale embarrada, como con sombra. */
+.league-header-panel .section-head h2 { font-weight: 400; }
+/* Dentro del contenido ya hay margen: el de .tab-bar--panel es para cuando la
+   barra va suelta en el panel, y aquí la dejaba metida respecto a su tabla. */
+.league-header-panel-body--content .tab-bar--panel { margin: 0 0 8px; }
+@media (max-width: 640px) {
+  .league-header-panel { --cal-pad: 12px; }
 }
 .league-verified-note {
   margin-top: 12px;
@@ -3975,6 +4150,7 @@ a.match-card-new {
 .bracket-title {
   font-family: var(--font-display);
   font-size: clamp(22px, 4vw, 30px);
+  font-weight: 400;
   line-height: 1.05;
   margin: 2px 0 0;
 }
@@ -5511,12 +5687,6 @@ body.is-storefront .footer-links a:hover { color: var(--sf-ink); }
    leía como cosas juntas, no como una pantalla. Hay UN botón amarillo, el
    primero de la portada; los demás son de contorno. */
 .mp {
-  --mp-noche: #0a1f13;
-  --mp-noche-2: #102b1b;
-  --mp-noche-3: #17392a;
-  --mp-cal: #f3f6f1;
-  --mp-gris: #aabdb0;
-  --mp-linea: rgba(243, 246, 241, 0.14);
   --home: #1f4a30;
   --home-ink: #ffffff;
   --away: #1f4a30;
