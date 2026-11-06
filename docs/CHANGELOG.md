@@ -37,8 +37,11 @@ entradas traen el post-mortem del bug que las provocó.
   los dos formatos: un detector sobre `fillText` comprobó en las 18 imágenes que ningún
   nombre se recorta, ningún texto se encima y nada se sale de la cancha. Con los datos
   alterados solo en memoria, 20 imágenes de los casos que no traen, y por la página real
-  en escritorio y celular. Cifras de la Nacional: de 25 a 28 px. Sin probar en un
-  teléfono real ni en Safari.
+  en escritorio y celular. Cifras de la Nacional: de 25 a 28 px. Desplegada ese día
+  (`0fc5578`), con el CI verde: en el sitio público salieron las dos imágenes de la
+  Nacional en escritorio y las de la LFA en tamaño de celular, con los datos de
+  producción y sin errores; las de un partido, en sus tres formatos, y la del bracket
+  también. Sin probar en un teléfono real ni en Safari.
 
 - **La imagen de un partido, también en horizontal (2026-11-05).** Lo pidió Alfredo:
   una tercera opción junto a Publicación e Historia, la más fiel a la forma de la
