@@ -44,6 +44,10 @@ entradas traen el post-mortem del bug que las provocó.
   negativo en verde, y el panel del torneo no se movió. Las 4 ligas, también en la compilación
   real, sin errores en consola. 21 pruebas nuevas en `leagueDisplay.test.mjs`.
 
+  Desplegada ese día (`0d3c45a`): CI verde, Vercel la sirvió a los 11 s, y en el sitio público
+  las 4 ligas salen sin errores en escritorio y en tamaño de celular, con el WhatsApp de ONEFA
+  ya en `wa.me/525555411027`.
+
 - **El calendario: cada partido es una cancha (2026-11-06).** Lo pidió Alfredo: que las
   tarjetas parecieran los campos horizontales de la página de un partido, y que la vista
   se viera más profesional. Cada tarjeta es ahora la portada en chico, con los mismos
