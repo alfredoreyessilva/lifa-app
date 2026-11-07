@@ -39,6 +39,11 @@ entradas traen el post-mortem del bug que las provocó.
   lado; esa pantalla pide sesión y ni las pruebas ni la compilación lo ven. Lo atrapó montarla de
   verdad en el navegador, sin sesión, con `import()` del módulo y el React de Vite.
 
+  Desplegado ese día (`bc422b6`): CI verde, Vercel lo sirvió y Render ya manda `brand_color`. En el
+  sitio público salen los 58 equipos encendidos y en abecedario, sin errores ni nada que se salga, en
+  escritorio y en tamaño de celular. GRIZZLIES, el único con color elegido, ya sale con él en su nicho
+  y en su ficha, y la página de ONEFA abre la ficha de un equipo con su color.
+
 - **El Panel Admin se volvió una herramienta (2026-11-06).** Lo pidió Alfredo: que se viera
   como un panel profesional y que cada sección se reacomodara. Ocupa todo el ancho, con una
   barra lateral en verde noche, y cada sección tiene la misma forma: el marcador arriba y el
