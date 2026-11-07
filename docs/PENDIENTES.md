@@ -58,7 +58,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-25 | P2 | El pase de lista no tiene suite e2e | código |
 | PD-26 | P2 | QA visual de `TournamentMatchesPanel` | verificación |
 | PD-27 | P2 | Los menores del panel del club (M2, M3, M6, M7) | código |
-| PD-28 | P2 | Cinco archivos concentran demasiado | deuda |
+| PD-28 | P2 | Cuatro archivos concentran demasiado | deuda |
 | PD-29 | P2 | Ramas viejas en local y en el remoto | limpieza |
 | PD-32 | P2 | Un dueño no se puede retirar aunque haya otros dueños, y el README dice que sí | decisión |
 | PD-33 | P2 | Los recordatorios de cobranza esconden su error y pierden el día | código |
@@ -366,7 +366,7 @@ enciende en minutos:
   minutos siempre gastaría 60–90 de ellas. Y de paso esa cadencia mantiene
   despierto a Render (`PD-03`), que en fin de semana es cuando más se usa.
 - `cron.yml` se queda como respaldo: llamar de más es inofensivo por diseño.
-- La pestaña Cron de `/admin` mide la cadencia nueva sin tocar nada.
+- La sección Cron de `/admin` mide la cadencia nueva sin tocar nada.
 
 **Antes de encenderlo, además de la cadencia**, cuatro fallas del push que se
 encontraron el 2026-09-24 y que no se arreglaron porque quedó apagado:
@@ -505,18 +505,19 @@ Siguen abiertos cuatro de la revisión del 2026-09-18, con su detalle en
 - **M6**: las tres secciones piden el overview completo.
 - **M7**: "Por cobrar" incluye a los dados de baja y la pantalla no lo dice.
 
-### PD-28 · Cinco archivos concentran demasiado
+### PD-28 · Cuatro archivos concentran demasiado
 
 Hoy funcionan y no hay razón para tocarlos, pero ahí es donde va a doler.
-Medido el 2026-09-23:
+`AdminPanel.jsx` salió de la lista el 2026-11-06, al rehacer el panel: una sección
+por archivo en `components/admin/`, con su propio CSS.
+Medido el 2026-11-06:
 
 | Archivo | Líneas | Qué concentra |
 |---|---|---|
-| `frontend/src/styles.css` | 4,463 | **Todos** los estilos de la app |
-| `backend/src/routes/manage.js` | 2,358 | El CRUD entero de liga, torneo, categoría, rama, equipo, sede y partido |
-| `backend/src/config/db.js` | 2,262 | Las 44 tablas y ~150 migraciones |
-| `frontend/src/pages/LeagueStructurePanel.jsx` | 1,157 | El árbol completo del panel de liga |
-| `frontend/src/pages/AdminPanel.jsx` | 1,143 | Las pestañas de `/admin` |
+| `frontend/src/styles.css` | 6,565 | Los estilos de la app, salvo los del Panel Admin |
+| `backend/src/routes/manage.js` | 2,590 | El CRUD entero de liga, torneo, categoría, rama, equipo, sede y partido |
+| `backend/src/config/db.js` | 2,515 | Las 44 tablas y ~150 migraciones |
+| `frontend/src/pages/LeagueStructurePanel.jsx` | 1,193 | El árbol completo del panel de liga |
 
 `db.js` es el que tiene techo real: creció 30% desde la última medición y el
 arranque corre todas las migraciones. El día que estorbe, la salida es congelar

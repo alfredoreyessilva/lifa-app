@@ -15,6 +15,32 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El Panel Admin se volvió una herramienta (2026-11-06).** Lo pidió Alfredo: que se viera
+  como un panel profesional y que cada sección se reacomodara. Ocupa todo el ancho, con una
+  barra lateral en verde noche, y cada sección tiene la misma forma: el marcador arriba y el
+  trabajo abajo. En Ligas, Organizaciones y Usuarios las celdas del marcador son los filtros
+  de una tabla con búsqueda y páginas, y cada fila lleva "Ver" y un menú `⋯` en vez de cuatro
+  o cinco botones. El alcance de cada patrocinador pasó de Estadísticas a su propio lugar, y
+  "Estadísticas" se llama ahora Resumen y abre con lo que te toca atender. El porqué está en
+  la sección "Panel Admin" del README.
+
+  Con los datos de `desarrollo-local` salieron cuatro cosas que nadie había visto. La gráfica
+  de visitas pintaba pegados los días con visitas, y un mes con cinco días sueltos parecía
+  cinco días seguidos. `COUNT(*)` llega como texto, así que `u.league_count !== 1` era
+  verdadero siempre y decía "1 ligas". La línea de crecimiento casi no se veía, verde sobre
+  una tarjeta verde. Y borrar con un error del servidor dejaba la ventana abierta sin decir
+  nada.
+
+  Verificación: 24 pruebas unitarias nuevas (`adminPanel.test.mjs`). `routes/admin.js` corrió
+  tal cual contra `desarrollo-local` en una sesión de solo lectura, para sacar respuestas
+  reales de la API, y con ellas se revisaron las seis secciones en Chrome: 15 anchos por 6
+  secciones sin desbordes, y 57 comprobaciones de cada acción contra una API simulada en el
+  navegador, dentro de la compilación de producción. Ese detector encontró un desborde que a
+  ojo no se veía: el texto oculto del punto del Cron se salía de la barra deslizable y dejaba
+  la página en 731 px de ancho en cualquier teléfono. Lo que **no** se probó es la escritura
+  contra el backend real: las rutas no cambiaron, y las URL y los métodos salen del mismo
+  `api/client.js`.
+
 - **La página de una liga (2026-11-06).** Lo pidió Alfredo: que se viera más profesional y
   que los botones de contacto estuvieran a la vista. En una computadora la primera pantalla
   de ONEFA era solo la foto: el nombre quedaba abajo del doblez, los equipos a 1,500 px, los

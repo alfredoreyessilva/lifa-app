@@ -1,1221 +1,175 @@
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import Modal from '../components/Modal.jsx';
-import ConfirmDialog from '../components/ConfirmDialog.jsx';
-import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
+import { formatNumber, leagueHasRequest } from '../utils/adminPanel.js';
+import {
+  IconClock, IconLeague, IconOrganization, IconOverview, IconSponsor, IconUsers,
+} from '../components/admin/AdminIcons.jsx';
+import AdminOverviewSection from '../components/admin/AdminOverviewSection.jsx';
+import AdminLeaguesSection from '../components/admin/AdminLeaguesSection.jsx';
+import AdminOrganizationsSection from '../components/admin/AdminOrganizationsSection.jsx';
+import AdminUsersSection from '../components/admin/AdminUsersSection.jsx';
+import AdminSponsorsSection from '../components/admin/AdminSponsorsSection.jsx';
+import AdminCronSection, { CRON_STATES } from '../components/admin/AdminCronSection.jsx';
+import '../components/admin/admin.css';
+
+// La sección vive en `?seccion=` y no en la ruta: el ErrorBoundary de App.jsx lleva
+// `key={location.pathname}`, y una ruta por sección desmontaría el panel entero en
+// cada clic, con sus datos.
+const SECTIONS = [
+  { key: 'resumen',        label: 'Resumen',        icon: IconOverview },
+  { key: 'ligas',          label: 'Ligas',          icon: IconLeague },
+  { key: 'organizaciones', label: 'Organizaciones', icon: IconOrganization },
+  { key: 'usuarios',       label: 'Usuarios',       icon: IconUsers },
+  { key: 'patrocinadores', label: 'Patrocinadores', icon: IconSponsor },
+  { key: 'cron',           label: 'Cron',           icon: IconClock },
+];
+
+const SOURCES = {
+  stats:         (token) => api.adminGetStats(token),
+  cron:          (token) => api.adminGetCron(token),
+  sponsors:      () => api.getSponsors(),
+  leagues:       (token) => api.adminGetLeagues(token),
+  organizations: (token) => api.adminGetOrganizations(token),
+  users:         (token) => api.adminGetUsers(token),
+};
+
+// Todo se pide al abrir el panel y se queda aquí: moverse entre secciones es
+// instantáneo, y los avisos de la barra lateral dicen lo mismo que las tablas.
+// Recargar una fuente no borra la anterior, así que la tabla no parpadea después de
+// publicar una liga.
+function useAdminData(token) {
+  const [data, setData] = useState({});
+  const [errors, setErrors] = useState({});
+
+  const reload = useCallback(async (source) => {
+    try {
+      const value = await SOURCES[source](token);
+      setData((current) => ({ ...current, [source]: value }));
+      setErrors((current) => ({ ...current, [source]: '' }));
+    } catch (e) {
+      setErrors((current) => ({ ...current, [source]: e.message }));
+    }
+  }, [token]);
+
+  useEffect(() => {
+    Object.keys(SOURCES).forEach(reload);
+  }, [reload]);
+
+  return { data, errors, reload };
+}
 
 export default function AdminPanel() {
   const { token } = useAuth();
-  const [tab, setTab] = useState('stats');
+  const [params] = useSearchParams();
+  const { data, errors, reload } = useAdminData(token);
 
-  // Va dentro del panel negro, como el resto del área con sesión (Mi panel,
-  // Mis notificaciones). El título no lleva margen arriba: ese aire ya lo da
-  // el relleno del panel.
+  const requested = params.get('seccion');
+  const section = SECTIONS.some((s) => s.key === requested) ? requested : 'resumen';
+
+  // App.jsx sube al inicio solo cuando cambia la ruta, y aquí cambia la búsqueda.
+  useEffect(() => { window.scrollTo(0, 0); }, [section]);
+
   return (
-    <div className="container">
-      <div className="dashboard-panel admin-panel">
-        <div className="dash-header" style={{ marginTop: 0 }}>
-          <div>
-            <span className="eyebrow">Administrador</span>
-            <h1>Panel de control</h1>
-          </div>
-        </div>
+    <div className="adm">
+      <AdminRail section={section} data={data} />
 
-        <div className="tab-bar" style={{ marginBottom: 24 }}>
-          {[
-            { key: 'stats',    label: 'Estadísticas' },
-            { key: 'cron',     label: 'Cron' },
-            { key: 'sponsors', label: 'Patrocinadores' },
-            { key: 'leagues',  label: 'Ligas' },
-            { key: 'organizations', label: 'Organizaciones' },
-            { key: 'users',    label: 'Usuarios' },
-          ].map((t) => (
-            <button
-              key={t.key}
-              className={`tab-btn ${tab === t.key ? 'active' : ''}`}
-              onClick={() => setTab(t.key)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {tab === 'stats'    && <StatsTab    token={token} />}
-        {tab === 'cron'     && <CronTab     token={token} />}
-        {tab === 'sponsors' && <SponsorsTab token={token} />}
-        {tab === 'leagues'  && <LeaguesTab  token={token} />}
-        {tab === 'organizations' && <OrganizationsTab token={token} />}
-        {tab === 'users'    && <UsersTab    token={token} />}
+      <div className="adm-main">
+        {section === 'resumen' && <AdminOverviewSection data={data} errors={errors} />}
+        {section === 'ligas' && (
+          <AdminLeaguesSection
+            leagues={data.leagues}
+            error={errors.leagues}
+            reload={() => reload('leagues')}
+            token={token}
+          />
+        )}
+        {section === 'organizaciones' && (
+          <AdminOrganizationsSection
+            organizations={data.organizations}
+            error={errors.organizations}
+            reload={() => reload('organizations')}
+            token={token}
+          />
+        )}
+        {section === 'usuarios' && (
+          <AdminUsersSection
+            users={data.users}
+            error={errors.users}
+            reload={() => reload('users')}
+            token={token}
+          />
+        )}
+        {section === 'patrocinadores' && (
+          <AdminSponsorsSection
+            sponsors={data.sponsors}
+            stats={data.stats}
+            error={errors.sponsors || errors.stats}
+            reload={() => Promise.all([reload('sponsors'), reload('stats')])}
+            token={token}
+          />
+        )}
+        {section === 'cron' && (
+          <AdminCronSection cron={data.cron} error={errors.cron} reload={() => reload('cron')} />
+        )}
       </div>
     </div>
   );
 }
 
-/* ══════════════════════════════════════════════════════════════
-   ESTADÍSTICAS
-══════════════════════════════════════════════════════════════ */
-function StatsTab({ token }) {
-  const [stats, setStats] = useState(null);
-  const [error, setError] = useState('');
+// Lo único amarillo de la barra es lo que espera a Alfredo. En el teléfono la barra
+// se desliza de lado, y la sección elegida se trae a la vista para que nunca quede
+// escondida a la derecha.
+function AdminRail({ section, data }) {
+  const current = useRef(null);
 
   useEffect(() => {
-    api.adminGetStats(token).then(setStats).catch((e) => setError(e.message));
-  }, [token]);
+    if (window.matchMedia('(max-width: 900px)').matches) {
+      current.current?.scrollIntoView({ inline: 'center', block: 'nearest' });
+    }
+  }, [section]);
 
-  if (error) return <div className="form-error">{error}</div>;
-  if (!stats) return <div className="loading">Cargando…</div>;
+  const requests = data.leagues?.filter(leagueHasRequest).length ?? 0;
+  const unverified = data.organizations?.filter((org) => !org.is_verified).length ?? 0;
+  const cronState = data.cron ? CRON_STATES[data.cron.estado] ?? CRON_STATES.sin_señal : null;
 
-  const items = [
-    { label: 'Ligas registradas', value: stats.leagues,  icon: '🏟️' },
-    { label: 'Usuarios',          value: stats.users,    icon: '👤' },
-    { label: 'Partidos',          value: stats.matches,  icon: '🏈' },
-    { label: 'Equipos',           value: stats.teams,    icon: '⛹️' },
-    { label: 'Visitas a Home',    value: stats.homeViews?.total ?? 0, icon: '👁️' },
-    { label: 'Visitantes únicos', value: stats.homeViews?.uniqueVisitors ?? 0, icon: '🧑‍🤝‍🧑' },
-  ];
-
-  const predictions = stats.predictions ?? { total: 0, uniquePredictors: 0, totalPools: 0, poolMembers: 0 };
-  const participationRate = stats.users > 0 ? Math.round((predictions.uniquePredictors / stats.users) * 100) : 0;
-  const engagementItems = [
-    { label: 'Predicciones hechas',        value: predictions.total,           icon: '🎯' },
-    { label: `Usuarios que predicen (${participationRate}%)`, value: predictions.uniquePredictors, icon: '🙋' },
-    { label: 'Quinielas creadas',          value: predictions.totalPools,      icon: '🏆' },
-    { label: 'Usuarios en quinielas',      value: predictions.poolMembers,     icon: '👥' },
-  ];
-
-  const last30Days = stats.homeViews?.last30Days ?? [];
-  const maxDayCount = Math.max(1, ...last30Days.map((d) => d.count));
+  const badges = { ligas: requests, organizaciones: unverified };
 
   return (
-    <>
-      <div className="admin-stats-grid">
-        {items.map((item) => (
-          <div key={item.label} className="admin-stat-card">
-            <div className="admin-stat-icon">{item.icon}</div>
-            <div className="admin-stat-value">{item.value}</div>
-            <div className="admin-stat-label">{item.label}</div>
-          </div>
-        ))}
-      </div>
-
-      <h3>Crecimiento de usuarios</h3>
-      <UserGrowthChart data={stats.userGrowth ?? []} />
-
-      <h3>Ligas por estado</h3>
-      <LeaguesByStateList data={stats.leaguesByState ?? []} />
-
-      <h3>Participación en quinielas</h3>
-      <div className="admin-stats-grid">
-        {engagementItems.map((item) => (
-          <div key={item.label} className="admin-stat-card">
-            <div className="admin-stat-icon">{item.icon}</div>
-            <div className="admin-stat-value">{item.value}</div>
-            <div className="admin-stat-label">{item.label}</div>
-          </div>
-        ))}
-      </div>
-
-      <h3>Visitas a Home — últimos 30 días</h3>
-      {last30Days.length === 0 ? (
-        <p className="admin-stat-label">Todavía no hay visitas registradas en este periodo.</p>
-      ) : (
-        <div className="admin-bar-chart">
-          {last30Days.map((d) => (
-            <div key={d.day} className="admin-bar-chart-col" title={`${d.day}: ${d.count} visitas`}>
-              <div
-                className="admin-bar-chart-bar"
-                style={{ height: `${(d.count / maxDayCount) * 100}%` }}
-              />
-              <div className="admin-bar-chart-value">{d.count}</div>
-            </div>
-          ))}
+    <aside className="adm-rail">
+      <div className="adm-rail-inner">
+        <div className="adm-rail-title">
+          <strong>Panel de control</strong>
+          <span>Administrador</span>
         </div>
-      )}
-
-      <h3>Patrocinadores — impresiones y clics</h3>
-      {(stats.sponsors ?? []).length === 0 ? (
-        <p className="admin-stat-label">Todavía no hay patrocinadores registrados.</p>
-      ) : (
-        <div className="admin-sponsor-list">
-          {stats.sponsors.map((s) => {
-            const ctr = s.impressions > 0 ? (s.clicks / s.impressions) * 100 : 0;
-            return (
-              <div key={s.id} className="admin-sponsor-row">
-                <div className="admin-sponsor-logo">
-                  <img src={s.logo_url} alt={s.name || 'Patrocinador'} />
-                </div>
-                <div className="admin-sponsor-info">
-                  <div className="who">{s.name || 'Sin nombre'}</div>
-                </div>
-                <div className="admin-sponsor-stats">
-                  <div className="admin-sponsor-stat">
-                    <div className="admin-sponsor-stat-value">{s.impressions}</div>
-                    <div className="admin-sponsor-stat-label">Impresiones</div>
-                  </div>
-                  <div className="admin-sponsor-stat">
-                    <div className="admin-sponsor-stat-value">{s.clicks}</div>
-                    <div className="admin-sponsor-stat-label">Clics</div>
-                  </div>
-                  <div className="admin-sponsor-stat">
-                    <div className="admin-sponsor-stat-value">{ctr.toFixed(1)}%</div>
-                    <div className="admin-sponsor-stat-label">CTR</div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </>
-  );
-}
-
-// Gráfica de línea del total acumulado de usuarios mes a mes. A propósito
-// muestra el ACUMULADO (no altas por mes): es la curva que cuenta la
-// historia de tracción que le importa a un patrocinador, en vez de un
-// conteo con picos y valles que no dice nada por sí solo.
-function UserGrowthChart({ data }) {
-  const [hoverIndex, setHoverIndex] = useState(null);
-
-  if (data.length === 0) {
-    return <p className="admin-stat-label">Todavía no hay usuarios registrados.</p>;
-  }
-
-  const W = 760, H = 220;
-  const marginLeft = 44, marginRight = 16, marginTop = 16, marginBottom = 28;
-  const plotW = W - marginLeft - marginRight;
-  const plotH = H - marginTop - marginBottom;
-  const baselineY = marginTop + plotH;
-  const n = data.length;
-
-  const maxValue = Math.max(...data.map((d) => d.totalUsers), 1);
-  const magnitude = Math.pow(10, Math.floor(Math.log10(maxValue)));
-  const normalized = maxValue / magnitude;
-  const niceStep = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
-  const niceMax = niceStep * magnitude;
-
-  const x = (i) => (n === 1 ? marginLeft + plotW / 2 : marginLeft + (i / (n - 1)) * plotW);
-  const y = (v) => marginTop + plotH - (v / niceMax) * plotH;
-
-  const linePoints = data.map((d, i) => `${x(i)},${y(d.totalUsers)}`).join(' ');
-  const areaPoints = `${marginLeft},${baselineY} ${linePoints} ${x(n - 1)},${baselineY}`;
-
-  const monthLabel = (m) =>
-    new Date(`${m}T00:00:00`).toLocaleDateString('es-MX', { month: 'short', year: '2-digit' });
-
-  // No más de ~6 etiquetas en el eje X para que no se amontonen los meses.
-  const maxLabels = 6;
-  const labelStep = Math.max(1, Math.ceil(n / maxLabels));
-  const lastIndex = n - 1;
-  const hovered = hoverIndex != null ? data[hoverIndex] : null;
-  const last = data[lastIndex];
-
-  return (
-    <div className="admin-line-chart-wrap">
-      <svg
-        className="admin-line-chart-svg"
-        viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="none"
-        role="img"
-        aria-label={`Crecimiento de usuarios: de ${data[0].totalUsers} a ${last.totalUsers} usuarios, entre ${monthLabel(data[0].month)} y ${monthLabel(last.month)}`}
-      >
-        {[0, 0.5, 1].map((step) => {
-          const gy = y(niceMax * step);
-          return (
-            <g key={step}>
-              <line x1={marginLeft} x2={W - marginRight} y1={gy} y2={gy} className="admin-line-chart-grid" />
-              <text x={marginLeft - 8} y={gy} dy="3" className="admin-line-chart-axis-label" textAnchor="end">
-                {Math.round(niceMax * step).toLocaleString('es-MX')}
-              </text>
-            </g>
-          );
-        })}
-
-        <polygon points={areaPoints} className="admin-line-chart-area" />
-        <polyline points={linePoints} className="admin-line-chart-line" />
-
-        {data.map((d, i) => {
-          if (i !== lastIndex && i % labelStep !== 0) return null;
-          const anchor = i === 0 ? 'start' : i === lastIndex ? 'end' : 'middle';
-          return (
-            <text key={d.month} x={x(i)} y={H - 6} textAnchor={anchor} className="admin-line-chart-axis-label">
-              {monthLabel(d.month)}
-            </text>
-          );
-        })}
-
-        {hovered && hoverIndex !== lastIndex && (
-          <>
-            <line x1={x(hoverIndex)} x2={x(hoverIndex)} y1={marginTop} y2={baselineY} className="admin-line-chart-crosshair" />
-            <circle cx={x(hoverIndex)} cy={y(hovered.totalUsers)} r="5" className="admin-line-chart-dot" />
-          </>
-        )}
-
-        {/* Marca del último punto: siempre visible, es el número que más le importa a alguien que solo mira una vez (sin pasar el mouse) */}
-        <circle cx={x(lastIndex)} cy={y(last.totalUsers)} r="5" className="admin-line-chart-dot" />
-        <text x={x(lastIndex)} y={y(last.totalUsers) - 12} textAnchor="end" className="admin-line-chart-end-label">
-          {last.totalUsers.toLocaleString('es-MX')}
-        </text>
-
-        {data.map((d, i) => {
-          const colWidth = plotW / n;
-          return (
-            <rect
-              key={d.month}
-              x={marginLeft + i * colWidth}
-              y={marginTop}
-              width={colWidth}
-              height={plotH}
-              fill="transparent"
-              tabIndex={0}
-              aria-label={`${monthLabel(d.month)}: ${d.totalUsers} usuarios en total, ${d.newUsers} nuevos ese mes`}
-              onMouseEnter={() => setHoverIndex(i)}
-              onFocus={() => setHoverIndex(i)}
-              onMouseLeave={() => setHoverIndex(null)}
-              onBlur={() => setHoverIndex(null)}
+        <nav className="adm-nav" aria-label="Secciones del panel">
+          {SECTIONS.map(({ key, label, icon: Icon }) => (
+            <Link
+              key={key}
+              ref={key === section ? current : null}
+              to={key === 'resumen' ? '/admin' : `/admin?seccion=${key}`}
+              aria-current={key === section ? 'page' : undefined}
             >
-              <title>{`${monthLabel(d.month)}: ${d.totalUsers} usuarios (+${d.newUsers} nuevos)`}</title>
-            </rect>
-          );
-        })}
-      </svg>
-
-      {hovered && (
-        <div
-          className="admin-line-chart-tooltip"
-          style={{ left: `${(x(hoverIndex) / W) * 100}%`, top: `${(y(hovered.totalUsers) / H) * 100}%` }}
-        >
-          <strong>{hovered.totalUsers.toLocaleString('es-MX')} usuarios</strong>
-          <div>{monthLabel(hovered.month)} · +{hovered.newUsers} nuevos</div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Ranking de ligas por estado (hoy, en la práctica, solo estados de México
-// — ver MEXICO_STATES en RegisterLeague.jsx). Es el alcance geográfico que
-// le importa a un patrocinador: en qué regiones ya hay presencia real.
-function LeaguesByStateList({ data }) {
-  if (data.length === 0) {
-    return <p className="admin-stat-label">Todavía no hay ligas registradas.</p>;
-  }
-
-  const max = Math.max(...data.map((d) => d.count), 1);
-
-  return (
-    <div className="admin-state-list">
-      {data.map((d) => (
-        <div key={d.state} className="admin-state-row">
-          <div className="admin-state-name">{d.state}</div>
-          <div className="admin-state-bar-track">
-            <div className="admin-state-bar-fill" style={{ width: `${(d.count / max) * 100}%` }} />
-          </div>
-          <div className="admin-state-count">{d.count}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-
-/* ══════════════════════════════════════════════════════════════
-   CRON — ¿sigue vivo y cada cuánto corre?
-══════════════════════════════════════════════════════════════ */
-
-// El cron que dispara POST /api/notifications/trigger vive FUERA del
-// repositorio, y durante mucho tiempo la única forma de saber si seguía
-// corriendo era entrar al panel del proveedor. De ahí esta pestaña: la app
-// registra cada llamada, así que puede contestar sola las dos preguntas que
-// importan — "¿sigue vivo?" y "¿cada cuánto?".
-//
-// La cadencia no se configura: se mide. 96 llamadas en un día completo son 15
-// minutos entre una y otra.
-
-const CRON_ESTADOS = {
-  ok:         { icono: '🟢', texto: 'Corriendo',  color: 'var(--positive)' },
-  atrasado:   { icono: '🟡', texto: 'Atrasado',   color: 'var(--flag)' },
-  sin_señal:  { icono: '🔴', texto: 'Sin señal',  color: 'var(--danger)' },
-};
-
-function haceCuanto(min) {
-  if (min === null || min === undefined) return 'nunca';
-  if (min < 1)  return 'hace menos de un minuto';
-  if (min < 60) return `hace ${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `hace ${h} h`;
-  const d = Math.floor(h / 24);
-  return d === 1 ? 'hace 1 día' : `hace ${d} días`;
-}
-
-function cadaCuanto(min) {
-  if (!min) return '—';
-  if (min < 60) return `cada ${min} min`;
-  const h = Math.round(min / 60);
-  return h === 24 ? 'una vez al día' : `cada ${h} h`;
-}
-
-function hora(valor) {
-  if (!valor) return '—';
-  return new Date(valor).toLocaleTimeString('es-MX', {
-    hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City',
-  });
-}
-
-// Resume en una línea qué hizo la corrida diaria de cobranza. El objeto que
-// guarda la bitácora es el mismo que el endpoint del cron devuelve.
-function avisos(n) {
-  return n === 1 ? '1 aviso' : `${n} avisos`;
-}
-
-function resumenCobranza(r) {
-  if (!r) return '—';
-  const piezas = [];
-  const liga = r.billing_reminders;
-  const jug  = r.player_billing_reminders;
-  if (liga && (liga.dueSoon || liga.overdue)) piezas.push(`liga: ${avisos(liga.dueSoon + liga.overdue)}`);
-  if (jug  && (jug.dueSoon  || jug.overdue))  piezas.push(`clubes: ${avisos(jug.dueSoon + jug.overdue)}`);
-  if (r.monthly_charges_created)              piezas.push(`${r.monthly_charges_created} mensualidades`);
-  if (r.monthly_charges_error)                piezas.push(`⚠ ${r.monthly_charges_error}`);
-  return piezas.length ? piezas.join(' · ') : 'nada que hacer';
-}
-
-function CronTab({ token }) {
-  const [datos, setDatos] = useState(null);
-  const [error, setError] = useState('');
-
-  const cargar = () => {
-    setError('');
-    api.adminGetCron(token).then(setDatos).catch((e) => setError(e.message));
-  };
-
-  useEffect(cargar, [token]);
-
-  if (error) return <div className="form-error">{error}</div>;
-  if (!datos) return <div className="loading">Cargando…</div>;
-
-  const estado = CRON_ESTADOS[datos.estado] ?? CRON_ESTADOS.sin_señal;
-
-  return (
-    <>
-      <div
-        className="admin-stat-card"
-        style={{ borderLeft: `4px solid ${estado.color}`, marginBottom: 'var(--space-5)' }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 28 }}>{estado.icono}</span>
-          <div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: estado.color }}>{estado.texto}</div>
-            <div className="admin-stat-label">
-              Última llamada {haceCuanto(datos.minutos_desde_ultima_llamada)}
-              {datos.minutos_de_tolerancia
-                ? ` · se considera atrasado pasados ${datos.minutos_de_tolerancia} min`
-                : ''}
-            </div>
-          </div>
-          <button className="btn btn-ghost" style={{ marginLeft: 'auto' }} onClick={cargar}>
-            Actualizar
-          </button>
-        </div>
-      </div>
-
-      <div className="admin-stats-grid">
-        <div className="admin-stat-card">
-          <div className="admin-stat-icon">⏱️</div>
-          <div className="admin-stat-value" style={{ fontSize: 22 }}>
-            {cadaCuanto(datos.cadencia_estimada_min)}
-          </div>
-          <div className="admin-stat-label">
-            Cadencia medida{datos.cadencia_medida_el ? ` el ${datos.cadencia_medida_el}` : ''}
-          </div>
-        </div>
-        <div className="admin-stat-card">
-          <div className="admin-stat-icon">📞</div>
-          <div className="admin-stat-value">{datos.llamadas_hoy}</div>
-          <div className="admin-stat-label">Llamadas hoy ({datos.hoy_mx})</div>
-        </div>
-        <div className="admin-stat-card">
-          <div className="admin-stat-icon">{datos.cobranza_corrio_hoy ? '✅' : '⏳'}</div>
-          <div className="admin-stat-value" style={{ fontSize: 22 }}>
-            {datos.cobranza_corrio_hoy ? 'Sí' : 'Todavía no'}
-          </div>
-          <div className="admin-stat-label">La cobranza corrió hoy</div>
-        </div>
-      </div>
-
-      <h3>Últimos días</h3>
-      {datos.dias.length === 0 ? (
-        <p className="admin-stat-label">
-          Todavía no hay ninguna llamada registrada. Si el cron externo sigue configurado,
-          debería aparecer aquí en cuanto vuelva a correr.
-        </p>
-      ) : (
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Día</th>
-              <th className="col-num">Llamadas</th>
-              <th>Última</th>
-              <th>Cobranza</th>
-              <th>Qué hizo</th>
-            </tr>
-          </thead>
-          <tbody>
-            {datos.dias.map((d) => (
-              <tr key={d.dia}>
-                <td>{d.dia}{d.dia === datos.hoy_mx ? ' (hoy)' : ''}</td>
-                <td className="col-num" style={{ fontVariantNumeric: 'tabular-nums' }}>{d.llamadas}</td>
-                <td>{hora(d.ultima_llamada)}</td>
-                <td>{d.cobranza_ok ? `✅ ${hora(d.cobranza_a_las)}` : '—'}</td>
-                <td>{resumenCobranza(d.cobranza_resultado)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      <p className="admin-stat-label" style={{ marginTop: 'var(--space-4)' }}>
-        Los avisos de partido corren en cada llamada; la cobranza y las mensualidades,
-        una vez al día. La bitácora guarda 120 días.
-      </p>
-    </>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════════
-   PATROCINADORES
-══════════════════════════════════════════════════════════════ */
-function SponsorsTab({ token }) {
-  const [sponsors, setSponsors] = useState([]);
-  const [error, setError]       = useState('');
-  const [modal, setModal]       = useState(null);
-
-  async function load() {
-    try {
-      const data = await api.getSponsors();
-      setSponsors(data);
-    } catch (e) {
-      setError(e.message);
-    }
-  }
-
-  useEffect(() => { load(); }, []);
-
-  return (
-    <div>
-      <div className="section-head">
-        <h2>Patrocinadores <span className="count">{sponsors.length}/4</span></h2>
-        {sponsors.length < 4 && (
-          <button className="btn btn-flag btn-sm" onClick={() => setModal({ type: 'add' })}>
-            + Agregar patrocinador
-          </button>
-        )}
-      </div>
-
-      {error && <div className="form-error">{error}</div>}
-
-      {sponsors.length === 0 ? (
-        <div className="empty-state">
-          <h3>Sin patrocinadores</h3>
-          <p>Agrega hasta 4 logos que aparecerán en la barra lateral del sitio.</p>
-        </div>
-      ) : (
-        <div className="admin-sponsor-list">
-          {sponsors.map((s) => (
-            <div key={s.id} className="admin-sponsor-row">
-              <div className="admin-sponsor-logo">
-                <img src={s.logo_url} alt={s.name || 'Patrocinador'} />
-              </div>
-              <div className="admin-sponsor-info">
-                <div className="who">{s.name || 'Sin nombre'}</div>
-                <div className="info">{s.link_url || 'Sin enlace'}</div>
-              </div>
-              <div className="row-actions">
-                <button className="btn btn-outline btn-sm" onClick={() => setModal({ type: 'edit', sponsor: s })}>
-                  Editar
-                </button>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  style={{ color: 'var(--flag)' }}
-                  onClick={() => setModal({ type: 'delete', sponsor: s })}
-                >
-                  Eliminar
-                </button>
-              </div>
-            </div>
+              <Icon />
+              <span>{label}</span>
+              {badges[key] > 0 && (
+                <span className="adm-nav-badge" aria-label={`${badges[key]} por atender`}>
+                  {formatNumber(badges[key])}
+                </span>
+              )}
+              {key === 'cron' && cronState && (
+                <span
+                  className={`adm-nav-dot is-${cronState.tone}`}
+                  role="img"
+                  aria-label={cronState.text}
+                  title={cronState.text}
+                />
+              )}
+            </Link>
           ))}
-        </div>
-      )}
-
-      {modal?.type === 'add' && (
-        <Modal title="Nuevo patrocinador" onClose={() => setModal(null)}>
-          <SponsorForm
-            submitLabel="Agregar"
-            onCancel={() => setModal(null)}
-            onSubmit={async (payload) => {
-              await api.adminCreateSponsor(payload, token);
-              load();
-              setModal(null);
-            }}
-          />
-        </Modal>
-      )}
-
-      {modal?.type === 'edit' && (
-        <Modal title="Editar patrocinador" onClose={() => setModal(null)}>
-          <SponsorForm
-            initial={modal.sponsor}
-            submitLabel="Guardar"
-            onCancel={() => setModal(null)}
-            onSubmit={async (payload) => {
-              await api.adminUpdateSponsor(modal.sponsor.id, payload, token);
-              load();
-              setModal(null);
-            }}
-          />
-        </Modal>
-      )}
-
-      {modal?.type === 'delete' && (
-        <Modal title="Eliminar patrocinador" onClose={() => setModal(null)}>
-          <p>¿Seguro que quieres eliminar <strong>{modal.sponsor.name || 'este patrocinador'}</strong>?</p>
-          <div className="modal-actions">
-            <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
-            <button className="btn btn-danger" onClick={async () => {
-              await api.adminDeleteSponsor(modal.sponsor.id, token);
-              load();
-              setModal(null);
-            }}>Eliminar</button>
-          </div>
-        </Modal>
-      )}
-    </div>
-  );
-}
-
-function SponsorForm({ initial, onSubmit, onCancel, submitLabel }) {
-  const { token } = useAuth();
-  const fileRef   = useRef(null);
-  const [form, setForm]       = useState({ name: initial?.name || '', logo_url: initial?.logo_url || '', link_url: initial?.link_url || '' });
-  const [uploading, setUploading] = useState(false);
-  const [error, setError]     = useState('');
-  const [loading, setLoading] = useState(false);
-
-  async function handleFile(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const { url } = await api.uploadImage(file, token);
-      setForm((f) => ({ ...f, logo_url: url.startsWith('http') ? url : `${import.meta.env.VITE_API_URL || ''}${url}` }));
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setUploading(false);
-      e.target.value = '';
-    }
-  }
-
-  async function submit(e) {
-    e.preventDefault();
-    if (!form.logo_url) { setError('El logo es obligatorio'); return; }
-    setError('');
-    setLoading(true);
-    try {
-      await onSubmit(form);
-    } catch (e) {
-      setError(e.message);
-      setLoading(false);
-    }
-  }
-
-  return (
-    <form onSubmit={submit}>
-      {error && <div className="form-error">{error}</div>}
-
-      <div className="field">
-        <label>Nombre del patrocinador (opcional)</label>
-        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ej. Coca-Cola" />
+        </nav>
       </div>
-
-      <div className="field">
-        <label>Logo</label>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          {form.logo_url && (
-            <div className="admin-sponsor-logo">
-              <img src={form.logo_url} alt="preview" />
-            </div>
-          )}
-          <input type="file" accept="image/*" ref={fileRef} onChange={handleFile} style={{ display: 'none' }} />
-          <button type="button" className="btn btn-outline btn-sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
-            {uploading ? 'Subiendo…' : '📷 Subir logo'}
-          </button>
-          {form.logo_url && (
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setForm({ ...form, logo_url: '' })}>Quitar</button>
-          )}
-        </div>
-        <input
-          type="text"
-          placeholder="o pega URL: https://…"
-          value={form.logo_url}
-          onChange={(e) => setForm({ ...form, logo_url: e.target.value })}
-          style={{ marginTop: 8 }}
-        />
-      </div>
-
-      <div className="field">
-        <label>Enlace (opcional)</label>
-        <input type="url" value={form.link_url} onChange={(e) => setForm({ ...form, link_url: e.target.value })} placeholder="https://…" />
-      </div>
-
-      <div className="modal-actions">
-        <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancelar</button>
-        <button className="btn btn-flag" disabled={loading}>{loading ? 'Guardando…' : submitLabel}</button>
-      </div>
-    </form>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════════
-   LIGAS
-══════════════════════════════════════════════════════════════ */
-function LeaguesTab({ token }) {
-  const [leagues, setLeagues] = useState([]);
-  const [error, setError]     = useState('');
-  const [modal, setModal]     = useState(null);
-  const [busyId, setBusyId]   = useState(null);
-
-  async function load() {
-    try {
-      const data = await api.adminGetLeagues(token);
-      // Las que solicitaron publicación van primero, para atenderlas sin buscarlas
-      const sorted = [...data].sort((a, b) => {
-        if (a.publish_requested && !b.publish_requested) return -1;
-        if (!a.publish_requested && b.publish_requested) return 1;
-        return 0;
-      });
-      setLeagues(sorted);
-    } catch (e) {
-      setError(e.message);
-    }
-  }
-
-  useEffect(() => { load(); }, []);
-
-  const requestedCount = leagues.filter((lg) => lg.publish_requested && !lg.is_public).length;
-
-  async function togglePublic(lg) {
-    setBusyId(lg.id);
-    try {
-      if (lg.is_public) {
-        await api.adminUnpublishLeague(lg.id, token);
-      } else {
-        await api.adminPublishLeague(lg.id, token);
-      }
-      await load();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function toggleVerified(lg) {
-    setBusyId(lg.id);
-    try {
-      if (lg.is_verified) {
-        await api.adminUnverifyLeague(lg.id, token);
-      } else {
-        await api.adminVerifyLeague(lg.id, token);
-      }
-      await load();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  return (
-    <div>
-      <div className="section-head">
-        <h2>
-          Ligas <span className="count">{leagues.length}</span>
-          {requestedCount > 0 && (
-            <span className="tag" style={{ marginLeft: 8, color: 'var(--live)', borderColor: 'var(--live)' }}>
-              {requestedCount} solicitud{requestedCount !== 1 ? 'es' : ''} de publicación
-            </span>
-          )}
-        </h2>
-      </div>
-
-      {error && <div className="form-error">{error}</div>}
-
-      {leagues.length === 0 ? (
-        <div className="empty-state"><h3>Sin ligas registradas</h3></div>
-      ) : (
-        leagues.map((lg) => (
-          <div key={lg.id} className="admin-match-row">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {lg.logo_url && (
-                <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
-                  <img src={lg.logo_url} alt={lg.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                </div>
-              )}
-              <div>
-                <div className="who">
-                  {lg.name}
-                  <span className="tag" style={{ marginLeft: 8, color: lg.is_public ? 'var(--field)' : 'var(--ink-dim)', borderColor: lg.is_public ? 'var(--field)' : 'var(--line-strong)' }}>
-                    {lg.is_public ? 'Pública' : 'Privada'}
-                  </span>
-                  {lg.is_verified && (
-                    <span className="tag" style={{ marginLeft: 8, color: 'var(--field)', borderColor: 'var(--field)' }}>
-                      ✓ Verificada
-                    </span>
-                  )}
-                  {!lg.is_public && lg.publish_requested && (
-                    <span className="tag" style={{ marginLeft: 8, color: 'var(--live)', borderColor: 'var(--live)' }}>
-                      Solicitó publicarse
-                    </span>
-                  )}
-                </div>
-                <div className="info">
-                  {lg.state && `${lg.state} · `}
-                  {lg.owner_name ? `${lg.owner_name} (${lg.owner_email})` : 'Sin propietario'}
-                </div>
-              </div>
-            </div>
-            <div className="row-actions">
-              <button
-                className={`btn btn-sm ${lg.is_public ? 'btn-outline' : 'btn-flag'}`}
-                disabled={busyId === lg.id}
-                onClick={() => togglePublic(lg)}
-              >
-                {busyId === lg.id ? 'Un momento…' : lg.is_public ? 'Ocultar liga' : 'Publicar liga'}
-              </button>
-              <button
-                className="btn btn-outline btn-sm"
-                disabled={busyId === lg.id}
-                onClick={() => toggleVerified(lg)}
-              >
-                {busyId === lg.id ? 'Un momento…' : lg.is_verified ? 'Quitar verificación' : 'Marcar verificada'}
-              </button>
-              <a href={`/ligas/${lg.slug}`} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
-                Ver
-              </a>
-              {/* Solo tiene sentido ante una solicitud pendiente: rechazar una
-                  liga que nadie pidió publicar no significa nada, y el backend
-                  lo rechaza con 400. */}
-              {!lg.is_public && lg.publish_requested && (
-                <button
-                  className="btn btn-outline btn-sm"
-                  disabled={busyId === lg.id}
-                  onClick={() => setModal({ type: 'decline-league', league: lg })}
-                >
-                  Rechazar solicitud
-                </button>
-              )}
-              <button
-                className="btn btn-ghost btn-sm"
-                style={{ color: 'var(--flag)' }}
-                onClick={() => setModal({ type: 'delete-league', league: lg })}
-              >
-                Eliminar
-              </button>
-            </div>
-          </div>
-        ))
-      )}
-
-
-      {modal?.type === 'decline-league' && (
-        <ConfirmDialog
-          title="Rechazar solicitud de publicación"
-          message={`${modal.league.name} seguirá sin aparecer en el sitio público, pero no se borra nada: su calendario y su configuración quedan intactos.`}
-          detail="El dueño recibe el motivo en su bandeja y puede volver a solicitarlo cuando lo corrija."
-          confirmLabel="Rechazar y avisar"
-          reasonLabel="Motivo (lo va a leer el dueño de la liga)"
-          reasonRequired
-          onConfirm={async (reason) => {
-            await api.adminDeclineLeaguePublish(modal.league.id, reason, token);
-            await load();
-            setModal(null);
-          }}
-          onClose={() => setModal(null)}
-        />
-      )}
-      {modal?.type === 'delete-league' && (
-        <Modal title="Eliminar liga" onClose={() => setModal(null)}>
-          <p>¿Seguro que quieres eliminar <strong>{modal.league.name}</strong> y todos sus datos? Esta acción no se puede deshacer.</p>
-          <div className="modal-actions">
-            <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
-            <button className="btn btn-danger" onClick={async () => {
-              await api.adminDeleteLeague(modal.league.id, token);
-              load();
-              setModal(null);
-            }}>Eliminar</button>
-          </div>
-        </Modal>
-      )}
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════════
-   ORGANIZACIONES (medio, proveedor, tienda, clínica, marca)
-══════════════════════════════════════════════════════════════ */
-const ORG_TYPE_LABELS = {
-  media: 'Medio de comunicación',
-  store: 'Tienda / proveedor',
-  clinic: 'Clínica',
-  brand: 'Marca',
-  // Entran aquí los equipos INDEPENDIENTES (sin liga) y los ENTREGADOS por su
-  // liga, que traen `league_id` y otra etiqueta (ver esEquipoEntregado). Uno de
-  // liga sin entregar no sale: lo administra su liga desde su panel. Ver
-  // GET /admin/organizations.
-  team: 'Equipo independiente',
-};
-
-function esEquipoEntregado(org) {
-  return org.type === 'team' && org.league_id != null;
-}
-
-function OrganizationsTab({ token }) {
-  const [orgs, setOrgs] = useState([]);
-  const [error, setError] = useState('');
-  const [busyId, setBusyId] = useState(null);
-  const [modal, setModal] = useState(null);
-
-  useEffect(() => { load(); }, []);
-
-  async function load() {
-    try {
-      setOrgs(await api.adminGetOrganizations(token));
-    } catch (e) {
-      setError(e.message);
-    }
-  }
-
-  // Publicar y verificar son dos botones, como en Ligas (README,
-  // "Organizaciones: publicar y verificar"). Hasta el 2026-10-29 "Marcar
-  // verificada" también la publicaba.
-  async function togglePublic(org) {
-    setBusyId(org.id);
-    try {
-      if (org.is_public) {
-        await api.adminUnpublishOrganization(org.id, token);
-      } else {
-        await api.adminPublishOrganization(org.id, token);
-      }
-      await load();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function toggleVerified(org) {
-    setBusyId(org.id);
-    try {
-      if (org.is_verified) {
-        await api.adminUnverifyOrganization(org.id, token);
-      } else {
-        await api.adminVerifyOrganization(org.id, token);
-      }
-      await load();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  const unverifiedCount = orgs.filter((o) => !o.is_verified).length;
-
-  return (
-    <div>
-      <div className="section-head">
-        <h2>
-          Organizaciones <span className="count">{orgs.length}</span>
-          {unverifiedCount > 0 && (
-            <span className="tag" style={{ marginLeft: 8, color: 'var(--live)', borderColor: 'var(--live)' }}>
-              {unverifiedCount} sin verificar
-            </span>
-          )}
-        </h2>
-      </div>
-
-      {error && <div className="form-error">{error}</div>}
-
-      {orgs.length === 0 ? (
-        <div className="empty-state"><h3>Sin organizaciones registradas</h3></div>
-      ) : (
-        orgs.map((org) => (
-          <div key={org.id} className="admin-match-row">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {org.logo_url && (
-                <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
-                  <img src={org.logo_url} alt={org.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                </div>
-              )}
-              <div>
-                <div className="who">
-                  {org.name}
-                  <span className="tag" style={{ marginLeft: 8 }}>
-                    {esEquipoEntregado(org) ? 'Equipo entregado' : ORG_TYPE_LABELS[org.type] || org.type}
-                  </span>
-                  {/* Un equipo independiente decide solo si sale en el home
-                      (show_on_platform): aquí se ve, pero no tiene botón. A uno
-                      entregado no le aplica: sale si su liga es pública. */}
-                  {org.type === 'team' ? (
-                    !esEquipoEntregado(org) && (
-                      <span
-                        className="tag"
-                        title="Lo decide el equipo desde su panel"
-                        style={{ marginLeft: 8, color: org.show_on_platform ? 'var(--field)' : 'var(--ink-dim)', borderColor: org.show_on_platform ? 'var(--field)' : 'var(--line-strong)' }}
-                      >
-                        {org.show_on_platform ? 'En el home' : 'Fuera del home'}
-                      </span>
-                    )
-                  ) : (
-                    <span className="tag" style={{ marginLeft: 8, color: org.is_public ? 'var(--field)' : 'var(--ink-dim)', borderColor: org.is_public ? 'var(--field)' : 'var(--line-strong)' }}>
-                      {org.is_public ? 'Pública' : 'Privada'}
-                    </span>
-                  )}
-                  {org.is_verified && (
-                    <span className="tag" style={{ marginLeft: 8, color: 'var(--field)', borderColor: 'var(--field)' }}>
-                      ✓ Verificada
-                    </span>
-                  )}
-                </div>
-                <div className="info">
-                  {org.country_name || 'Sin país'}
-                  {esEquipoEntregado(org) && ` · ${org.league_name}`}
-                </div>
-              </div>
-            </div>
-            <div className="row-actions">
-              {org.type !== 'team' && (
-                <button
-                  className={`btn btn-sm ${org.is_public ? 'btn-outline' : 'btn-flag'}`}
-                  disabled={busyId === org.id}
-                  onClick={() => togglePublic(org)}
-                >
-                  {busyId === org.id ? 'Un momento…' : org.is_public ? 'Ocultar' : 'Publicar'}
-                </button>
-              )}
-              <button
-                className="btn btn-outline btn-sm"
-                disabled={busyId === org.id}
-                onClick={() => toggleVerified(org)}
-              >
-                {busyId === org.id ? 'Un momento…' : org.is_verified ? 'Quitar verificación' : 'Marcar verificada'}
-              </button>
-              {org.type === 'store' && (
-                <button
-                  className={`btn btn-sm ${org.plan === 'pro' ? 'btn-outline' : 'btn-flag'}`}
-                  onClick={() => setModal({ type: 'plan-org', org })}
-                >
-                  {org.plan === 'pro' ? '⚙️ Plan Pro' : 'Activar Pro'}
-                </button>
-              )}
-              {/* El perfil de un equipo vive en `teams`, no en su organización:
-                  /panel/organizacion/:id le enseñaría lo que quedó ahí el día que
-                  nació. El link se queda para una organización sin equipo, que
-                  no tiene ficha que abrir (PD-42). */}
-              {org.team ? (
-                <button className="btn btn-outline btn-sm" onClick={() => setModal({ type: 'team-profile', org })}>
-                  Ver
-                </button>
-              ) : (
-                <a href={`/panel/organizacion/${org.id}`} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
-                  Ver
-                </a>
-              )}
-            </div>
-          </div>
-        ))
-      )}
-
-      {modal?.type === 'team-profile' && (
-        <TeamInfoPanel
-          team={{ ...modal.org.team, is_verified: modal.org.is_verified }}
-          leagueId={modal.org.league_id}
-          onClose={() => setModal(null)}
-        />
-      )}
-
-      {modal?.type === 'plan-org' && (
-        <PlanModal
-          org={modal.org}
-          token={token}
-          onClose={() => setModal(null)}
-          onSaved={() => { setModal(null); load(); }}
-        />
-      )}
-    </div>
-  );
-}
-
-// Modal para activar/renovar el plan Pro de una tienda y guardar los datos
-// de su número de WhatsApp. Mientras no haya cobro automático, esto es lo
-// que el admin llena a mano después de recibir el pago por fuera de la
-// plataforma (transferencia/PayPal). "Días a agregar" suma a la fecha de
-// vencimiento actual (o a hoy si no tenía una) en vez de pedir una fecha
-// exacta, para que renovar un mes más sea un solo clic.
-function PlanModal({ org, token, onClose, onSaved }) {
-  const [plan, setPlan] = useState(org.plan || 'free');
-  const [daysToAdd, setDaysToAdd] = useState(30);
-  const [whatsappPhoneNumberId, setWhatsappPhoneNumberId] = useState(org.whatsapp_phone_number_id || '');
-  const [whatsappDisplayNumber, setWhatsappDisplayNumber] = useState(org.whatsapp_display_number || '');
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const currentExpiry = org.plan_expires_at ? new Date(org.plan_expires_at) : null;
-  const currentlyActive = org.plan === 'pro' && (!currentExpiry || currentExpiry > new Date());
-
-  async function handleSave() {
-    setSaving(true);
-    setError('');
-    try {
-      let plan_expires_at;
-      if (plan === 'pro') {
-        const base = currentExpiry && currentExpiry > new Date() ? currentExpiry : new Date();
-        base.setDate(base.getDate() + Number(daysToAdd || 0));
-        plan_expires_at = base.toISOString();
-      } else {
-        plan_expires_at = null;
-      }
-
-      await api.adminUpdateOrganizationPlan(org.id, {
-        plan,
-        plan_expires_at,
-        whatsapp_phone_number_id: whatsappPhoneNumberId || null,
-        whatsapp_display_number: whatsappDisplayNumber || null,
-      }, token);
-      onSaved();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Modal title={`Plan de ${org.name}`} onClose={onClose}>
-      {error && <div className="form-error">{error}</div>}
-
-      <p style={{ fontSize: 13, color: 'var(--ink-dim)' }}>
-        Estado actual: {currentlyActive
-          ? <strong style={{ color: 'var(--field)' }}>Pro activo{currentExpiry ? ` hasta ${currentExpiry.toLocaleDateString('es-MX')}` : ''}</strong>
-          : <strong>Sin plan activo</strong>}
-      </p>
-
-      <div className="field">
-        <label>Plan</label>
-        <select value={plan} onChange={(e) => setPlan(e.target.value)}>
-          <option value="free">Gratis (sin bot)</option>
-          <option value="pro">Pro (bot de WhatsApp con IA)</option>
-        </select>
-      </div>
-
-      {plan === 'pro' && (
-        <div className="field">
-          <label>Días a agregar desde hoy (o desde el vencimiento actual)</label>
-          <input type="number" min="1" value={daysToAdd} onChange={(e) => setDaysToAdd(e.target.value)} />
-        </div>
-      )}
-
-      <div className="field">
-        <label>WhatsApp Phone Number ID (de Meta for Developers)</label>
-        <input value={whatsappPhoneNumberId} onChange={(e) => setWhatsappPhoneNumberId(e.target.value)} placeholder="1029384756..." />
-      </div>
-
-      <div className="field">
-        <label>Número a mostrar en el perfil (ej. 52 55 1234 5678)</label>
-        <input value={whatsappDisplayNumber} onChange={(e) => setWhatsappDisplayNumber(e.target.value)} placeholder="52 55 1234 5678" />
-      </div>
-
-      <div className="modal-actions">
-        <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-flag" disabled={saving} onClick={handleSave}>
-          {saving ? 'Guardando…' : 'Guardar'}
-        </button>
-      </div>
-    </Modal>
-  );
-}
-
-
-function UsersTab({ token }) {
-  const [users, setUsers]   = useState([]);
-  const [error, setError]   = useState('');
-  const [modal, setModal]   = useState(null);
-  const { user: me }        = useAuth();
-
-  async function load() {
-    try {
-      const data = await api.adminGetUsers(token);
-      setUsers(data);
-    } catch (e) {
-      setError(e.message);
-    }
-  }
-
-  useEffect(() => { load(); }, []);
-
-  return (
-    <div>
-      <div className="section-head">
-        <h2>Usuarios <span className="count">{users.length}</span></h2>
-      </div>
-
-      {error && <div className="form-error">{error}</div>}
-
-      {users.length === 0 ? (
-        <div className="empty-state"><h3>Sin usuarios</h3></div>
-      ) : (
-        users.map((u) => (
-          <div key={u.id} className="admin-match-row">
-            <div>
-              <div className="who">
-                {u.name}
-                {u.role === 'admin' && <span className="tag" style={{ marginLeft: 8, color: 'var(--flag)', borderColor: 'var(--flag)' }}>Admin</span>}
-              </div>
-              <div className="info">
-                {u.email} · {u.league_count} liga{u.league_count !== 1 ? 's' : ''}
-              </div>
-            </div>
-            {u.role !== 'admin' && u.id !== me?.id && (
-              <div className="row-actions">
-                <button
-                  className="btn btn-ghost btn-sm"
-                  style={{ color: 'var(--flag)' }}
-                  onClick={() => setModal({ type: 'delete-user', user: u })}
-                >
-                  Eliminar
-                </button>
-              </div>
-            )}
-          </div>
-        ))
-      )}
-
-      {modal?.type === 'delete-user' && (
-        <Modal title="Eliminar usuario" onClose={() => setModal(null)}>
-          <p>¿Seguro que quieres eliminar a <strong>{modal.user.name}</strong> ({modal.user.email})? Se eliminarán también sus ligas y todos sus datos.</p>
-          <div className="modal-actions">
-            <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
-            <button className="btn btn-danger" onClick={async () => {
-              await api.adminDeleteUser(modal.user.id, token);
-              load();
-              setModal(null);
-            }}>Eliminar</button>
-          </div>
-        </Modal>
-      )}
-    </div>
+    </aside>
   );
 }

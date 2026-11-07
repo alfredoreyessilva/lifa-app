@@ -2,7 +2,7 @@ import { moneyShort, monthLabel } from '../utils/money.js';
 
 // Cobranza por mes. SVG a mano, sin librería de gráficas — la app no tiene
 // ninguna instalada y no vale la pena traer uno de 50 KB para seis barras
-// (mismo criterio que UserGrowthChart en AdminPanel.jsx).
+// (mismo criterio que UserGrowthChart en admin/AdminCharts.jsx).
 //
 // Decisiones de lectura:
 //  - Serie única, un solo color: el acento del club. Sin leyenda — el título

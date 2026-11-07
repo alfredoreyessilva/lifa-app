@@ -1,0 +1,820 @@
+/* ==========================================================================
+   PANEL ADMIN (/admin)
+   Se carga con el panel: quien entra a ver un calendario no descarga esto.
+
+   Una herramienta y no una página: ocupa todo el ancho, sin la cancha alrededor.
+   La barra lateral en verde noche dobla hacia arriba y forma una L con la banda de
+   cada sección, y el trabajo va en un lienzo negro neutro, donde los logos y los
+   datos no compiten con el fondo.
+
+   Cada color tiene un solo trabajo: el amarillo es "esto te toca a ti" (pendientes y
+   la acción principal), el verde son datos, el rojo es lo que no se deshace.
+   ========================================================================== */
+body:has(.adm) .app-layout { min-height: 0; }
+body:has(.adm) .footer { display: none; }
+body:has(.adm) .topbar-inner { max-width: none; }
+
+.adm {
+  /* --field un paso más claro: el verde de marca validado sobre --ws-surface para
+     marcas de gráfica (lo que no se veía era verde sobre tarjetas verdes). */
+  --adm-data: #46a34d;
+  --adm-data-soft: rgba(70, 163, 77, 0.16);
+  --adm-pad: var(--space-6);
+  --adm-max: 1320px;
+  display: grid;
+  grid-template-columns: 228px minmax(0, 1fr);
+  min-height: calc(100vh - var(--topbar-h, 64px));
+  background: var(--mp-noche);
+  color: var(--ws-ink);
+}
+.adm a:focus-visible,
+.adm button:focus-visible,
+.adm input:focus-visible {
+  outline: 2px solid var(--flag);
+  outline-offset: 2px;
+}
+
+/* ---------- Barra lateral ---------- */
+.adm-rail { min-width: 0; }
+.adm-rail-inner {
+  position: sticky;
+  top: var(--topbar-h, 64px);
+  padding: var(--space-5) var(--space-3);
+}
+.adm-rail-title { padding: 0 var(--space-3) var(--space-4); }
+.adm-rail-title strong {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 21px;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: var(--mp-cal);
+}
+.adm-rail-title span { font-size: 12px; color: var(--mp-gris); }
+.adm-nav { display: flex; flex-direction: column; gap: 2px; }
+.adm-nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px var(--space-3);
+  border-radius: var(--radius-md);
+  font-family: var(--font-eyebrow);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  color: var(--mp-gris);
+  text-decoration: none;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.adm-nav a:hover { color: var(--mp-cal); background: rgba(243, 246, 241, 0.05); }
+.adm-nav a[aria-current="page"] {
+  color: var(--mp-cal);
+  background: var(--mp-noche-3);
+  box-shadow: inset 3px 0 0 var(--flag);
+}
+.adm-nav svg { flex-shrink: 0; }
+.adm-nav-badge {
+  margin-left: auto;
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--flag);
+  color: #1a1300;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.adm-nav-dot {
+  margin-left: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.adm-nav-dot.is-on  { background: var(--positive); }
+.adm-nav-dot.is-ask { background: var(--flag); }
+.adm-nav-dot.is-bad { background: var(--danger); }
+
+/* ---------- La banda: título y marcador ---------- */
+.adm-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  container-type: inline-size;
+}
+.adm-band { padding: var(--space-5) var(--adm-pad) 0; }
+.adm-band-top,
+.adm-score,
+.adm-canvas > * { max-width: var(--adm-max); }
+.adm-band-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.adm-band-actions { flex-shrink: 0; }
+.adm-band h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 32px;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  color: var(--mp-cal);
+}
+
+/* El marcador: una sola pieza, no seis tarjetas. El -16 px alinea el texto de la
+   primera celda con el título: la celda conserva su relleno para el hover. */
+.adm-score {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  margin: var(--space-3) 0 0 calc(var(--space-4) * -1);
+}
+.adm-score-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 0;
+  padding: var(--space-2) var(--space-4) var(--space-4);
+  border: 0;
+  border-left: 1px solid var(--mp-linea);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.adm-score-cell:first-child { border-left-color: transparent; }
+.adm-score-label {
+  max-width: 100%;
+  overflow: hidden;
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  color: var(--mp-gris);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adm-score-value {
+  font-family: var(--font-display);
+  font-size: 38px;
+  line-height: 1.2;
+  color: var(--mp-cal);
+}
+.adm-score-value.is-attention { color: var(--flag); }
+/* Texto y no cifra ("Corriendo", "Cada 4 h"): misma caja que un número, para que la
+   fila no brinque entre secciones. */
+.adm-score-value.is-text {
+  display: flex;
+  align-items: center;
+  min-height: 46px;
+  font-family: var(--font-eyebrow);
+  font-size: 21px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+}
+.adm-score-value.is-text .adm-status { font-size: inherit; color: inherit; gap: 9px; }
+.adm-score-sub { font-size: 12px; color: var(--mp-gris); }
+.adm-score-cell.is-filter {
+  cursor: pointer;
+  box-shadow: inset 0 -3px 0 transparent;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+.adm-score-cell.is-filter:hover { background: rgba(243, 246, 241, 0.05); }
+.adm-score-cell.is-filter.is-active { box-shadow: inset 0 -3px 0 var(--flag); }
+.adm-score-cell.is-filter.is-active .adm-score-label { color: var(--mp-cal); }
+
+/* ---------- El lienzo ---------- */
+.adm-canvas {
+  flex: 1;
+  padding: var(--space-5) var(--adm-pad) var(--space-7);
+  border-top-left-radius: var(--radius-xl);
+  background: var(--ws-surface);
+}
+.adm-canvas-title {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-eyebrow);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--ws-ink);
+}
+.adm-note { margin: var(--space-3) 0 0; font-size: 12.5px; color: var(--ws-ink-dim); }
+.adm-faint,
+.adm-table tbody td.adm-faint { color: var(--ws-ink-dim); }
+.adm-num { font-variant-numeric: tabular-nums; }
+.adm-loading {
+  padding: var(--space-7) 0;
+  color: var(--ws-ink-dim);
+  font-size: 14px;
+  text-align: center;
+}
+.adm-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- Por atender ---------- */
+.adm-attention {
+  margin-bottom: var(--space-5);
+  overflow: hidden;
+  border: 1px solid rgba(255, 210, 63, 0.32);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 210, 63, 0.05);
+}
+.adm-attention-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 11px var(--space-4);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ws-ink);
+  text-decoration: none;
+}
+.adm-attention-row + .adm-attention-row { border-top: 1px solid rgba(255, 210, 63, 0.16); }
+.adm-attention-row:hover { background: rgba(255, 210, 63, 0.06); }
+.adm-attention-row.is-ask .adm-status-dot { color: var(--flag); }
+.adm-attention-row.is-bad .adm-status-dot { color: var(--danger); }
+.adm-attention-text { flex: 1; min-width: 0; }
+.adm-attention-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--flag);
+}
+
+/* ---------- Tablero del Resumen ----------
+   Una sola pieza partida con líneas, como el marcador: `gap` de 1 px sobre el fondo
+   de línea, en vez de tarjetas sueltas con su propia sombra. */
+.adm-board {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-lg);
+  background: var(--ws-line);
+}
+.adm-cell {
+  min-width: 0;
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  background: var(--ws-surface);
+}
+.adm-cell h2 {
+  margin: 0;
+  font-family: var(--font-eyebrow);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  color: var(--ws-ink);
+}
+.adm-cell-sub { margin: 2px 0 var(--space-4); font-size: 12.5px; color: var(--ws-ink-dim); }
+
+/* ---------- Gráficas ---------- */
+.adm-chart { position: relative; }
+.adm-chart svg { display: block; touch-action: pan-y; }
+.adm-chart:focus { outline: none; }
+.adm-chart:focus-visible {
+  outline: 2px solid var(--flag);
+  outline-offset: 4px;
+  border-radius: var(--radius-sm);
+}
+.adm-chart-empty { margin: var(--space-6) 0; color: var(--ws-ink-dim); font-size: 13px; text-align: center; }
+.adm-chart-grid { stroke: var(--ws-line); stroke-width: 1; shape-rendering: crispEdges; }
+.adm-chart-axis {
+  fill: var(--ws-ink-dim);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.adm-chart-area { fill: var(--adm-data); fill-opacity: 0.12; stroke: none; }
+.adm-chart-line {
+  fill: none;
+  stroke: var(--adm-data);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.adm-chart-dot { fill: var(--adm-data); stroke: var(--ws-surface); stroke-width: 2; }
+.adm-chart-end {
+  fill: var(--ws-ink);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+}
+.adm-chart-crosshair { stroke: var(--ws-line-strong); stroke-width: 1; shape-rendering: crispEdges; }
+.adm-chart-bar { fill: var(--adm-data); }
+.adm-chart-bar.is-hovered { filter: brightness(1.3); }
+.adm-tooltip {
+  position: absolute;
+  z-index: 2;
+  padding: 6px 10px;
+  border: 1px solid var(--ws-line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--ws-surface-3);
+  box-shadow: var(--shadow-md);
+  color: var(--ws-ink-dim);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 10px));
+}
+.adm-tooltip strong {
+  display: block;
+  color: var(--ws-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+.adm-rank {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.adm-rank li {
+  display: grid;
+  grid-template-columns: minmax(0, 180px) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+}
+.adm-rank-name {
+  overflow: hidden;
+  color: var(--ws-ink);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adm-rank-track { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+/* El largo sale de lo que queda después de reservarle lugar a la cifra: si la barra
+   más larga se encogiera sola para dejárselo, dejaría de ser proporcional. */
+.adm-rank-bar {
+  flex: none;
+  width: calc((100% - 44px) * var(--share));
+  min-width: 2px;
+  height: 8px;
+  border-radius: 0 3px 3px 0;
+  background: var(--adm-data);
+}
+.adm-rank-value { color: var(--ws-ink); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.adm-text-button {
+  margin-top: var(--space-3);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--flag);
+  font-family: var(--font-body);
+  font-size: 13px;
+  cursor: pointer;
+}
+.adm-text-button:hover { text-decoration: underline; }
+.adm-meter-row { display: flex; align-items: center; gap: var(--space-3); }
+.adm-meter {
+  flex: 1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--adm-data-soft);
+}
+.adm-meter span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--adm-data);
+}
+.adm-meter-value {
+  font-family: var(--font-display);
+  font-size: 24px;
+  line-height: 1;
+  color: var(--ws-ink);
+}
+.adm-facts { margin: var(--space-4) 0 0; }
+.adm-facts > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 9px 0;
+  border-top: 1px solid var(--ws-line);
+}
+.adm-facts > div:last-child { padding-bottom: 0; }
+.adm-facts dt { color: var(--ws-ink-dim); font-size: 13px; }
+.adm-facts dd {
+  margin: 0;
+  color: var(--ws-ink);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Tablas ---------- */
+.adm-toolbar { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
+.adm-search { position: relative; flex: 1; max-width: 420px; color: var(--ws-ink-dim); }
+.adm-search svg { position: absolute; top: 50%; left: 11px; transform: translateY(-50%); pointer-events: none; }
+.adm-search input {
+  width: 100%;
+  padding: 9px 12px 9px 35px;
+  border: 1px solid var(--ws-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--ws-surface-2);
+  color: var(--ws-ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+}
+.adm-search input::placeholder { color: var(--ws-ink-dim); opacity: 1; }
+.adm-table-box {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-lg);
+}
+.adm-table-box .table-wrap { border: 0; border-radius: 0; background: none; }
+/* Columnas fijas: con la tabla en automático, cada página de resultados las movía de
+   lugar según los nombres que le tocaran. */
+.adm-table { table-layout: fixed; font-size: 13.5px; }
+.adm-table thead th { color: var(--ws-ink-dim); font-size: 11px; }
+.adm-table tbody td { padding: 10px var(--space-3); }
+.adm-table thead th:first-child,
+.adm-table tbody td:first-child { padding-left: var(--space-4); }
+.adm-table thead th:last-child,
+.adm-table tbody td:last-child { padding-right: var(--space-4); }
+.adm-table tbody tr:nth-child(even) { background: none; }
+.adm-table tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
+.adm-table tbody tr.is-busy { opacity: 0.55; }
+.adm-table tbody tr.is-request {
+  background: rgba(255, 210, 63, 0.05);
+  box-shadow: inset 3px 0 0 var(--flag);
+}
+.adm-cell-clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-cron-table { min-width: 720px; }
+.adm-who { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.adm-who-logo {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--ws-surface-3);
+  object-fit: contain;
+}
+.adm-who-logo.is-round { border-radius: 50%; }
+.adm-who-logo.is-initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ws-ink-dim);
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+}
+.adm-who-text { display: flex; flex-direction: column; min-width: 0; }
+.adm-who-name,
+.adm-who-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-who-name { color: var(--ws-ink); font-weight: 600; }
+.adm-who-name.is-plain { font-weight: 400; }
+.adm-who-sub { color: var(--ws-ink-dim); font-size: 12px; }
+/* En Usuarios el correo tiene su columna: debajo del nombre solo hace falta cuando
+   esa columna se esconde. */
+.adm-users-table .adm-who-sub { display: none; }
+.adm-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ws-ink);
+  font-size: 13px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.adm-state { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+/* 15 px: lo que mide el punto del renglón de arriba, para que las dos palabras
+   arranquen en la misma columna. */
+.adm-verified { padding-left: 15px; color: var(--ws-ink-dim); font-size: 12px; white-space: nowrap; }
+.adm-verified.is-on { color: var(--positive); }
+.adm-status-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.adm-status.is-on svg,
+.adm-status.is-on .adm-status-dot { color: var(--positive); }
+.adm-status.is-ask .adm-status-dot { color: var(--flag); }
+.adm-status.is-bad .adm-status-dot { color: var(--danger); }
+.adm-status.is-off { color: var(--ws-ink-dim); }
+.adm-status.is-off .adm-status-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--ws-ink-faint);
+}
+.adm-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.adm-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ws-ink-dim);
+  cursor: pointer;
+}
+.adm-more:hover,
+.adm-more[aria-expanded="true"] { background: var(--ws-surface-3); color: var(--ws-ink); }
+.adm-more[disabled] { opacity: 0.4; cursor: not-allowed; }
+/* Va en un portal, fuera de .adm: solo puede usar los tokens de :root. */
+.adm-menu {
+  position: fixed;
+  z-index: 40;
+  min-width: 196px;
+  padding: 6px;
+  border: 1px solid var(--ws-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--ws-surface-2);
+  box-shadow: var(--shadow-lg);
+}
+.adm-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ws-ink);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.adm-menu-item:hover,
+.adm-menu-item:focus { background: var(--ws-surface-3); outline: none; }
+.adm-menu-item.is-danger,
+.adm-danger-text { color: #ff8f8f; }
+.adm-danger-text:hover { color: var(--danger); }
+.adm-menu-divider { height: 1px; margin: 6px 0; background: var(--ws-line); }
+.adm-table-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 48px;
+  padding: 8px var(--space-4);
+  border-top: 1px solid var(--ws-line);
+  color: var(--ws-ink-dim);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.adm-pager { display: flex; align-items: center; gap: var(--space-2); }
+.adm-pager button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--ws-line-strong);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ws-ink);
+  cursor: pointer;
+}
+.adm-pager button:hover:not(:disabled) { border-color: var(--flag); color: var(--flag); }
+.adm-pager button:disabled { opacity: 0.35; cursor: default; }
+.adm-no-results {
+  padding: var(--space-7) var(--space-4);
+  border: 1px dashed var(--ws-line-strong);
+  border-radius: var(--radius-lg);
+  color: var(--ws-ink-dim);
+  font-size: 14px;
+  text-align: center;
+}
+.adm-no-results p { max-width: 460px; margin: 0 auto; }
+.adm-no-results .btn { margin-top: var(--space-3); }
+
+/* ---------- Patrocinadores: un lugar por logo ---------- */
+.adm-slots {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.adm-slot {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-lg);
+}
+.adm-slot.is-free {
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 340px;
+  border: 1px dashed var(--ws-line-strong);
+  background: none;
+  color: var(--ws-ink-dim);
+  font-family: var(--font-eyebrow);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.adm-slot.is-free:hover { border-color: var(--flag); color: var(--flag); }
+/* El verde de .sponsor-logo: un logo se revisa sobre el fondo en el que va a salir. */
+.adm-slot-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 112px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--card);
+}
+.adm-slot-logo.is-small { width: 64px; height: 64px; }
+.adm-slot-logo img { width: 100%; height: 100%; padding: var(--space-2); object-fit: contain; }
+.adm-slot-body { min-width: 0; margin-top: var(--space-3); }
+.adm-slot-body h2 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ws-ink);
+  font-family: var(--font-eyebrow);
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adm-slot-link {
+  display: block;
+  overflow: hidden;
+  color: var(--ws-ink-dim);
+  font-size: 12.5px;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+a.adm-slot-link:hover { color: var(--ws-ink); text-decoration: underline; }
+.adm-slot .adm-facts { margin-top: var(--space-3); }
+.adm-slot-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: auto;
+  padding-top: var(--space-4);
+}
+.adm-slot-actions .adm-danger-text { margin-left: auto; }
+.adm-logo-field { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+
+/* ---------- Cron ---------- */
+.adm-mini { display: grid; grid-template-columns: minmax(0, 1fr) 32px; align-items: center; gap: var(--space-2); }
+.adm-mini-track { display: block; height: 6px; }
+.adm-mini-track span {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 0 3px 3px 0;
+  background: var(--adm-data);
+}
+.adm-mini .adm-num { text-align: right; }
+
+/* ---------- Las ventanas, sobre el lienzo ----------
+   El modal de la app es verde porque nace sobre la cancha. Aquí se abriría una caja
+   verde con campos verdes y letra amarilla sobre un panel negro. */
+body:has(.adm) .modal {
+  border-color: var(--ws-line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--ws-surface-2);
+  color: var(--ws-ink);
+}
+/* Anton trae un solo peso: el negrita de fábrica de un h3 lo embarra. */
+body:has(.adm) .modal h3 { font-weight: 400; }
+body:has(.adm) .modal .field label { color: var(--ws-ink-dim); }
+body:has(.adm) .modal .field input,
+body:has(.adm) .modal .field select {
+  border-color: var(--ws-line-strong);
+  background: var(--ws-surface);
+  color: var(--ws-ink);
+}
+body:has(.adm) .modal .field input::placeholder { color: var(--ws-ink-dim); }
+.adm-modal-note { color: var(--ws-ink-dim); font-size: 13px; }
+.adm-modal-note .is-on { color: var(--positive); }
+
+/* ---------- Según el ancho del lienzo, no el de la ventana ----------
+   Con la barra lateral puesta, una ventana de 1100 px deja 870 de lienzo; sin ella, una
+   de 880 deja casi lo mismo. Lo que decide qué cabe es el lienzo. */
+@container (max-width: 980px) {
+  .adm-col-date { display: none; }
+  .adm-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .adm-slot.is-free { min-height: 160px; }
+}
+@container (max-width: 860px) {
+  .adm-board { grid-template-columns: minmax(0, 1fr); }
+}
+@container (max-width: 720px) {
+  .adm-score {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-left: 0;
+  }
+  .adm-score:has(> :nth-child(4):last-child) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .adm-score-cell {
+    padding: var(--space-2) var(--space-2) var(--space-3) 0;
+    border-top: 1px solid var(--mp-linea);
+    border-left: 0;
+  }
+  .adm-score-cell.is-filter { padding-left: var(--space-2); }
+  .adm-score-value { font-size: 30px; }
+  .adm-score-value.is-text { min-height: 36px; font-size: 17px; }
+  .adm-search { max-width: none; }
+}
+/* Sin lugar para las columnas, cada fila es una ficha: nombre, estado y acciones. La
+   fecha se queda fuera y el responsable toma todo el ancho, porque es lo que se mira
+   antes de aprobar. El cron no se vuelve ficha: sus columnas solo se entienden juntas,
+   y se desliza. */
+@container (max-width: 760px) {
+  .adm-table:not(.adm-cron-table),
+  .adm-table:not(.adm-cron-table) tbody { display: block; width: auto; }
+  .adm-table:not(.adm-cron-table) thead { display: none; }
+  .adm-table:not(.adm-cron-table) tbody tr {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--ws-line);
+  }
+  .adm-table:not(.adm-cron-table) tbody tr:last-child { border-bottom: 0; }
+  .adm-table:not(.adm-cron-table) tbody td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+  .adm-table:not(.adm-cron-table) tbody td.adm-col-date { display: none; }
+  .adm-table:not(.adm-cron-table) .adm-who-text { width: 100%; }
+  .adm-table:not(.adm-cron-table) .adm-state { flex-direction: row; align-items: center; gap: var(--space-3); }
+  .adm-table:not(.adm-cron-table) .adm-verified { padding-left: 0; }
+  .adm-table:not(.adm-cron-table) .adm-row-actions { flex-wrap: wrap; justify-content: flex-start; }
+
+  /* Usuarios solo tiene su rol y el menú: caben en el renglón del nombre, con el
+     correo debajo de él en vez de en una columna propia. */
+  .adm-table.adm-users-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto 32px;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .adm-table.adm-users-table tbody td.adm-col-owner,
+  .adm-table.adm-users-table tbody td.col-num { display: none; }
+  .adm-users-table .adm-who-sub { display: block; }
+}
+@container (max-width: 620px) {
+  .adm-slots { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 900px) {
+  .adm { grid-template-columns: minmax(0, 1fr); --adm-pad: var(--space-4); }
+  .adm-rail {
+    position: sticky;
+    top: var(--topbar-h, 64px);
+    z-index: 15;
+    background: var(--mp-noche);
+    border-bottom: 1px solid var(--mp-linea);
+  }
+  .adm-rail-inner { position: static; padding: 0 var(--space-2); }
+  .adm-rail-title { display: none; }
+  .adm-nav {
+    flex-direction: row;
+    padding: var(--space-2) 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .adm-nav::-webkit-scrollbar { display: none; }
+  .adm-nav a { flex-shrink: 0; padding: 7px 10px; font-size: 14px; }
+  .adm-nav a[aria-current="page"] { box-shadow: inset 0 -2px 0 var(--flag); }
+  .adm-nav-badge,
+  .adm-nav-dot { margin-left: 2px; }
+  .adm-canvas { border-top-left-radius: 0; }
+  .adm-cell { padding: var(--space-4); }
+  .adm-rank li { grid-template-columns: minmax(0, 120px) minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adm *,
+  .adm-menu { transition: none !important; }
+}

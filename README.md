@@ -98,7 +98,7 @@ backend no responde, si el HTTP no es 200, o si `partidos_error` no viene
 
 **Lo que GitHub entrega de verdad es una llamada cada ~4 horas** (medido el
 2026-09-23: 8, 7, 5, 6 y 4 llamadas del 19 al 23 de septiembre). Las llamadas
-de la pestaña Cron coinciden una por una con las corridas del workflow, a la
+de la sección Cron coinciden una por una con las corridas del workflow, a la
 misma hora, así que **el cron externo de antes ya no llama**: no hay nada que
 apagar. A la cobranza le basta, porque corre una vez al día. A los avisos push
 de partido no: el de "próximo" salió en 0 de 29 partidos de ONEFA en dos
@@ -120,9 +120,9 @@ El secreto se acepta en **dos formatos**, `x-cron-secret: <secreto>` y
 mandan solo el segundo (Vercel Cron entre ellos), y aceptar los dos es lo que
 deja cambiar de proveedor sin tocar el backend.
 
-### ¿Sigue vivo? ¿Cada cuánto corre? — pestaña Cron del panel admin
+### ¿Sigue vivo? ¿Cada cuánto corre? — sección Cron del panel admin
 
-`GET /api/admin/cron` y la pestaña **Cron** de `/admin` contestan las dos
+`GET /api/admin/cron` y la sección **Cron** de `/admin` contestan las dos
 preguntas con lo que la propia app registró. Cada llamada al endpoint incrementa
 un contador en `cron_runs` (fila `phase='trigger'`, una por día, con `calls` y
 `last_call_at`). Una fila por día y no una por llamada: con el cron cada 15
@@ -797,6 +797,8 @@ lifa-app/
                                  quien tenga el permiso `asistencia`. No son dos
                                  pantallas: lo que cambia es si se puede marcar
       components/
+        admin/                   El Panel Admin: una sección por archivo, sus piezas
+                                 y su CSS, que se carga con el panel (ver "Panel Admin")
         MatchHero.jsx            La portada de un partido: la cancha de noche, las
                                  end zones y los dos cascos (ver "La página de un
                                  partido"). Junto a ella, las secciones: MatchPoll,
@@ -2084,7 +2086,7 @@ sobre movimientos contables — ahora muestra qué se cancela y pide el motivo, 
 queda asentado en el libro), **`LedgerEntryList.jsx`** (la misma lista de
 movimientos que estaba copiada dos veces en línea, ahora sirve a los tres
 libros), **`MonthlyFlowChart.jsx`** (SVG a mano, sin librería, mismo criterio que
-`UserGrowthChart` en `AdminPanel.jsx`) y **`utils/money.js`** (el formateo de
+`UserGrowthChart` en `components/admin/AdminCharts.jsx`) y **`utils/money.js`** (el formateo de
 pesos que estaba duplicado en cuatro archivos).
 
 ### Fase B — renombrar la superficie (HECHA)
@@ -5799,7 +5801,7 @@ verificación no lo sacaba de los partidos donde ya estaba.
 
 ### Los equipos independientes no se publican desde aquí
 
-En la pestaña Organizaciones también salen los equipos sin liga, pero solo con
+En la sección Organizaciones también salen los equipos sin liga, pero solo con
 "Marcar verificada". Si salen en el home lo decide el propio equipo con
 `teams.show_on_platform` ("Mostrar en el home", ver "Equipos independientes"),
 sin aprobación de nadie, y eso no cambia. La fila dice "En el home" o "Fuera
@@ -5813,7 +5815,7 @@ con `teams.show_on_platform`; publicar u ocultar uno de esos por aquí contesta
 ### Un equipo de liga entra a la lista cuando se entrega
 
 **Decidido el 2026-11-06, a pedido de Alfredo.** Un equipo creado por una liga
-no salía en la pestaña Organizaciones ni después de entregado, así que no había
+no salía en la sección Organizaciones ni después de entregado, así que no había
 cómo verificarlo. El filtro preguntaba por `teams.league_id`, que se queda
 puesta para siempre, y su razón era que a ese equipo lo administra su liga desde
 su panel: justo lo que deja de ser cierto al entregarlo.
@@ -5822,7 +5824,7 @@ Ahora la pregunta es la misma que decide todo lo demás de un equipo entregado:
 si hay alguien en `organization_members` (`orgTieneMiembrosSql`, junto a
 `orgTieneMiembros()`, en `utils/orgMembers.js`).
 
-| Equipo | En la pestaña Organizaciones |
+| Equipo | En la sección Organizaciones |
 |-|-|
 | De liga, sin entregar | No sale: lo administra su liga |
 | De liga, entregado | Sale, con "Marcar verificada" |
@@ -6084,6 +6086,104 @@ bot.
 - Cubrir el bot en el Aviso de Privacidad (ver "Pendientes abiertos").
 - Checkout self-serve que reemplace la activación manual del plan (Fase 2 del
   roadmap de negocio).
+
+## Panel Admin
+
+`/admin` es desde donde se opera la plataforma: qué ligas publicar, qué organizaciones
+verificar, quién entró, cómo van los patrocinadores y si el cron sigue vivo. **Rehecho el
+2026-11-06**, cuando Alfredo pidió que se viera como un panel profesional. Lo que había
+funcionaba, pero eran seis pestañas dentro de la tarjeta negra, tarjetas verdes con emojis,
+listas de cientos de filas sin buscador y cuatro o cinco botones repetidos en cada renglón.
+
+### Una herramienta, no una página
+
+Ocupa todo el ancho, sin la cancha alrededor: una tarjeta flotando sobre el pasto se lee
+como una página más del sitio. La barra lateral va en verde noche (`--mp-noche`, el del
+calendario) y dobla hacia arriba para formar una L con la banda de cada sección; el trabajo
+va en un lienzo negro neutro (`--ws-surface`), donde los logos y los datos no compiten con
+el fondo. El pie de la app no sale aquí, igual que la barra de patrocinadores.
+
+Todas las secciones tienen la misma forma, **el marcador arriba y el trabajo abajo**, para
+que moverse entre ellas no obligue a volver a aprender dónde está cada cosa:
+
+| Sección | Marcador | Trabajo |
+|-|-|-|
+| Resumen | Usuarios, ligas, equipos, partidos, visitas, visitantes únicos | Lo que te toca atender, y cuatro gráficas en un solo tablero |
+| Ligas | Registradas, solicitudes, públicas, privadas, verificadas | Tabla, con las solicitudes arriba |
+| Organizaciones | Registradas, sin verificar y una celda por tipo con filas | Tabla |
+| Usuarios | Registrados, nuevos este mes, dueños de liga, administradores | Tabla |
+| Patrocinadores | Lugares ocupados, impresiones, clics, CTR | Los cuatro lugares de la barra lateral |
+| Cron | Estado, última llamada, cadencia, llamadas hoy, cobranza de hoy | Los últimos 14 días |
+
+El alcance de cada patrocinador estaba en Estadísticas, lejos del logo al que se refiere.
+Ahora vive adentro de su lugar, y el Resumen ya no lo repite.
+
+### Las celdas del marcador son los filtros
+
+En Ligas, Organizaciones y Usuarios cada celda filtra la tabla. El número de "Públicas" y un
+filtro "Públicas" serían dos renglones diciendo lo mismo: es un solo control. El filtro vive
+en la dirección (`?filtro=`), así que recargar no te saca de donde estabas y "Revisar", en
+el Resumen, llega ya filtrado.
+
+### Cada color tiene un solo trabajo
+
+- **Amarillo: esto te toca a ti.** Los avisos de la barra lateral, las cifras pendientes, la
+  acción principal. Un estado que no pide nada, como ser administrador, no va en amarillo.
+- **Verde: datos.** Las marcas de las gráficas, en `--field` un paso más claro (`#46a34d`,
+  validado sobre el lienzo). La línea de crecimiento no se veía porque era verde sobre
+  tarjetas verdes; el problema era el fondo, no el color.
+- **Rojo: lo que no se deshace.**
+
+Un estado siempre lleva su palabra junto al punto: el color solo no dice nada a quien no lo
+distingue.
+
+### Una fila no es una botonera
+
+Cada renglón lleva "Ver" y un menú `⋯`. Solo lo que pide una decisión saca su botón a la
+vista:
+
+- **Una solicitud de publicación** trae "Publicar". "Rechazar solicitud" va en el menú: abre
+  un diálogo que exige el motivo, y un segundo botón le quitaba al nombre de la liga la
+  mitad de su columna en una laptop.
+- **Una organización sin verificar** trae "Marcar verificada" solo en el filtro "Sin
+  verificar", que es la cola de trabajo. En la lista completa ese botón era una pared: 122
+  de 126 filas en `desarrollo-local`.
+
+Borrar una liga, un usuario o un patrocinador pasa por `ConfirmDialog`. Antes un error del
+servidor ahí se perdía y la ventana se quedaba abierta sin decir nada.
+
+### Por qué `?seccion=` y no una ruta
+
+`ErrorBoundary` lleva `key={location.pathname}` en `App.jsx`, y una ruta por sección
+desmontaría el panel entero en cada clic. Con `?seccion=` el panel pide todo una vez al abrir
+y se queda con ello: moverse es instantáneo, y los avisos de la barra lateral dicen lo mismo
+que las tablas. Después de una acción se recarga solo la fuente que cambió, sin borrar la
+anterior, para que la tabla no parpadee.
+
+### Lo que la pantalla resuelve al leer
+
+- **`COUNT(*)` llega como texto.** `pg` no convierte bigint y el proyecto no le puso parser,
+  así que `stats.leagues` es `"99"` y `league_count` es `"1"`. Por eso decía "1 ligas".
+- **`last30Days` trae solo los días con visitas.** Pintados tal cual, cinco días sueltos de
+  un mes salían pegados y parecían cinco días seguidos. `fillDays` arma los 30 con cero en
+  los demás.
+- **Las gráficas se dibujan en píxeles reales**, midiendo su contenedor. La anterior escalaba
+  el texto con un `viewBox` y en un teléfono las etiquetas bajaban a menos de 5 px.
+
+### Lo que no se ve
+
+Las reglas puras están en `utils/adminPanel.js`, con sus pruebas. Cada sección es un archivo
+en `components/admin/`, y su CSS (`admin.css`) se carga con el panel: quien entra a ver un
+calendario no lo descarga. `styles.css` bajó 274 líneas en vez de crecer.
+
+### Fuera de esta versión
+
+- **Ordenar una tabla por columna.** Hoy conserva el orden del backend, con lo pendiente
+  arriba, y la búsqueda alcanza para encontrar una fila.
+- **Elegir el rango de las gráficas.** Sería un filtro de una fila arriba del tablero, y el
+  backend solo manda 30 días.
+- **Juntar los estados mal capturados.** "CIUDAD DE MEXICO" y "CIUDAD DE MÉXICO" salen como
+  dos filas en Ligas por estado: el campo es texto libre y el ranking lo cuenta como viene.
 
 ## Seguridad — decisiones ya tomadas
 
