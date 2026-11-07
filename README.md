@@ -4372,6 +4372,39 @@ rankings y los avisos de "Mis notificaciones" —ver "Los avisos de tus
 predicciones"—, que avisan si acertaste y en qué lugar vas al cerrar cada
 jornada.
 
+### La fila dice aciertos
+
+Una fila del ranking trae dos cuentas distintas: `99/129 aciertos` son partidos
+acertados sobre partidos calificados, y `101 pts` son puntos. Durante la temporada
+regular siempre coinciden, así que nadie tenía por qué distinguirlas. El
+2026-11-07, con los dos primeros playoffs de ONEFA calificados, el primer lugar
+quedó con 101 pts y 99/129, y Alfredo lo leyó como un error. No lo era: son 97
+aciertos de temporada regular más 2 de playoff, que valen 2 cada uno. Se comprobó
+partido por partido contra el ranking público y cuadró en las 38 filas.
+
+La fracción **no se cambió a `101/129`**, aunque fue lo primero que se pidió:
+
+- Diría 101 aciertos donde hay 99.
+- Quien acertara todo saldría con 131 de 129, más de 100 %, y la diferencia crecería
+  en cada ronda de playoffs.
+- Taparía un dato del concurso: el segundo lugar lleva más aciertos (100) que el
+  primero, que va arriba por los puntos dobles.
+
+Lo que se hizo fue decirlo en la misma fila: `99/129 aciertos · 2 en fase final ·
+77%`. Quien no tiene aciertos en fase final conserva la fila de siempre. La frase
+sale de `utils/rankingFormat.js`, la misma en la pestaña Ranking, en la quiniela y
+en la imagen para compartir.
+
+El número lo cuenta el **backend** (`correctFinalPhase`, en los dos rankings) con
+la misma pregunta que reparte los 2 puntos, `MATCH_IS_ELIMINATION_SQL`. Restar
+puntos menos aciertos en la pantalla da lo mismo hoy, pero sería otra copia de la
+regla de puntos: el día que una final valga 3, la fila diría "2 en fase final" por
+un solo acierto.
+
+En celular el detalle baja a su propio renglón, debajo del nombre, como en la
+imagen. Al lado del nombre le quedaba una columna de 50 px, y a 360 de ancho la
+frase larga salía en seis líneas.
+
 ### Dos alcances: el calendario y tu grupo
 
 | | Ranking del calendario | Quiniela (`pools`) |
@@ -4415,7 +4448,8 @@ distinta y ninguna sería "el ranking".
   votaste enseña el porcentaje en vez de los botones.
 - `MatchPoll.jsx` — los mismos votos (`usePrediction`) en la página del partido,
   con espacio para enseñarlos. Ver "La página de un partido".
-- `CalendarRanking.jsx` y `PoolRanking.jsx` — dentro de `CalendarViewer`.
+- `CalendarRanking.jsx` y `PoolRanking.jsx` — dentro de `CalendarViewer`. El
+  detalle de su fila sale de `utils/rankingFormat.js`, igual que en la imagen.
 - `PredictionStats.jsx` y `MiCartelera.jsx` — en `/panel` (`Dashboard.jsx`).
 - `PoolJoinPage.jsx` — `/quiniela/:code`, público, para abrir el link recibido.
 

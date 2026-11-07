@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 import RankingImageButton from './RankingImageButton.jsx';
+import { rankingDetail } from '../utils/rankingFormat.js';
 
 // Se usa dentro de CalendarViewer, como pestaña "Ranking" junto a
 // "Calendario". Recibe la lista exacta de IDs de partido que se están
@@ -47,11 +48,7 @@ export default function CalendarRanking({ matchIds, header = {} }) {
           <div key={r.userId} className={`ranking-row${user?.id === r.userId ? ' ranking-row--me' : ''}`}>
             <div className="ranking-pos">{r.position ?? i + 1}</div>
             <div className="ranking-name">{r.name}{user?.id === r.userId ? ' (tú)' : ''}</div>
-            <div className="ranking-detail">
-              {r.graded > 0
-                ? `${r.correct}/${r.graded} aciertos${r.accuracyPct === null ? '' : ` · ${r.accuracyPct}%`}`
-                : `${r.total} ${r.total === 1 ? 'predicción' : 'predicciones'} · sin calificar`}
-            </div>
+            <div className="ranking-detail">{rankingDetail(r)}</div>
             <div className="ranking-pct">{r.points}<small>pts</small></div>
           </div>
         ))}

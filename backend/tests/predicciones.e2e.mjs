@@ -254,6 +254,41 @@ const enVivo = await call(`/manage/matches/${M5}/status`, { method: 'PATCH', tok
 const tarde = await votar(F2, M5, 'away');
 ok(enVivo.status === 200 && tarde.status === 400, 'en cuanto lo marcan En vivo, ya no se vota aunque no tenga fecha', `=${tarde.status} ${JSON.stringify(tarde.data)}`);
 
+console.log('\n=== 8. Un acierto en fase final vale doble, y la fila lo dice ===');
+// README, "La fila dice aciertos": la fracción son aciertos, no puntos, y el
+// conteo de fase final tiene que salir igual en el ranking público y en la
+// quiniela, porque los dos pintan la misma fila.
+const M7 = await crear('Jaguares', 'Coyotes', 'PLAYOFF');
+ok((await votar(F1, M7, 'home')).status === 201 && (await votar(F2, M7, 'away')).status === 201,
+  'F1 y F2 votan un partido de playoff, cada uno por un lado');
+await moverA(M7, '-5 hours');
+await call(`/manage/matches/${M7}`, { method: 'PUT', token: LIGA, body: { home_score: 28, away_score: 7 } });
+const finM7 = await call(`/manage/matches/${M7}/status`, { method: 'PATCH', token: LIGA, body: { status: 'finished' } });
+ok(finM7.status === 200, 'termina el playoff: gana el local', `=${finM7.status}`);
+
+const conPlayoff = [M1, M2, M3, M4, M7];
+const publico = (await call(`/predictions/ranking?matchIds=${conPlayoff.join(',')}`)).data;
+const filaDe = (filas, id) => filas.find((r) => r.userId === id);
+const pub1 = filaDe(publico, ID1);
+const pub2 = filaDe(publico, ID2);
+ok(pub1?.correct === 3 && pub1?.graded === 4 && pub1?.points === 4 && pub1?.correctFinalPhase === 1,
+  'F1 acertó el playoff: 3 de 4 aciertos, 4 puntos, 1 en fase final', JSON.stringify(pub1));
+ok(pub2?.correct === 2 && pub2?.graded === 4 && pub2?.points === 2 && pub2?.correctFinalPhase === 0,
+  'F2 lo falló: sus puntos siguen siendo sus aciertos, y 0 en fase final', JSON.stringify(pub2));
+ok(publico.every((r) => r.points === r.correct + r.correctFinalPhase),
+  'en todas las filas, los puntos son los aciertos más los de fase final', JSON.stringify(publico.map((r) => [r.points, r.correct, r.correctFinalPhase])));
+
+const enQuiniela = (await call(`/pools/${CODE}/ranking?matchIds=${conPlayoff.join(',')}`, { token: F1 })).data.ranking;
+const qui1 = filaDe(enQuiniela, ID1);
+const qui2 = filaDe(enQuiniela, ID2);
+ok(qui1?.correctFinalPhase === 1 && qui1?.points === pub1.points && qui1?.correct === pub1.correct,
+  'la quiniela dice lo mismo de F1', JSON.stringify(qui1));
+ok(qui2?.correctFinalPhase === 0 && qui2?.points === pub2.points && qui2?.correct === pub2.correct,
+  'y lo mismo de F2', JSON.stringify(qui2));
+const sinPartidos = (await call(`/pools/${CODE}/ranking`, { token: F1 })).data.ranking;
+ok(sinPartidos.length === 2 && sinPartidos.every((r) => r.correctFinalPhase === 0),
+  'una quiniela sin partidos todavía manda el conteo en 0, no vacío', JSON.stringify(sinPartidos));
+
 console.log(`\n========  ${pass} ok, ${fail} fallas  ========`);
 await pool.end();
 process.exit(fail ? 1 : 0);

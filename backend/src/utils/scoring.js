@@ -76,6 +76,9 @@ export const PREDICTION_CORRECT_SQL = `(
   )
 )`;
 
+// El partido es de fase final: es lo que hace que un acierto valga doble.
+export const MATCH_IS_ELIMINATION_SQL = `(${MATCH_PHASE_TYPE_SQL} IN (${ELIMINATION_TYPES.map((t) => `'${t}'`).join(', ')}))`;
+
 // Puntos que vale este renglón de predicción: 0 si no acertó (o el partido
 // aún no termina), 2 por acierto en fase final y 1 en cualquier otro caso.
 //
@@ -88,9 +91,15 @@ export const PREDICTION_CORRECT_SQL = `(
 // también reparte los 2 puntos, cosa que antes no pasaba.
 export const PREDICTION_POINTS_SQL = `
   CASE WHEN ${PREDICTION_CORRECT_SQL}
-    THEN (CASE WHEN ${MATCH_PHASE_TYPE_SQL} IN (${ELIMINATION_TYPES.map((t) => `'${t}'`).join(', ')}) THEN 2 ELSE 1 END)
+    THEN (CASE WHEN ${MATCH_IS_ELIMINATION_SQL} THEN 2 ELSE 1 END)
     ELSE 0 END
 `;
+
+// La predicción `p` acertó en fase final: lo que explica que los puntos de una
+// fila sean más que sus aciertos (README, "La fila dice aciertos"). Sale de la
+// misma pregunta que reparte los 2 puntos, y no de restar puntos menos aciertos
+// en la pantalla, que sería otra copia de esta regla.
+export const PREDICTION_CORRECT_ELIMINATION_SQL = `(${PREDICTION_CORRECT_SQL} AND ${MATCH_IS_ELIMINATION_SQL})`;
 
 // El partido no cuenta para la quiniela (un amistoso/scrimmage). Misma idea:
 // se pregunta a la fase, no a la etiqueta.

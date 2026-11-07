@@ -15,6 +15,29 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **La fila del ranking dice cuántos aciertos cayeron en fase final (2026-11-07).**
+  Lo pidió Alfredo: el primer lugar de ONEFA iba con 101 pts y 99/129 aciertos, y
+  esperaba 101/129. No era un error: 97 aciertos de temporada regular más 2 de
+  playoff, que valen 2 cada uno, comprobado partido por partido en las 38 filas.
+  Eligió dejar la fracción en aciertos y decirlo en la fila:
+  `99/129 aciertos · 2 en fase final · 77%`.
+
+  `GET /predictions/ranking` y `GET /pools/:code/ranking` mandan ahora
+  `correctFinalPhase`, contado con la misma pregunta que reparte los 2 puntos, y la
+  frase vive en `utils/rankingFormat.js` para la pestaña Ranking, la quiniela y la
+  imagen. De paso, la quiniela ya dice "1 predicción" en singular, y en celular el
+  detalle baja a su propio renglón: a 360 de ancho salía en seis líneas y ahora en
+  una, en las 38 filas.
+
+  Verificado: `predicciones.e2e.mjs` 48/48 antes y 56/56 después; el SQL de antes
+  contra el nuevo, en solo lectura sobre `desarrollo-local`, idéntico en las 36 filas
+  del calendario y en las 8 quinielas, con los datos como están y con seis partidos
+  jugados vestidos de PLAYOFF: esos pasan los puntos de 564 a 619, justo los 55
+  aciertos que cuenta el dato nuevo. La pantalla, en diez anchos con el ranking real
+  de ONEFA y el dato agregado a mano, porque producción aún no lo manda; las dos
+  imágenes, sin ningún texto recortado; la quiniela, con una sesión simulada. El
+  porqué está en "La fila dice aciertos" del README.
+
 - **El home es un muro de cascos (2026-11-07).** Lo pidió Alfredo: que se viera más profesional
   y que los equipos no se acomodaran como dentro de una liga, porque eso le quita individualidad
   a cada uno. Cada equipo tiene ahora su nicho, con su casco en grande, encendido con su color, y

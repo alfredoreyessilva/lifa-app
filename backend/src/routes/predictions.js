@@ -2,7 +2,7 @@ import express from 'express';
 import db from '../config/db.js';
 import { authRequired, optionalAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL, PREDICTION_POINTS_SQL, MATCH_IS_EXHIBITION_SQL } from '../utils/scoring.js';
+import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL, PREDICTION_CORRECT_ELIMINATION_SQL, PREDICTION_POINTS_SQL, MATCH_IS_EXHIBITION_SQL } from '../utils/scoring.js';
 import { conPosiciones, porcentaje } from '../utils/rankingPredicciones.js';
 
 const router = express.Router();
@@ -153,6 +153,7 @@ router.get('/ranking', asyncHandler(async (req, res) => {
       COUNT(*) AS total,
       COUNT(*) FILTER (WHERE ${MATCH_GRADABLE_SQL}) AS graded,
       COUNT(*) FILTER (WHERE ${PREDICTION_CORRECT_SQL}) AS correct,
+      COUNT(*) FILTER (WHERE ${PREDICTION_CORRECT_ELIMINATION_SQL}) AS correct_final_phase,
       COALESCE(SUM(${PREDICTION_POINTS_SQL}), 0) AS points
     FROM predictions p
     JOIN matches m ON m.id = p.match_id
@@ -178,6 +179,7 @@ router.get('/ranking', asyncHandler(async (req, res) => {
       total,
       graded,
       correct,
+      correctFinalPhase: Number(r.correct_final_phase),
       points,
       accuracyPct: porcentaje(correct, graded),
     };

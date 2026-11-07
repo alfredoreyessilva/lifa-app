@@ -4,7 +4,7 @@ import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isNonEmptyString } from '../utils/validation.js';
-import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL, PREDICTION_POINTS_SQL, MATCH_IS_EXHIBITION_SQL } from '../utils/scoring.js';
+import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL, PREDICTION_CORRECT_ELIMINATION_SQL, PREDICTION_POINTS_SQL, MATCH_IS_EXHIBITION_SQL } from '../utils/scoring.js';
 import { conPosiciones, porcentaje } from '../utils/rankingPredicciones.js';
 
 const router = express.Router();
@@ -110,6 +110,7 @@ router.get('/:code/ranking', authRequired, asyncHandler(async (req, res) => {
         COUNT(p.id) FILTER (WHERE ${notScrimmage}) AS total,
         COUNT(p.id) FILTER (WHERE ${notScrimmage} AND ${MATCH_GRADABLE_SQL}) AS graded,
         COUNT(p.id) FILTER (WHERE ${notScrimmage} AND ${PREDICTION_CORRECT_SQL}) AS correct,
+        COUNT(p.id) FILTER (WHERE ${notScrimmage} AND ${PREDICTION_CORRECT_ELIMINATION_SQL}) AS correct_final_phase,
         COALESCE(SUM(
           CASE WHEN ${notScrimmage} THEN (${PREDICTION_POINTS_SQL}) ELSE 0 END
         ), 0) AS points
@@ -137,6 +138,7 @@ router.get('/:code/ranking', authRequired, asyncHandler(async (req, res) => {
       total,
       graded,
       correct,
+      correctFinalPhase: Number(r.correct_final_phase ?? 0),
       points,
       accuracyPct: porcentaje(correct, graded),
     };

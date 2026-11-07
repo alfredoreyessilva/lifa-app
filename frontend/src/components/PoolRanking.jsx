@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import AuthModal from './AuthModal.jsx';
 import RankingImageButton from './RankingImageButton.jsx';
+import { rankingDetail } from '../utils/rankingFormat.js';
 
 export default function PoolRanking({ matchIds, header = {} }) {
   const { token, user } = useAuth();
@@ -112,11 +113,7 @@ function PoolRankingList({ code, matchIds, header = {} }) {
               <div key={r.userId} className={`ranking-row${user?.id === r.userId ? ' ranking-row--me' : ''}`}>
                 <div className="ranking-pos">{r.position ?? i + 1}</div>
                 <div className="ranking-name">{r.name}{user?.id === r.userId ? ' (tú)' : ''}</div>
-                <div className="ranking-detail">
-                  {r.graded > 0
-                    ? `${r.correct}/${r.graded} aciertos${r.accuracyPct === null ? '' : ` · ${r.accuracyPct}%`}`
-                    : `${r.total} predicciones · sin calificar`}
-                </div>
+                <div className="ranking-detail">{rankingDetail(r)}</div>
                 <div className="ranking-pct">{r.points ?? 0}<small>pts</small></div>
               </div>
             ))}

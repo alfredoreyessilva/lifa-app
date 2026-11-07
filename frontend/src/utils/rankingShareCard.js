@@ -13,18 +13,9 @@ import {
   FORMATS, readTheme, ensureFonts, loadImage, drawBallIcon, drawBackground,
   fitText, roundRect, drawImageContain, ellipsize, BRAND_LOGO_SRC, BRAND_LOGO_RATIO,
 } from './shareCardCommon.js';
+import { rankingDetail } from './rankingFormat.js';
 
 const MAX_ROWS = 10;
-
-// Línea de detalle bajo cada nombre — mismo criterio que CalendarRanking.jsx.
-function detailLine(r) {
-  if (r.graded > 0) {
-    const pct = r.accuracyPct === null ? '' : ` · ${r.accuracyPct}%`;
-    return `${r.correct}/${r.graded} aciertos${pct}`;
-  }
-  const n = r.total === 1 ? 'predicción' : 'predicciones';
-  return `${r.total} ${n} · sin calificar`;
-}
 
 /**
  * Dibuja el encabezado (la "zona de anotación" arriba de la tarjeta):
@@ -92,7 +83,7 @@ function drawHeader(ctx, w, h, theme, header, rowCount, totalParticipants) {
 
 /**
  * Genera la imagen del Top 10 del ranking.
- * @param {Array<{userId:number,name:string,total:number,graded:number,correct:number,points:number,accuracyPct:number|null}>} ranking
+ * @param {Array<{userId:number,name:string,total:number,graded:number,correct:number,correctFinalPhase:number,points:number,accuracyPct:number|null}>} ranking
  *   la lista COMPLETA que devuelve la API (ya ordenada); aquí se recortan las primeras 10.
  * @param {'post'|'story'} formatKey
  * @param {{title?:string, tournament?:string, context?:string, poolName?:string, leagueLogo?:string}} header
@@ -195,7 +186,7 @@ export async function generateRankingCard(ranking, formatKey, header = {}) {
 
     ctx.fillStyle = theme.inkDim;
     ctx.font = `500 20px ${theme.fontBody}`;
-    ctx.fillText(ellipsize(ctx, detailLine(r), nameMaxW + 90), nameX, midY + 22);
+    ctx.fillText(ellipsize(ctx, rankingDetail(r), nameMaxW + 90), nameX, midY + 22);
 
     // puntos
     ctx.textAlign = 'right';
