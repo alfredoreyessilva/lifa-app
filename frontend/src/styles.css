@@ -246,40 +246,6 @@ a { color: inherit; }
 .btn-block { width: 100%; }
 .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
 
-/* ---------- Hero ---------- */
-.hero {
-  padding: 72px 0 48px;
-  text-align: center;
-}
-.hero .eyebrow {
-  font-family: var(--font-eyebrow);
-  text-transform: uppercase;
-  letter-spacing: 0.3em;
-  font-size: 12px;
-  color: var(--flag);
-  margin-bottom: 16px;
-}
-.hero h1 {
-  font-family: var(--font-display);
-  font-size: clamp(40px, 8vw, 84px);
-  line-height: 1.02;
-  margin: 0 0 16px;
-  color: var(--paper);
-  letter-spacing: 0.01em;
-}
-.hero p {
-  color: var(--ink-dim);
-  font-size: 17px;
-  max-width: 480px;
-  margin: 0 auto 32px;
-}
-.hero-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
 /* ---------- Section heads ---------- */
 .section-head {
   display: flex;
@@ -307,12 +273,6 @@ a { color: inherit; }
    "Medios de comunicación" con su botón no cabe en un renglón de teléfono:
    el conteo y el botón bajan debajo del título, igual que en OrgLogoBar. */
 .home-section-head {
-  flex-wrap: wrap;
-  gap: 12px;
-}
-.home-section-actions {
-  display: flex;
-  align-items: center;
   flex-wrap: wrap;
   gap: 12px;
 }
@@ -714,6 +674,7 @@ button.league-card {
 }
 .empty-state h3 {
   font-family: var(--font-display);
+  font-weight: 400;
   color: var(--paper);
   font-size: 22px;
   margin-bottom: 8px;
@@ -1168,6 +1129,18 @@ button.league-card {
   border-radius: 10px 10px 0 0;
   position: relative;
 }
+/* La ficha de un equipo lleva el color de su nicho (README, "El home"). Una sede o
+   un medio no tienen uno y se quedan con el degradado. La portada, si la hay, se
+   pinta encima en línea. */
+.ficha-de-equipo .team-profile-banner {
+  background-color: var(--eq);
+  background-image:
+    radial-gradient(60% 130% at 50% 100%, rgba(255, 255, 255, 0.3), transparent),
+    linear-gradient(to bottom, rgba(5, 15, 10, 0.3), transparent 70%);
+}
+.ficha-de-equipo .team-profile-logo {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--eq) 55%, white), var(--eq));
+}
 .team-profile-close {
   position: absolute;
   top: 12px;
@@ -1219,6 +1192,7 @@ button.league-card {
 }
 .team-profile-name {
   font-family: var(--font-display);
+  font-weight: 400;
   font-size: 26px;
   color: var(--paper);
   margin: 8px 0 16px;
@@ -1657,11 +1631,6 @@ button.league-card {
   .topbar-inner .btn-sm {
     padding: 6px 10px;
     font-size: 10px;
-  }
-
-  /* Hero más compacto en móvil */
-  .hero {
-    padding: 40px 0 32px;
   }
 
   /* Match card: apilar fecha arriba, acción abajo */
@@ -6562,4 +6531,382 @@ body.is-storefront .footer-links a:hover { color: var(--sf-ink); }
 @media (prefers-reduced-motion: reduce) {
   .mh-helmet.is-listo { animation: none; }
   .mh-live i { animation: none; }
+}
+
+/* ---------- El home ----------
+   README, "El home". La noche del calendario, y sobre ella un muro de cascos: el
+   único color de la página es el de los equipos y las ligas. */
+.hm { max-width: 1320px; }
+/* La barra de arriba se alinea con el panel, que aquí es más ancho que en las
+   demás páginas. */
+body:has(.hm) .topbar-inner { max-width: 1320px; }
+
+.hm-panel {
+  --hm-pad: 24px;
+  margin-top: 16px;
+  padding: 0 var(--hm-pad) var(--hm-pad);
+  border-radius: 16px;
+  background: var(--mp-noche);
+}
+
+.hm-cabeza { padding: 24px 0 2px; }
+.hm-cabeza h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(29px, 3.7vw, 46px);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: 0.01em;
+  color: var(--mp-cal);
+  text-wrap: balance;
+}
+.hm-cabeza p {
+  margin: 6px 0 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--mp-gris);
+}
+
+.hm-panel .section-head {
+  align-items: center;
+  margin: 24px 0 14px;
+  padding-bottom: 10px;
+  border-bottom-color: var(--mp-linea);
+  scroll-margin-top: calc(var(--topbar-h, 60px) + 12px);
+}
+.hm-panel .section-head h2 { font-weight: 400; }
+.hm-cuenta {
+  margin-left: 10px;
+  font-family: var(--font-eyebrow);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--mp-gris);
+}
+.hm-panel .empty-state { color: var(--mp-gris); }
+
+/* Las ligas: la misma anatomía de un nicho, pero de lado y con su nombre en
+   grande. La región va en su placa de noche porque es letra chica, y sobre un logo
+   de tono medio no se lee ni en blanco ni en negro (medido: reprobaba en 171 de 912
+   colores). El nombre, por su tamaño, sí pasa sobre cualquiera. */
+.hm-ligas-marco { container-type: inline-size; }
+.hm-ligas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+@container (min-width: 880px) {
+  .hm-ligas { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+}
+.hm-liga {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--mp-noche);
+  color: var(--mp-cal);
+  text-decoration: none;
+}
+.hm-liga-marca {
+  position: relative;
+  display: flex;
+  flex: 1 0 auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  container-type: inline-size;
+  background-color: var(--home);
+  color: var(--home-ink);
+  transition: background-color 0.5s ease;
+}
+.hm-liga-marca::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(52% 120% at 15% 50%, rgba(255, 255, 255, 0.26), transparent 100%),
+    linear-gradient(to bottom, rgba(5, 15, 10, 0.12), transparent 40%, rgba(5, 15, 10, 0.26));
+}
+.hm-liga .mh-helmet {
+  position: relative;
+  flex: 0 0 auto;
+  width: 88px;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.hm-liga .mh-helmet.is-listo { animation: none; }
+.hm-liga .mh-helmet img { filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.5)); }
+.hm-liga .mh-helmet--placa img { width: 94%; height: 94%; }
+.hm-liga .mh-helmet--disco img {
+  width: 92%;
+  height: 92%;
+  box-shadow: 0 0 0 2px var(--mp-cal), 0 6px 12px rgba(0, 0, 0, 0.45);
+  filter: none;
+}
+.hm-liga .mh-helmet-initials {
+  border-width: 2px;
+  font-size: 26px;
+}
+/* --len (leagueDisplay.js) deja que la letra llene su renglón, sea "PFL" o el
+   nombre completo de una liga. Los 102px son el logo y su espacio: cqi ya viene sin
+   los márgenes. */
+.hm-liga-nombre {
+  position: relative;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: clamp(16px, (100cqi - 102px) / (var(--len) * 0.5), 54px);
+  line-height: 1.06;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+.hm-liga-placa {
+  min-height: 28px;
+  padding: 5px 16px;
+  border-top: 2px solid var(--mp-cal);
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* El muro. Las columnas se fijan para saber cuántos lugares quedan libres en la
+   última fila: `.hm-libre` los ocupa todos. */
+.hm-muro-marco { container-type: inline-size; }
+.hm-muro {
+  --columnas: 3;
+  --hueco: 6px;
+  display: grid;
+  grid-template-columns: repeat(var(--columnas), minmax(0, 1fr));
+  gap: var(--hueco);
+}
+@container (min-width: 520px) { .hm-muro { --columnas: 4; } }
+@container (min-width: 680px) { .hm-muro { --columnas: 5; } }
+@container (min-width: 860px) { .hm-muro { --columnas: 6; } }
+@container (min-width: 1020px) { .hm-muro { --columnas: 7; } }
+@container (min-width: 1180px) { .hm-muro { --columnas: 8; } }
+
+/* Apagado hasta que se lee el color de su logo: el muro se enciende al llegar. */
+.hm-nicho {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+  background-color: var(--eq, var(--mp-noche-2));
+  color: var(--mp-cal);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.5s ease;
+}
+/* La luz va detrás del casco y las orillas se quedan en sombra. Sin esto, un casco
+   del color de su equipo se perdería contra su propio nicho. */
+.hm-nicho::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(closest-side at 50% 44%, rgba(255, 255, 255, 0.34), transparent),
+    linear-gradient(to bottom, rgba(5, 15, 10, 0.25), transparent 30%, rgba(5, 15, 10, 0.6));
+  transition: opacity 0.5s ease;
+}
+.hm-nicho.is-encendido::before { opacity: 1; }
+.hm-nicho .mh-helmet {
+  position: relative;
+  width: 86%;
+  margin: 7% auto 2%;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.hm-nicho .mh-helmet.is-listo { animation: none; }
+/* El filo claro es lo que despega al guinda del guinda y al dorado del dorado. */
+.hm-nicho .mh-helmet img {
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.8)) drop-shadow(0 8px 6px rgba(0, 0, 0, 0.55));
+}
+.hm-nicho .mh-helmet--placa img { width: 96%; height: 96%; }
+.hm-nicho .mh-helmet--disco img {
+  box-shadow: 0 0 0 2px var(--mp-cal), 0 8px 14px rgba(0, 0, 0, 0.5);
+  filter: none;
+}
+.hm-nicho .mh-helmet-initials {
+  border-width: 2px;
+  font-size: clamp(20px, 6cqi, 32px);
+}
+@media (hover: hover) {
+  .hm-nicho:hover .mh-helmet,
+  .hm-liga:hover .mh-helmet { transform: scale(1.06); }
+}
+.hm-nicho.is-activo { box-shadow: 0 0 0 2px var(--flag); }
+.hm-nicho:focus-visible,
+.hm-liga:focus-visible,
+.hm-libre:focus-visible,
+.hm-org:focus-visible {
+  outline: 3px solid var(--flag);
+  outline-offset: 2px;
+}
+.hm-nicho-placa {
+  position: relative;
+  display: flex;
+  flex: 1 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 6px;
+  border-top: 2px solid var(--mp-cal);
+  background: var(--mp-noche);
+  font-family: var(--font-display);
+  font-size: clamp(13px, 1.5cqi, 15.5px);
+  line-height: 1.16;
+  letter-spacing: 0.02em;
+  text-align: center;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+/* Lo que sobra de la última fila son nichos apagados, esperando a un equipo. Es un
+   solo enlace: las divisiones las pinta el fondo, una por columna. Un navegador
+   sin `mod()` lo deja en un solo lugar. */
+.hm-libre {
+  --celda: calc((100cqi - (var(--columnas) - 1) * var(--hueco)) / var(--columnas));
+  grid-column: span calc(var(--columnas) - mod(var(--n), var(--columnas)));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 92px;
+  padding: 12px;
+  background: repeating-linear-gradient(
+    to right,
+    var(--mp-noche-2) 0 var(--celda),
+    transparent var(--celda) calc(var(--celda) + var(--hueco))
+  );
+  border-radius: 4px;
+  color: var(--mp-cal);
+  text-align: center;
+  text-decoration: none;
+}
+.hm-libre-titulo {
+  font-family: var(--font-display);
+  font-size: 21px;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+}
+.hm-libre-accion {
+  font-family: var(--font-eyebrow);
+  font-size: 14px;
+  letter-spacing: 0.03em;
+  color: var(--flag);
+}
+.hm-libre:hover .hm-libre-accion {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Apagado: la forma del home mientras la API despierta. */
+.hm-apagado .hm-liga,
+.hm-apagado .hm-nicho,
+.hm-apagado .hm-org {
+  background: var(--mp-noche-2);
+  box-shadow: none;
+  cursor: default;
+}
+.hm-apagado .hm-liga { min-height: 136px; }
+.hm-apagado .hm-nicho { aspect-ratio: 1 / 1.3; }
+.hm-apagado .hm-org { min-height: 68px; }
+.hm-apagado { animation: hm-respira 1.8s ease-in-out infinite; }
+@keyframes hm-respira {
+  50% { opacity: 0.55; }
+}
+.hm-carga {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--mp-gris);
+}
+
+/* Medios y tiendas */
+.hm-directorio {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: 0 28px;
+}
+.hm-orgs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 8px;
+}
+.hm-org {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--mp-noche-2);
+  box-shadow: inset 0 0 0 1px var(--mp-linea);
+  color: var(--mp-cal);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
+}
+.hm-org:hover,
+.hm-org.is-activo { box-shadow: inset 0 0 0 1px rgba(243, 246, 241, 0.6); }
+.hm-org-logo {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--mp-noche-3);
+  font-family: var(--font-display);
+  color: var(--flag);
+}
+.hm-org-logo img { width: 100%; height: 100%; object-fit: cover; }
+.hm-org-nombre {
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .hm-panel { --hm-pad: 12px; }
+  .hm-cabeza { padding-top: 18px; }
+  .hm-cabeza p { font-size: 14px; }
+  /* En un teléfono, cuatro ligas apiladas se comían la primera pantalla. */
+  .hm-liga-marca {
+    gap: 8px;
+    padding: 6px 10px;
+  }
+  .hm-apagado .hm-liga { min-height: 92px; }
+  .hm-liga .mh-helmet { width: 50px; }
+  .hm-liga-nombre { font-size: clamp(14px, (100cqi - 58px) / (var(--len) * 0.5), 30px); }
+  .hm-liga-placa {
+    min-height: 24px;
+    padding: 4px 10px;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hm-nicho,
+  .hm-nicho::before,
+  .hm-nicho .mh-helmet,
+  .hm-liga-marca,
+  .hm-liga .mh-helmet { transition: none; }
+  .hm-apagado { animation: none; }
 }

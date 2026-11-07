@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import Loading from '../components/Loading.jsx';
-import TeamCard from '../components/TeamCard.jsx';
+import TeamNiche from '../components/TeamNiche.jsx';
 import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
 import OrganizationInfoPanel from '../components/OrganizationInfoPanel.jsx';
+import { Casco } from '../components/MatchField.jsx';
+import { imagenAjustada } from '../utils/imagenes.js';
+import { equiposEnOrden, largoDelNombre, regionDeLiga } from '../utils/leagueDisplay.js';
+import { useTeamPaint } from '../utils/useTeamPaint.js';
 
 export default function Home() {
   const [leagues, setLeagues] = useState(null);
@@ -48,73 +51,91 @@ export default function Home() {
   }
 
   return (
-    <div className="container">
-      <SectionHead
-        id="ligas"
-        title="Ligas"
-        count={leagues && `${leagues.length} registradas`}
-        registerTo="/registrar-liga"
-        registerLabel="Registrar liga"
-      />
+    <div className="container hm">
+      <div className="hm-panel">
+        <header className="hm-cabeza">
+          <h1>Conectando al Football Americano de México</h1>
+          <p>Encuentra los calendarios, categorías y transmisiones de las ligas de fútbol americano de todo el país.</p>
+        </header>
 
-      {error && <div className="form-error">{error}</div>}
+        <section>
+          <SectionHead
+            id="ligas"
+            title="Ligas"
+            count={leagues?.length}
+            registerTo="/registrar-liga"
+            registerLabel="Registrar liga"
+          />
 
-      {!leagues && !error && <Loading message="Cargando ligas…" />}
+          {error && <div className="form-error">{error}</div>}
 
-      {leagues && leagues.length === 0 && (
-        <div className="empty-state">
-          <h3>Todavía no hay ligas registradas</h3>
-          <p>Muy pronto vas a encontrar aquí los calendarios de las ligas de fútbol americano de México.</p>
-        </div>
-      )}
-
-      {leagues && leagues.length > 0 && (
-        <div className="league-grid">
-          {leagues.map((lg) => (
-            <Link key={lg.id} to={`/ligas/${lg.slug}`} className="league-card">
-              <div className="league-logo">
-                {lg.logo_url
-                  ? <img src={lg.logo_url} alt={lg.name} />
-                  : initials(lg.name)}
+          {!leagues && !error && (
+            <>
+              <div className="hm-ligas-marco" aria-hidden="true">
+                <div className="hm-ligas hm-apagado"><Apagados clase="hm-liga" cuantos={4} /></div>
               </div>
-              <h3>{lg.name}</h3>
-            </Link>
-          ))}
-        </div>
-      )}
+              <p className="hm-carga" role="status">Cargando… La primera carga puede tardar unos segundos</p>
+            </>
+          )}
 
-      <SectionHead
-        id="equipos"
-        title="Equipos"
-        count={teams && `${teams.length} registrados`}
-        registerTo="/registrar-equipo"
-        registerLabel="Registrar equipo"
-        style={{ marginTop: 28 }}
-      />
+          {leagues && leagues.length === 0 && (
+            <div className="empty-state">
+              <h3>Todavía no hay ligas registradas</h3>
+              <p>Muy pronto vas a encontrar aquí los calendarios de las ligas de fútbol americano de México.</p>
+            </div>
+          )}
 
-      {teamsError && <div className="form-error">{teamsError}</div>}
+          {leagues && leagues.length > 0 && (
+            <div className="hm-ligas-marco">
+              <div className="hm-ligas">
+                {leagues.map((lg) => <LeagueTile key={lg.id} league={lg} />)}
+              </div>
+            </div>
+          )}
+        </section>
 
-      {!teams && !teamsError && <Loading message="Cargando equipos…" />}
+        <section>
+          <SectionHead
+            id="equipos"
+            title="Equipos"
+            count={teams?.length}
+            registerTo="/registrar-equipo"
+            registerLabel="Registrar equipo"
+          />
 
-      {teams && teams.length === 0 && (
-        <div className="empty-state">
-          <h3>Todavía no hay equipos registrados</h3>
-          <p>En cuanto una liga publicada tenga equipos en su roster, o un equipo independiente decida mostrarse, van a aparecer aquí.</p>
-        </div>
-      )}
+          {teamsError && <div className="form-error">{teamsError}</div>}
 
-      {teams && teams.length > 0 && (
-        <>
-          <div className="team-grid">
-            {teams.map((team) => (
-              <TeamCard
-                key={team.id}
-                team={team}
-                isSelected={selectedTeam?.id === team.id}
-                onClick={() => handleTeamClick(team)}
-              />
-            ))}
-          </div>
+          {!teams && !teamsError && (
+            <div className="hm-muro-marco" aria-hidden="true">
+              <div className="hm-muro hm-apagado"><Apagados clase="hm-nicho" cuantos={24} /></div>
+            </div>
+          )}
+
+          {teams && teams.length === 0 && (
+            <div className="empty-state">
+              <h3>Todavía no hay equipos registrados</h3>
+              <p>En cuanto una liga publicada tenga equipos en su roster, o un equipo independiente decida mostrarse, van a aparecer aquí.</p>
+            </div>
+          )}
+
+          {teams && teams.length > 0 && (
+            <div className="hm-muro-marco">
+              <div className="hm-muro" style={{ '--n': teams.length }}>
+                {equiposEnOrden(teams).map((team) => (
+                  <TeamNiche
+                    key={team.id}
+                    team={team}
+                    isSelected={selectedTeam?.id === team.id}
+                    onClick={() => handleTeamClick(team)}
+                  />
+                ))}
+                <Link to="/registrar-equipo" className="hm-libre">
+                  <span className="hm-libre-titulo">¿Falta tu equipo?</span>
+                  <span className="hm-libre-accion">Regístralo</span>
+                </Link>
+              </div>
+            </div>
+          )}
           {selectedTeam && (
             <TeamInfoPanel
               team={selectedTeam}
@@ -122,47 +143,65 @@ export default function Home() {
               onClose={() => setSelectedTeam(null)}
             />
           )}
-        </>
-      )}
+        </section>
 
-      <OrganizationDirectorySection
-        id="medios"
-        title="Medios de comunicación"
-        orgs={mediaOrgs}
-        error={mediaError}
-        loadingMessage="Cargando medios…"
-        emptyTitle="Todavía no hay medios registrados"
-        emptyText="En cuanto se publique un medio de comunicación, va a aparecer aquí."
-        registerTo="/registrar-organizacion?tipo=media"
-        registerLabel="Registrar medio"
-        selectedId={selectedMedia?.id}
-        onSelect={setSelectedMedia}
-      />
-      {selectedMedia && (
-        <OrganizationInfoPanel org={selectedMedia} onClose={() => setSelectedMedia(null)} />
-      )}
-
-      <OrganizationDirectorySection
-        id="tiendas"
-        title="Tiendas y proveedores"
-        orgs={storeOrgs}
-        error={storeError}
-        loadingMessage="Cargando tiendas y proveedores…"
-        emptyTitle="Todavía no hay tiendas ni proveedores registrados"
-        emptyText="En cuanto se publique una tienda o proveedor, va a aparecer aquí."
-        registerTo="/registrar-organizacion?tipo=store"
-        registerLabel="Registrar tienda o proveedor"
-      />
-
-      <section className="hero">
-        <span className="eyebrow">Temporada en curso</span>
-        <h1>Conectando al Football<br />Americano de México</h1>
-        <p>Encuentra los calendarios, categorías y transmisiones de las ligas de fútbol americano de todo el país.</p>
-        <div className="hero-actions">
-          <a href="#ligas" className="btn btn-flag">Ir al inicio</a>
+        <div className="hm-directorio">
+          <OrganizationDirectorySection
+            id="medios"
+            title="Medios de comunicación"
+            orgs={mediaOrgs}
+            error={mediaError}
+            emptyTitle="Todavía no hay medios registrados"
+            emptyText="En cuanto se publique un medio de comunicación, va a aparecer aquí."
+            registerTo="/registrar-organizacion?tipo=media"
+            registerLabel="Registrar medio"
+            selectedId={selectedMedia?.id}
+            onSelect={setSelectedMedia}
+          />
+          <OrganizationDirectorySection
+            id="tiendas"
+            title="Tiendas y proveedores"
+            orgs={storeOrgs}
+            error={storeError}
+            emptyTitle="Todavía no hay tiendas ni proveedores registrados"
+            emptyText="En cuanto se publique una tienda o proveedor, va a aparecer aquí."
+            registerTo="/registrar-organizacion?tipo=store"
+            registerLabel="Registrar tienda o proveedor"
+          />
         </div>
-      </section>
+        {selectedMedia && (
+          <OrganizationInfoPanel org={selectedMedia} onClose={() => setSelectedMedia(null)} />
+        )}
+      </div>
     </div>
+  );
+}
+
+// Mientras la API despierta (hasta 40 s, PD-03) el home enseña su forma, apagada,
+// en vez de cuatro letreros de "Cargando…": para quien llega en frío, esta es la
+// primera impresión.
+function Apagados({ clase, cuantos }) {
+  return Array.from({ length: cuantos }, (_, i) => <span key={i} className={clase} />);
+}
+
+// Una liga en el home: su end zone, pintada con el color de su logo como en su
+// propia página, con el nombre rotulado y hasta dónde llega.
+function LeagueTile({ league }) {
+  const pintura = useTeamPaint(league.logo_url, null, { alInstante: true });
+  const region = regionDeLiga(league);
+
+  return (
+    <Link
+      to={`/ligas/${league.slug}`}
+      className="hm-liga"
+      style={{ '--home': pintura.fondo, '--home-ink': pintura.tinta, '--len': largoDelNombre(league.name) }}
+    >
+      <span className="hm-liga-marca">
+        <Casco lado="home" nombre={league.name} logo={league.logo_url} pintura={pintura} ancho={240} alt="" />
+        <span className="hm-liga-nombre">{league.name}</span>
+      </span>
+      <span className="hm-liga-placa" title={league.state}>{region}</span>
+    </Link>
   );
 }
 
@@ -178,21 +217,22 @@ export default function Home() {
 // un equipo: así van los medios, cuya página no le enseña al público nada que
 // no quepa en la ficha. Sin él, la tarjeta lleva a su página: así van las
 // tiendas, que ahí tienen su catálogo y el botón de WhatsApp.
-function OrganizationDirectorySection({ id, title, orgs, error, loadingMessage, emptyTitle, emptyText, registerTo, registerLabel, selectedId, onSelect }) {
+function OrganizationDirectorySection({ id, title, orgs, error, emptyTitle, emptyText, registerTo, registerLabel, selectedId, onSelect }) {
   return (
-    <>
+    <section>
       <SectionHead
         id={id}
         title={title}
-        count={orgs && `${orgs.length} registrados`}
+        count={orgs?.length}
         registerTo={registerTo}
         registerLabel={registerLabel}
-        style={{ marginTop: 28 }}
       />
 
       {error && <div className="form-error">{error}</div>}
 
-      {!orgs && !error && <Loading message={loadingMessage} />}
+      {!orgs && !error && (
+        <div className="hm-orgs hm-apagado" aria-hidden="true"><Apagados clase="hm-org" cuantos={1} /></div>
+      )}
 
       {orgs && orgs.length === 0 && (
         <div className="empty-state">
@@ -202,47 +242,39 @@ function OrganizationDirectorySection({ id, title, orgs, error, loadingMessage, 
       )}
 
       {orgs && orgs.length > 0 && (
-        <div className="league-grid">
+        <div className="hm-orgs">
           {orgs.map((org) => {
             const content = (
               <>
-                {org.logo_url ? (
-                  <img src={org.logo_url} alt={org.name} style={{ width: 56, height: 56, borderRadius: '50%' }} />
-                ) : (
-                  <div style={{
-                    width: 56, height: 56, borderRadius: '50%', background: 'var(--surface)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontFamily: 'var(--font-display)', color: 'var(--flag)',
-                  }}>
-                    {initials(org.name)}
-                  </div>
-                )}
-                <h3>
+                <span className="hm-org-logo">
+                  {org.logo_url ? <img src={imagenAjustada(org.logo_url, 112)} alt="" /> : initials(org.name)}
+                </span>
+                <span className="hm-org-nombre">
                   {org.name}
                   {org.is_verified && (
                     <span className="team-card-verified" title="Verificada" aria-label="Verificada">✓</span>
                   )}
-                </h3>
+                </span>
               </>
             );
             return onSelect ? (
               <button
                 key={org.id}
                 type="button"
-                className={`league-card${selectedId === org.id ? ' league-card--selected' : ''}`}
+                className={`hm-org${selectedId === org.id ? ' is-activo' : ''}`}
                 onClick={() => onSelect(org)}
               >
                 {content}
               </button>
             ) : (
-              <Link key={org.id} to={`/panel/organizacion/${org.id}`} className="league-card">
+              <Link key={org.id} to={`/panel/organizacion/${org.id}`} className="hm-org">
                 {content}
               </Link>
             );
           })}
         </div>
       )}
-    </>
+    </section>
   );
 }
 
@@ -250,14 +282,11 @@ function OrganizationDirectorySection({ id, title, orgs, error, loadingMessage, 
 // botón se ve con sesión y sin ella y siempre lleva a la misma pantalla de
 // registro: si no hay sesión, es la ruta la que pide crear cuenta y después
 // regresa ahí (ver ProtectedRoute), así que el home no decide nada.
-function SectionHead({ id, title, count, registerTo, registerLabel, style }) {
+function SectionHead({ id, title, count, registerTo, registerLabel }) {
   return (
-    <div className="section-head home-section-head" id={id} style={style}>
-      <h2>{title}</h2>
-      <div className="home-section-actions">
-        {count && <span className="count">{count}</span>}
-        <Link to={registerTo} className="btn btn-flag btn-sm">{registerLabel}</Link>
-      </div>
+    <div className="section-head home-section-head" id={id}>
+      <h2>{title}{count > 0 && <span className="hm-cuenta">{count}</span>}</h2>
+      <Link to={registerTo} className="btn btn-outline btn-sm">{registerLabel}</Link>
     </div>
   );
 }

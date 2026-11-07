@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import TeamForm from './TeamForm.jsx';
 import { initials } from '../utils/matchDisplay.js';
 import { puede } from '../utils/permisos.js';
+import { useTeamPaint } from '../utils/useTeamPaint.js';
 
 // El perfil público del equipo: lo que ve cualquiera en CFBAMX. Es el
 // contenido que antes ERA todo el panel del equipo (Dashboard.jsx); ahora es
@@ -92,6 +93,7 @@ export default function TeamProfileSection({ team, token, onChange }) {
 // antes de entrar a editar. Reutiliza las mismas clases del preview de
 // TeamForm para que se vea igual de un lado y del otro.
 function TeamProfileView({ team, onEdit }) {
+  const pintura = useTeamPaint(team.logo_url, team.brand_color, { alInstante: true });
   const hasContact = team.city || team.institution || team.maps_url || team.contact_email || team.contact_phone;
   const hasLinks = team.facebook_url || team.instagram_url || team.twitter_url || team.website_url;
   const sectionLabelStyle = {
@@ -107,7 +109,7 @@ function TeamProfileView({ team, onEdit }) {
           : 'Así se ve el perfil de tu equipo en CFBAMX. Tu rol lo consulta, no lo edita.'}
       </p>
 
-      <div className="team-editor-preview">
+      <div className="team-editor-preview ficha-de-equipo" style={{ '--eq': pintura.fondo }}>
         <div className="team-profile-banner">
           {team.cover_url && <img src={team.cover_url} alt="Portada" className="team-editor-cover-img" />}
         </div>
@@ -119,7 +121,7 @@ function TeamProfileView({ team, onEdit }) {
         </div>
 
         <div className="team-profile-body">
-          <h2 style={{ textAlign: 'center', fontFamily: 'var(--font-display)', marginBottom: 16 }}>{team.name}</h2>
+          <h2 style={{ textAlign: 'center', fontFamily: 'var(--font-display)', fontWeight: 400, marginBottom: 16 }}>{team.name}</h2>
 
           {hasContact && (
             <div className="team-profile-section" style={{ textAlign: 'left', marginBottom: 16 }}>

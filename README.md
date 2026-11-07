@@ -1043,6 +1043,104 @@ saltaba la fila con un error de Postgres, porque `matches.match_date` era
   los que siguen activos, que es lo correcto para un partido que todavía no
   se juega.
 
+## El home
+
+`/` (`Home.jsx`) es la primera impresión de CFBAMX, y eran 58 cuadritos verdes iguales
+sobre el pasto, con el lema hasta el final de la página y un botón de "Ir al inicio". Se
+rehízo el 2026-11-07 con una condición de Alfredo: que los equipos **no** se acomoden como
+dentro de una liga. Ahí cada uno es un renglón de una lista, y eso le quita su
+individualidad.
+
+### El muro de cascos
+
+Todos los equipos lado a lado, sin separarlos por liga, cada uno en su nicho
+(`TeamNiche.jsx`): su casco en grande, encendido con su color, y su nombre en una placa
+debajo de la línea de gol. La idea viene del muro de cascos del College Football Hall of
+Fame. El verde noche de la página no compite: el único color de la pantalla es el de los
+equipos y las ligas.
+
+- **Todos miden lo mismo.** CFBAMX es un medio y nadie recibe un trato que los demás no
+  tengan. De un nicho a otro solo cambia lo que ya era de cada equipo.
+- **Van por abecedario.** El orden de antes era el de captura, que juntaba a los de ONEFA
+  en las primeras filas y se leía como una lista de ligas. Por abecedario se revuelven, y
+  cualquiera encuentra al suyo.
+- **No dicen de qué liga son.** A propósito: aquí el protagonista es el equipo.
+- **El casco y el color, y nada más.** Es lo único que tienen los 58. La portada no entra:
+  la subieron 25, casi todas son flyers con texto hasta las orillas que repiten el mismo
+  casco, y recortarlas es lo que "La portada no se recorta" prohíbe. Se queda en la ficha.
+
+**Un casco del color de su equipo.** `TeamStrip` pone el casco sobre el pasto porque un
+casco rojo sobre rojo desaparece. Aquí el nicho sí es del color del equipo, así que la luz
+va detrás del casco, las orillas se quedan en sombra y un filo claro de 1 px lo despega del
+fondo. Se compararon seis variantes con los casos peores (guinda sobre guinda, dorado sobre
+dorado, negro sobre rojo, logos cuadrados): la calcomanía con borde blanco separaba más,
+pero se veía a pegatina.
+
+El color es el de todas las pantallas (`useTeamPaint`): sale del logo, y `teams.brand_color`
+manda si el equipo eligió uno. Para eso `GET /leagues/all-teams` lo manda desde el
+2026-11-07.
+
+### Las ligas
+
+La misma anatomía de un nicho, de lado: el logo y el nombre sobre su color, y la región en
+la placa. La región va en la placa por una medida: es letra chica, y sobre un logo de tono
+medio no se lee ni en blanco ni en negro. Recorriendo 912 colores con las capas del CSS,
+sobre el color reprobaba en 171. El nombre sí pasa sobre cualquiera por su tamaño: el peor
+da 3.15:1, y el mínimo a esa medida es 3:1.
+
+En un teléfono van de dos en dos: apiladas se comían la primera pantalla.
+
+### El lema, arriba y en chico
+
+En julio (`1f7ccbb`) el lema se bajó para que las ligas salieran primero, y con los equipos
+se fue hasta el final de la página, donde casi nadie lo veía. Regresó arriba sin cambiar esa
+decisión: ya no es un hero de 400 px sino dos renglones dentro del panel, y las ligas siguen
+en la primera pantalla, a menos de 320 px en una computadora y en un teléfono. "Temporada en
+curso" e "Ir al inicio" se fueron: no decían nada.
+
+### Lo que sobra del muro
+
+Los equipos casi nunca llenan la última fila. Los lugares que quedan son nichos apagados y
+un solo enlace, "¿Falta tu equipo?", que cierra el muro en un rectángulo y le habla a quien
+lo recorrió y no se encontró. El "Registrar equipo" de arriba es para quien ya viene a eso.
+
+Las columnas del muro son fijas (de 3 a 8, con container queries y no con `auto-fill`) para
+que `.hm-libre` sepa cuántos lugares ocupar: el resto lo saca `mod()` con el total de equipos
+(`--n`), sin JavaScript. Un navegador sin `mod()` lo deja en un solo lugar, y no se rompe
+nada. Con una fila exacta, ocupa un renglón entero.
+
+Los "Registrar…" pasaron de amarillo a contorno: siguen a la vista con sesión y sin ella,
+pero quien llega viene a ver, no a registrarse.
+
+### Mientras carga
+
+La API tarda hasta 40 s en despertar (PD-03), así que para quien llega en frío la pantalla
+de carga *es* la primera impresión. Antes eran cuatro letreros de "Cargando…" apilados.
+Ahora el home enseña su forma, apagada, con un solo aviso, y cada nicho se enciende al leer
+su logo. Es la única animación de la página, y `prefers-reduced-motion` la apaga.
+
+### La ficha de un equipo
+
+Se abría con el mismo degradado verde y dorado para todos, y después de un nicho guinda se
+sentía de otra aplicación. Ahora lleva el color del equipo (`.ficha-de-equipo`), igual que
+sus dos vistas previas del editor (`TeamForm`, `TeamProfileSection`), que dicen "así se ve tu
+ficha": quien elige su color lo ve ahí mismo. La portada, si la hay, sigue ganando. Una sede
+o un medio no tienen color de equipo y se quedan con su degradado.
+
+### Lo que pesa
+
+Son más imágenes y pesa menos: el home pasó de 65 imágenes y 6.1 MB a 127 y 1.2 MB. Antes
+bajaba cada logo en su tamaño original para pintarlo a 64 px; ahora se le pide a Cloudinary a
+la medida (`imagenAjustada`). Cada logo se baja dos veces a propósito: la versión de 96 px es
+la que se lee para sacarle el color (ver "El color sale del logo").
+
+### Fuera de esta versión
+
+- **Un buscador de equipos.** Con 58, el abecedario alcanza.
+- **Quitar `TeamCard`.** Lo sigue usando la página de un torneo; se va con PD-44.
+
+---
+
 ## La página de un partido
 
 `/partidos/:id` es a donde llega cada link que circula por WhatsApp, y hasta el

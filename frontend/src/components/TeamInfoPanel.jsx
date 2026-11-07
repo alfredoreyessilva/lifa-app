@@ -1,7 +1,10 @@
 import { useEffect } from 'react';
 import SubscribeButton from './SubscribeButton.jsx';
+import { useTeamPaint } from '../utils/useTeamPaint.js';
 
 export default function TeamInfoPanel({ team, leagueId, onClose }) {
+  const pintura = useTeamPaint(team.logo_url, team.brand_color, { alInstante: true });
+
   useEffect(() => {
     function onKey(e) {
       if (e.key === 'Escape') onClose();
@@ -14,7 +17,7 @@ export default function TeamInfoPanel({ team, leagueId, onClose }) {
   const hasLinks   = team.facebook_url || team.instagram_url || team.twitter_url || team.website_url;
 
   const card = (
-    <div className="team-profile-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="team-profile-modal ficha-de-equipo" style={{ '--eq': pintura.fondo }} onClick={(e) => e.stopPropagation()}>
 
       {/* BANNER */}
       <div

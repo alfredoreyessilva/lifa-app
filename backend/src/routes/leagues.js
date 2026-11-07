@@ -292,7 +292,7 @@ router.get('/matches/:matchId/context', asyncHandler(async (req, res) => {
 router.get('/all-teams', asyncHandler(async (req, res) => {
   const teams = await db.prepare(`
     SELECT DISTINCT ON (t.id)
-      t.id, t.name, t.logo_url, t.cover_url, t.city, t.institution, t.maps_url, t.contact_email, t.contact_phone,
+      t.id, t.name, t.logo_url, t.cover_url, t.brand_color, t.city, t.institution, t.maps_url, t.contact_email, t.contact_phone,
       t.facebook_url, t.instagram_url, t.twitter_url, t.website_url,
       o.is_verified AS is_verified,
       l.id AS league_id

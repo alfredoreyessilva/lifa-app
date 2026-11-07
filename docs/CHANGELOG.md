@@ -15,6 +15,30 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El home es un muro de cascos (2026-11-07).** Lo pidió Alfredo: que se viera más profesional
+  y que los equipos no se acomodaran como dentro de una liga, porque eso le quita individualidad
+  a cada uno. Cada equipo tiene ahora su nicho, con su casco en grande, encendido con su color, y
+  su nombre en una placa, por abecedario y sin separarlos por liga. Las ligas llevan la misma
+  anatomía, de lado; el lema subió a la primera pantalla, ya en chico y dentro del panel; medios y
+  tiendas van en dos columnas; la carga en frío enseña el home apagado en vez de cuatro letreros, y
+  la ficha de un equipo y sus dos vistas previas del editor llevan su color.
+  `GET /leagues/all-teams` manda ahora `brand_color`, para que el color elegido por un equipo
+  mande también aquí. El porqué está en la sección "El home" del README.
+
+  Verificado con los datos públicos de producción, solo en lectura y con los POST bloqueados, y
+  **solo en Chrome**: 26 anchos de 320 a 2560 px sin nada que se salga ni nombres recortados, y el
+  lugar libre cerrando la última fila en todos; los estados de carga, vacío y error; nombres de 49
+  letras, sin logo, con logo roto, con color elegido, 56 equipos (fila exacta), cinco ligas y
+  patrocinadores encendidos; teclado, Enter y Esc, y cada enlace. La consulta nueva, en sesión de
+  solo lectura contra `desarrollo-local`: las mismas 57 filas, con el resto de las columnas igual.
+  El peso bajó de 6.1 MB a 1.2 MB en imágenes.
+
+  Dos cosas salieron solo de correrlo. La región de una liga sobre su color reprobaba el contraste
+  en 171 de 912 colores, aunque las cuatro ligas de hoy se veían bien: por eso va en su placa. Y el
+  perfil de un equipo tronaba con `pintura is not defined` por un hook puesto en la función de al
+  lado; esa pantalla pide sesión y ni las pruebas ni la compilación lo ven. Lo atrapó montarla de
+  verdad en el navegador, sin sesión, con `import()` del módulo y el React de Vite.
+
 - **El Panel Admin se volvió una herramienta (2026-11-06).** Lo pidió Alfredo: que se viera
   como un panel profesional y que cada sección se reacomodara. Ocupa todo el ancho, con una
   barra lateral en verde noche, y cada sección tiene la misma forma: el marcador arriba y el

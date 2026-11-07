@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { required, maxLength, validEmail, validUrl, validGoogleMapsUrl, runValidations } from '../utils/validation.js';
 import CharField from './CharField.jsx';
 import LinkListField from './LinkListField.jsx';
+import { useTeamPaint } from '../utils/useTeamPaint.js';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 function initials(name) {
@@ -92,6 +93,7 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel, ind
   });
   const [error, setError]   = useState('');
   const [loading, setLoading] = useState(false);
+  const pintura = useTeamPaint(form.logo_url, form.brand_color, { alInstante: true });
 
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -157,7 +159,7 @@ export default function TeamForm({ initial, onSubmit, onCancel, submitLabel, ind
       {error && <div className="form-error">{error}</div>}
 
       {/* ── PREVIEW CARD (idéntica a TeamInfoPanel) ── */}
-      <div className="team-editor-preview">
+      <div className="team-editor-preview ficha-de-equipo" style={{ '--eq': pintura.fondo }}>
 
         {/* BANNER */}
         <div className="team-profile-banner team-editor-banner">

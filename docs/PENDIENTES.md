@@ -29,7 +29,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | **P1** | Hoy no daña, pero frena el siguiente paso: la primera liga que cobre, la prueba en cancha, el siguiente cliente |
 | **P2** | Deuda y pulido. Se toma cuando hay tiempo o cuando se toca ese archivo |
 
-## Índice (2026-11-06)
+## Índice (2026-11-07)
 
 | ID | P | Qué | Tipo |
 |-|-|-|-|
@@ -67,6 +67,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-42 | P2 | Borrar un equipo deja su organización, y sale en Organizaciones como "Equipo independiente" | código |
 | PD-43 | P2 | El recordatorio de WhatsApp a un tutor no le pone el 52 a un número de diez dígitos | código |
 | PD-44 | P2 | La página de un torneo se quedó con su portada gigante y sus tarjetas verdes | código |
+| PD-45 | P2 | Un logo que no carga se ve como un cuadro roto | código |
 
 ---
 
@@ -653,7 +654,15 @@ imagen (`tournaments.logo_url`), la portada mide 1032×689 px y el nombre del to
 822 px. Sin calendario abierto, la lista de equipos sigue con `TeamCard`, las tarjetas verdes.
 
 Es P2 porque afecta a un solo torneo. Los equipos se resuelven con `TeamStrip`; la portada
-puede seguir la regla de "La página de una liga" (entera y sin estirar).
+puede seguir la regla de "La página de una liga" (entera y sin estirar). Desde el 2026-11-07 es
+el último que usa `TeamCard`: al cerrarlo se van también ese archivo, `.team-grid` y `.team-card`.
+
+### PD-45 · Un logo que no carga se ve como un cuadro roto
+
+Visto el 2026-11-07 al probar el muro del home con una URL que no existe: `Casco`
+(`MatchField.jsx`) pinta el `<img>` y deja el cuadro de imagen rota dentro del disco, y lo mismo
+pasa en el calendario, la portada de un partido y la página de una liga. Hoy no le pasa a nadie:
+los 58 logos públicos cargan. Se resuelve con un `onError` en `Casco` que caiga a las iniciales.
 
 ---
 
