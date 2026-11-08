@@ -28,45 +28,45 @@ function formatWhen(isoDate) {
 // (utils/misNotificaciones.js). Los cuatro últimos son los de `match_events`
 // más los dos que el backend calcula — un tipo nuevo va en los tres lados.
 const TYPE_META = {
-  league_approved:   { icon: '🎉', label: 'Liga aprobada', color: 'var(--flag)' },
-  league_unapproved: { icon: '⚠️', label: 'Publicación', color: 'var(--ink-dim)' },
+  league_approved:   { icon: '🎉', label: 'Liga aprobada', tone: 'oro' },
+  league_unapproved: { icon: '⚠️', label: 'Publicación', tone: 'gris' },
   // Rechazo de la SOLICITUD de publicación (admin.js, decline-publish). No es
   // lo mismo que league_unapproved, que es ocultar una liga que ya era pública.
-  league_publish_declined: { icon: '📝', label: 'Solicitud rechazada', color: 'var(--live)' },
-  league_verified:   { icon: '⭐', label: 'Verificada', color: 'var(--paper)' },
-  league_unverified: { icon: '⚠️', label: 'Verificación retirada', color: 'var(--ink-dim)' },
-  team_claimed:      { icon: '🤝', label: 'Equipo reclamado', color: 'var(--flag)' },
-  org_admin_claimed: { icon: '👋', label: 'Nuevo miembro', color: 'var(--flag)' },
-  broadcast_added:   { icon: '🎥', label: 'Transmisión', color: 'var(--live)' },
-  score_reminder:    { icon: '⏳', label: 'Marcador pendiente', color: 'var(--ink-dim)', cta: 'Ir al partido →' },
-  match_not_started: { icon: '📅', label: 'Partido sin actualizar', color: 'var(--ink-dim)', cta: 'Ir al partido →' },
-  billing_charge_new:       { icon: '🧾', label: 'Nuevo cargo',     color: 'var(--flag)',     cta: 'Ver estado de cuenta →' },
-  billing_due_soon:         { icon: '⏰', label: 'Cargo por vencer', color: 'var(--ink-dim)', cta: 'Ver estado de cuenta →' },
-  billing_overdue:          { icon: '🔴', label: 'Cargo vencido',    color: 'var(--live)',    cta: 'Ver estado de cuenta →' },
-  billing_payment_recorded: { icon: '✅', label: 'Pago registrado',  color: 'var(--paper)',   cta: 'Ver estado de cuenta →' },
+  league_publish_declined: { icon: '📝', label: 'Solicitud rechazada', tone: 'rojo' },
+  league_verified:   { icon: '⭐', label: 'Verificada', tone: 'cal' },
+  league_unverified: { icon: '⚠️', label: 'Verificación retirada', tone: 'gris' },
+  team_claimed:      { icon: '🤝', label: 'Equipo reclamado', tone: 'oro' },
+  org_admin_claimed: { icon: '👋', label: 'Nuevo miembro', tone: 'oro' },
+  broadcast_added:   { icon: '🎥', label: 'Transmisión', tone: 'rojo' },
+  score_reminder:    { icon: '⏳', label: 'Marcador pendiente', tone: 'gris', cta: 'Ir al partido →' },
+  match_not_started: { icon: '📅', label: 'Partido sin actualizar', tone: 'gris', cta: 'Ir al partido →' },
+  billing_charge_new:       { icon: '🧾', label: 'Nuevo cargo',     tone: 'oro',     cta: 'Ver estado de cuenta →' },
+  billing_due_soon:         { icon: '⏰', label: 'Cargo por vencer', tone: 'gris', cta: 'Ver estado de cuenta →' },
+  billing_overdue:          { icon: '🔴', label: 'Cargo vencido',    tone: 'rojo',    cta: 'Ver estado de cuenta →' },
+  billing_payment_recorded: { icon: '✅', label: 'Pago registrado',  tone: 'cal',   cta: 'Ver estado de cuenta →' },
   // El equipo le reporta un pago a su liga (lo lee la LIGA), y el aviso de
   // vuelta si se lo rechazan (lo lee el EQUIPO).
-  team_payment_reported:    { icon: '🧾', label: 'Pago por confirmar', color: 'var(--flag)', cta: 'Ir a Cobranza →' },
-  billing_payment_rejected: { icon: '⚠️', label: 'Pago rechazado',     color: 'var(--live)', cta: 'Ver estado de cuenta →' },
+  team_payment_reported:    { icon: '🧾', label: 'Pago por confirmar', tone: 'oro', cta: 'Ir a Cobranza →' },
+  billing_payment_rejected: { icon: '⚠️', label: 'Pago rechazado',     tone: 'rojo', cta: 'Ver estado de cuenta →' },
   // Cuotas del club a sus jugadores (routes/playerBilling.js). Los dos de
   // vencimiento llegan agregados, uno por equipo y no uno por jugador —
   // ver utils/billingReminders.js.
-  player_payment_reported:  { icon: '🧾', label: 'Pago por confirmar', color: 'var(--flag)',     cta: 'Ir a Finanzas →' },
-  player_billing_due_soon:  { icon: '⏰', label: 'Cuotas por vencer',  color: 'var(--ink-dim)', cta: 'Ir a Finanzas →' },
-  player_billing_overdue:   { icon: '🔴', label: 'Cuotas vencidas',    color: 'var(--live)',    cta: 'Ir a Finanzas →' },
+  player_payment_reported:  { icon: '🧾', label: 'Pago por confirmar', tone: 'oro',     cta: 'Ir a Finanzas →' },
+  player_billing_due_soon:  { icon: '⏰', label: 'Cuotas por vencer',  tone: 'gris', cta: 'Ir a Finanzas →' },
+  player_billing_overdue:   { icon: '🔴', label: 'Cuotas vencidas',    tone: 'rojo',    cta: 'Ir a Finanzas →' },
   // Lo que sigues.
-  upcoming:        { icon: '⏰', label: 'Próximo',        color: 'var(--flag)',     cta: 'Ver partido →' },
-  live:            { icon: '🔴', label: 'En vivo',        color: 'var(--live)',     cta: 'Ver partido →' },
-  final_score:     { icon: '🏆', label: 'Marcador final', color: 'var(--paper)',    cta: 'Ver partido →' },
-  schedule_change: { icon: '📅', label: 'Cambio',         color: 'var(--ink-dim)', cta: 'Ver partido →' },
+  upcoming:        { icon: '⏰', label: 'Próximo',        tone: 'oro',     cta: 'Ver partido →' },
+  live:            { icon: '🔴', label: 'En vivo',        tone: 'rojo',     cta: 'Ver partido →' },
+  final_score:     { icon: '🏆', label: 'Marcador final', tone: 'cal',    cta: 'Ver partido →' },
+  schedule_change: { icon: '📅', label: 'Cambio',         tone: 'gris', cta: 'Ver partido →' },
   // Tus predicciones (utils/bandeja.js › avisosDePrediccion). El del resultado
   // cambia de ícono según acertaste, así que su texto lo trae.
-  prediction_result:   { icon: '🎯', label: 'Tu predicción', color: 'var(--paper)',   cta: 'Ver partido →' },
-  prediction_round:    { icon: '🏅', label: 'Ranking',       color: 'var(--flag)',    cta: 'Ver ranking →' },
-  prediction_reminder: { icon: '🗳️', label: 'Por votar',     color: 'var(--flag)',    cta: 'Votar →' },
+  prediction_result:   { icon: '🎯', label: 'Tu predicción', tone: 'cal',   cta: 'Ver partido →' },
+  prediction_round:    { icon: '🏅', label: 'Ranking',       tone: 'oro',    cta: 'Ver ranking →' },
+  prediction_reminder: { icon: '🗳️', label: 'Por votar',     tone: 'oro',    cta: 'Votar →' },
 };
 
-const SIN_META = { icon: '📢', label: 'Aviso', color: 'var(--ink-dim)' };
+const SIN_META = { icon: '📢', label: 'Aviso', tone: 'gris' };
 
 // De quién es el aviso: la organización (con su logo) o la liga del partido
 // que sigues.
@@ -108,52 +108,67 @@ function textoDe(item) {
   return { title: item.title, body: item.body };
 }
 
-function NotificationItem({ item }) {
+// Los avisos se agrupan por día, como una crónica: "Hoy", "Ayer" y luego la
+// fecha. La lista ya viene ordenada del más nuevo al más viejo.
+function etiquetaDeDia(isoDate) {
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return 'Antes';
+  const hoy = new Date();
+  const inicio = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const dias = Math.round((inicio(hoy) - inicio(date)) / 86400000);
+  if (dias === 0) return 'Hoy';
+  if (dias === 1) return 'Ayer';
+  return date.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+function agruparPorDia(items) {
+  const grupos = [];
+  for (const item of items) {
+    const dia = etiquetaDeDia(item.at);
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && ultimo.dia === dia) ultimo.items.push(item);
+    else grupos.push({ dia, items: [item] });
+  }
+  return grupos;
+}
+
+function formatHora(isoDate) {
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+}
+
+function NotificationItem({ item, indice }) {
   const meta = TYPE_META[item.type] || SIN_META;
   const { title, body, icon } = textoDe(item);
+  const clases = [
+    'nt-card',
+    `nt-card--${meta.tone}`,
+    item.is_new ? 'nt-card--new' : '',
+    item.type === 'live' ? 'nt-card--live' : '',
+  ].filter(Boolean).join(' ');
 
   return (
-    <div className={`notification-item${item.is_new ? ' notification-item--new' : ''}`}>
-      <div className="notification-item-head">
-        <Origen item={item} />
-        <span className="notification-item-time">
-          {item.is_new && <span className="notification-new-tag">Nuevo</span>}
-          {formatWhen(item.at)}
-        </span>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
-        <span style={{ fontSize: 16 }} aria-hidden="true">{icon || meta.icon}</span>
-        <span className="notification-item-title">{title}</span>
-        <span
-          className="tag"
-          style={{
-            fontSize: 10,
-            padding: '2px 6px',
-            color: meta.color,
-            borderColor: meta.color,
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-          }}
-        >
-          {meta.label}
-        </span>
-      </div>
-
-      {body && (
-        <span className="notification-item-body" style={{ marginTop: 4, lineHeight: 1.4, whiteSpace: 'pre-line' }}>
-          {body}
-        </span>
-      )}
-
-      {item.url && (
-        <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-start' }}>
-          <Link to={item.url} className="btn btn-outline btn-sm" style={{ fontSize: 12, padding: '3px 10px' }}>
-            {meta.cta || 'Abrir →'}
-          </Link>
+    <article className={clases} style={{ '--nt-i': Math.min(indice, 12) }}>
+      <div className="nt-card-icon" aria-hidden="true">{icon || meta.icon}</div>
+      <div className="nt-card-main">
+        <div className="nt-card-top">
+          <span className="nt-card-label">{meta.label}</span>
+          {item.is_new && <span className="nt-card-new">Nuevo</span>}
+          <span className="nt-card-time" title={formatWhen(item.at)}>{formatHora(item.at)}</span>
         </div>
-      )}
-    </div>
+        <h3 className="nt-card-title">{title}</h3>
+        {body && <p className="nt-card-body">{body}</p>}
+        <div className="nt-card-foot">
+          <Origen item={item} />
+          {item.url && (
+            <Link to={item.url} className="nt-card-cta">
+              {meta.cta || 'Abrir →'}
+            </Link>
+          )}
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -168,13 +183,20 @@ export default function Notifications() {
     setError('');
     api.getMyNotifications(token)
       .then((data) => {
-        if (!vigente) return null;
+        if (!vigente) return;
         setItems(data.items || []);
         // Se marca como visto DESPUÉS de traer la lista: lo que era nuevo se
         // pinta como nuevo en esta visita, y deja de contar en el balón.
-        return api.markMyNotificationsSeen(token).then(() => {
-          window.dispatchEvent(new Event(EVENTO_NOTIFICACIONES_VISTAS));
-        });
+        //
+        // Va en su propia cadena: colgada de la de arriba, si marcarla fallaba
+        // (se fue la señal justo después de cargar), el catch de abajo ponía
+        // "No se pudieron cargar tus notificaciones" encima de la lista ya
+        // cargada. No hay nada que avisar: el evento que pone el balón en cero
+        // sale solo si el servidor guardó la marca, y lo nuevo vuelve a salir
+        // como nuevo en la próxima visita, que es cuando se vuelve a marcar.
+        api.markMyNotificationsSeen(token)
+          .then(() => window.dispatchEvent(new Event(EVENTO_NOTIFICACIONES_VISTAS)))
+          .catch(() => {});
       })
       .catch((err) => {
         if (!vigente) return;
@@ -186,44 +208,56 @@ export default function Notifications() {
     return () => { vigente = false; };
   }, [token]);
 
-  // Va dentro del panel negro, como el resto del área con sesión (Mi panel,
-  // invitaciones). El título no lleva margen arriba: ese aire ya lo da el
-  // relleno del panel.
+  // Es una pantalla del aficionado, no un panel de trabajo: va en la noche de
+  // la cancha (la placa de la página de un partido), no en el panel negro.
+  const nuevos = items ? items.filter((i) => i.is_new).length : 0;
+  let indice = 0;
+
   return (
     <div className="container">
-      <div className="dashboard-panel">
-        <div className="section-head" style={{ marginTop: 0 }}>
-          <h2>Mis notificaciones</h2>
-        </div>
+      <div className="nt-page">
+        <header className="nt-hero">
+          <span className="nt-hero-eyebrow">Tu bandeja</span>
+          <h1 className="nt-hero-title">Mis notificaciones</h1>
+          <p className="nt-hero-sub">
+            {items === null && !error && 'Revisando lo que pasó en la cancha…'}
+            {items && nuevos > 0 && <><strong>{nuevos}</strong> {nuevos === 1 ? 'aviso nuevo' : 'avisos nuevos'} desde tu última visita</>}
+            {items && items.length > 0 && nuevos === 0 && 'Estás al día. Esto es lo más reciente.'}
+            {items && items.length === 0 && !error && 'Todavía no hay jugadas que contarte.'}
+          </p>
+        </header>
 
-        {error && (
-          <div className="empty-state" style={{ padding: '16px 20px' }}>
-            <p style={{ color: 'var(--ink-dim)', margin: 0 }}>{error}</p>
-          </div>
-        )}
+        {error && <div className="nt-aviso">{error}</div>}
 
         {items === null && !error && (
-          <div className="empty-state">
-            <h3>Cargando…</h3>
+          <div className="nt-list" aria-busy="true">
+            {[0, 1, 2].map((n) => <div key={n} className="nt-skeleton" />)}
           </div>
         )}
 
         {items && items.length === 0 && !error && (
-          <div className="empty-state" style={{ padding: '36px 20px', background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 8, marginTop: 12 }}>
-            <h3 style={{ marginBottom: 8 }}>Sin notificaciones todavía</h3>
-            <p style={{ color: 'var(--ink-dim)', fontSize: 14, margin: 0 }}>
-              Sigue un partido o a un equipo y aquí te llegan sus avisos. Si predices quién gana, aquí te enteras de si acertaste y en qué lugar vas. Si administras una liga o un club, aquí llegan también los suyos.
-            </p>
+          <div className="nt-empty">
+            <div className="nt-empty-ball" aria-hidden="true">🏈</div>
+            <h3>Sin notificaciones todavía</h3>
+            <ul>
+              <li><span aria-hidden="true">⭐</span> Sigue un partido o a un equipo y aquí te llegan sus avisos.</li>
+              <li><span aria-hidden="true">🎯</span> Predice quién gana y entérate de si acertaste y en qué lugar vas.</li>
+              <li><span aria-hidden="true">🏟️</span> Si administras una liga o un club, aquí llegan también los suyos.</li>
+            </ul>
+            <Link to="/" className="nt-card-cta">Explorar ligas y equipos →</Link>
           </div>
         )}
 
-        {items && items.length > 0 && (
-          <div className="notification-list" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
-            {items.map((item) => (
-              <NotificationItem key={item.key} item={item} />
-            ))}
-          </div>
-        )}
+        {items && items.length > 0 && agruparPorDia(items).map((grupo) => (
+          <section key={grupo.dia} className="nt-day">
+            <h2 className="nt-day-title"><span>{grupo.dia}</span></h2>
+            <div className="nt-list">
+              {grupo.items.map((item) => (
+                <NotificationItem key={item.key} item={item} indice={indice++} />
+              ))}
+            </div>
+          </section>
+        ))}
       </div>
     </div>
   );

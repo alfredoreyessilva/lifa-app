@@ -219,6 +219,19 @@ Se van la cuadrícula de logos de esa pantalla y la sección "Partidos que sigo"
 La barra de logos de los paneles (`OrgLogoBar`) se queda: esa sirve para
 navegar, no para leer avisos.
 
+**Es una pantalla del aficionado, no un panel de trabajo** (2026-11-08). Vivía
+en el panel negro del área con sesión, con renglones de etiquetas chicas: se
+leía como bandeja de oficina, y quien más la abre es alguien que sigue un
+partido o predice. Va en la noche de la cancha (`--mp-*`, la placa de la página
+de un partido): un encabezado con las yardas pintadas y el número de avisos
+nuevos, la lista **agrupada por día** ("Hoy", "Ayer", la fecha) como una
+crónica, y una tarjeta por aviso con el color de su tipo como franja e
+insignia (`tone` en `TYPE_META`: oro, rojo, cal, gris). El botón de cada aviso
+va en amarillo, como en el resto de la app pública. En el teléfono, el ícono
+sube al renglón de la etiqueta: como columna le quitaba ~50 px a cada renglón.
+La etiqueta roja va aclarada porque el `--live` puro daba 3.98:1 contra la
+tarjeta; la franja sí lleva el rojo puro.
+
 Las organizaciones de cada quien son **las mismas que ya devuelve
 `/auth/me`**: donde es miembro activo, o dueño por `owner_user_id`. La cuenta de
 administrador de la plataforma no es la excepción: aunque pase todas las
@@ -415,6 +428,14 @@ cada usuario guarda **hasta dónde ya vio** (`users.notifications_seen_at`). Un
 aviso es nuevo si su hora es posterior a esa marca y no está en el futuro; abrir
 "Mis notificaciones" la mueve a ahora. `read_at` se queda en la tabla (regla 8)
 pero deja de usarse.
+
+**Si moverla falla, la pantalla no dice nada** (2026-11-08). La lista ya está en
+pantalla; el balón no se pone en cero, porque el evento que lo hace sale solo
+cuando el servidor guardó la marca, y lo nuevo vuelve a salir como nuevo en la
+próxima visita, que es cuando se vuelve a marcar. Antes las dos llamadas
+compartían un solo manejo de error, y si se iba la señal justo después de
+cargar salía "No se pudieron cargar tus notificaciones" encima de la lista ya
+cargada.
 
 **"Ahora" es la hora de la base, no la del servidor.** Los avisos, los eventos
 y la marca los fecha Postgres; si el reloj de Node va atrasado, lo recién creado

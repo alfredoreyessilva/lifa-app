@@ -15,6 +15,39 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **"Mis notificaciones" es una pantalla del aficionado (2026-11-08).** Lo pidió
+  Alfredo: que se viera mejor, llamativa y no tan seria como un panel de trabajo,
+  porque quien más la abre es un aficionado. Vivía en el panel negro del área con
+  sesión, con renglones de etiquetas chicas. Ahora va en la noche de la cancha, como
+  la página de un partido: un encabezado con las yardas pintadas y cuántos avisos
+  nuevos hay, la lista agrupada por día ("Hoy", "Ayer", la fecha) y una tarjeta por
+  aviso con el color de su tipo en la franja y en el ícono, y el botón en amarillo.
+  Mientras carga enseña tarjetas en gris que brillan; vacía, un balón que se mece, qué
+  hacer para que lleguen avisos y "Explorar ligas y equipos". En el teléfono el ícono
+  sube al renglón de la etiqueta: como columna le quitaba ~50 px a cada renglón.
+
+  Al medir el contraste salieron dos textos abajo de 4.5:1: la etiqueta roja ("En
+  vivo", "Cargo vencido"), 3.98:1 contra la tarjeta, y el subtítulo del encabezado,
+  4.2:1 donde el degradado es más verde. Van aclarados (5.4 y 5.7); la franja conserva
+  el rojo.
+
+  De paso, un bug que ya venía de antes: traer la lista y marcarla como vista
+  compartían un solo manejo de error, así que si fallaba la marca (se iba la señal
+  justo después de cargar) salía "No se pudieron cargar tus notificaciones" encima de
+  la lista ya cargada. Ahora la marca va aparte y, si falla, no se avisa: el balón no
+  se pone en cero y lo nuevo vuelve a salir como nuevo en la próxima visita.
+
+  Verificado en el navegador con la pantalla real, la sesión simulada y una bandeja
+  inventada con los cuatro tonos, los tres orígenes, un tipo desconocido y varios
+  días: nada se sale de la pantalla en 1280 y 360; carga, vacío y error; los colores
+  que calcula el navegador son los medidos. El bug, con control: el mismo script de
+  cinco casos (todo bien; falla la marca, con 500 o sin señal; falla la lista, con 500
+  o sin señal), entrando por la campana desde otra página, reprodujo el letrero falso
+  en los dos casos de la marca antes del arreglo y pasa los cinco después, con el
+  evento que pone el balón en cero saliendo solo cuando la marca se guardó. Sin probar
+  contra el backend real ni en un teléfono. El porqué, en "Notificaciones: la bandeja
+  y el push" del README.
+
 - **El panel de una liga es una herramienta con secciones (2026-11-07).** Lo pidió
   Alfredo: que el panel de trabajo de una liga, en "Mi panel", se viera más
   profesional. Era una sola página dentro de la tarjeta negra, con "Liga" de título y

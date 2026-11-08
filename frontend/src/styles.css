@@ -558,35 +558,6 @@ button.league-card {
 .match-action { white-space: nowrap; }
 
 /* ---------- Notificaciones ---------- */
-.notification-item {
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--card);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.notification-item-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-}
-.notification-item-title {
-  font-family: var(--font-eyebrow);
-  font-size: 15px;
-  color: var(--paper);
-}
-.notification-item-time {
-  font-size: 11px;
-  color: var(--ink-dim);
-  white-space: nowrap;
-}
-.notification-item-body {
-  font-size: 13px;
-  color: var(--ink-dim);
-}
 .notification-dot {
   position: absolute;
   top: 2px;
@@ -596,23 +567,6 @@ button.league-card {
   border-radius: 50%;
   background: var(--live);
   border: 2px solid var(--field-deep);
-}
-/* "Mis notificaciones": lo que llegó después de la última visita. */
-.notification-item--new {
-  border-left: 3px solid var(--flag);
-}
-.notification-new-tag {
-  display: inline-block;
-  margin-right: 8px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--flag);
-  color: var(--field-deep);
-  font-family: var(--font-eyebrow);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
 }
 /* De quién es el aviso: la organización con su logo, o lo que sigues. */
 .notification-origin {
@@ -642,6 +596,295 @@ button.league-card {
   height: 100%;
   object-fit: cover;
 }
+/* ---------- Mis notificaciones ----------
+   Es una pantalla del aficionado, no un panel de trabajo: va en la noche de la
+   cancha (--mp-*), con las yardas pintadas en la placa, una tarjeta por aviso
+   y el color de su tipo como franja e insignia. Los avisos se agrupan por día. */
+.nt-page {
+  --nt-tone: var(--mp-gris);
+  max-width: 760px;
+  margin: 8px auto 48px;
+  padding: 0 0 28px;
+  background: var(--mp-noche);
+  border-radius: 18px;
+  overflow: hidden;
+  color: var(--mp-cal);
+}
+.nt-hero {
+  position: relative;
+  padding: 30px 26px 26px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 58px, var(--mp-linea) 58px 60px),
+    radial-gradient(120% 140% at 100% 0%, rgba(255, 210, 63, 0.22), transparent 55%),
+    linear-gradient(160deg, var(--field-deep), var(--mp-noche-2) 70%);
+  border-bottom: 3px solid var(--flag);
+}
+.nt-hero-eyebrow {
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--flag);
+}
+.nt-hero-title {
+  margin: 4px 0 6px;
+  font-family: var(--font-display);
+  font-size: clamp(34px, 7vw, 52px);
+  line-height: 1;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--mp-cal);
+}
+.nt-hero-sub {
+  margin: 0;
+  font-size: 14px;
+  /* --mp-gris daba 4.2:1 donde el degradado es más verde. */
+  color: color-mix(in srgb, var(--mp-cal) 82%, transparent);
+  min-height: 1.4em;
+}
+.nt-hero-sub strong {
+  display: inline-block;
+  min-width: 24px;
+  padding: 0 7px;
+  margin-right: 2px;
+  border-radius: 999px;
+  background: var(--flag);
+  color: var(--mp-noche);
+  font-family: var(--font-eyebrow);
+  text-align: center;
+}
+
+.nt-day { padding: 0 18px; }
+.nt-day-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 24px 0 12px;
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mp-gris);
+}
+.nt-day-title::after {
+  content: '';
+  flex: 1;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, var(--mp-linea) 0 10px, transparent 10px 16px);
+}
+.nt-day-title span::first-letter { text-transform: uppercase; }
+
+.nt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.nt-page > .nt-list { padding: 22px 18px 0; }
+
+.nt-card--oro  { --nt-tone: var(--flag); }
+/* La etiqueta en --live daba 3.98:1 contra la parte clara de la tarjeta; la
+   letra va aclarada (5.4:1) y la franja y el ícono conservan el rojo. */
+.nt-card--rojo { --nt-tone: var(--live); --nt-tone-texto: color-mix(in srgb, var(--live) 70%, white); }
+.nt-card--cal  { --nt-tone: var(--mp-cal); }
+.nt-card--gris { --nt-tone: var(--mp-gris); }
+
+.nt-card {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  padding: 16px 16px 14px 18px;
+  background: linear-gradient(135deg, var(--mp-noche-3), var(--mp-noche-2));
+  border: 1px solid var(--mp-linea);
+  border-radius: 14px;
+  overflow: hidden;
+  animation: nt-entra 0.35s ease both;
+  animation-delay: calc(var(--nt-i, 0) * 40ms);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.nt-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: var(--nt-tone);
+}
+.nt-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--nt-tone) 45%, transparent);
+}
+.nt-card--new {
+  border-color: color-mix(in srgb, var(--flag) 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--flag) 25%, transparent), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.nt-card-icon {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  background: color-mix(in srgb, var(--nt-tone) 16%, transparent);
+  border: 2px solid color-mix(in srgb, var(--nt-tone) 55%, transparent);
+}
+.nt-card--live .nt-card-icon { animation: pulse-live 1.6s ease-in-out infinite; }
+.nt-card-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.nt-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nt-card-label {
+  font-family: var(--font-eyebrow);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--nt-tone-texto, var(--nt-tone));
+}
+.nt-card-new {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--flag);
+  color: var(--mp-noche);
+  font-family: var(--font-eyebrow);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.nt-card-time {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--mp-gris);
+  white-space: nowrap;
+}
+.nt-card-title {
+  margin: 0;
+  font-family: var(--font-eyebrow);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--mp-cal);
+}
+.nt-card-body {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--mp-gris);
+  white-space: pre-line;
+}
+.nt-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+.nt-card-foot .notification-origin { color: var(--mp-gris); }
+.nt-card-foot .notification-origin-logo { background: var(--mp-noche); }
+.nt-card-cta {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--flag);
+  color: var(--mp-noche);
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-decoration: none;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.nt-card-cta:hover { background: var(--flag-deep); transform: translateX(2px); }
+
+.nt-skeleton {
+  height: 104px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, var(--mp-noche-2), var(--mp-noche-3), var(--mp-noche-2));
+  background-size: 200% 100%;
+  animation: nt-brillo 1.2s linear infinite;
+}
+.nt-aviso {
+  margin: 22px 18px 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--mp-linea);
+  color: var(--mp-gris);
+}
+.nt-empty {
+  margin: 26px 18px 0;
+  padding: 30px 22px;
+  text-align: center;
+  border: 2px dashed var(--mp-linea);
+  border-radius: 16px;
+}
+.nt-empty-ball {
+  font-size: 48px;
+  animation: nt-gira 3s ease-in-out infinite;
+}
+.nt-empty h3 {
+  margin: 8px 0 14px;
+  font-family: var(--font-display);
+  font-size: 26px;
+  text-transform: uppercase;
+  color: var(--mp-cal);
+}
+.nt-empty ul {
+  list-style: none;
+  margin: 0 auto 20px;
+  padding: 0;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+  font-size: 14px;
+  color: var(--mp-gris);
+}
+.nt-empty li { display: flex; gap: 10px; }
+
+@keyframes nt-entra {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes nt-brillo { to { background-position: -200% 0; } }
+@keyframes nt-gira {
+  0%, 100% { transform: rotate(-12deg); }
+  50%      { transform: rotate(12deg) translateY(-4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nt-card, .nt-card--live .nt-card-icon, .nt-empty-ball, .nt-skeleton { animation: none; }
+}
+/* En el teléfono, la columna del ícono le quitaba ~50 px a cada renglón: el
+   ícono sube al renglón de la etiqueta y el texto usa todo el ancho. */
+@media (max-width: 560px) {
+  .nt-hero { padding: 24px 18px 20px; }
+  .nt-day, .nt-page > .nt-list { padding-left: 12px; padding-right: 12px; }
+  .nt-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 10px;
+    row-gap: 4px;
+    padding: 12px 12px 12px 15px;
+  }
+  .nt-card-main { display: contents; }
+  .nt-card-icon { width: 34px; height: 34px; font-size: 17px; }
+  .nt-card-top { grid-column: 2; }
+  .nt-card-title, .nt-card-body, .nt-card-foot { grid-column: 1 / -1; }
+  .nt-card-title { margin-top: 4px; font-size: 17px; }
+}
+
 /* El numerito del balón de la barra de arriba. */
 .topbar-bell {
   position: relative;
