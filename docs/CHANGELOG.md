@@ -48,6 +48,13 @@ entradas traen el post-mortem del bug que las provocó.
   contra el backend real ni en un teléfono. El porqué, en "Notificaciones: la bandeja
   y el push" del README.
 
+  Desplegado ese día (`25b2abe`): CI verde y Vercel lo sirvió; la hoja principal tiene
+  el mismo hash que la compilación revisada (`index-4VjZtSVP.css`). En el sitio
+  público, con la sesión simulada y entrando por la campana, sale la pantalla nueva en
+  tamaño de celular y pasan los mismos cinco casos de la marca, sin nada fuera de la
+  pantalla; lo único que la página quiso escribir fueron sus visitas a `/api/track`,
+  abortadas. Sigue sin probarse con una cuenta real en producción.
+
 - **El panel de una liga es una herramienta con secciones (2026-11-07).** Lo pidió
   Alfredo: que el panel de trabajo de una liga, en "Mi panel", se viera más
   profesional. Era una sola página dentro de la tarjeta negra, con "Liga" de título y
