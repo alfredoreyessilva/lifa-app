@@ -8,6 +8,7 @@ import { matchState } from './leaguePanel.js';
 import { fechaCorta } from './matchDisplay.js';
 import { getMatchStatus } from './matchStatus.js';
 import { etiquetaDeMiRol } from './permisos.js';
+import { storeHref } from './storePanel.js';
 
 /* ---------- La banda ---------- */
 
@@ -64,7 +65,8 @@ export function organizationsOf({ leagues, teams, organizations } = {}) {
       logo: org.logo_url || null,
       what: ORG_TYPE_LABELS[org.type] || 'Organización',
       role: etiquetaDeMiRol(org),
-      href: `/panel/organizacion/${org.id}?edit=1`,
+      // Una tienda tiene su panel; lo demás, su formulario.
+      href: org.type === 'store' ? storeHref(org.id) : `/panel/organizacion/${org.id}?edit=1`,
     }));
 
   return [...ligas, ...equipos, ...otras];

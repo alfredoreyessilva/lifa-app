@@ -41,12 +41,15 @@ export function Scoreboard({ children, label }) {
   return <div className="adm-score" role="group" aria-label={label}>{children}</div>;
 }
 
-// Una celda que solo informa.
-export function ScoreCell({ label, value, sub, loading, small }) {
+// Una celda que solo informa. `attention` la pinta de amarillo, como la cifra de
+// un filtro que pide algo: "Agotados" en el Resumen de una tienda.
+export function ScoreCell({ label, value, sub, loading, small, attention }) {
   return (
     <div className="adm-score-cell">
       <span className="adm-score-label">{label}</span>
-      <span className={`adm-score-value${small ? ' is-text' : ''}`}>{loading ? '—' : value}</span>
+      <span className={`adm-score-value${small ? ' is-text' : ''}${attention && !loading ? ' is-attention' : ''}`}>
+        {loading ? '—' : value}
+      </span>
       {sub && <span className="adm-score-sub">{sub}</span>}
     </div>
   );

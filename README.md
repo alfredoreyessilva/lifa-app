@@ -813,6 +813,9 @@ lifa-app/
         LeagueStructurePanel.jsx El panel de una liga: pide el árbol una vez y
                                  monta la sección de `?seccion=` (ver "El panel
                                  de una liga")
+        StorePanel.jsx           El panel de una tienda: pide la tienda y su
+                                 inventario una vez y monta la sección de
+                                 `?seccion=` (ver "El panel de una tienda")
         PlayerStatementPage.jsx  /cuenta/:token — estado de cuenta del jugador,
                                  público y sin sesión
         PublicRosterPage.jsx     /partidos/:matchId/equipos/:teamId/roster — el
@@ -826,6 +829,12 @@ lifa-app/
         league/                  El panel de una liga, armado con esas piezas: una
                                  sección por archivo, sus ventanas y league.css
                                  (ver "El panel de una liga")
+        store/                   El panel de una tienda, con las mismas piezas y la
+                                 barra de la liga: una sección por archivo, sus
+                                 ventanas y store.css (ver "El panel de una tienda")
+        OrganizationProfileForm.jsx  El perfil de un medio, una tienda, una clínica
+                                 o una marca. Lo comparten la página de un medio y
+                                 la ventana "Editar perfil" de una tienda
         MatchHero.jsx            La portada de un partido: la cancha de noche, las
                                  end zones y los dos cascos (ver "La página de un
                                  partido"). Junto a ella, las secciones: MatchPoll,
@@ -5893,7 +5902,7 @@ nadie, y Alfredo pidió borrarla. `/panel/organizacion/:id` queda así:
 
 | Tipo | Quien la administra | Cualquier otro (el "Ver" del panel admin, un link viejo) |
 |-|-|-|
-| Tienda | Su página, con "Editar" | Su página: catálogo y WhatsApp |
+| Tienda | Su página, con "Administrar tienda", que lleva a su panel (ver "El panel de una tienda") | Su página: catálogo y WhatsApp |
 | Medio, clínica, marca | Directo al formulario; "Ver como público" abre la ficha encima | La ficha; cerrarla lleva al home |
 
 Clínica y marca van con el medio: no salen en el home, así que su página
@@ -5927,6 +5936,8 @@ primera tanda ya estaba en `main`.
   cada una nombraba sus columnas a mano; con nueve, la que se quedara atrás
   dejaría la ficha a medias según desde dónde se abriera. Lo que es solo para
   administrarla (el plan, el número del bot, `is_public`) no está en la lista.
+  `GET /organizations/:id`, la que arma la página de una tienda, sí los manda:
+  es PD-46.
 - **La portada se recorta a banner** (3:1 en la página de una tienda, la
   franja de 120 px en la ficha). A su altura natural, una foto cuadrada o
   vertical se comía la pantalla.
@@ -6148,8 +6159,9 @@ infantil. Es **la única página pública que deja la cancha** (`StoreFront`, en
   al `body` —con `useLayoutEffect`, para que el primer cuadro no salga con
   cancha—, cambia el `theme-color` (la barra del navegador del celular) al
   verde de la placa y pone el nombre de la tienda en la pestaña. Todo se
-  regresa al salir y al pasar a "Editar", que sigue sobre la cancha: es el
-  panel de quien la administra, no lo que ve el público.
+  regresa al salir, también al pasar a su panel con "Administrar tienda": el
+  panel de quien la administra no es lo que ve el público (ver "El panel de una
+  tienda").
 - **Lo de la tienda se ve entero.** El logo va sobre blanco y sin recortar: el
   círculo de antes le cortaba las esquinas a un logo cuadrado, y uno
   transparente se perdía sobre el fondo. Las fotos de producto van en un
@@ -6375,7 +6387,9 @@ la forma que Alfredo ya aprobó para una herramienta. La barra lateral en verde 
 arriba la liga —su escudo, su nombre, con qué rol entraste y si está en el sitio— y abajo sus
 secciones. El trabajo va en el lienzo negro, con el marcador arriba. Las piezas viven en
 `components/admin/` (`AdminKit.jsx`, `admin.css`) y lo que es solo de la liga en
-`components/league/` (`league.css`).
+`components/league/` (`league.css`). La barra y la piel de Staff (`.lws`) las usa también
+el panel de una tienda (ver "El panel de una tienda"): quien toque esas reglas, que lo vea
+en los dos.
 
 | Sección | Marcador | Trabajo |
 |-|-|-|
@@ -6555,6 +6569,126 @@ la siguen usando el panel de un equipo y la pantalla de partidos de un torneo.
 - **Si una liga es pública, en su ficha.** `/auth/me` no manda `is_public` de una liga, y esta
   versión no toca el backend.
 - **El panel de un equipo** sigue con la barra de logos arriba (ver "El panel de una liga").
+
+## El panel de una tienda
+
+`/panel/tienda/:id` es donde una tienda lleva su inventario, su perfil y quién la
+administra. **Rehecho el 2026-11-08**, cuando Alfredo pidió que se viera como un panel
+profesional. Lo que había funcionaba, pero eran dos páginas sueltas sobre la cancha:
+"Editar organización", un formulario largo con un botón "📦 Administrar inventario", e
+"Inventario", con el formulario de alta siempre abierto arriba y los productos en
+tarjetas con tres botones cada una ("Editar", "Desactivar", "Borrar") y un
+`window.confirm` para borrar. Nada decía de un vistazo qué estaba agotado, qué salía en
+la vitrina o qué le faltaba al perfil.
+
+### El panel de una liga, con la tienda adentro
+
+No se inventó ninguna pieza: es el panel de una liga (ver "El panel de una liga") con la
+tienda adentro. La barra lateral en verde noche lleva su logo —sobre blanco, como en la
+vitrina, porque el logo de una tienda suele ser un PNG pensado para fondo claro—, su
+nombre, "Tienda · " con tu rol y si es pública; abajo, sus secciones. El trabajo va en el
+lienzo negro, con el marcador arriba. Las piezas vienen de `components/admin/`, y la barra
+y la piel de Staff de `components/league/` (la raíz lleva `.lws`); lo que es solo de la
+tienda vive en `components/store/` (`store.css`, `.sws`).
+
+| Sección | Marcador | Trabajo |
+|-|-|-|
+| Resumen | En venta, en tu vitrina, existencias, agotados, si está en el sitio | Lo que te toca; lo que se cambió al último; los primeros productos de tu vitrina y si lleva el botón de WhatsApp |
+| Productos | Productos, en tu vitrina, ocultos, inactivos, agotados, sin foto | Tabla con búsqueda y páginas |
+| Perfil | En el sitio, verificación, plan, botón de WhatsApp | Quién la ve, y lo que publica |
+| Staff | — | Quién tiene acceso, ya abierto |
+
+Las celdas de Productos filtran la tabla, y el filtro vive en la dirección (`?filtro=`),
+como en /admin. La sección va en `?seccion=` por la misma razón que en la liga: una ruta
+por sección desmontaría la página en cada clic.
+
+### Lo que le toca a la tienda
+
+Dos cosas de un producto y una del perfil, en amarillo, cada una con su renglón en el
+Resumen, que lleva a donde se arregla ya filtrado:
+
+- **Agotado**: activo y con cero existencias registradas. La vitrina no enseña
+  existencias, así que ahí un producto agotado se ve como cualquier otro. Sin existencias
+  registradas no es agotado —hay tiendas que no llevan la cuenta— y la tabla dice "Sin
+  registrar".
+- **Sin foto, en la vitrina**: ahí sale un recuadro que dice "Sin foto". Uno oculto o
+  inactivo no cuenta, porque su foto no la ve nadie.
+- **Lo que le falta al perfil**: el logo, la descripción o alguna forma de contacto
+  (teléfono, correo, sitio, una red o el botón de WhatsApp). La portada no: una vitrina sin
+  portada se ve completa.
+
+El número amarillo de "Productos" en la barra son los productos con algo que atender,
+contados una vez aunque tengan las dos cosas. Se resuelve al leer (`utils/storePanel.js`,
+con sus pruebas) y no se guarda nada. Como en la liga, no decide por la tienda: cuenta lo
+que su vitrina enseña.
+
+### Una fila, un botón
+
+Cada producto lleva "Editar" a la vista y lo demás en "⋯": mostrarlo en la vitrina o
+quitarlo, activarlo o desactivarlo, y borrarlo, al final y en rojo. Mostrar y desactivar
+no piden confirmación porque se deshacen con el mismo menú, y mandan solo el campo que
+cambia. Borrar pasa por `ConfirmDialog`, que nombra el producto y propone desactivarlo si
+solo dejó de venderse por un tiempo. A un producto inactivo no se le ofrece la vitrina: no
+sale en ningún lado. Lo inactivo va al final de la tabla.
+
+El estado va en dos renglones —"Activo" o "Inactivo", y debajo "En tu vitrina" o "Fuera
+de tu vitrina"— porque son dos preguntas distintas (`is_active` y `show_on_platform`, ver
+"Inventario — dos listados, y por qué").
+
+### La ventana de un producto enseña su tarjeta de la vitrina
+
+Alta y edición son una ventana con el formulario y, al lado, la tarjeta del producto tal
+como sale en la vitrina, con las mismas clases (`.storefront-product`): si la vitrina
+cambia, la vista previa cambia con ella. Antes de guardar se ve el recorte de la foto, el
+precio como lo escribe la vitrina ("$850", "Precio a consultar") y las tallas; si la
+casilla está desmarcada o el producto está inactivo, lo dice en vez de prometer que va a
+salir. En el teléfono la tarjeta baja al final, antes de los botones.
+
+El formulario dice qué está mal antes de mandar: sin nombre, un precio negativo,
+existencias con decimales. Vacío es NULL, como antes: sin precio la vitrina dice "Precio
+a consultar", y sin existencias el panel dice "Sin registrar", que no es cero.
+
+### El perfil
+
+"Editar perfil" abre en una ventana el mismo formulario que tenía "Editar organización":
+salió a `components/OrganizationProfileForm.jsx`, con los mismos campos y las mismas
+validaciones, y un medio, una clínica o una marca lo siguen viendo en su página, sobre la
+tarjeta negra. Sus etiquetas perdieron los emojis, y el error sale junto al botón: en una
+ventana larga, arriba quedaba fuera de la vista de quien acababa de apretar "Guardar".
+
+Lo que la tienda no puede cambiar se dice sin botón: publicarla y verificarla lo decide
+CFBAMX (ver "Organizaciones: publicar y verificar"), y el plan Pro y el número de WhatsApp
+los carga CFBAMX desde /admin (ver "El bot"). La regla del botón "Consultar por WhatsApp"
+—plan Pro vigente y número cargado— vive en un solo lugar (`whatsappStatus`): la vitrina la
+usa para enseñarlo y el panel para decir por qué no sale.
+
+### Staff
+
+Medio, tienda, clínica y marca tienen dueño y administrador desde el 2026-09-19 (ver "Los
+roles"), con su permiso para repartir acceso, pero una tienda no tenía dónde usarlo:
+`OrgAdminsPanel` vivía solo en el panel de una liga y en el de un equipo. Ahora una tienda
+invita desde Staff, con la misma lista y las mismas invitaciones. El backend no cambió: las
+rutas de invitaciones ya aceptaban cualquier tipo de organización.
+
+### Lo que cambió de lugar
+
+- La tienda de "Mi panel" y de la barra de logos abre `/panel/tienda/:id`. Un medio, una
+  clínica o una marca siguen abriendo su formulario.
+- La vitrina le ofrece a quien la administra "Administrar tienda" en vez de "Editar
+  organización", y su catálogo vacío lleva a Productos.
+- `/panel/organizacion/:id/inventario` y el `?edit=1` de una tienda tuya llevan al panel,
+  para que un link guardado no se rompa. `pages/ProductsPanel.jsx` se fue.
+- La casilla se llama "Mostrar en mi vitrina de CFBAMX".
+
+### Fuera de esta versión
+
+- **Cambiar las existencias desde la tabla**, sin abrir la ventana. Es lo que más va a
+  hacer una tienda el día que venda en serio; hoy son tres clics.
+- **El panel de un medio** (y el de una clínica o una marca) sigue con su formulario.
+  Llevarle estas piezas se ve con Alfredo antes.
+- **Las conversaciones del bot.** `bot_messages` guarda las de cada cliente, pero el bot no
+  está conectado y antes hay que cubrirlas en el Aviso de Privacidad (ver "Dos cosas de
+  `bot_messages`").
 
 ## Seguridad — decisiones ya tomadas
 

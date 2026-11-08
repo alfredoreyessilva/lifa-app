@@ -15,6 +15,50 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El panel de una tienda, con las piezas del panel de una liga (2026-11-08).** Lo
+  pidió Alfredo: el panel de trabajo de una tienda era muy básico y tenía que verse
+  profesional. Eran dos páginas sueltas sobre la cancha: "Editar organización", un
+  formulario largo con un botón "📦 Administrar inventario", e "Inventario", con el
+  formulario de alta siempre abierto arriba y los productos en tarjetas con tres
+  botones cada una y un `window.confirm` para borrar. Ahora es `/panel/tienda/:id`,
+  con la barra lateral en verde noche (el logo de la tienda sobre blanco, su rol y si
+  es pública) y cuatro secciones en el lienzo negro: **Resumen** (en venta, en tu
+  vitrina, existencias, agotados; lo que te toca; lo último que se cambió; los
+  primeros productos de tu vitrina y si lleva el botón de WhatsApp), **Productos**
+  (las celdas filtran una tabla con búsqueda y páginas; "Editar" a la vista y lo demás
+  en "⋯"), **Perfil** (quién la ve, lo que publica, el plan y el botón de WhatsApp,
+  con "Editar perfil" en una ventana) y **Staff**, que una tienda no tenía aunque sus
+  roles existen desde septiembre. Alta y edición de un producto enseñan al lado su
+  tarjeta tal como sale en la vitrina. Detalle en el README, "El panel de una tienda".
+
+  Lo que se movió para eso: el formulario del perfil salió a
+  `OrganizationProfileForm.jsx`, y un medio lo sigue viendo en su página, sin los
+  emojis de sus etiquetas y con el error junto al botón; la regla del botón de
+  WhatsApp vive en `whatsappStatus` y la vitrina la lee de ahí; "Mi panel", la barra
+  de logos y la vitrina ("Administrar tienda") llevan al panel, y
+  `/panel/organizacion/:id/inventario` y el `?edit=1` de una tienda redirigen a él.
+  `ProductsPanel.jsx` se fue. El backend no cambió.
+
+  Verificado en el navegador sin backend ni cuenta: la tienda y sus 3 productos son
+  los de Deportes Cancún en la API pública de producción, leídos en solo lectura, y
+  el resto del inventario (agotado, sin foto, oculto, inactivo, sin precio ni
+  existencias) se armó en la memoria de la ventana, que contestó también lo que la
+  página escribe. 31 comprobaciones de los botones de Productos (lo que manda cada
+  uno, el filo amarillo y el número de la barra que se van y vuelven, la validación,
+  la vista previa, filtros, búsqueda sin acentos, el menú con teclado y un 500 del
+  servidor), 19 de cómo se llega y se sale (Mi panel, la vitrina, los enlaces viejos,
+  una tienda ajena, el formulario de un medio guardando sus 12 campos), el perfil
+  guardando con el país y el nombre nuevo en la barra, y nueve casos (vacío, perfil a
+  medias, plan Pro, 58 productos con páginas, cargando, y las dos fallas). Las cuatro
+  secciones y la ventana de un producto en 12 anchos de 1440 a 320 px: nada fuera de
+  la pantalla ni desplazamiento de lado (el detector, con control positivo). 674
+  unitarias, 15 de ellas nuevas en `storePanel.test.mjs`. Sin probar con una cuenta
+  real ni en un teléfono real, y no se generó ningún link de invitación.
+
+  Al revisarlo salió PD-46 (P2): la ruta pública que arma la página de una tienda
+  manda también su plan y hasta cuándo lo pagó. Hoy no le pasa a nadie, porque la
+  única tienda publicada está en plan gratuito.
+
 - **Mi panel, con las piezas del Panel Admin (2026-11-08).** Lo pidió Alfredo: que
   se viera más profesional. Eran dos bloques sueltos en la tarjeta negra: una
   cuadrícula de logos de 72 px sin nombre, tres botones "Registrar…" con el mismo

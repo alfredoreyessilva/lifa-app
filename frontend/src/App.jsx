@@ -26,7 +26,7 @@ const PublicRosterPage = lazy(() => import('./pages/PublicRosterPage.jsx'));
 const MatchStatsPage = lazy(() => import('./pages/MatchStatsPage.jsx'));
 const RegisterOrganizationPage = lazy(() => import('./pages/RegisterOrganizationPage.jsx'));
 const OrganizationDetailPage = lazy(() => import('./pages/OrganizationDetailPage.jsx'));
-const ProductsPanel = lazy(() => import('./pages/ProductsPanel.jsx'));
+const StorePanel = lazy(() => import('./pages/StorePanel.jsx'));
 const BillingLeaguePanel = lazy(() => import('./pages/BillingLeaguePanel.jsx'));
 const TeamPanel = lazy(() => import('./pages/TeamPanel.jsx'));
 const PlayerStatementPage = lazy(() => import('./pages/PlayerStatementPage.jsx'));
@@ -45,6 +45,7 @@ const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy.jsx'));
 // Las páginas legales solo se publican cuando hay datos reales de quien
 // opera el Servicio. Se llenan en un solo lugar: src/config/legal.js.
 import { LEGAL_DATA_READY, PRIVACY_PUBLISHED } from './config/legal.js';
+import { storeHref } from './utils/storePanel.js';
 
 // La pantalla clásica de liga (/panel/liga/:id, modelo plano sin torneos) se
 // retiró — todo lo que hacía ya vive en LeagueStructurePanel.jsx, y en
@@ -54,6 +55,13 @@ import { LEGAL_DATA_READY, PRIVACY_PUBLISHED } from './config/legal.js';
 function RedirectToLeagueStructure() {
   const { id } = useParams();
   return <Navigate to={`/panel/liga/${id}/estructura`} replace />;
+}
+
+// El inventario de una tienda tenía su propia página hasta el 2026-11-08; hoy es
+// la sección Productos de su panel. Lo mismo: que un link guardado no se rompa.
+function RedirectToStoreProducts() {
+  const { id } = useParams();
+  return <Navigate to={storeHref(id, 'productos')} replace />;
 }
 
 // Al navegar a otra ruta, React Router conserva el scroll de la página
@@ -189,9 +197,16 @@ export default function App() {
               path="/panel/equipo/:id/playbook"
               element={<ProtectedRoute><TeamPanel section="playbook" /></ProtectedRoute>}
             />
+            {/* El panel de una tienda: Resumen, Productos, Perfil y Staff en
+                `?seccion=` — ver pages/StorePanel.jsx. El inventario vivía aparte
+                hasta el 2026-11-08; su ruta lleva ahora a la sección Productos. */}
+            <Route
+              path="/panel/tienda/:id"
+              element={<ProtectedRoute><StorePanel /></ProtectedRoute>}
+            />
             <Route
               path="/panel/organizacion/:id/inventario"
-              element={<ProtectedRoute><ProductsPanel /></ProtectedRoute>}
+              element={<ProtectedRoute><RedirectToStoreProducts /></ProtectedRoute>}
             />
             <Route
               path="/notificaciones"

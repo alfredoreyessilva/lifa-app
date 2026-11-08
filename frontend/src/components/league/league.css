@@ -7,6 +7,10 @@
 
    Los colores siguen la regla de admin.css: amarillo es "esto te toca", verde son
    datos, rojo es lo que no se deshace (y, aquí, lo que se está jugando).
+
+   El panel de una tienda (components/store/) también lleva `.lws` en su raíz: usa
+   la barra (identidad, regreso, renglón chico del teléfono), la piel de Staff y la
+   de las ventanas. Un cambio a esas reglas se revisa en los dos paneles.
    ========================================================================== */
 
 /* ---------- La barra: de dónde vienes, qué liga es, con qué rol entraste ---------- */

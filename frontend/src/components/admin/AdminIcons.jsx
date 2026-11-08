@@ -124,3 +124,17 @@ export const IconBack = () => (
     <path d="M19 12H5M11 6l-6 6 6 6" />
   </Icon>
 );
+
+// El de Productos, del panel de una tienda (2026-11-08): una etiqueta de precio.
+export const IconTag = () => (
+  <Icon>
+    <path d="M3.5 12.6V4.5a1 1 0 0 1 1-1h8.1l8 8a1.4 1.4 0 0 1 0 2l-6.6 6.6a1.4 1.4 0 0 1-2 0z" />
+    <circle cx="8.3" cy="8.3" r="1.5" />
+  </Icon>
+);
+// "Ver mi página": sale a otra pantalla.
+export const IconExternal = () => (
+  <Icon size={15}>
+    <path d="M14 4h6v6M20 4l-8.5 8.5M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+  </Icon>
+);
