@@ -789,6 +789,9 @@ lifa-app/
         Notifications, AdminPanel, InviteClaim
         TeamPanel.jsx            Panel de trabajo del equipo: una página, seis
                                  secciones (ver "Cuotas del club")
+        LeagueStructurePanel.jsx El panel de una liga: pide el árbol una vez y
+                                 monta la sección de `?seccion=` (ver "El panel
+                                 de una liga")
         PlayerStatementPage.jsx  /cuenta/:token — estado de cuenta del jugador,
                                  público y sin sesión
         PublicRosterPage.jsx     /partidos/:matchId/equipos/:teamId/roster — el
@@ -799,6 +802,9 @@ lifa-app/
       components/
         admin/                   El Panel Admin: una sección por archivo, sus piezas
                                  y su CSS, que se carga con el panel (ver "Panel Admin")
+        league/                  El panel de una liga, armado con esas piezas: una
+                                 sección por archivo, sus ventanas y league.css
+                                 (ver "El panel de una liga")
         MatchHero.jsx            La portada de un partido: la cancha de noche, las
                                  end zones y los dos cascos (ver "La página de un
                                  partido"). Junto a ella, las secciones: MatchPoll,
@@ -814,7 +820,7 @@ lifa-app/
                                  los desempates ya vienen resueltos del backend
         StandingsView.jsx        Campeones + pestañas por nivel + las tablas.
                                  La usan la página pública y la vista previa del panel
-        CompetitionModelModal.jsx  El panel de "⚙ competencia" de una rama:
+        CompetitionModelModal.jsx  La ventana "Competencia" de una rama:
                                  Fases · Formato · Títulos · Vista previa
                                  (ver "Tabla de posiciones y modelo de competencia")
         (resto de components/), context/, api/
@@ -1817,9 +1823,9 @@ administrador y tesorero; ver "Notificaciones".
 
 ### Frontend
 
-- `pages/BillingLeaguePanel.jsx` — `/panel/liga/:id/cobranza` (link "💵 Cobranza"
-  en el encabezado de los dos paneles de liga: el clásico `/panel/liga/:id` y el de
-  estructura `/panel/liga/:id/estructura`, que es al que llega el logo bar).
+- `pages/BillingLeaguePanel.jsx` — `/panel/liga/:id/cobranza`, la sección Cobranza
+  del panel de una liga desde el 2026-11-07 (ver "El panel de una liga"): conserva su
+  ruta, sus cifras van en el marcador de arriba y lo de adentro no cambió.
   Registrar cobro (`ChargeForm`, con tabla de monto por equipo + calculadora por
   partidos), repetir jornada (`RepeatChargeModal`), registrar pago (`PaymentForm`),
   ver movimientos, cancelar.
@@ -2746,8 +2752,9 @@ Por eso es el único link del que puede haber uno solo.
   para copiar el link mataba en silencio el que ya estaba en el WhatsApp de
   alguien.
 - **Una vez usado, las tres opciones desaparecen** de la fila del equipo en el
-  panel de la liga: "Entregar perfil", "Cancelar entrega" y el 🗑 de eliminar.
-  Las dos primeras ya se escondían. El 🗑 seguía apareciendo aunque el backend
+  panel de la liga: "Entregar perfil", "Cancelar entrega" y "Eliminar equipo"
+  (desde el 2026-11-07 van en el menú "⋯" de su fila, en Equipos). Las dos
+  primeras ya se escondían. Eliminar seguía apareciendo aunque el backend
   conteste 409, y ofrecerlo es prometer algo que no se puede (ver "Quién puede
   eliminar un equipo").
 - **Al reclamarla se revisa si el equipo ya tiene miembros, y si sí, 409.**
@@ -3738,7 +3745,7 @@ compiten con nadie de 14 Grandes.
 
 ### Modo ONEFA
 
-Un botón en ⚙ competencia que deja la rama configurada como juega ONEFA. Lo
+Un botón en Competencia (la ventana de una rama) que deja la rama configurada como juega ONEFA. Lo
 pidió Alfredo el 2026-10-25, y **solo aparece en la liga ONEFA**: se reconoce
 por su id (13), no por el nombre ni el slug, que la liga puede editar. El
 backend lo vuelve a revisar al aplicar; esconder el botón no basta.
@@ -4170,7 +4177,7 @@ enciende (decidido por Alfredo el 2026-11-01); ese día la Nacional ya estaba
 completa y a 14 Grandes le faltaban 7 partidos. También aparece en cuanto se
 captura su primer partido de playoffs, aunque quede uno de temporada regular
 sin marcador: con los playoffs empezados, esconderlo por un partido olvidado
-sería peor. Antes, solo lo ve la liga, en ⚙ competencia → Vista previa, con
+sería peor. Antes, solo lo ve la liga, en Competencia → Vista previa, con
 cuántos partidos faltan: es una proyección que cambia cada jornada.
 
 **Dónde se ve.**
@@ -4516,8 +4523,9 @@ subida, nunca leyendo imágenes pegadas en el Excel.
 
 ### Frontend
 
-`components/BranchRosterModal.jsx` (se abre desde la fila de un equipo inscrito
-en una rama, dentro de `pages/LeagueStructurePanel.jsx`): sección "Descargar
+`components/BranchRosterModal.jsx` (se abre con "Roster" en la fila de un equipo
+inscrito, en Equipos de una rama del panel de la liga,
+`components/league/LeagueBranchSection.jsx`): sección "Descargar
 plantilla / Subir plantilla llena" con el resumen de la importación, campo CURP
 en el alta manual, botón de foto por jugador. `api/client.js`:
 `downloadBranchRosterTemplate`, `importBranchRoster`, `updateBranchRosterPlayer`.
@@ -4537,7 +4545,8 @@ en el alta manual, botón de foto por jugador. `api/client.js`:
   Se borró el botón en vez de repuntarlo porque **el camino correcto ya existía
   en la misma pantalla**: en el árbol Torneo → Categoría → Rama, cada equipo
   inscrito en una rama tiene un chip "roster" que abre `BranchRosterModal` de esa
-  rama. La liga no perdió nada; solo dejó de haber una entrada que producía
+  rama (hoy, el botón "Roster" de su fila en Equipos de la rama). La liga no
+  perdió nada; solo dejó de haber una entrada que producía
   jugadores huérfanos. Se fueron con él `TeamRosterModal.jsx`, los tres endpoints
   obsoletos de `players.js` (`GET`/`POST /teams/:id/roster` y
   `POST /:playerId/move-to-team/:id`, este último sí sin usar) y sus tres
@@ -4909,7 +4918,8 @@ es justo cuando todavía no hay nada capturado.
 
 **Los totales a mano también se teclean aquí** (decidido por Alfredo el
 2026-10-19). Quien puede capturar ve "Teclear totales a mano": el mismo
-formulario del botón "Stats" del panel de la liga —equipo, jugador y sus
+formulario de "Estadísticas" en el panel de la liga (el menú "⋯" de cada partido)
+—equipo, jugador y sus
 números— con los rosters que la pantalla ya bajó para la captura, nombre y
 número y nada más. Así el visor, que es quien anota las estadísticas de una
 liga, tiene las dos formas en su pantalla; antes ese formulario solo se abría
@@ -6284,6 +6294,12 @@ vista:
 Borrar una liga, un usuario o un patrocinador pasa por `ConfirmDialog`. Antes un error del
 servidor ahí se perdía y la ventana se quedaba abierta sin decir nada.
 
+El menú se maneja con el teclado: al abrirse, el foco entra a su primera opción, las flechas
+lo recorren y Escape lo cierra y regresa al botón. **Hasta el 2026-11-07 no pasaba:** el menú
+nace con `visibility: hidden` mientras se mide, y el foco se pedía en ese momento, a un
+elemento escondido; se quedaba en el botón y ni Escape ni las flechas hacían nada. Salió al
+probar el panel de una liga, que usa la misma pieza.
+
 ### Por qué `?seccion=` y no una ruta
 
 `ErrorBoundary` lleva `key={location.pathname}` en `App.jsx`, y una ruta por sección
@@ -6316,6 +6332,117 @@ calendario no lo descarga. `styles.css` bajó 274 líneas en vez de crecer.
   backend solo manda 30 días.
 - **Juntar los estados mal capturados.** "CIUDAD DE MEXICO" y "CIUDAD DE MÉXICO" salen como
   dos filas en Ligas por estado: el campo es texto libre y el ranking lo cuenta como viene.
+
+## El panel de una liga
+
+`/panel/liga/:id/estructura` es donde una liga arma su temporada y la lleva: torneos,
+categorías, ramas, calendario, equipos, sedes, staff, cobranza y su perfil. Las ligas públicas
+las captura Alfredo desde aquí. **Rehecho el 2026-11-07**, cuando pidió que se viera más
+profesional. Lo que había funcionaba, pero era una sola página dentro de la tarjeta negra: el
+encabezado decía "Liga" en grande y el nombre en chiquito, el aviso de "Tu liga es pública"
+usaba el estilo de un error, y Equipos (33), Sedes (33) y el torneo colgaban del mismo acordeón
+verde. Abierto, ONEFA eran 210 renglones, cada uno con cuatro a siete botones.
+
+### Las piezas del Panel Admin, con la liga adentro
+
+No se inventó ninguna pieza: es el Panel Admin (ver "Panel Admin") con la liga adentro, que es
+la forma que Alfredo ya aprobó para una herramienta. La barra lateral en verde noche lleva
+arriba la liga —su escudo, su nombre, con qué rol entraste y si está en el sitio— y abajo sus
+secciones. El trabajo va en el lienzo negro, con el marcador arriba. Las piezas viven en
+`components/admin/` (`AdminKit.jsx`, `admin.css`) y lo que es solo de la liga en
+`components/league/` (`league.css`).
+
+| Sección | Marcador | Trabajo |
+|-|-|-|
+| Resumen | Jugados, por jugar, equipos, sedes, si está en el sitio | Lo que te toca; en vivo y próximos; últimos resultados |
+| Torneos | Torneos, categorías, ramas, partidos | Torneo → categoría → rama; cada rama dice cómo va su temporada |
+| Una rama | Partidos, por jugar, en vivo, jugados, por capturar, borradores | Calendario · Equipos · Conferencias y grupos |
+| Equipos | Equipos, se administran solos, sin entregar, sin inscribir | Tabla con búsqueda y páginas |
+| Sedes | Sedes, con partidos, sin partidos | Tabla con búsqueda y páginas |
+| Cobranza | Por cobrar, vencido, al corriente | La de siempre (ver "Cobranza") |
+| Staff | — | Quién tiene acceso, ya abierto |
+| Perfil | En el sitio, verificación, zona horaria | Quién la ve, y lo que publica |
+
+Las celdas de una rama, de Equipos y de Sedes filtran la tabla de abajo, como en /admin, y el
+filtro vive en la dirección (`?filtro=`). Cobranza conserva su ruta
+(`/panel/liga/:id/cobranza`), que viaja en los avisos de la bandeja; lo que cambió es que
+ahora la envuelve el mismo panel. Las demás van en `?seccion=` por la misma razón que en
+/admin: una ruta por sección desmontaría la página, y con ella el árbol de la liga.
+
+Cada sección existe solo para quien tiene su permiso (`LEAGUE_SECTIONS`). El tesorero de liga
+ve Resumen y Cobranza; el visor, el Resumen que le dice que lo suyo está en la página de cada
+partido. Pedir a mano una sección que no le toca lo deja en el Resumen.
+
+### "Por capturar": lo que le toca a la liga
+
+Un partido está por capturar si ya terminó —a mano, o por el estado automático de su
+categoría— y no tiene marcador, o si ya debió terminar (su hora, más la ventana de su
+categoría, más una hora) y nadie lo cerró. Es la misma cuenta del aviso "Falta capturar un
+marcador" (`NOMINAL_END` en `routes/notifications.js`), para que el panel y la bandeja digan
+lo mismo. Un borrador no cuenta, porque no está publicado. Uno que tiene marcador pero que
+nadie dio por final sale como "Falta cerrarlo": en una categoría sin estado automático se
+queda así para siempre, y el calendario lo sigue enseñando como programado.
+
+Se resuelve al leer (`matchState` en `utils/leaguePanel.js`, con sus pruebas): no se guarda
+nada. Eso, los borradores y los equipos sin conferencia en una rama que sí se divide son "Lo
+que te toca" del Resumen. Cada renglón lleva a su rama ya filtrada, y el total es el número
+amarillo de "Torneos" en la barra. No pinta a nadie ni decide nada (regla 10): cuenta lo que
+falta capturar.
+
+### Una rama se abre en su propia vista
+
+`?seccion=torneos&rama=17`. Torneos ya no enseña los partidos: es la lista de torneos,
+categorías y ramas, y cada rama dice cuántos equipos y partidos tiene, cuántos van jugados
+(una barra verde) y lo que le falta. Al abrirla:
+
+- **Calendario**, por jornada y en el orden del calendario público (`ordenarCalendario` y
+  `groupByJornada`). Los dos equipos van uno sobre otro, con su escudo y el marcador a la
+  derecha, como en cualquier tabla de resultados; el que perdió va apagado. Buscar "jornada 3"
+  o "J3" trae esa jornada: buscando palabra por palabra,
+  el 3 encontraba la sede "23 de Octubre" y metía partidos de la jornada 2.
+- **Equipos**, agrupados por su conferencia, con los que no tienen hasta abajo y en amarillo.
+  Inscribir uno de la liga se hace aquí.
+- **Conferencias y grupos**, con cuántos equipos tiene cada una.
+
+Apretar una celda del marcador desde Equipos regresa al calendario: lo que cuentan las celdas
+son partidos.
+
+### Una fila, un botón
+
+Como en /admin: cada renglón lleva su acción de todos los días a la vista (Editar, Roster) y
+lo demás en "⋯", con lo que no se deshace al final y en rojo. Las reglas de antes se quedan: a
+un equipo que ya se administra solo no se le ofrece cancelar la entrega ni eliminarlo (el
+backend contesta 409), y lo que el Excel dejó en "Sin clasificar" no se renombra ni se borra a
+mano.
+
+### Las ventanas no cambiaron
+
+Lo que hace cada ventana —crear, editar y borrar en cualquier nivel— es lo mismo de antes:
+salieron tal cual a `components/league/LeagueModals.jsx` y mandan las mismas peticiones.
+Sobre el lienzo se ven oscuras. Además de la piel de `admin.css`, que solo alcanza a los
+campos dentro de un `.field`, `league.css` reasigna dentro de ellas los tokens verdes
+(`--card`, `--field`…): Competencia pinta sus campos con `var(--card)`, y quedaban verdes
+sobre el negro. Lo que promete "así se ve en público" (la portada de pasto de una sede, el
+color de un equipo) usa otros tokens y no cambió.
+
+### Lo que cambió de lugar
+
+- La barra de logos de "Mi panel" ya no va arriba: la barra lateral lleva "← Mi panel".
+- "Quién tiene acceso" es la sección Staff, ya abierta (`OrgAdminsPanel`, con
+  `siempreAbierto`).
+- "Tu liga es pública" y sus botones están en Perfil, junto con "Editar perfil" (antes "Editar
+  liga") y "Ver mi página". Si está en el sitio también se lee en la barra y en el Resumen.
+- "Expandir todo", "Colapsar todo" y el buscador del árbol se fueron: cada tabla busca en lo
+  suyo. Lo que la página guardaba en `localStorage` (`lifa:tree-expanded:<id>`) ya no se lee.
+
+### Fuera de esta versión
+
+- **Buscar en toda la liga a la vez.** Hoy cada tabla busca en lo suyo, y casi todas las ligas
+  tienen una o dos ramas.
+- **El panel de un equipo** (`TeamWorkspace`) sigue con su encabezado y sus pestañas. Llevarle
+  estas piezas se ve con Alfredo antes.
+- **Que el aviso de una solicitud rechazada lleve a Perfil.** Lleva al Resumen
+  (`/panel/liga/:id/estructura`, en `routes/admin.js`), y Perfil está a un clic.
 
 ## Seguridad — decisiones ya tomadas
 

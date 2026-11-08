@@ -58,7 +58,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-25 | P2 | El pase de lista no tiene suite e2e | código |
 | PD-26 | P2 | QA visual de `TournamentMatchesPanel` | verificación |
 | PD-27 | P2 | Los menores del panel del club (M2, M3, M6, M7) | código |
-| PD-28 | P2 | Cuatro archivos concentran demasiado | deuda |
+| PD-28 | P2 | Tres archivos concentran demasiado | deuda |
 | PD-29 | P2 | Ramas viejas en local y en el remoto | limpieza |
 | PD-32 | P2 | Un dueño no se puede retirar aunque haya otros dueños, y el README dice que sí | decisión |
 | PD-33 | P2 | Los recordatorios de cobranza esconden su error y pierden el día | código |
@@ -506,19 +506,20 @@ Siguen abiertos cuatro de la revisión del 2026-09-18, con su detalle en
 - **M6**: las tres secciones piden el overview completo.
 - **M7**: "Por cobrar" incluye a los dados de baja y la pantalla no lo dice.
 
-### PD-28 · Cuatro archivos concentran demasiado
+### PD-28 · Tres archivos concentran demasiado
 
 Hoy funcionan y no hay razón para tocarlos, pero ahí es donde va a doler.
 `AdminPanel.jsx` salió de la lista el 2026-11-06, al rehacer el panel: una sección
-por archivo en `components/admin/`, con su propio CSS.
-Medido el 2026-11-06:
+por archivo en `components/admin/`, con su propio CSS. `LeagueStructurePanel.jsx`
+salió el 2026-11-07 por lo mismo: de 1,193 líneas a 121, con cada sección del panel
+de la liga en `components/league/`.
+Medido el 2026-11-07:
 
 | Archivo | Líneas | Qué concentra |
 |---|---|---|
-| `frontend/src/styles.css` | 6,565 | Los estilos de la app, salvo los del Panel Admin |
+| `frontend/src/styles.css` | 6,822 | Los estilos de la app, salvo los del Panel Admin y los del panel de una liga |
 | `backend/src/routes/manage.js` | 2,590 | El CRUD entero de liga, torneo, categoría, rama, equipo, sede y partido |
 | `backend/src/config/db.js` | 2,515 | Las 44 tablas y ~150 migraciones |
-| `frontend/src/pages/LeagueStructurePanel.jsx` | 1,193 | El árbol completo del panel de liga |
 
 `db.js` es el que tiene techo real: creció 30% desde la última medición y el
 arranque corre todas las migraciones. El día que estorbe, la salida es congelar

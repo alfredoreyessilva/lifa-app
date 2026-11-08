@@ -60,7 +60,7 @@ respaldos se resolvieron el 2026-09-23.
 
 | Producto | Nivel | Evidencia | Qué lo detiene |
 |-|-|-|-|
-| Estructura y panel de liga (torneo → categoría → rama → partido, importador de Excel) | 4 | Las ligas públicas las captura Alfredo | PD-26, PD-34 |
+| Estructura y panel de liga (torneo → categoría → rama → partido, importador de Excel) | 4 | Las ligas públicas las captura Alfredo. **El panel con secciones (2026-11-07) está en 3, sin desplegar**: verificado en el navegador con el árbol real de `desarrollo-local` en solo lectura y la sesión simulada (ONEFA, LFA, una liga sin categorías y una vacía, los cuatro roles, 10 secciones en 11 anchos, las 18 ventanas, 25 comprobaciones de controles que mandan las mismas peticiones que antes). Sin probar contra el backend real ni en un teléfono | PD-26, PD-34 |
 | Equipos independientes | **5** | Un caso: GRIZZLIES | PD-13 |
 | Roles, invitaciones y entrega de equipos | **5** | Un caso: GRIZZLIES tiene un administrador invitado | PD-07, PD-32 |
 | Playbook del equipo (imágenes de jugadas del cuerpo técnico) | 4 | Verificado el 2026-10-08 contra `desarrollo-local`: `invites-roles.e2e.mjs` (sección 15b, con una subida real a Cloudinary) y recorrido en el navegador, escritorio y celular. Desplegado ese día (`2d88ce5`): Render responde `/api/playbook` (401 sin sesión) y el bundle de Vercel ya trae la pestaña | — |

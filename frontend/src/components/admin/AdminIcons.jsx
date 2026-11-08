@@ -91,3 +91,36 @@ export const IconChevronRight = () => (
     <path d="m9.5 6 6 6-6 6" />
   </Icon>
 );
+
+// Los que agregó el panel de una liga (2026-11-07), que se arma con estas mismas
+// piezas.
+export const IconShield = () => (
+  <Icon>
+    <path d="M12 3 4.5 6v5.5c0 4.4 3.2 8.2 7.5 9.5 4.3-1.3 7.5-5.1 7.5-9.5V6z" />
+  </Icon>
+);
+export const IconPin = () => (
+  <Icon>
+    <path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" />
+    <circle cx="12" cy="10" r="2.4" />
+  </Icon>
+);
+export const IconMoney = () => (
+  <Icon>
+    <rect x="3" y="6.5" width="18" height="11" rx="1.5" />
+    <circle cx="12" cy="12" r="2.6" />
+    <path d="M6.5 9.5v.01M17.5 14.5v.01" />
+  </Icon>
+);
+export const IconProfile = () => (
+  <Icon>
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <circle cx="9" cy="11" r="2.2" />
+    <path d="M5.8 16.2a3.4 3.4 0 0 1 6.4 0M14.5 10h4M14.5 13.5h3" />
+  </Icon>
+);
+export const IconBack = () => (
+  <Icon size={16}>
+    <path d="M19 12H5M11 6l-6 6 6 6" />
+  </Icon>
+);

@@ -15,12 +15,15 @@ import InviteAdminModal from './InviteAdminModal.jsx';
 // solo para saber qué puede hacer QUIEN MIRA (`my_permissions`). Esconder no
 // es proteger: el backend vuelve a decidir en cada petición — ver
 // `utils/permisos.js`.
-export default function OrgAdminsPanel({ organizationId, organizationName, organizationType, entidad, token }) {
+//
+// `siempreAbierto` es para cuando la lista ES la sección (Staff, en el panel de
+// una liga): ahí plegarla obligaba a un clic para ver lo único que hay.
+export default function OrgAdminsPanel({ organizationId, organizationName, organizationType, entidad, token, siempreAbierto = false }) {
   const { user } = useAuth();
   const [members, setMembers] = useState(null);
   const [pendientes, setPendientes] = useState(null);
   const [error, setError] = useState('');
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(siempreAbierto);
   const [modal, setModal] = useState(null);
   const [copiado, setCopiado] = useState(null);
 
@@ -100,9 +103,15 @@ export default function OrgAdminsPanel({ organizationId, organizationName, organ
 
   return (
     <div className="category-block">
-      <div className="category-block-head" onClick={() => setExpanded((prev) => !prev)} style={{ cursor: 'pointer' }}>
+      <div
+        className="category-block-head"
+        onClick={siempreAbierto ? undefined : () => setExpanded((prev) => !prev)}
+        style={{ cursor: siempreAbierto ? 'default' : 'pointer' }}
+      >
         <h4>
-          <span style={{ display: 'inline-block', transition: 'transform 0.15s ease', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', marginRight: 8 }}>▸</span>
+          {!siempreAbierto && (
+            <span style={{ display: 'inline-block', transition: 'transform 0.15s ease', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', marginRight: 8 }}>▸</span>
+          )}
           Quién tiene acceso
           <span style={{ color: 'var(--ink-dim)', fontSize: 12, fontWeight: 400, marginLeft: 8 }}>
             {count === undefined ? '' : `${count} persona${count === 1 ? '' : 's'}`}

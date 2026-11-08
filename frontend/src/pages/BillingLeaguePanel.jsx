@@ -9,7 +9,10 @@ import LedgerEntryList from '../components/LedgerEntryList.jsx';
 import ChargeForm from '../components/ChargeForm.jsx';
 import PaymentForm from '../components/PaymentForm.jsx';
 import RepeatChargeModal from '../components/RepeatChargeModal.jsx';
+import LeagueWorkspace, { LeagueEyebrow, sectionHref } from '../components/league/LeagueWorkspace.jsx';
+import { Band, ScoreCell, Scoreboard } from '../components/admin/AdminKit.jsx';
 import { money, moneyShort, fmtDate, balanceClass, balanceText } from '../utils/money.js';
+import { puede } from '../utils/permisos.js';
 
 const CATEGORY_LABELS = {
   campo: 'Renta de campo', arbitraje: 'Arbitraje', transmision: 'Transmisión',
@@ -24,6 +27,10 @@ const CATEGORY_LABELS = {
 // mismo con otros estilos, una clase CSS `billing-table` que no existía en
 // ninguna hoja, y un window.confirm del navegador para cancelar un movimiento
 // contable — sin poder decir qué se cancelaba ni pedir el motivo.
+//
+// Desde el 2026-11-07 vive dentro del panel de la liga (LeagueWorkspace), como
+// una sección más, y sus tres cifras van en el marcador de arriba. Lo de adentro
+// —la bandeja, la tabla, el libro— no cambió.
 export default function BillingLeaguePanel() {
   const { id } = useParams();
   const { token, leagues } = useAuth();
@@ -38,7 +45,8 @@ export default function BillingLeaguePanel() {
   const [openTeamId, setOpenTeamId] = useState(null);
   const [ledger, setLedger] = useState(null);
 
-  const isMine = (leagues || []).some((l) => String(l.id) === String(id));
+  const league = (leagues || []).find((l) => String(l.id) === String(id));
+  const isMine = Boolean(league);
 
   useEffect(() => {
     if (token && isMine) refresh();
@@ -118,51 +126,42 @@ export default function BillingLeaguePanel() {
   const pending = data?.pending_payments || [];
 
   return (
-    <div className="container">
-      <div className="dashboard-panel ws">
-        <div className="crumb">
-          <Link to={`/panel/liga/${id}/estructura`}>← {data ? data.league.name : 'Liga'}</Link>
-        </div>
+    <LeagueWorkspace league={league} section="cobranza">
+      <Band title="Cobranza" eyebrow={<LeagueEyebrow league={league} />}>
+        {/* Las mismas tres cifras de siempre, ahora en el marcador. Sin equipos no
+            hay nada que contar. */}
+        {(!data || data.teams.length > 0) && (
+          <Scoreboard label="La cobranza en cifras">
+            <ScoreCell
+              label="Por cobrar"
+              value={kpis && <span className={kpis.receivable > 0 ? 'lws-money is-owed' : 'lws-money'}>{moneyShort(kpis.receivable)}</span>}
+              loading={!data}
+            />
+            <ScoreCell
+              label="Vencido"
+              value={kpis && <span className={kpis.overdue > 0 ? 'lws-money is-overdue' : 'lws-money'}>{moneyShort(kpis.overdue)}</span>}
+              loading={!data}
+            />
+            <ScoreCell
+              label="Al corriente"
+              value={kpis && `${kpis.total > 0 ? Math.round((kpis.upToDate / kpis.total) * 100) : 0}%`}
+              sub={kpis ? `${kpis.upToDate} de ${kpis.total} equipos` : null}
+              loading={!data}
+            />
+          </Scoreboard>
+        )}
+      </Band>
 
-        <div className="ws-head">
-          <div className="ws-head-text">
-            <span className="eyebrow">{data ? data.league.name : 'Cargando…'}</span>
-            <h1>Cobranza</h1>
-            <div className="ws-head-meta">
-              Lo que cobras cada semana a tus equipos (campo, arbitraje, transmisión…).
-              Cada equipo ve solo el suyo desde su panel.
-            </div>
-          </div>
-        </div>
+      <div className="adm-canvas ws">
+        <p className="adm-note lws-billing-intro">
+          Lo que cobras cada semana a tus equipos (campo, arbitraje, transmisión…). Cada equipo ve solo el suyo
+          desde su panel.
+        </p>
 
         {error && <div className="form-error">{error}</div>}
 
         {!data ? <Loading /> : (
           <>
-            {data.teams.length > 0 && (
-              <div className="stat-strip">
-                <div className="stat-tile">
-                  <div className="stat-tile-label">Por cobrar</div>
-                  <div className={`stat-tile-value ${kpis.receivable > 0 ? 'is-owed' : 'is-zero'}`}>
-                    {moneyShort(kpis.receivable)}
-                  </div>
-                </div>
-                <div className="stat-tile">
-                  <div className="stat-tile-label">Vencido</div>
-                  <div className={`stat-tile-value ${kpis.overdue > 0 ? 'is-overdue' : 'is-zero'}`}>
-                    {moneyShort(kpis.overdue)}
-                  </div>
-                </div>
-                <div className="stat-tile">
-                  <div className="stat-tile-label">Al corriente</div>
-                  <div className="stat-tile-value is-positive">
-                    {kpis.total > 0 ? Math.round((kpis.upToDate / kpis.total) * 100) : 0}%
-                  </div>
-                  <div className="stat-tile-sub">{kpis.upToDate} de {kpis.total} equipos</div>
-                </div>
-              </div>
-            )}
-
             {pending.length > 0 && (
               <div className="pending-tray">
                 <div className="pending-tray-head">
@@ -225,12 +224,15 @@ export default function BillingLeaguePanel() {
                 <div className="empty-teach-icon">🏟️</div>
                 <h3>Esta liga todavía no tiene equipos</h3>
                 <p>
-                  Créalos en el panel de la liga y aquí vas a poder registrarles lo que les cobras
+                  Créalos en Equipos y aquí vas a poder registrarles lo que les cobras
                   cada jornada, llevar su estado de cuenta y ver quién te debe.
                 </p>
-                <Link to={`/panel/liga/${id}/estructura`} className="btn btn-accent">
-                  Ir a la estructura de la liga
-                </Link>
+                {/* El tesorero de liga no da de alta equipos: a él no se le ofrece. */}
+                {puede(league, 'estructura') && (
+                  <Link to={sectionHref(id, 'equipos')} className="btn btn-accent">
+                    Ir a Equipos
+                  </Link>
+                )}
               </div>
             ) : (
               <div className="table-wrap">
@@ -394,6 +396,6 @@ export default function BillingLeaguePanel() {
           />
         )}
       </div>
-    </div>
+    </LeagueWorkspace>
   );
 }

@@ -18,12 +18,18 @@ export function formatDate(value) {
 /* ---------- La banda: el título y el marcador ---------- */
 
 // `actions` va a la derecha del título: es donde vive la acción principal de la
-// sección, si la tiene.
-export function Band({ title, actions, children }) {
+// sección, si la tiene. `eyebrow` es el renglón chico de arriba: el panel de una
+// liga lo usa para decir de qué torneo es una rama.
+export function Band({ title, eyebrow, actions, children }) {
   return (
     <header className="adm-band">
       <div className="adm-band-top">
-        <h1>{title}</h1>
+        {eyebrow ? (
+          <div className="adm-band-title">
+            <div className="adm-band-eyebrow">{eyebrow}</div>
+            <h1>{title}</h1>
+          </div>
+        ) : <h1>{title}</h1>}
         {actions && <div className="adm-band-actions">{actions}</div>}
       </div>
       {children}
@@ -221,8 +227,15 @@ export function RowMenu({ label, items, disabled }) {
       top: roomBelow > height + 12 ? anchor.bottom + 6 : Math.max(8, anchor.top - height - 6),
       right: Math.max(8, window.innerWidth - anchor.right),
     });
-    menu.current.querySelector('[role="menuitem"]')?.focus();
   }, [open]);
+
+  // El foco entra al menú ya colocado. Mientras se mide nace con visibility:
+  // hidden, y un elemento escondido no recibe el foco: hasta el 2026-11-07 se
+  // pedía ahí, el foco se quedaba en el botón, y ni Escape ni las flechas hacían
+  // nada.
+  useEffect(() => {
+    if (open && position) menu.current?.querySelector('[role="menuitem"]')?.focus();
+  }, [open, position]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -230,11 +243,17 @@ export function RowMenu({ label, items, disabled }) {
     const onPointerDown = (e) => {
       if (!menu.current?.contains(e.target) && !button.current?.contains(e.target)) close();
     };
+    // Escape cierra aunque el foco siga en el botón (quien abrió con el ratón).
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') { close(); button.current?.focus(); }
+    };
     document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
     window.addEventListener('scroll', close, true);
     window.addEventListener('resize', close);
     return () => {
       document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('scroll', close, true);
       window.removeEventListener('resize', close);
     };

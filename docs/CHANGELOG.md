@@ -15,6 +15,35 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El panel de una liga es una herramienta con secciones (2026-11-07).** Lo pidió
+  Alfredo: que el panel de trabajo de una liga, en "Mi panel", se viera más
+  profesional. Era una sola página dentro de la tarjeta negra, con "Liga" de título y
+  un acordeón verde que, abierto, daba 210 renglones en ONEFA con cuatro a siete
+  botones cada uno. Ahora se arma con las piezas del Panel Admin: barra lateral con la
+  liga y siete secciones (Resumen, Torneos, Equipos, Sedes, Cobranza, Staff, Perfil),
+  marcador arriba y trabajo abajo. Una rama se abre en su propia vista, con el
+  calendario por jornada en forma de tabla de resultados, sus equipos por conferencia
+  y sus conferencias. El Resumen dice lo que le toca a la liga —partidos por capturar,
+  borradores, equipos sin conferencia, con la misma cuenta del aviso de la bandeja— y
+  lo próximo y lo último, con "Editar" a un clic. Cobranza conserva su ruta y su
+  contenido; ahora la envuelve el panel. Las ventanas son las mismas, movidas tal cual
+  a `components/league/LeagueModals.jsx`. `LeagueStructurePanel.jsx` pasó de 1,193
+  líneas a 121, y `styles.css` bajó 115.
+
+  Dos arreglos que salieron al probarlo y valen también para el Panel Admin, que usa
+  las mismas piezas: el menú "⋯" no pasaba el foco a sus opciones (nace escondido
+  mientras se mide), así que con el teclado ni Escape ni las flechas funcionaban; y en
+  el teléfono, una sección más corta que la pantalla estiraba la barra de arriba.
+
+  Verificado en el navegador con el árbol real de `desarrollo-local`, leído en solo
+  lectura con las rutas del backend tal cual, y la sesión simulada: ONEFA, LFA, una
+  liga sin categorías y una vacía; los cuatro roles; las 10 secciones en 11 anchos de
+  320 a 1440 sin nada fuera de la pantalla; las 18 ventanas sin restos de verde (con
+  control: una sonda verde sí se detecta); 25 comprobaciones de controles, entre ellas
+  que borrar un partido, agregar una conferencia, ocultar la liga e inscribir un equipo
+  mandan la misma petición que antes; carga lenta y error. Sin probar contra el
+  backend real ni en un teléfono. El porqué, en "El panel de una liga" del README.
+
 - **La fila del ranking dice cuántos aciertos cayeron en fase final (2026-11-07).**
   Lo pidió Alfredo: el primer lugar de ONEFA iba con 101 pts y 99/129 aciertos, y
   esperaba 101/129. No era un error: 97 aciertos de temporada regular más 2 de

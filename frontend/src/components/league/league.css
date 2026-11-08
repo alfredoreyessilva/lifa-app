@@ -1,0 +1,507 @@
+/* ==========================================================================
+   PANEL DE UNA LIGA (/panel/liga/:id/estructura y /cobranza)
+   Se arma con las piezas del Panel Admin (components/admin/admin.css): la barra
+   en verde noche, el marcador arriba y el lienzo negro abajo. Aquí va solo lo que
+   la liga tiene y /admin no: su identidad en la barra, sus torneos, y el
+   calendario de una rama por jornada, con los dos equipos uno sobre otro.
+
+   Los colores siguen la regla de admin.css: amarillo es "esto te toca", verde son
+   datos, rojo es lo que no se deshace (y, aquí, lo que se está jugando).
+   ========================================================================== */
+
+/* ---------- La barra: de dónde vienes, qué liga es, con qué rol entraste ---------- */
+.lws-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 var(--space-3) var(--space-4);
+  color: var(--mp-gris);
+  font-size: 13px;
+  text-decoration: none;
+}
+.lws-back:hover { color: var(--mp-cal); }
+.lws-id {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+}
+.lws-id-text { display: flex; flex-direction: column; min-width: 0; }
+.lws-id-text strong {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 21px;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  color: var(--mp-cal);
+  overflow-wrap: anywhere;
+}
+.lws-id-text span { margin-top: 2px; font-size: 12px; color: var(--mp-gris); }
+.lws-id-status { padding: var(--space-3) var(--space-3) 0; }
+.lws-id-status .adm-status { color: var(--mp-gris); font-size: 12.5px; }
+.lws .adm-nav { margin-top: var(--space-5); }
+
+/* El escudo sobre una placa apenas más clara que la barra: un logo oscuro con
+   fondo transparente no se pierde, y uno claro no queda flotando. */
+.lws-mark {
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: rgba(243, 246, 241, 0.07);
+  object-fit: contain;
+}
+.lws-mark.is-md { width: 46px; height: 46px; padding: 4px; }
+.lws-mark.is-initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mp-cal);
+  font-family: var(--font-display);
+  font-size: 17px;
+}
+
+/* El renglón chico arriba del título: en el escritorio, la ruta de una rama; en
+   el teléfono, además, el nombre de la liga, que la barra ya no enseña. */
+.lws-eyebrow-league { display: none; }
+.lws-crumb {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: rgba(170, 189, 176, 0.45);
+  text-underline-offset: 3px;
+}
+.lws-crumb:hover { color: var(--mp-cal); text-decoration-color: currentColor; }
+
+/* Las acciones de la banda bajan de renglón antes de salirse. admin.css no las deja
+   encoger (allá nunca son más de una), y una rama trae cuatro: sin el min-width,
+   en 320 px medían lo de un solo renglón y empujaban la página de lado. */
+.lws .adm-band-top { flex-wrap: wrap; }
+.lws .adm-band-actions {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 1;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* ---------- Resumen ---------- */
+.lws-attention-where {
+  display: block;
+  margin-top: 1px;
+  color: var(--ws-ink-dim);
+  font-size: 12px;
+  font-weight: 400;
+}
+.lws-board { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.lws-feed { margin: 0; padding: 0; list-style: none; }
+.lws-feed-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 11px 0;
+  border-top: 1px solid var(--ws-line);
+}
+.lws-feed-row:first-child { padding-top: 0; border-top: 0; }
+.lws-feed-row:last-child { padding-bottom: 0; }
+.lws-feed-when { display: flex; flex-direction: column; gap: 4px; }
+.lws-feed-match { min-width: 0; }
+.lws-feed-branch {
+  display: block;
+  margin: 5px 0 0 30px;
+  overflow: hidden;
+  color: var(--ws-ink-dim);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lws-feed-empty { margin: var(--space-4) 0 0; color: var(--ws-ink-dim); font-size: 13px; }
+.lws-role { max-width: 640px; }
+.lws-role h2 {
+  margin: 0 0 var(--space-2);
+  color: var(--ws-ink);
+  font-family: var(--font-eyebrow);
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.lws-role p { margin: 0 0 var(--space-4); color: var(--ws-ink-dim); font-size: 14px; line-height: 1.55; }
+.lws-role a:not(.btn) { color: var(--flag); }
+
+/* ---------- Un partido: los dos equipos, uno sobre otro ---------- */
+.lws-match { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.lws-match-line { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.lws-match-logo {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--ws-surface-3);
+  object-fit: contain;
+}
+.lws-match-logo.is-initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ws-ink-dim);
+  font-family: var(--font-eyebrow);
+  font-size: 9.5px;
+}
+.lws-match-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ws-ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* El marcador en la letra de los marcadores de la app, con las cifras alineadas. */
+.lws-match-score {
+  flex-shrink: 0;
+  min-width: 26px;
+  color: var(--ws-ink);
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.lws-match-line.is-lost .lws-match-name,
+.lws-match-line.is-lost .lws-match-score { color: var(--ws-ink-dim); font-weight: 500; }
+.lws-match-scope {
+  display: block;
+  margin: 6px 0 0 30px;
+  color: var(--ws-ink-dim);
+  font-size: 11.5px;
+}
+.lws-when { display: flex; flex-direction: column; color: var(--ws-ink); font-size: 13px; white-space: nowrap; }
+.lws-when-time { color: var(--ws-ink-dim); font-size: 12px; }
+.lws-when.is-tbd { color: var(--ws-ink-dim); }
+.lws-state { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+.lws-draft {
+  margin-left: 15px;
+  padding: 0 8px;
+  border: 1px dashed var(--ws-line-strong);
+  border-radius: 999px;
+  color: var(--ws-ink-dim);
+  font-size: 11px;
+  line-height: 18px;
+}
+.adm-status.is-live .adm-status-dot { color: var(--live); }
+.lws-venue {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ws-ink-dim);
+  font-size: 13px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* ---------- Tablas de la liga ---------- */
+/* Lo que le toca a la liga se marca como las solicitudes de /admin: un filo
+   amarillo y un velo apenas visible. */
+.adm-table tbody tr.is-attention {
+  background: rgba(255, 210, 63, 0.05);
+  box-shadow: inset 3px 0 0 var(--flag);
+}
+/* Encabezado de un tramo (una jornada, una conferencia) dentro de la tabla. */
+.adm-table tbody tr.lws-group:hover { background: none; }
+.lws-group th {
+  padding: 16px var(--space-4) 8px;
+  border-bottom: 1px solid var(--ws-line);
+  background: var(--ws-surface);
+  color: var(--ws-ink);
+  font-family: var(--font-eyebrow);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  text-align: left;
+}
+.lws-group-sub {
+  margin-left: var(--space-2);
+  color: var(--ws-ink-dim);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.adm-table tbody tr.lws-group.is-attention { box-shadow: none; background: none; }
+.lws-group.is-attention th { color: var(--flag); }
+.lws-cal tbody td { padding-top: 12px; padding-bottom: 12px; }
+.lws-struct-name { color: var(--ws-ink); font-weight: 600; }
+.lws-struct-kind { display: block; color: var(--ws-ink-dim); font-size: 12px; }
+.lws-struct tbody tr.is-nested td:first-child { padding-left: 44px; }
+.lws-more-spacer { display: inline-block; flex-shrink: 0; width: 32px; height: 32px; }
+
+/* Las vistas de una rama: calendario, equipos, conferencias. */
+.lws-tabs {
+  display: flex;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-4);
+  overflow-x: auto;
+  border-bottom: 1px solid var(--ws-line);
+  scrollbar-width: none;
+}
+.lws-tabs::-webkit-scrollbar { display: none; }
+.lws-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: -1px;
+  padding: 10px var(--space-3);
+  border-bottom: 2px solid transparent;
+  color: var(--ws-ink-dim);
+  font-family: var(--font-eyebrow);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.lws-tab:hover { color: var(--ws-ink); }
+.lws-tab[aria-current="page"] { color: var(--ws-ink); border-bottom-color: var(--flag); }
+.lws-tab-count {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--ws-surface-3);
+  color: var(--ws-ink-dim);
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 19px;
+  font-variant-numeric: tabular-nums;
+}
+.lws-toolbar { flex-wrap: wrap; }
+.lws-select {
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--ws-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--ws-surface-2);
+  color: var(--ws-ink);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.lws-select:hover { border-color: var(--flag); }
+
+/* ---------- Torneos: torneo → categoría → rama ---------- */
+.lws-outline { display: flex; flex-direction: column; gap: var(--space-5); }
+.lws-tourney {
+  overflow: hidden;
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-lg);
+}
+.lws-tourney-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--ws-line);
+  background: var(--ws-surface-2);
+}
+.lws-tourney-logo { flex-shrink: 0; width: 32px; height: 32px; border-radius: var(--radius-sm); object-fit: contain; }
+.lws-tourney-head h2 {
+  min-width: 0;
+  margin: 0;
+  color: var(--ws-ink);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+.lws-tourney-year { margin-left: var(--space-2); color: var(--ws-ink-dim); }
+.lws-tourney-meta { margin-left: auto; color: var(--ws-ink-dim); font-size: 12.5px; white-space: nowrap; }
+.lws-cat { padding-bottom: var(--space-2); }
+.lws-cat + .lws-cat { border-top: 1px solid var(--ws-line); }
+.lws-cat-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-2) var(--space-4);
+}
+.lws-cat-head h3 {
+  min-width: 0;
+  margin: 0;
+  color: var(--ws-ink);
+  font-family: var(--font-eyebrow);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+}
+.lws-cat-meta { margin-left: auto; color: var(--ws-ink-dim); font-size: 12px; white-space: nowrap; }
+.lws-cat.is-placeholder h3,
+.lws-branch.is-placeholder .lws-branch-name { color: var(--ws-ink-dim); font-style: italic; }
+.lws-branch {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) minmax(0, 1.3fr) minmax(160px, 1.3fr) auto 20px;
+  align-items: center;
+  gap: var(--space-4);
+  margin: 0 var(--space-3) var(--space-1);
+  padding: 12px var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--ws-ink);
+  text-decoration: none;
+  transition: background 0.12s ease;
+}
+.lws-branch:hover { background: var(--ws-surface-3); }
+.lws-branch-name {
+  min-width: 0;
+  font-family: var(--font-eyebrow);
+  font-size: 17px;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+.lws-branch-facts { color: var(--ws-ink-dim); font-size: 13px; }
+.lws-branch-progress { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.lws-branch-progress .adm-meter { flex: 1; height: 6px; }
+.lws-branch-played {
+  color: var(--ws-ink-dim);
+  font-size: 12.5px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.lws-branch-flags { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.lws-flag {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(255, 210, 63, 0.12);
+  color: var(--flag);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.lws-branch-go { display: flex; color: var(--ws-ink-dim); }
+.lws-branch:hover .lws-branch-go { color: var(--flag); }
+.lws-empty-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  color: var(--ws-ink-dim);
+  font-size: 13px;
+}
+
+/* ---------- Perfil ---------- */
+.lws-cell-text { margin: var(--space-2) 0 var(--space-4); color: var(--ws-ink-dim); font-size: 13.5px; line-height: 1.55; }
+.lws-facts dd { max-width: 65%; font-weight: 500; text-align: right; overflow-wrap: anywhere; }
+
+/* ---------- Cobranza: el dinero conserva sus colores de siempre ---------- */
+.lws-money.is-owed { color: var(--flag); }
+.lws-money.is-overdue { color: var(--danger); }
+.lws-billing-intro { margin: 0 0 var(--space-4); }
+
+/* ---------- Staff: la lista de siempre, sobre el lienzo ---------- */
+.lws .category-block { margin-top: 0; padding-top: 0; border-top: 0; }
+.lws .category-block-head h4 { color: var(--ws-ink); font-size: 15px; letter-spacing: 0.06em; }
+.lws .category-block-head h4 span { color: var(--ws-ink-dim) !important; }
+.lws .category-block > p { color: var(--ws-ink-dim) !important; }
+.lws .admin-match-row { padding: 12px 0; border-bottom-color: var(--ws-line); }
+.lws .admin-match-row > div { min-width: 0; }
+.lws .admin-match-row .who { color: var(--ws-ink); }
+.lws .admin-match-row .info { color: var(--ws-ink-dim); overflow-wrap: anywhere; }
+.lws .row-actions { flex-wrap: wrap; justify-content: flex-end; }
+
+/* ---------- Las ventanas, sobre el lienzo ----------
+   admin.css ya las pinta oscuras (`body:has(.adm) .modal`), pero solo alcanza a los
+   campos dentro de un `.field`. Varias ventanas de la liga —Competencia, sobre
+   todo— pintan sus campos con `var(--card)` por su cuenta, y quedaban verdes sobre
+   el negro. Aquí se reasignan esos tokens dentro de la ventana, en vez de ir campo
+   por campo. Lo que promete "así se ve en público" (la portada de pasto de una
+   sede, el color de un equipo) usa otros tokens y no se toca. */
+body:has(.lws) .modal {
+  --card: var(--ws-surface);
+  --card-hover: var(--ws-surface-3);
+  --field: var(--ws-surface);
+  --line: var(--ws-line-strong);
+  --ink-dim: var(--ws-ink-dim);
+}
+
+/* ---------- Según el ancho del lienzo ---------- */
+@container (max-width: 980px) {
+  .lws-col-venue { display: none; }
+}
+@container (max-width: 860px) {
+  .lws-board { grid-template-columns: minmax(0, 1fr); }
+  /* Los avisos van en su propio renglón: al lado del nombre lo dejaban en 40 px y
+     "Varonil" se partía en dos. */
+  .lws-branch {
+    grid-template-columns: minmax(0, 1fr) 20px;
+    grid-template-areas:
+      "name go"
+      "facts go"
+      "progress go"
+      "flags go";
+    row-gap: 6px;
+  }
+  .lws-branch-flags { justify-content: flex-start; }
+  .lws-branch-flags:empty { display: none; }
+  .lws-branch-name { grid-area: name; }
+  .lws-branch-facts { grid-area: facts; }
+  .lws-branch-progress { grid-area: progress; max-width: 380px; }
+  .lws-branch-flags { grid-area: flags; }
+  .lws-branch-go { grid-area: go; }
+}
+/* Sin lugar para columnas, cada partido es una ficha de dos renglones: los
+   equipos con su fecha a la derecha, y debajo su estado con sus acciones. */
+@container (max-width: 760px) {
+  .adm-table.lws-cal tbody tr:not(.lws-group) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "match when"
+      "state actions";
+    align-items: center;
+    gap: 10px var(--space-3);
+  }
+  /* admin.css vuelve bloque cada celda de una ficha; la sede se queda fuera igual
+     que en una tabla angosta. */
+  .adm-table.lws-cal tbody td.lws-col-venue { display: none; }
+  .adm-table.lws-cal tbody td:nth-child(1) { grid-area: match; }
+  .adm-table.lws-cal tbody td:nth-child(2) { grid-area: when; }
+  .adm-table.lws-cal tbody td:nth-child(4) { grid-area: state; }
+  .adm-table.lws-cal tbody td:nth-child(5) { grid-area: actions; }
+  .lws-cal .lws-when { align-items: flex-end; text-align: right; }
+  .lws-cal .lws-state { flex-direction: row; align-items: center; flex-wrap: wrap; }
+  .lws-cal .lws-draft { margin-left: 0; }
+  .adm-table.lws-cal tbody tr.lws-group,
+  .adm-table.lws-teams tbody tr.lws-group { display: block; padding: 0; border-bottom: 0; }
+  .adm-table.lws-cal tbody tr.lws-group th,
+  .adm-table.lws-teams tbody tr.lws-group th { display: block; padding: 14px var(--space-4) 8px; }
+  .adm-table.lws-teams tbody tr:not(.lws-group) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .adm-table.lws-struct tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto 32px;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .adm-table.lws-struct tbody tr.is-nested { padding-left: 44px; }
+  .lws-struct tbody tr.is-nested td:first-child { padding-left: 0; }
+  .lws-feed-row { grid-template-columns: 80px minmax(0, 1fr); }
+  .lws-feed-row .btn { grid-column: 2; justify-self: start; }
+  .lws-tourney-meta,
+  .lws-cat-meta { display: none; }
+  /* En Staff, los botones de cada persona bajan debajo de su nombre. */
+  .lws .admin-match-row { grid-template-columns: minmax(0, 1fr); }
+  .lws .row-actions { justify-content: flex-start; }
+}
+
+@media (max-width: 900px) {
+  .lws .lws-back,
+  .lws .lws-id,
+  .lws .lws-id-status { display: none; }
+  .lws .adm-nav { margin-top: 0; }
+  .lws-eyebrow-league { display: inline; }
+  .lws-eyebrow-league + .lws-eyebrow-path::before { content: " · "; }
+}

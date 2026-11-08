@@ -1,6 +1,8 @@
 /* ==========================================================================
-   PANEL ADMIN (/admin)
-   Se carga con el panel: quien entra a ver un calendario no descarga esto.
+   PANEL ADMIN (/admin), y las piezas del panel de una liga
+   Se carga con el panel: quien entra a ver un calendario no descarga esto. El
+   panel de una liga (components/league/) se arma con estas mismas piezas y le
+   suma lo suyo en league.css.
 
    Una herramienta y no una página: ocupa todo el ancho, sin la cancha alrededor.
    La barra lateral en verde noche dobla hacia arriba y forma una L con la banda de
@@ -115,6 +117,15 @@ body:has(.adm) .topbar-inner { max-width: none; }
   gap: var(--space-4);
 }
 .adm-band-actions { flex-shrink: 0; }
+.adm-band-title { min-width: 0; }
+.adm-band-eyebrow {
+  margin-bottom: 2px;
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  color: var(--mp-gris);
+  overflow-wrap: anywhere;
+}
 .adm-band h1 {
   margin: 0;
   font-family: var(--font-display);
@@ -707,12 +718,14 @@ body:has(.adm) .modal {
 body:has(.adm) .modal h3 { font-weight: 400; }
 body:has(.adm) .modal .field label { color: var(--ws-ink-dim); }
 body:has(.adm) .modal .field input,
-body:has(.adm) .modal .field select {
+body:has(.adm) .modal .field select,
+body:has(.adm) .modal .field textarea {
   border-color: var(--ws-line-strong);
   background: var(--ws-surface);
   color: var(--ws-ink);
 }
-body:has(.adm) .modal .field input::placeholder { color: var(--ws-ink-dim); }
+body:has(.adm) .modal .field input::placeholder,
+body:has(.adm) .modal .field textarea::placeholder { color: var(--ws-ink-dim); }
 .adm-modal-note { color: var(--ws-ink-dim); font-size: 13px; }
 .adm-modal-note .is-on { color: var(--positive); }
 
@@ -788,7 +801,10 @@ body:has(.adm) .modal .field input::placeholder { color: var(--ws-ink-dim); }
 }
 
 @media (max-width: 900px) {
-  .adm { grid-template-columns: minmax(0, 1fr); --adm-pad: var(--space-4); }
+  /* El segundo renglón toma lo que sobre de la pantalla: sin él, en una sección más
+     corta que la pantalla el sobrante se repartía y la barra de arriba se estiraba,
+     con un hueco vacío debajo de las pestañas. */
+  .adm { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); --adm-pad: var(--space-4); }
   .adm-rail {
     position: sticky;
     top: var(--topbar-h, 64px);
