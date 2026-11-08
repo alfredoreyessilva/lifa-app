@@ -706,7 +706,7 @@ export default function MatchForm({
             ))}
             <option value="FINAL">Final</option>
             <option value="SEMIFINAL">Semifinal</option>
-            <option value="PLAYOFF">Playoff</option>
+            <option value="PLAYOFF">Playoffs</option>
             <option value="SCRIMMAGE">Scrimmage</option>
           </select>
         </div>

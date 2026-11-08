@@ -102,11 +102,12 @@ test('fechaLarga: el año solo se dice si no es el de hoy', () => {
   assert.equal(fechaLarga('2024-06-08T01:00:00.000Z', 'America/Mexico_City', hoy), 'Viernes 7 de junio de 2024');
 });
 
-test('rondaDelPartido: la jornada, o la fase cuando la etiqueta no dice nada', () => {
+test('rondaDelPartido: la jornada, o la fase cuando no hay jornada', () => {
   assert.equal(rondaDelPartido({ week_label: '5', phase_name: 'Temporada regular', phase_type: 'groups' }), 'Jornada 5');
-  assert.equal(rondaDelPartido({ week_label: 'PLAYOFF', phase_name: 'Cuartos de final', phase_type: 'single_elimination' }), 'Cuartos de final');
+  assert.equal(rondaDelPartido({ week_label: 'PLAYOFF', phase_name: 'Cuartos de final', phase_type: 'single_elimination' }), 'PLAYOFFS');
+  assert.equal(rondaDelPartido({ week_label: null, phase_name: 'Cuartos de final', phase_type: 'single_elimination' }), 'Cuartos de final');
   assert.equal(rondaDelPartido({ week_label: 'FINAL', phase_name: 'Postemporada', phase_type: 'single_elimination' }), 'FINAL');
-  assert.equal(rondaDelPartido({ week_label: 'PLAYOFF', phase_name: null, phase_type: 'single_elimination' }), 'PLAYOFF');
+  assert.equal(rondaDelPartido({ week_label: 'PLAYOFF', phase_name: null, phase_type: 'single_elimination' }), 'PLAYOFFS');
   assert.equal(rondaDelPartido({ week_label: null, phase_name: 'Repechaje', phase_type: 'round_robin' }), 'Repechaje');
   assert.equal(rondaDelPartido({ week_label: null, phase_name: null }), '');
 });

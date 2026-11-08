@@ -115,7 +115,9 @@ export function ordenarCalendario(matches) {
 // solo llega aquí cuando la lista mezcla partidos con y sin ella.
 export function jornadaLabel(weekLabel) {
   if (!weekLabel) return 'Sin jornada';
-  return /^\d+$/.test(weekLabel) ? `Jornada ${weekLabel}` : weekLabel;
+  if (/^\d+$/.test(weekLabel)) return `Jornada ${weekLabel}`;
+  // ONEFA llama playoffs a sus tres rondas: la jornada dice la etapa, no la ronda.
+  return String(weekLabel).trim().toUpperCase() === 'PLAYOFF' ? 'PLAYOFFS' : weekLabel;
 }
 
 // Parte el calendario en tramos consecutivos de la misma jornada, para que
@@ -213,13 +215,12 @@ export function fechaCorta(isoString, tz) {
 }
 
 // Qué partido es dentro de la competencia. Casi siempre, su jornada. La fase
-// solo manda cuando la etiqueta no dice nada: ONEFA captura sus playoffs como
-// "PLAYOFF" y la fase es la que sabe que son los cuartos de final; en cambio, la
-// LFA captura "FINAL" y su fase se llama "Postemporada", que dice menos.
+// solo manda cuando el partido no tiene jornada. Un "PLAYOFF" se queda como
+// PLAYOFFS aunque su fase se llame "Cuartos de final": así lo pidió ONEFA el
+// 2026-11-08, que llama playoffs a las tres rondas.
 export function rondaDelPartido(match) {
   const etiqueta = (match.week_label || '').trim();
-  const generica = !etiqueta || etiqueta.toUpperCase() === 'PLAYOFF';
-  if (generica && match.phase_name && match.phase_type === 'single_elimination') return match.phase_name;
+  if (!etiqueta && match.phase_name && match.phase_type === 'single_elimination') return match.phase_name;
   return etiqueta ? jornadaLabel(etiqueta) : (match.phase_name || '');
 }
 
