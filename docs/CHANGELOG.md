@@ -15,6 +15,46 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Mi panel, con las piezas del Panel Admin (2026-11-08).** Lo pidió Alfredo: que
+  se viera más profesional. Eran dos bloques sueltos en la tarjeta negra: una
+  cuadrícula de logos de 72 px sin nombre, tres botones "Registrar…" con el mismo
+  peso que todo lo demás, y "Mi cartelera" con el % de aciertos metido debajo del
+  título y todos los partidos pasados, uno tras otro. Ahora es la banda en verde
+  noche con "Hola" y tu nombre y un marcador (organizaciones, por jugar, aciertos,
+  por calificar), y abajo, en el lienzo negro y centrado: una ficha por organización
+  con su escudo, su nombre, qué es y con qué rol entras, con "+ Registrar" como menú;
+  y la cartelera en Próximos y Pasados, seis por lista y "Ver más", con lo que trajo
+  cada partido en un renglón al pie de su tarjeta. Quien no administra nada ve su
+  cartelera arriba y la invitación a registrar al final. Detalle en el README, "Mi
+  panel".
+
+  Dos cosas que salieron al probarla:
+
+  - **"Próximos" se ordenaba solo por fecha**, y un partido del jueves que nadie
+    cerró —en una categoría sin estado automático se queda programado para siempre—
+    salía arriba del que estaba en vivo. Con seis por lista habría escondido a los
+    que de verdad siguen. Ahora va lo que está en vivo, lo que sigue, lo que no tiene
+    fecha, y al final lo que ya debió terminar (`matchState`, la cuenta del panel de
+    una liga).
+  - **El menú "⋯" del Panel Admin y del panel de una liga se abría 15 px a la
+    izquierda de su botón** en cualquier página con barra de desplazamiento: medía
+    con `window.innerWidth`, que la cuenta. Ahora usa `clientWidth`; comprobado en
+    /admin y en Mi panel.
+
+  Verificado en el navegador sin backend ni cuenta: la sesión simulada en la
+  ventana, la cartelera armada con los partidos públicos de ONEFA (con las fechas
+  movidas solo en esa copia) y toda escritura abortada. Cinco casos —quien administra
+  siete organizaciones, con un logo roto y un nombre larguísimo; un aficionado sin
+  organizaciones; una cuenta nueva; cargando; con error—, el primero en seis anchos
+  de 1920 a 320 px y los demás en escritorio y teléfono: nada fuera de la pantalla
+  ni desplazamiento de lado, el contenido centrado a 1920, y el nombre largo cortado
+  en dos renglones solo donde no cabe (el detector, con control positivo). Los
+  controles: el menú con ratón y con teclado (foco, flechas, Escape, Enter) y su
+  opción navega; "Ver más" 6 → 18 → 20; "Dejar de seguir" bien (la tarjeta sale y
+  "Por jugar" baja), con el servidor fallando y sin señal, cada aviso en su tarjeta.
+  659 unitarias, 14 de ellas nuevas en `dashboard.test.mjs`. Sin probar con una
+  cuenta real ni en un teléfono real.
+
 - **"Mis notificaciones" es una pantalla del aficionado (2026-11-08).** Lo pidió
   Alfredo: que se viera mejor, llamativa y no tan seria como un panel de trabajo,
   porque quien más la abre es un aficionado. Vivía en el panel negro del área con

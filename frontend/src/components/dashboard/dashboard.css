@@ -1,0 +1,260 @@
+/* ==========================================================================
+   MI PANEL (/panel)
+   Las piezas del Panel Admin (components/admin/admin.css) sin barra lateral: la
+   banda en verde noche con el marcador, y el lienzo negro abajo. Aquí va solo lo
+   propio: el lienzo centrado, las fichas de tus organizaciones y la cartelera.
+   README, "Mi panel".
+
+   Los colores siguen la regla de admin.css: amarillo es "esto te toca", verde son
+   datos, rojo es lo que no se deshace. Mi panel no le pide nada a nadie, así que
+   casi no lleva amarillo.
+   ========================================================================== */
+
+/* ---------- Sin barra lateral ----------
+   Una sola columna, y el relleno centra el contenido en el ancho del Panel Admin:
+   pegado a la izquierda, una pantalla ancha quedaba con un hueco del lado derecho.
+   El % es del ancho de .adm-main y no de la ventana: 100vw incluye la barra de
+   desplazamiento y descuadraba el centro unos 15 px. */
+.adm.is-solo {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  --adm-pad: max(var(--space-6), calc((100% - var(--adm-max)) / 2));
+}
+/* Sin barra no hay L que formar: el lienzo sube como una hoja, con las dos
+   esquinas redondas. */
+.adm.is-solo .adm-canvas { border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
+
+/* ---------- Secciones del lienzo ---------- */
+.dsh-section + .dsh-section,
+.dsh-section + .dsh-invite { margin-top: var(--space-7); }
+.dsh-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.dsh-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-family: var(--font-eyebrow);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  color: var(--ws-ink);
+}
+.dsh-head-sub { margin: 2px 0 0; font-size: 13px; color: var(--ws-ink-dim); }
+.dsh-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--ws-surface-3);
+  color: var(--ws-ink-dim);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  letter-spacing: 0;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Tus organizaciones ----------
+   Una ficha por organización: el escudo manda, el nombre completo se lee, y qué
+   es y con qué rol entras van debajo. La ficha entera es el link. */
+.dsh-orgs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dsh-org {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 100%;
+  padding: var(--space-4);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-lg);
+  background: var(--ws-surface-2);
+  color: var(--ws-ink-dim);
+  text-decoration: none;
+  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.dsh-org:hover {
+  border-color: var(--ws-line-strong);
+  background: var(--ws-surface-3);
+  color: var(--ws-ink);
+}
+.dsh-org > svg { flex-shrink: 0; }
+/* La placa de .lws-mark, un paso más grande: un logo oscuro con fondo transparente
+   no se pierde en el negro, y uno claro no queda flotando. */
+.dsh-org-mark {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  padding: 5px;
+  border-radius: var(--radius-md);
+  background: rgba(243, 246, 241, 0.07);
+  object-fit: contain;
+}
+.dsh-org-mark.is-initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--ws-ink);
+  font-family: var(--font-display);
+  font-size: 20px;
+}
+.dsh-org-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+/* Dos renglones antes de cortar: "Liga de Futbol Americano Profesional" no cabe en
+   uno, y cortada en el primero ya no se sabe cuál es. */
+.dsh-org-name {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-family: var(--font-eyebrow);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  color: var(--ws-ink);
+  overflow-wrap: anywhere;
+}
+.dsh-org-what {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 12.5px;
+  color: var(--ws-ink-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* El rol es una pastilla y no otro renglón gris: es lo que cambia de una ficha a
+   otra, y lo que explica por qué un panel enseña menos secciones que otro. */
+.dsh-org-role {
+  max-width: 100%;
+  margin-top: 4px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px solid var(--ws-line-strong);
+  border-radius: 999px;
+  font-size: 11.5px;
+  line-height: 18px;
+  color: var(--ws-ink-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Quien no administra nada ----------
+   El recuadro punteado es un lugar libre, como los de Patrocinadores en /admin. */
+.dsh-invite {
+  padding: var(--space-5) var(--space-4);
+  border: 1px dashed var(--ws-line-strong);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+.dsh-invite h2 {
+  margin: 0;
+  font-family: var(--font-eyebrow);
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--ws-ink);
+}
+.dsh-invite p { margin: 4px 0 var(--space-4); font-size: 13.5px; color: var(--ws-ink-dim); }
+.dsh-invite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+/* ---------- Mi cartelera ---------- */
+.dsh-list + .dsh-list { margin-top: var(--space-6); }
+.dsh-subhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-eyebrow);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ws-ink-dim);
+}
+/* La misma tarjeta del calendario, en tantas columnas como quepan: se mide contra
+   sí misma (cqi), así que no hay que tocarle nada. 320 px es lo que mide en un
+   teléfono; con 360, una tableta de 768 quedaba en una sola columna de tarjetas
+   gigantes. En el ancho máximo caben tres, nunca cuatro: por eso las listas se
+   cortan en 6 y crecen de 12 en 12. */
+.dsh-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: var(--space-4);
+}
+.dsh-more { margin-top: var(--space-4); }
+.dsh-more-left { color: var(--ws-ink-dim); }
+.dsh-more:hover .dsh-more-left { color: inherit; }
+
+/* El pie de la tarjeta: por qué está aquí. Es un renglón más de la tarjeta, con la
+   línea del "¿Quién gana?" encima, para que se lea como parte de ella y no como
+   una etiqueta suelta. */
+.dsh-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 8px 12px 9px;
+  border-top: 1px solid var(--mp-linea);
+  font-size: 12.5px;
+  color: var(--mp-gris);
+}
+.dsh-foot-league {
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  color: var(--mp-cal);
+}
+.dsh-foot-reason { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 5px; }
+.dsh-foot-reason svg { flex-shrink: 0; color: var(--positive); }
+.dsh-foot-action {
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mp-gris);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: rgba(170, 189, 176, 0.45);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.dsh-foot-action:hover { color: var(--mp-cal); text-decoration-color: currentColor; }
+.dsh-foot-action:disabled { cursor: default; opacity: 0.7; }
+.dsh-foot-error { flex-basis: 100%; color: #ff8f8f; }
+
+/* ---------- Teléfono ---------- */
+@media (max-width: 900px) {
+  .adm.is-solo { --adm-pad: var(--space-4); }
+  .adm.is-solo .adm-canvas { border-radius: 0; }
+}

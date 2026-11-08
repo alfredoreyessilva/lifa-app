@@ -512,12 +512,13 @@ Hoy funcionan y no hay razón para tocarlos, pero ahí es donde va a doler.
 `AdminPanel.jsx` salió de la lista el 2026-11-06, al rehacer el panel: una sección
 por archivo en `components/admin/`, con su propio CSS. `LeagueStructurePanel.jsx`
 salió el 2026-11-07 por lo mismo: de 1,193 líneas a 121, con cada sección del panel
-de la liga en `components/league/`.
-Medido el 2026-11-07:
+de la liga en `components/league/`. Mi panel se llevó sus estilos a
+`components/dashboard/dashboard.css` el 2026-11-08.
+Medido el 2026-11-08:
 
 | Archivo | Líneas | Qué concentra |
 |---|---|---|
-| `frontend/src/styles.css` | 6,822 | Los estilos de la app, salvo los del Panel Admin y los del panel de una liga |
+| `frontend/src/styles.css` | 7,023 | Los estilos de la app, salvo los del Panel Admin, los del panel de una liga y los de Mi panel |
 | `backend/src/routes/manage.js` | 2,590 | El CRUD entero de liga, torneo, categoría, rama, equipo, sede y partido |
 | `backend/src/config/db.js` | 2,515 | Las 44 tablas y ~150 migraciones |
 

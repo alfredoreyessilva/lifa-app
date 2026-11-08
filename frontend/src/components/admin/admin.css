@@ -550,6 +550,10 @@ body:has(.adm) .topbar-inner { max-width: none; }
 .adm-more:hover,
 .adm-more[aria-expanded="true"] { background: var(--ws-surface-3); color: var(--ws-ink); }
 .adm-more[disabled] { opacity: 0.4; cursor: not-allowed; }
+/* El mismo menú abierto desde un botón con texto ("+ Registrar" en Mi panel). */
+.adm-menu-trigger { display: inline-flex; align-items: center; gap: 6px; }
+.adm-menu-trigger svg { width: 16px; height: 16px; }
+.adm-menu-trigger[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
 /* Va en un portal, fuera de .adm: solo puede usar los tokens de :root. */
 .adm-menu {
   position: fixed;

@@ -78,7 +78,11 @@ function Centro({ match, status, parts, isNext }) {
 //
 // `onAbrir` avisa antes de abrir el partido: con eso el calendario recuerda a qué
 // tarjeta regresar. El id de la tarjeta es a donde llega.
-export default function MatchCard({ match, isNext = false, onAbrir }) {
+//
+// `footer` es un renglón al pie, dentro de la tarjeta y fuera del link: Mi
+// cartelera dice ahí por qué está el partido, con su "Dejar de seguir". El
+// calendario no lo usa.
+export default function MatchCard({ match, isNext = false, onAbrir, footer }) {
   const parts = getMatchParts(match.match_date, match.timezone);
   const status = getMatchStatus(match);
   const local = useTeamPaint(match.home_logo_url, match.home_brand_color, { alInstante: true });
@@ -123,6 +127,8 @@ export default function MatchCard({ match, isNext = false, onAbrir }) {
       {status === 'scheduled' && (
         <PredictionWidget matchId={match.id} homeTeam={match.home_team} awayTeam={match.away_team} weekLabel={match.week_label} />
       )}
+
+      {footer}
     </article>
   );
 }

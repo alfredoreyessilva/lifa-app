@@ -31,7 +31,7 @@ Dónde buscar antes de preguntar: **README** tiene una sección por dominio
 Predicciones y quinielas · Roster · Roster público y pase de lista ·
 Estadísticas por jugada · Capturar sin señal · Equipos independientes · Playbook
 del equipo · Organizaciones: publicar y verificar · Transmisiones · Tiendas y bot
-de WhatsApp · Panel Admin · El panel de una liga · Seguridad),
+de WhatsApp · Panel Admin · El panel de una liga · Mi panel · Seguridad),
 cada una con el porqué de sus decisiones. **`docs/ESTADO.md`** dice
 qué producto está a qué nivel, y **`docs/PENDIENTES.md`** es la lista única de lo
 que falta, con prioridad.

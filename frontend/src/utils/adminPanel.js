@@ -140,6 +140,17 @@ export function attentionItems({ leagues, organizations, cron }) {
 
 /* ---------- Organizaciones ---------- */
 
+// Cómo se dice cada tipo de organización en un panel. La usan /admin y Mi panel
+// (utils/dashboard.js): una sola tabla, para que no digan cosas distintas. `team`
+// solo aplica en /admin, donde un equipo sin liga sale entre las organizaciones.
+export const ORG_TYPE_LABELS = {
+  media: 'Medio de comunicación',
+  store: 'Tienda / proveedor',
+  clinic: 'Clínica',
+  brand: 'Marca',
+  team: 'Equipo independiente',
+};
+
 // Un equipo entra a esta lista de dos formas: independiente (sin liga) o entregado
 // por su liga. Ver GET /admin/organizations y README, "Organizaciones: publicar y
 // verificar".

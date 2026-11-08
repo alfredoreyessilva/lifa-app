@@ -999,9 +999,9 @@ Dos recorridos de punta a punta en `backend/tests/`. **Nunca contra producción*
    - **Lo decide la ruta, no el home** (`ProtectedRoute` con `signupReason`, en `App.jsx`). Así cualquier enlace a esas tres pantallas se comporta igual —un link compartido, el "registra la liga" de `/registrar-equipo`—, y el home no tiene que saber si hay sesión.
    - **El destino viaja en el historial** (`location.state.from`), no en la URL: nadie puede armar un link que, después de entrar, te mande a otro lado.
    - `?tipo=` solo acepta un tipo que `GET /organizations/types` ofrezca y se salta la pregunta de "¿qué tipo de organización?"; cualquier otro valor cae en esa pregunta, como si no viniera nada.
-2. Sin organización todavía, `/panel` ("Mi panel") se ve vacío salvo la barra de logos, con sus botones "Registrar liga", "Registrar equipo" y "Registrar organización" (`OrgLogoBar.jsx`).
+2. Sin organización todavía, `/panel` ("Mi panel") enseña su cartelera y, al final, un recuadro con "Registrar liga", "Registrar equipo" y "Registrar organización" (ver "Mi panel").
 3. Una liga registrada (`/registrar-liga`) queda como **pendiente de aprobación** — no aparece en el inicio hasta que un admin la apruebe desde `/admin`.
-4. De ahí en adelante, cada liga o equipo que administra (propio o entregado por invitación) aparece como un logo en "Mi panel". Un clic abre su panel de trabajo específico; otro clic sobre el mismo logo lo cierra.
+4. De ahí en adelante, cada liga, equipo u organización que administra (propio o entregado por invitación) aparece como una ficha en "Mi panel", con su nombre y con qué rol entra. Un clic abre su panel de trabajo.
 5. Dentro del panel de una liga: agrega categorías, grupos, equipos, sedes y partidos; define fecha, sede, jornada, link de transmisión, estado (programado/en vivo/finalizado) y marcador — todo esto funciona con normalidad aunque la liga siga pendiente de aprobación. También puede importar partidos en bloque desde un Excel (`manage.js`, endpoint `/import`).
 6. Puede generar una invitación (`invites.js`) para entregar un equipo específico a otra persona, que lo administra desde su propia cuenta — ese equipo aparece como su propio logo en el panel personal de quien lo recibe, no en el de quien registró la liga original.
 7. También puede invitar a alguien más a administrar esa misma liga o equipo con el mismo acceso (botón "+ Invitar administrador" en el panel), sin quitarle el acceso a nadie — a diferencia del punto anterior, aquí no hay reemplazo, puede haber varios administradores a la vez.
@@ -4478,7 +4478,8 @@ distinta y ninguna sería "el ranking".
   con espacio para enseñarlos. Ver "La página de un partido".
 - `CalendarRanking.jsx` y `PoolRanking.jsx` — dentro de `CalendarViewer`. El
   detalle de su fila sale de `utils/rankingFormat.js`, igual que en la imagen.
-- `PredictionStats.jsx` y `MiCartelera.jsx` — en `/panel` (`Dashboard.jsx`).
+- Tus aciertos y "Mi cartelera" — en `/panel` (`pages/Dashboard.jsx` y
+  `components/dashboard/`, ver "Mi panel").
 - `PoolJoinPage.jsx` — `/quiniela/:code`, público, para abrir el link recibido.
 
 **"Mi cartelera"** (`routes/board.js`) junta en una sola lista los partidos que
@@ -6319,7 +6320,10 @@ El menú se maneja con el teclado: al abrirse, el foco entra a su primera opció
 lo recorren y Escape lo cierra y regresa al botón. **Hasta el 2026-11-07 no pasaba:** el menú
 nace con `visibility: hidden` mientras se mide, y el foco se pedía en ese momento, a un
 elemento escondido; se quedaba en el botón y ni Escape ni las flechas hacían nada. Salió al
-probar el panel de una liga, que usa la misma pieza.
+probar el panel de una liga, que usa la misma pieza. **Y hasta el 2026-11-08 se abría 15 px a
+la izquierda de su botón** en cualquier página más alta que la pantalla: medía la ventana con
+`window.innerWidth`, que cuenta la barra de desplazamiento. Salió al probar "+ Registrar" en Mi
+panel, que es el mismo menú.
 
 ### Por qué `?seccion=` y no una ruta
 
@@ -6464,6 +6468,93 @@ color de un equipo) usa otros tokens y no cambió.
   estas piezas se ve con Alfredo antes.
 - **Que el aviso de una solicitud rechazada lleve a Perfil.** Lleva al Resumen
   (`/panel/liga/:id/estructura`, en `routes/admin.js`), y Perfil está a un clic.
+
+## Mi panel
+
+`/panel` es la puerta de una cuenta: las ligas, equipos y organizaciones que administras, y lo
+que sigues como aficionado. Lo abre todo el que tiene sesión, y la mayoría de las cuentas no
+administra nada: entra a ver sus partidos y sus aciertos. **Rehecho el 2026-11-08**, cuando
+Alfredo pidió que se viera más profesional. Lo que había funcionaba, pero eran dos bloques
+sueltos dentro de la tarjeta negra: una cuadrícula de logos de 72 px sin nombre, tres botones
+"Registrar…" con el mismo peso que todo lo demás, y "Mi cartelera" con el % de aciertos metido
+debajo del título y todos los partidos pasados, uno tras otro.
+
+### Las piezas del Panel Admin, sin barra lateral
+
+No se inventó ninguna pieza: es la banda en verde noche con el marcador y el lienzo negro
+abajo, como en "Panel Admin" y "El panel de una liga". No lleva barra lateral porque Mi panel
+no tiene secciones, y una barra con un solo renglón sería adorno. Sin ella, la banda y el
+lienzo se centran en el ancho máximo del Panel Admin (`.adm.is-solo`): pegados a la izquierda,
+una pantalla ancha quedaba con un hueco del lado derecho. Al entrar a una liga, su barra
+lateral ya trae "← Mi panel" de regreso.
+
+| Pieza | Qué dice |
+|-|-|
+| Banda | "Hola", con tu nombre |
+| Marcador | Organizaciones (cuántas de cada tipo), Por jugar (en tu cartelera, y cuándo sigue el próximo), Aciertos (el % y cuántos de cuántos calificados), Por calificar |
+| Tus organizaciones | Una ficha por liga, equipo u organización, y "+ Registrar" |
+| Mi cartelera | Próximos y Pasados, con la tarjeta del calendario |
+
+### Los aciertos van en el marcador
+
+Antes eran una tarjeta debajo del título de "Mi cartelera", y parecía suelta. Son una cifra de
+tu cuenta, igual que cuántas organizaciones tienes, y el marcador es donde se leen esas cifras.
+
+Las celdas no se esconden: quien nunca ha votado ve "Aciertos —" con "Todavía no votas" debajo.
+La tarjeta de antes desaparecía para no decir "0 de 0"; en el marcador, una celda vacía con su
+razón se lee como lo que es, y el renglón no cambia de forma cuando llegan los datos. La única
+que falta cuando no hay nada es "Organizaciones", que se sabe desde que abre la página: no
+brinca.
+
+### Tus organizaciones
+
+- **Una ficha por cada una**: su escudo sobre una placa neutra, su nombre completo, qué es
+  ("Liga", "Equipo · ONEFA", "Equipo independiente", "Medio de comunicación"…) y con qué rol
+  entras. La ficha entera abre su panel. Antes era un logo de 72 px sin nombre: con dos escudos
+  parecidos había que entrar para saber cuál era, y nada decía con qué rol.
+- **Ligas, luego equipos, luego lo demás, y por abecedario dentro de cada grupo.** `/auth/me` no
+  ordena ligas ni equipos, y salían como la base los regresara.
+- **"+ Registrar" es un menú** con las tres opciones. Es el menú "⋯" del Panel Admin con un botón
+  de texto (`RowMenu` con `trigger`), y sus opciones navegan dentro de la app (`to`).
+- **Quien no administra nada no ve una sección vacía arriba de su cartelera.** La cartelera sube,
+  y al final queda un recuadro punteado con las tres opciones a la vista: ahí no hay nada más que
+  hacer, así que no hace falta esconderlas en un menú.
+
+### Mi cartelera
+
+- **Próximos y Pasados.** En Próximos va primero lo que se está jugando, luego lo que sigue
+  por fecha, luego lo que no tiene fecha, y al final lo que ya debió terminar sin que nadie lo
+  cerrara (la cuenta de `matchState`, la del panel de una liga). Antes iban solo por fecha, y
+  un partido del jueves que nadie cerró —en una categoría sin estado automático se queda
+  programado para siempre— salía arriba del que estaba en vivo; con seis por lista habría
+  escondido a los que de verdad siguen. Los pasados, del más reciente al más viejo. Es la misma
+  tarjeta del calendario (`MatchCard`), en tantas columnas como quepan.
+- **Por qué está ahí va dentro de la tarjeta**, en un renglón al pie (`footer` de `MatchCard`): la
+  liga, "Lo sigues" con "Dejar de seguir", o "Sigues a X". En un partido en vivo o ya jugado dice
+  también "Votaste por X"; en uno por jugar no, porque el "¿Quién gana?" de la misma tarjeta ya lo
+  dice. Antes eran etiquetas sueltas debajo, con emoji, y "Tu predicción: Local" obligaba a
+  buscar quién era el local.
+- **Seis por lista, y "Ver más" de doce en doce.** Quien votó la temporada de ONEFA trae más de
+  120 partidos pasados, y se pintaban todos. Seis llenan una, dos o tres columnas sin huecos.
+- **Mientras carga dice "Cargando…", y si falla lo dice en un renglón.** Antes no pintaba nada en
+  los dos casos: con Render dormido (PD-03) eran 40 s de un panel sin cartelera y sin explicación.
+- Si "Dejar de seguir" falla, el aviso sale en la tarjeta de ese partido, no arriba de la lista.
+
+### Lo que no se ve
+
+Las reglas puras —el orden de las fichas, las cifras del marcador, por qué está cada partido—
+están en `utils/dashboard.js`, con sus pruebas. Las dos secciones viven en
+`components/dashboard/`, y su CSS (`dashboard.css`) se carga con la página. `MiCartelera.jsx` y
+`PredictionStats.jsx` se fueron, y con ellos sus estilos de `styles.css`. `OrgLogoBar` se queda:
+la siguen usando el panel de un equipo y la pantalla de partidos de un torneo.
+
+### Fuera de esta versión
+
+- **Lo que te toca en cada organización** (partidos por capturar, pagos por confirmar), en su
+  ficha. Pediría el árbol de cada liga al abrir el panel.
+- **Si una liga es pública, en su ficha.** `/auth/me` no manda `is_public` de una liga, y esta
+  versión no toca el backend.
+- **El panel de un equipo** sigue con la barra de logos arriba (ver "El panel de una liga").
 
 ## Seguridad — decisiones ya tomadas
 

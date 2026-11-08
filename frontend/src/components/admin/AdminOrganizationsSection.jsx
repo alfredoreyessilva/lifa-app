@@ -3,7 +3,7 @@ import { api } from '../../api/client.js';
 import Modal from '../Modal.jsx';
 import TeamInfoPanel from '../TeamInfoPanel.jsx';
 import {
-  ORGANIZATION_FILTERS, countFilters, isHandedOverTeam, matchesSearch, planStatus,
+  ORGANIZATION_FILTERS, ORG_TYPE_LABELS, countFilters, isHandedOverTeam, matchesSearch, planStatus,
 } from '../../utils/adminPanel.js';
 import {
   Band, FilterScoreboard, Identity, NoResults, RowMenu, SearchBox, SectionError, SectionLoading,
@@ -13,14 +13,6 @@ import {
 /* Medio, proveedor, tienda, clínica, marca, y los equipos que ya no administra una
    liga. Un equipo de liga sin entregar no sale: lo administra su liga desde su
    panel. Ver GET /admin/organizations. */
-const ORG_TYPE_LABELS = {
-  media: 'Medio de comunicación',
-  store: 'Tienda / proveedor',
-  clinic: 'Clínica',
-  brand: 'Marca',
-  team: 'Equipo independiente',
-};
-
 const typeLabel = (org) => (
   isHandedOverTeam(org) ? 'Equipo entregado' : ORG_TYPE_LABELS[org.type] || org.type
 );

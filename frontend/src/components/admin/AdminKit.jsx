@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { initials } from '../../utils/matchDisplay.js';
 import { formatNumber, paginate } from '../../utils/adminPanel.js';
 import { IconCheck, IconChevronLeft, IconChevronRight, IconMore, IconSearch } from './AdminIcons.jsx';
@@ -210,14 +210,22 @@ export function Verified({ on }) {
 // desplazar la página: un menú fijo que se queda flotando lejos de su fila ya no
 // dice de cuál es.
 //
-// items: [{ label, onSelect } | { label, href } | { divider: true }], con
-// `danger` para lo que no se deshace.
-export function RowMenu({ label, items, disabled }) {
+// items: [{ label, onSelect } | { label, to } | { label, href } | { divider: true }],
+// con `danger` para lo que no se deshace. `to` navega dentro de la app; `href` abre
+// otra pestaña.
+//
+// `trigger` cambia los tres puntos por un botón con texto, con el mismo menú: es
+// el "+ Registrar" de Mi panel. Entonces el texto del botón es su nombre, y
+// `label` nombra solo al menú.
+export function RowMenu({ label, items, disabled, trigger }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState(null);
   const button = useRef(null);
   const menu = useRef(null);
 
+  // `right` se mide desde la orilla de la ventana SIN la barra de desplazamiento:
+  // con `window.innerWidth`, que sí la cuenta, el menú quedaba 15 px a la izquierda
+  // de su botón en cualquier página más alta que la pantalla (2026-11-08).
   useLayoutEffect(() => {
     if (!open) return;
     const anchor = button.current.getBoundingClientRect();
@@ -225,7 +233,7 @@ export function RowMenu({ label, items, disabled }) {
     const roomBelow = window.innerHeight - anchor.bottom;
     setPosition({
       top: roomBelow > height + 12 ? anchor.bottom + 6 : Math.max(8, anchor.top - height - 6),
-      right: Math.max(8, window.innerWidth - anchor.right),
+      right: Math.max(8, document.documentElement.clientWidth - anchor.right),
     });
   }, [open]);
 
@@ -284,14 +292,14 @@ export function RowMenu({ label, items, disabled }) {
       <button
         ref={button}
         type="button"
-        className="adm-more"
-        aria-label={label}
+        className={trigger ? 'btn btn-ws btn-sm adm-menu-trigger' : 'adm-more'}
+        aria-label={trigger ? undefined : label}
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled}
         onClick={() => { setPosition(null); setOpen((value) => !value); }}
       >
-        <IconMore />
+        {trigger ?? <IconMore />}
       </button>
       {open && createPortal(
         <div
@@ -305,6 +313,13 @@ export function RowMenu({ label, items, disabled }) {
           {entries.map((item) => {
             if (item.divider) return <div key={item.key} className="adm-menu-divider" role="separator" />;
             const className = `adm-menu-item${item.danger ? ' is-danger' : ''}`;
+            if (item.to) {
+              return (
+                <Link key={item.label} className={className} role="menuitem" to={item.to} onClick={() => setOpen(false)}>
+                  {item.label}
+                </Link>
+              );
+            }
             return item.href ? (
               <a
                 key={item.label}
