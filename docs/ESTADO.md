@@ -69,7 +69,7 @@ respaldos se resolvieron el 2026-09-23.
 | Roster (Excel, foto, altas y bajas) | 4 | Sin medir. La tarjeta pública ya no lleva el historial de equipos: desplegado el 2026-10-17 (`ff73a8b`), y en producción `GET /players/:id/card` responde `team` y no `trajectory` | PD-37 |
 | Roster público y pase de lista | 4 | Sin medir | PD-25 |
 | Estadísticas por jugada y captura sin señal | 4, **sin validar en cancha** | Solo Chromium con red apagada | PD-09, PD-10 |
-| El panel de una tienda (Resumen, Productos, Perfil y Staff) | **3** | Rehecho el 2026-11-08 y verificado en el navegador sin backend: la tienda real de producción (Deportes Cancún, leída en solo lectura) y un inventario inventado en la memoria de la ventana; 31 comprobaciones de los botones de Productos, 19 de rutas, 9 casos y 12 anchos de 1440 a 320 px. Sin desplegar, sin probar con una cuenta real ni en un teléfono | — |
+| El panel de una tienda (Resumen, Productos, Perfil y Staff) | 4 | Rehecho el 2026-11-08 y verificado en el navegador sin backend: la tienda real de producción (Deportes Cancún, leída en solo lectura) y un inventario inventado en la memoria de la ventana; 31 comprobaciones de los botones de Productos, 19 de rutas, 9 casos y 12 anchos de 1440 a 320 px. Desplegado ese día (`edf0866`): CI verde, Vercel sirve la misma hoja que la compilación revisada, y en el sitio público salen las cuatro secciones en escritorio y en tamaño de celular, sin errores ni escrituras a la API. Sin probar con una cuenta real ni en un teléfono | PD-46 |
 | Tienda y bot de WhatsApp | 2 | Código completo, sin conectar | Siguiente alcance |
 
 ## Plataforma y operación

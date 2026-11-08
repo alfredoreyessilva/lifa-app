@@ -59,6 +59,15 @@ entradas traen el post-mortem del bug que las provocó.
   manda también su plan y hasta cuándo lo pagó. Hoy no le pasa a nadie, porque la
   única tienda publicada está en plan gratuito.
 
+  Desplegado ese día (`edf0866`): CI verde y Vercel lo sirvió, con la hoja del panel
+  idéntica a la de la compilación revisada (el mismo nombre con hash y los mismos
+  5,176 bytes). En el sitio público, con Deportes Cancún leída de la API real y la
+  sesión y el inventario simulados en la ventana, salen las cuatro secciones; guardar
+  un producto actualiza la tabla, el marcador y la barra; en tamaño de celular nada se
+  desliza de lado, y Mi panel, el enlace viejo de Inventario y la vitrina llevan al
+  panel. Sin errores en la consola y sin una sola escritura a la API: la del producto
+  la contestó la ventana. Sigue sin probarse con una cuenta real y en un teléfono.
+
 - **Mi panel, con las piezas del Panel Admin (2026-11-08).** Lo pidió Alfredo: que
   se viera más profesional. Eran dos bloques sueltos en la tarjeta negra: una
   cuadrícula de logos de 72 px sin nombre, tres botones "Registrar…" con el mismo
