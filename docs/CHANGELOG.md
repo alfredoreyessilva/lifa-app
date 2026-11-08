@@ -44,6 +44,14 @@ entradas traen el post-mortem del bug que las provocó.
   mandan la misma petición que antes; carga lenta y error. Sin probar contra el
   backend real ni en un teléfono. El porqué, en "El panel de una liga" del README.
 
+  Desplegado ese día (`24ad096`): CI verde y Vercel lo sirvió; la hoja principal y las
+  dos del panel tienen el mismo hash que la compilación revisada. En el sitio público,
+  con una liga inventada y la sesión simulada, salen las siete secciones y una rama,
+  en escritorio y en tamaño de celular, sin errores y sin una sola petición a la API;
+  sin sesión, el panel pide iniciar sesión como antes. Sigue sin probarse con una
+  cuenta real en producción: la primera vez que Alfredo lo use para capturar es esa
+  prueba.
+
 - **La fila del ranking dice cuántos aciertos cayeron en fase final (2026-11-07).**
   Lo pidió Alfredo: el primer lugar de ONEFA iba con 101 pts y 99/129 aciertos, y
   esperaba 101/129. No era un error: 97 aciertos de temporada regular más 2 de
