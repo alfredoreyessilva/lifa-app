@@ -46,7 +46,15 @@ entradas traen el post-mortem del bug que las provocó.
   propósito sí salió. En el navegador, como dueño, de "Ver mi página" a la página, el
   torneo, la tabla con su imagen, el partido con su imagen y el roster, con el aviso en los
   cuatro y en 360 px; como visor y sin sesión, "No encontramos esta liga". 683 unitarias.
-  Sin desplegar; sin probar en un teléfono real.
+
+  Desplegado ese día (`9f08187`): CI verde y Vercel lo sirvió, con la hoja idéntica a la
+  de la compilación revisada (el mismo nombre con hash) y los estilos del aviso adentro.
+  Render ya contesta el campo nuevo: `preview: false` en la página, el torneo y el
+  contexto de un partido de las 4 ligas públicas, con sus tablas en 200 y una liga que no
+  existe en 404. En el sitio público, en un navegador limpio y sin sesión, ONEFA, su
+  torneo y un partido salen sin aviso y sin errores, y sin una sola escritura a la API.
+  Sigue sin probarse en producción con la cuenta de una liga sin publicar, y en un
+  teléfono real.
 
 - **"Antes se enfrentaron" ya no empieza con coma (2026-11-08).** Un partido anterior
   de una categoría sin torneo, el modelo viejo, decía ", Jornada 3". Salió al probar la
