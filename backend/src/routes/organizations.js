@@ -3,8 +3,8 @@ import db from '../config/db.js';
 import { authRequired, optionalAuth } from '../middleware/auth.js';
 import { isValidUrl, isValidEmail, isNonEmptyString } from '../utils/validation.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { isOrgMember, puedeVerOrganizacion } from '../utils/orgMembers.js';
-import { camposDeFichaSql } from '../utils/orgVisibility.js';
+import { administraOrganizacion, isOrgMember, puedeVerOrganizacion } from '../utils/orgMembers.js';
+import { camposDeFichaSql, organizacionParaQuienLaVe } from '../utils/orgVisibility.js';
 import { organizationAdminRequired } from '../middleware/ownership.js';
 import { rolesDeTipo, etiquetaDeRol, puede, esRolValido } from '../utils/orgRoles.js';
 
@@ -108,7 +108,7 @@ router.post('/', authRequired, asyncHandler(async (req, res) => {
     VALUES (?, ?, 'owner')
   `).run(org.id, req.user.id);
 
-  res.status(201).json(org);
+  res.status(201).json(organizacionParaQuienLaVe(org, { administra: true }));
 }));
 
 // Público, sin authRequired — mismo criterio que la tarjeta del jugador:
@@ -119,6 +119,11 @@ router.post('/', authRequired, asyncHandler(async (req, res) => {
 // que una liga oculta, y responde el mismo 404 que una que no existe. La siguen
 // viendo quienes la administran y el admin de la plataforma — esta misma página
 // es su panel —, por eso `optionalAuth`.
+//
+// La fila se lee entera, pero no se responde entera (PD-46): al público le
+// llega lo de la página y, si la tienda lleva el botón de WhatsApp, solo el
+// número; el plan, su vencimiento y si está publicada, solo a quien la
+// administra. README, "Lo que enseña su página".
 router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
   const org = await db.prepare(`
     SELECT o.*, c.name AS country_name
@@ -129,7 +134,8 @@ router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
   if (!org || !(await puedeVerOrganizacion(req.user, org))) {
     return res.status(404).json({ error: 'Organización no encontrada' });
   }
-  res.json(org);
+  const administra = await administraOrganizacion(req.user, org);
+  res.json(organizacionParaQuienLaVe(org, { administra }));
 }));
 
 router.put('/:id', authRequired, asyncHandler(async (req, res) => {
@@ -186,7 +192,9 @@ router.put('/:id', authRequired, asyncHandler(async (req, res) => {
     org.id
   );
 
-  res.json(updated);
+  // Con la misma forma que el GET: el panel de la tienda reemplaza con esto lo
+  // que tenía, y sin `storefront_whatsapp` diría que el botón se apagó.
+  res.json(organizacionParaQuienLaVe(updated, { administra: true }));
 }));
 
 /* ===================== ADMINISTRADORES DE LA ORGANIZACIÓN ===================== */

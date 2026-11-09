@@ -796,6 +796,52 @@ ok((await call(`/admin/organizations/${MEDIA}/publish`, { method: 'PUT', token: 
 ok((await call(`/admin/organizations/${MEDIA}/unpublish`, { method: 'PUT', token: PLAT2 })).data.is_public === false,
   'y Ocultar lo deja privado otra vez');
 
+console.log('\n=== 18b. La página de una tienda no le dice al público su plan (PD-46) ===');
+// README, "Lo que enseña su página" (2026-11-08). Hasta ese día GET
+// /organizations/:id respondía la fila entera: cualquiera veía en las
+// herramientas del navegador si la tienda pagaba el Pro y hasta cuándo.
+const NUMERO = '+52 998 000 0000';
+const PRIVADOS = ['plan', 'plan_expires_at', 'whatsapp_display_number', 'whatsapp_phone_number_id', 'is_public'];
+const enAnio = new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString();
+const plan = await call(`/admin/organizations/${TIENDA}/plan`, {
+  method: 'PUT', token: PLAT2,
+  body: { plan: 'pro', plan_expires_at: enAnio, whatsapp_phone_number_id: `e2e-${stamp}`, whatsapp_display_number: NUMERO },
+});
+ok(plan.status === 200 && plan.data.plan === 'pro', 'el admin le activa el Pro y le carga el número', `=${plan.status}`);
+await call(`/admin/organizations/${TIENDA}/publish`, { method: 'PUT', token: PLAT2 });
+
+const paginaTienda = async (token) => (await call(`/organizations/${TIENDA}`, token ? { token } : {})).data;
+for (const [quien, token] of [['el público', null], ['alguien con sesión que no la administra', FAN]]) {
+  const vista = await paginaTienda(token);
+  const filtrados = PRIVADOS.filter((c) => c in vista);
+  ok(filtrados.length === 0, `${quien} no ve el plan, su vencimiento ni los datos del bot`, JSON.stringify(filtrados));
+  ok(vista.storefront_whatsapp === NUMERO, `${quien} sí recibe el número del botón`, JSON.stringify(vista.storefront_whatsapp));
+  ok(vista.name && vista.type === 'store' && 'contact_phone' in vista, `${quien} recibe lo de la página`);
+}
+
+const delDueno = await paginaTienda(MEDIO);
+ok(delDueno.plan === 'pro' && delDueno.plan_expires_at && delDueno.whatsapp_display_number === NUMERO && delDueno.is_public === true,
+  'quien la administra ve su plan, hasta cuándo, su número y si está publicada', JSON.stringify(delDueno));
+ok(!('whatsapp_phone_number_id' in delDueno), 'el id de Meta no le llega ni a él: solo lo lee el webhook');
+ok((await paginaTienda(PLAT2)).plan === 'pro', 'el admin de la plataforma también ve el plan');
+
+const guardado = await call(`/organizations/${TIENDA}`, { method: 'PUT', token: MEDIO, body: { description: 'Jerseys e2e' } });
+ok(guardado.status === 200 && guardado.data.storefront_whatsapp === NUMERO && guardado.data.plan === 'pro'
+  && !('whatsapp_phone_number_id' in guardado.data),
+  'editar el perfil responde con la misma forma: el panel no ve apagarse el botón', JSON.stringify(guardado.data));
+
+// Con el plan vencido, al público ya no le llega el número, y tampoco el porqué.
+await call(`/admin/organizations/${TIENDA}/plan`, {
+  method: 'PUT', token: PLAT2, body: { plan_expires_at: new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString() },
+});
+const vencida = await paginaTienda(null);
+ok(vencida.storefront_whatsapp === null && !('plan' in vencida), 'vencido el Pro, el botón se apaga sin decir por qué', JSON.stringify(vencida));
+ok((await paginaTienda(MEDIO)).plan === 'pro', 'su dueño sí ve que su Pro venció: el panel lo dice con la fecha');
+
+// Que la suite no deje una tienda de prueba en el home ni un número de bot asignado.
+await call(`/admin/organizations/${TIENDA}/unpublish`, { method: 'PUT', token: PLAT2 });
+await pool.query('UPDATE organizations SET whatsapp_phone_number_id = NULL WHERE id = $1', [TIENDA]);
+
 console.log('\n=== 19. Un equipo de liga llega a la pestaña Organizaciones cuando se entrega ===');
 // README, "Un equipo de liga entra a la lista cuando se entrega" (2026-11-06).
 // Hasta ese día el filtro preguntaba por `teams.league_id`, que se queda puesta

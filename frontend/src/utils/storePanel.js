@@ -104,12 +104,16 @@ const CONTACT_FIELDS = [
 ];
 
 // El botón "Consultar por WhatsApp" de la vitrina: plan Pro vigente Y el número de
-// la tienda cargado. Es la misma regla que el webhook del bot (README, "El bot"),
-// y la página pública la lee de aquí. El número lo carga CFBAMX desde /admin.
+// la tienda cargado. Lo decide el backend, con la misma regla que el webhook del
+// bot, y manda el número en `storefront_whatsapp` solo si el botón sale: al
+// público no le llega el plan (PD-46, README, "Lo que enseña su página"). La
+// vitrina y el panel leen el botón de aquí; el porqué de uno apagado sale del plan,
+// que solo le llega a quien administra la tienda. El número lo carga CFBAMX desde
+// /admin.
 export function whatsappStatus(org, now = new Date()) {
+  const number = String(org?.storefront_whatsapp ?? '').trim();
+  if (number) return { on: true, tone: 'on', label: 'Encendido', sub: number };
   const { active, expires } = planStatus(org || {}, now);
-  const number = String(org?.whatsapp_display_number ?? '').trim();
-  if (active && number) return { on: true, tone: 'on', label: 'Encendido', sub: number };
   if (active) return { on: false, tone: 'off', label: 'Apagado', sub: 'Falta que CFBAMX cargue tu número' };
   if (org?.plan === 'pro' && expires) {
     return { on: false, tone: 'off', label: 'Apagado', sub: `Tu plan Pro venció el ${fecha(expires)}` };

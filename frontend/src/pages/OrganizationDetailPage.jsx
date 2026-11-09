@@ -313,12 +313,14 @@ function useVitrina(nombre) {
 
 // El botón del bot de WhatsApp con IA — solo aparece si la tienda tiene el
 // plan Pro activo (no vencido) y ya tiene su número configurado desde el Admin
-// Panel. La regla vive en `whatsappStatus` (utils/storePanel.js), la misma que
-// le dice a la tienda, desde su panel, si su vitrina lo lleva.
+// Panel. Lo decide el backend, que manda el número en `storefront_whatsapp`
+// solo entonces, y se lee con `whatsappStatus` (utils/storePanel.js), lo mismo
+// que le dice a la tienda, desde su panel, si su vitrina lo lleva.
 function whatsappDeLaTienda(org) {
-  if (!whatsappStatus(org).on) return null;
+  const { on, sub: numero } = whatsappStatus(org);
+  if (!on) return null;
   const texto = `Hola, vi ${org.name} en CFBAMX y quiero preguntar por un producto`;
-  return `https://wa.me/${org.whatsapp_display_number.replace(/\D/g, '')}?text=${encodeURIComponent(texto)}`;
+  return `https://wa.me/${numero.replace(/\D/g, '')}?text=${encodeURIComponent(texto)}`;
 }
 
 // La palomita del sello va en el amarillo de CFBAMX: es la plataforma la que

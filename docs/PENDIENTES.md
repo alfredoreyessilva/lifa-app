@@ -68,7 +68,6 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-43 | P2 | El recordatorio de WhatsApp a un tutor no le pone el 52 a un número de diez dígitos | código |
 | PD-44 | P2 | La página de un torneo se quedó con su portada gigante y sus tarjetas verdes | código |
 | PD-45 | P2 | Un logo que no carga se ve como un cuadro roto | código |
-| PD-46 | P2 | La página pública de una tienda deja ver su plan y hasta cuándo lo pagó | código |
 
 ---
 
@@ -666,29 +665,6 @@ Visto el 2026-11-07 al probar el muro del home con una URL que no existe: `Casco
 (`MatchField.jsx`) pinta el `<img>` y deja el cuadro de imagen rota dentro del disco, y lo mismo
 pasa en el calendario, la portada de un partido y la página de una liga. Hoy no le pasa a nadie:
 los 58 logos públicos cargan. Se resuelve con un `onError` en `Casco` que caiga a las iniciales.
-
-### PD-46 · La página pública de una tienda deja ver su plan y hasta cuándo lo pagó
-
-Visto el 2026-11-08 al rehacer el panel de una tienda. `GET /organizations/:id` es público
-(`optionalAuth`) y responde `o.*`: además de lo que enseña la ficha, manda `plan`,
-`plan_expires_at`, `whatsapp_phone_number_id` y `whatsapp_display_number`. Cualquiera que abra las
-herramientas del navegador en la página de una tienda ve si paga el plan Pro y hasta cuándo. El
-README dice que lo que es solo para administrarla no sale en público ("Lo que enseña su ficha"), y
-es cierto en el directorio y en "También transmiten", que nombran sus columnas con
-`CAMPOS_DE_FICHA`; esta ruta no.
-
-Hoy no le pasa a nadie: medido ese día en la API pública, la única tienda publicada (Deportes
-Cancún) está en plan gratuito, con `plan_expires_at` y los dos campos de WhatsApp en NULL. Una
-tienda privada contesta 404 al público.
-
-No basta con quitar las columnas. La vitrina lee tres de ellas para decidir si enseña "Consultar
-por WhatsApp" (`whatsappStatus`, en `utils/storePanel.js`), y el Perfil del panel de la tienda
-enseña el plan. Lo que haría falta, en los dos lados a la vez (regla 6):
-
-- Que el backend decida el botón y mande al público solo el número, y solo con el plan vigente.
-- Que el plan, su vencimiento y `whatsapp_phone_number_id` (el id de Meta, que solo usa el
-  webhook) salgan únicamente para quien la administra y para el admin, con la misma pregunta que
-  ya decide si una organización privada existe (`puedeVerOrganizacion`).
 
 ---
 

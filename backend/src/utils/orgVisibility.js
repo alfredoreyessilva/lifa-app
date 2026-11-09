@@ -58,3 +58,57 @@ export const CAMPOS_DE_FICHA = [
 export function camposDeFichaSql(aliasOrganizacion = 'o') {
   return CAMPOS_DE_FICHA.map((campo) => `${aliasOrganizacion}.${campo}`).join(', ');
 }
+
+// ── La página de una organización (GET /organizations/:id) ────────────────
+//
+// Hasta el 2026-11-08 esa ruta respondía la fila entera, y cualquiera que
+// abriera las herramientas del navegador en la vitrina de una tienda veía si
+// pagaba el plan Pro y hasta cuándo (PD-46). Ahora la respuesta se arma con
+// listas cerradas, como la tarjeta del jugador: una columna nueva en
+// `organizations` no sale en ningún lado hasta que alguien la agregue aquí.
+
+// Lo que ve cualquiera que pueda abrir la página: quién es y su ficha.
+export const CAMPOS_DE_PAGINA = [
+  'id', 'name', 'slug', 'type', 'country_id', 'country_name', 'logo_url', 'is_verified',
+  ...CAMPOS_DE_FICHA,
+];
+
+// Lo que además ve quien la administra, y el admin de la plataforma: si la
+// plataforma la muestra, su plan y el número que CFBAMX le cargó. El panel de
+// la tienda los enseña en Perfil. `whatsapp_phone_number_id` no sale por aquí
+// ni para ellos: es el id que Meta le da a ese número, solo lo lee el webhook
+// del bot, y el admin lo ve en su propia lista (GET /admin/organizations).
+export const CAMPOS_DE_QUIEN_ADMINISTRA = [
+  'is_public', 'plan', 'plan_expires_at', 'whatsapp_display_number',
+];
+
+// ¿Tiene el plan Pro vigente? `plan='pro'` con la fecha vencida ya no es Pro, y
+// sin fecha no vence. Es la misma pregunta que hace el webhook del bot antes de
+// contestar (`routes/bot.js`): si fueran dos, la vitrina podría prometer un bot
+// que no contesta. Una fecha que no se entiende cuenta como vencida.
+export function planProVigente(org, ahora = new Date()) {
+  if (org?.plan !== 'pro') return false;
+  if (org.plan_expires_at === null || org.plan_expires_at === undefined) return true;
+  return new Date(org.plan_expires_at).getTime() > ahora.getTime();
+}
+
+// El número al que abre "Consultar por WhatsApp" en la vitrina de una tienda, o
+// null si la vitrina no lleva el botón: una tienda, con el plan Pro vigente y su
+// número cargado. Lo decide el backend para que al público le llegue solo el
+// número, y solo cuando el botón sale — nunca el plan.
+export function whatsappDeVitrina(org, ahora = new Date()) {
+  if (org?.type !== 'store' || !planProVigente(org, ahora)) return null;
+  const numero = String(org.whatsapp_display_number ?? '').trim();
+  return numero || null;
+}
+
+// La organización como la ve quien abre su página. `administra` lo resuelve
+// quien llama, con la misma pregunta que decide si una privada existe
+// (`administraOrganizacion`, en `orgMembers.js`).
+export function organizacionParaQuienLaVe(org, { administra = false, ahora = new Date() } = {}) {
+  const campos = administra ? [...CAMPOS_DE_PAGINA, ...CAMPOS_DE_QUIEN_ADMINISTRA] : CAMPOS_DE_PAGINA;
+  const vista = {};
+  for (const campo of campos) vista[campo] = org[campo] ?? null;
+  vista.storefront_whatsapp = whatsappDeVitrina(org, ahora);
+  return vista;
+}

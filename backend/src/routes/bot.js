@@ -1,6 +1,7 @@
 import express from 'express';
 import db from '../config/db.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { planProVigente } from '../utils/orgVisibility.js';
 
 const router = express.Router();
 
@@ -148,8 +149,9 @@ router.post('/webhook', asyncHandler(async (req, res) => {
     return res.sendStatus(200);
   }
 
-  const isPlanActive = org.plan === 'pro' && (!org.plan_expires_at || new Date(org.plan_expires_at) > new Date());
-  if (!isPlanActive) {
+  // La misma regla que decide si la vitrina lleva el botón (`orgVisibility.js`):
+  // si fueran dos, el botón podría mandar al cliente con un bot que no contesta.
+  if (!planProVigente(org)) {
     // Plan vencido o nunca activado: no contestamos con IA. Se deja
     // silencioso (sin mensaje automático) para no confundir al cliente
     // final con un aviso interno de facturación.

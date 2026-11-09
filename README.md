@@ -5935,9 +5935,9 @@ primera tanda ya estaba en `main`.
   /organizations`) y "También transmiten" (`GET /broadcasts/match/:id`). Antes
   cada una nombraba sus columnas a mano; con nueve, la que se quedara atrás
   dejaría la ficha a medias según desde dónde se abriera. Lo que es solo para
-  administrarla (el plan, el número del bot, `is_public`) no está en la lista.
-  `GET /organizations/:id`, la que arma la página de una tienda, sí los manda:
-  es PD-46.
+  administrarla (el plan, el número del bot, `is_public`) no está en la lista,
+  y tampoco sale al público de `GET /organizations/:id`, la que arma la página:
+  ver "Lo que enseña su página", abajo.
 - **La portada se recorta a banner** (3:1 en la página de una tienda, la
   franja de 120 px en la ficha). A su altura natural, una foto cuadrada o
   vertical se comía la pantalla.
@@ -5959,6 +5959,41 @@ Igual que una liga oculta, una organización privada no existe para el público:
   (`puedeVerOrganizacion`, en `utils/orgMembers.js`). A quien la administra, su
   página le dice si es pública o privada y quién la publica: desde su sesión la
   ve igual que siempre, y no tendría cómo saber que nadie más la ve.
+
+### Lo que enseña su página
+
+Hasta el 2026-11-08, `GET /organizations/:id` respondía la fila entera, y
+cualquiera que abriera las herramientas del navegador en la vitrina de una
+tienda veía si pagaba el plan Pro y hasta cuándo (PD-46). No le pasó a nadie
+—la única tienda publicada ese día estaba en plan gratuito—, pero la ficha ya
+decía que eso no era público y la página lo publicaba.
+
+Ahora la respuesta se arma con dos listas cerradas (`organizacionParaQuienLaVe`,
+en `utils/orgVisibility.js`), como la tarjeta del jugador:
+
+- **A cualquiera que pueda abrirla**: quién es (nombre, tipo, logo, país,
+  palomita) y su ficha (`CAMPOS_DE_FICHA`).
+- **Además, a quien la administra y al admin de la plataforma**: si está
+  publicada, el plan, su vencimiento y el número que CFBAMX le cargó. Es la
+  misma pregunta que decide si una privada existe (`administraOrganizacion`,
+  en `utils/orgMembers.js`). El panel de la tienda los enseña en Perfil.
+- **A nadie, por aquí**: `whatsapp_phone_number_id`, el id que Meta le da al
+  número. Solo lo lee el webhook del bot, y el admin lo ve en su propia lista
+  (`GET /admin/organizations`).
+
+Lo que se lee de la fila y no está en ninguna lista no sale: una columna nueva
+en `organizations` no se publica hasta que alguien la agrega a propósito. El
+`PUT` y el `POST` de la misma ruta responden con la misma forma —quien los usa
+la administra—, porque el panel de la tienda reemplaza con eso lo que tenía.
+
+**El botón de WhatsApp lo decide el backend.** La vitrina necesitaba el plan
+para saber si enseñar "Consultar por WhatsApp", y por eso no bastaba con quitar
+las columnas. Ahora el backend manda `storefront_whatsapp`: el número, solo si
+es una tienda con el plan Pro vigente y su número cargado, y `null` en
+cualquier otro caso. Al público le llega el número cuando el botón sale —que es
+cuando la tienda quiere que le escriban— y nunca el porqué cuando no sale. La
+regla del plan (`planProVigente`) es la misma que usa el webhook antes de
+contestar: si fueran dos, el botón podría mandar al cliente con un bot callado.
 
 ### Para transmitir: publicada y verificada
 
@@ -6057,7 +6092,7 @@ que crea la columna, que en ese mismo paso queda `NOT NULL DEFAULT FALSE`.
 | GET | `/admin/organizations` | Admin — trae `is_public` y, de un equipo, `show_on_platform`, `league_id`, `league_name` y `team`, con lo que enseña su ficha. Un equipo de liga solo sale ya entregado |
 | GET | `/organizations` | **Público** — el directorio: solo publicadas, con `is_verified` para la palomita y `CAMPOS_DE_FICHA` para la ficha |
 | PUT | `/organizations/:id` | Dueño o administrador de la organización, o el admin — edita nombre, país, logo, descripción, sitio web, portada, redes y contacto (400 si es liga o equipo) |
-| GET | `/organizations/:id` | Público si está publicada; si no, quien la administra o el admin (404 a los demás) |
+| GET | `/organizations/:id` | Público si está publicada; si no, quien la administra o el admin (404 a los demás). El plan y si está publicada, solo para quien la administra o el admin; al público, el número del botón de WhatsApp (`storefront_whatsapp`) y solo si sale. Ver "Lo que enseña su página" |
 | GET | `/products/organization/:id` | El mismo criterio que su página |
 | GET | `/auth/me` | `organizations[].is_public`, para el control de "Transmitir" |
 
@@ -6223,9 +6258,10 @@ API — no hay una URL de webhook por tienda.
 **El cobro es el interruptor.** Si la organización no tiene `plan = 'pro'`
 vigente, el bot **no contesta y se queda callado** — sin mensaje automático, a
 propósito, para no meterle al cliente final un aviso interno de facturación. Hoy
-el plan lo activa un admin a mano desde `/admin` (`PUT /organizations/:id/plan`)
+el plan lo activa un admin a mano desde `/admin` (`PUT /admin/organizations/:id/plan`)
 después de un pago fuera de la plataforma; automatizar eso es la Fase 2 del
-roadmap de negocio.
+roadmap de negocio. "Vigente" lo contesta `planProVigente` (`utils/orgVisibility.js`),
+la misma función que decide si la vitrina lleva el botón de WhatsApp.
 
 ### Dos cosas de `bot_messages`
 
@@ -6659,8 +6695,10 @@ ventana larga, arriba quedaba fuera de la vista de quien acababa de apretar "Gua
 Lo que la tienda no puede cambiar se dice sin botón: publicarla y verificarla lo decide
 CFBAMX (ver "Organizaciones: publicar y verificar"), y el plan Pro y el número de WhatsApp
 los carga CFBAMX desde /admin (ver "El bot"). La regla del botón "Consultar por WhatsApp"
-—plan Pro vigente y número cargado— vive en un solo lugar (`whatsappStatus`): la vitrina la
-usa para enseñarlo y el panel para decir por qué no sale.
+—plan Pro vigente y número cargado— la decide el backend desde el 2026-11-08 y manda solo el
+número, en `storefront_whatsapp` (ver "Lo que enseña su página"). `whatsappStatus` lo lee: la
+vitrina para enseñar el botón, y el panel para decir por qué no sale, con el plan que solo le
+llega a quien administra la tienda.
 
 ### Staff
 

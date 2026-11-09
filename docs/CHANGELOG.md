@@ -15,6 +15,35 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **La página de una tienda ya no le dice al público su plan (2026-11-08, cierra
+  PD-46).** `GET /organizations/:id` respondía la fila entera: quien abriera las
+  herramientas del navegador en una vitrina veía si la tienda pagaba el Pro y hasta
+  cuándo, el número que CFBAMX le cargó y el id de Meta del bot. No le pasó a nadie
+  —Deportes Cancún, la única publicada, está en plan gratuito—, pero la ficha ya decía
+  que eso no era público. Ahora la respuesta se arma con dos listas cerradas
+  (`organizacionParaQuienLaVe`): al público, quién es y su ficha; a quien la
+  administra y al admin, además si está publicada, el plan, su vencimiento y el
+  número; el id de Meta, a nadie por aquí. Una columna nueva no sale hasta que se
+  agrega a propósito.
+
+  No bastaba con quitar columnas: la vitrina leía el plan para decidir el botón
+  "Consultar por WhatsApp". Ahora lo decide el backend y manda solo el número, en
+  `storefront_whatsapp`, cuando el botón sale (regla 6: backend y frontend en el mismo
+  cambio). La regla del plan vigente (`planProVigente`) es una sola para la vitrina y
+  para el webhook del bot, que tenía su propia copia. El `PUT` y el `POST` responden
+  con la misma forma, porque el panel de la tienda reemplaza con eso lo que tenía.
+  Detalle en el README, "Lo que enseña su página".
+
+  Verificado: 682 unitarias (7 nuevas en el backend, 1 en el frontend), y
+  `invites-roles.e2e.mjs` contra `desarrollo-local` con 251 ok y 0 fallas, 13 de ellas
+  nuevas (sección 18b): una tienda con el Pro y su número vista por el público, por
+  alguien con sesión que no la administra, por su dueño y por el admin; editar el
+  perfil; y el Pro vencido. En el navegador, con el arnés del panel de una tienda
+  contestando con la función real del backend: el Perfil y la vitrina, con y sin
+  sesión, en plan gratuito, Pro y Pro vencido —el botón sale solo en Pro, y sin sesión
+  la página no recibe ni el plan ni si está publicada— y guardar el perfil con el Pro
+  no apaga el botón. Sin probar con una cuenta real.
+
 - **El panel de una tienda, con las piezas del panel de una liga (2026-11-08).** Lo
   pidió Alfredo: el panel de trabajo de una tienda era muy básico y tenía que verse
   profesional. Eran dos páginas sueltas sobre la cancha: "Editar organización", un

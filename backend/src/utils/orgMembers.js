@@ -76,7 +76,15 @@ export function orgTieneMiembrosSql(aliasOrganizacion = 'o') {
 // verificar".
 export async function puedeVerOrganizacion(user, org) {
   if (!esPrivadaAlPublico(org)) return true;
-  if (!user) return false;
+  return administraOrganizacion(user, org);
+}
+
+// ¿Esta persona la administra, o es el admin de la plataforma? Es la pregunta
+// de arriba sin la parte de "es pública": decide también qué más le llega de
+// la organización en su página —su plan, si está publicada—, que el público no
+// ve (PD-46, `organizacionParaQuienLaVe` en `orgVisibility.js`).
+export async function administraOrganizacion(user, org) {
+  if (!user || !org) return false;
   if (user.role === 'admin') return true;
   return isOrgMember(user.id, org.id);
 }

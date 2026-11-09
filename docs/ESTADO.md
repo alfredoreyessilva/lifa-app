@@ -69,7 +69,7 @@ respaldos se resolvieron el 2026-09-23.
 | Roster (Excel, foto, altas y bajas) | 4 | Sin medir. La tarjeta pública ya no lleva el historial de equipos: desplegado el 2026-10-17 (`ff73a8b`), y en producción `GET /players/:id/card` responde `team` y no `trajectory` | PD-37 |
 | Roster público y pase de lista | 4 | Sin medir | PD-25 |
 | Estadísticas por jugada y captura sin señal | 4, **sin validar en cancha** | Solo Chromium con red apagada | PD-09, PD-10 |
-| El panel de una tienda (Resumen, Productos, Perfil y Staff) | 4 | Rehecho el 2026-11-08 y verificado en el navegador sin backend: la tienda real de producción (Deportes Cancún, leída en solo lectura) y un inventario inventado en la memoria de la ventana; 31 comprobaciones de los botones de Productos, 19 de rutas, 9 casos y 12 anchos de 1440 a 320 px. Desplegado ese día (`edf0866`): CI verde, Vercel sirve la misma hoja que la compilación revisada, y en el sitio público salen las cuatro secciones en escritorio y en tamaño de celular, sin errores ni escrituras a la API. Sin probar con una cuenta real ni en un teléfono | PD-46 |
+| El panel de una tienda (Resumen, Productos, Perfil y Staff) | 4 | Rehecho el 2026-11-08 y verificado en el navegador sin backend: la tienda real de producción (Deportes Cancún, leída en solo lectura) y un inventario inventado en la memoria de la ventana; 31 comprobaciones de los botones de Productos, 19 de rutas, 9 casos y 12 anchos de 1440 a 320 px. Desplegado ese día (`edf0866`): CI verde, Vercel sirve la misma hoja que la compilación revisada, y en el sitio público salen las cuatro secciones en escritorio y en tamaño de celular, sin errores ni escrituras a la API. Sin probar con una cuenta real ni en un teléfono. Desde PD-46 (2026-11-08) la página pública ya no manda el plan: el botón de WhatsApp lo decide el backend | — |
 | Tienda y bot de WhatsApp | 2 | Código completo, sin conectar | Siguiente alcance |
 
 ## Plataforma y operación
@@ -80,7 +80,7 @@ respaldos se resolvieron el 2026-09-23.
 | Disponibilidad | ⚠️ Render gratuito: **41.5 s** en frío (medido 2026-09-23) | PD-03 |
 | Cron | ⚠️ Una llamada cada ~4 h (GitHub). El externo de antes ya no llama. Alcanza para la cobranza, no para los avisos de partido | PD-02 (P2) |
 | Monitoreo | Sentry en frontend y backend ✅ · caída del servicio ❌ | PD-12 |
-| Pruebas | **674 unitarias** (334 backend + 340 frontend) en el CI ✅ · **7 suites e2e** que se corren a mano | PD-11, PD-25 |
+| Pruebas | **682 unitarias** (341 backend + 341 frontend) en el CI ✅ · **7 suites e2e** que se corren a mano | PD-11, PD-25 |
 | Despliegue | Push a `main` = producción, sin protección ni espera al CI | PD-11 |
 | Seguridad | JWT obligatorio, límite de intentos en login y en el estado de cuenta público, CORS con lista, SQL parametrizado, candado contra producción, invitaciones que caducan a los 7 días ✅ · Recuperar la contraseña con un código por correo, que cierra las sesiones abiertas: verificado el 2026-10-17 contra `desarrollo-local` (`recuperar-contrasena.e2e.mjs` y navegador) y desplegado ese día (`ff73a8b`), pero **apagado en producción**: Render no tiene Resend y la ruta contesta 503 | PD-38, PD-20, PD-21 |
 | Páginas legales | ✅ Completas desde el 2026-09-19 | — |

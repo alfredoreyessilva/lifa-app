@@ -1,6 +1,8 @@
 // Pruebas de lo que calcula el panel de una tienda (utils/storePanel.js). Los
 // productos tienen la forma de GET /products/organization/:id/manage —el precio
-// llega como texto, porque es NUMERIC— y la tienda la de GET /organizations/:id.
+// llega como texto, porque es NUMERIC— y la tienda la de GET /organizations/:id
+// para quien la administra: con su plan, y con `storefront_whatsapp`, el número
+// del botón de la vitrina, que el backend manda solo si el botón sale (PD-46).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,8 +26,15 @@ const tienda = (extra = {}) => ({
   id: 99, type: 'store', name: 'Deportes Cancún', logo_url: 'https://img.test/logo.png',
   description: 'Uniformes y equipo de fútbol americano', contact_phone: '998 123 4567', contact_email: null,
   website_url: null, facebook_url: null, instagram_url: null, youtube_url: null, tiktok_url: null,
-  plan: 'free', plan_expires_at: null, whatsapp_display_number: null, is_public: true, is_verified: false, ...extra,
+  plan: 'free', plan_expires_at: null, whatsapp_display_number: null, storefront_whatsapp: null,
+  is_public: true, is_verified: false, ...extra,
 });
+
+// Lo que le llega al público de la misma tienda: sin plan ni número cargado.
+const vitrina = (extra = {}) => {
+  const { plan, plan_expires_at, whatsapp_display_number, is_public, ...publica } = tienda(extra);
+  return publica;
+};
 
 test('un producto inactivo no está en la vitrina aunque lo hayan marcado para salir', () => {
   assert.equal(inShowcase(producto(1)), true);
@@ -105,19 +114,31 @@ test('el arranque de la vitrina son los primeros productos que el público ve, e
   assert.deepEqual(showcaseLead(lista, 2).map((p) => p.id), [8, 6]);
 });
 
-test('el botón de WhatsApp necesita el plan Pro vigente y el número', () => {
+test('el botón de WhatsApp sale cuando el backend manda el número, y el panel dice por qué no', () => {
   assert.equal(whatsappStatus(tienda(), AHORA).sub, 'Llega con el plan Pro');
   assert.equal(whatsappStatus(tienda({ plan: 'pro' }), AHORA).sub, 'Falta que CFBAMX cargue tu número');
-  assert.equal(whatsappStatus(tienda({ plan: 'pro', whatsapp_display_number: '   ' }), AHORA).on, false);
+  assert.equal(whatsappStatus(tienda({ plan: 'pro', storefront_whatsapp: '   ' }), AHORA).on, false);
 
-  const encendido = whatsappStatus(tienda({ plan: 'pro', whatsapp_display_number: '+52 998 123 4567' }), AHORA);
-  assert.deepEqual(encendido, { on: true, tone: 'on', label: 'Encendido', sub: '+52 998 123 4567' });
+  const pro = { plan: 'pro', whatsapp_display_number: '+52 998 123 4567', storefront_whatsapp: '+52 998 123 4567' };
+  assert.deepEqual(whatsappStatus(tienda(pro), AHORA), { on: true, tone: 'on', label: 'Encendido', sub: '+52 998 123 4567' });
 
+  // El backend no lo manda si el plan venció: el panel lo dice con la fecha.
   const vencido = whatsappStatus(
     tienda({ plan: 'pro', plan_expires_at: '2026-11-01T06:00:00Z', whatsapp_display_number: '9981234567' }), AHORA,
   );
   assert.equal(vencido.on, false);
   assert.match(vencido.sub, /^Tu plan Pro venció el 1 nov/);
+
+  // Quien decide es el backend: con el número cargado pero sin `storefront_whatsapp`
+  // el botón no sale, aunque el plan parezca vigente desde aquí.
+  assert.equal(whatsappStatus(tienda({ plan: 'pro', whatsapp_display_number: '9981234567' }), AHORA).on, false);
+});
+
+test('la vitrina enciende el botón sin saber nada del plan', () => {
+  const publica = vitrina({ storefront_whatsapp: '+52 998 123 4567' });
+  assert.ok(!('plan' in publica) && !('plan_expires_at' in publica) && !('whatsapp_display_number' in publica));
+  assert.deepEqual(whatsappStatus(publica, AHORA), { on: true, tone: 'on', label: 'Encendido', sub: '+52 998 123 4567' });
+  assert.equal(whatsappStatus(vitrina(), AHORA).on, false);
 });
 
 test('el plan dice hasta cuándo, y uno vencido ya es gratis', () => {
@@ -135,7 +156,9 @@ test('a un perfil le falta lo que la vitrina necesita para decir quién es y có
   );
   assert.equal(hasContact(tienda({ contact_phone: null, instagram_url: 'https://instagram.com/x' })), true);
   assert.equal(
-    hasContact(tienda({ contact_phone: null, plan: 'pro', whatsapp_display_number: '9981234567' })), true,
+    hasContact(tienda({
+      contact_phone: null, plan: 'pro', whatsapp_display_number: '9981234567', storefront_whatsapp: '9981234567',
+    })), true,
     'el botón de WhatsApp también es una forma de contacto',
   );
   assert.deepEqual(profileGaps(null), []);

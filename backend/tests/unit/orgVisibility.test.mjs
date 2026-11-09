@@ -13,6 +13,8 @@
 //      `organizations.is_public` no se lee para ellos.
 //   4. La ficha pública trae lo que la organización llenó en su página, y nada
 //      de lo que solo es para administrarla.
+//   5. La página de una tienda no le dice al público su plan (PD-46): solo el
+//      número de WhatsApp, y solo cuando la vitrina lleva el botón.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,6 +26,11 @@ import {
   puedeTransmitirSql,
   CAMPOS_DE_FICHA,
   camposDeFichaSql,
+  CAMPOS_DE_PAGINA,
+  CAMPOS_DE_QUIEN_ADMINISTRA,
+  planProVigente,
+  whatsappDeVitrina,
+  organizacionParaQuienLaVe,
 } from '../../src/utils/orgVisibility.js';
 
 // Un medio como lo deja `POST /organizations`: privado y sin verificar.
@@ -113,4 +120,82 @@ test('la versión SQL lleva el alias en cada columna y ningún signo de interrog
   assert.equal(camposDeFichaSql('o'), CAMPOS_DE_FICHA.map((c) => `o.${c}`).join(', '));
   assert.equal(camposDeFichaSql(), camposDeFichaSql('o'), 'el alias por default es o');
   assert.ok(!camposDeFichaSql('org').includes('?'), 'sin signos de interrogación: db.prepare los vuelve parámetros');
+});
+
+// ── 5. La página de una tienda (PD-46) ────────────────────────────────────
+
+const AHORA = new Date('2026-11-08T20:00:00Z');
+
+// Una fila como la lee GET /organizations/:id: `o.*` más el país, con todo lo
+// que `organizations` tiene hoy.
+const fila = (extra = {}) => ({
+  id: 7, name: 'Deportes Cancún', slug: 'deportes-cancun', type: 'store', country_id: 1, country_name: 'México',
+  logo_url: 'https://img.test/logo.png', description: 'Uniformes', website_url: null, cover_url: null,
+  facebook_url: null, instagram_url: null, youtube_url: null, tiktok_url: null,
+  contact_email: null, contact_phone: '998 123 4567',
+  status: 'active', created_at: new Date('2026-10-01T12:00:00Z'), is_verified: false, is_public: true,
+  plan: 'pro', plan_expires_at: new Date('2026-12-03T06:00:00Z'),
+  whatsapp_phone_number_id: '1234567890', whatsapp_display_number: '+52 998 123 4567',
+  ...extra,
+});
+
+const PRIVADOS = ['is_public', 'plan', 'plan_expires_at', 'whatsapp_display_number', 'whatsapp_phone_number_id'];
+
+test('el público no ve el plan, su vencimiento ni los datos del bot', () => {
+  const vista = organizacionParaQuienLaVe(fila(), { ahora: AHORA });
+  for (const campo of PRIVADOS) assert.ok(!(campo in vista), campo);
+  // Lo de la página sí, con la ficha completa.
+  for (const campo of [...CAMPOS_DE_PAGINA, ...CAMPOS_DE_FICHA]) assert.ok(campo in vista, campo);
+});
+
+test('una columna que no está en las listas no sale, para nadie', () => {
+  const conAlgoNuevo = fila({ notas_internas: 'debe 3 meses' });
+  assert.ok(!('notas_internas' in organizacionParaQuienLaVe(conAlgoNuevo, { ahora: AHORA })));
+  assert.ok(!('notas_internas' in organizacionParaQuienLaVe(conAlgoNuevo, { administra: true, ahora: AHORA })));
+});
+
+test('quien la administra ve su plan y su número; el id de Meta, tampoco él', () => {
+  const vista = organizacionParaQuienLaVe(fila(), { administra: true, ahora: AHORA });
+  assert.equal(vista.plan, 'pro');
+  assert.equal(vista.is_public, true);
+  assert.equal(vista.whatsapp_display_number, '+52 998 123 4567');
+  assert.deepEqual(vista.plan_expires_at, new Date('2026-12-03T06:00:00Z'));
+  assert.ok(!('whatsapp_phone_number_id' in vista));
+  assert.deepEqual(CAMPOS_DE_QUIEN_ADMINISTRA.filter((c) => CAMPOS_DE_PAGINA.includes(c)), [], 'las listas no se pisan');
+});
+
+test('lo privado no se cuela en la lista pública', () => {
+  for (const campo of PRIVADOS) assert.ok(!CAMPOS_DE_PAGINA.includes(campo), campo);
+});
+
+test('el plan Pro vale hasta su fecha, sin fecha no vence, y una fecha ilegible cuenta como vencida', () => {
+  assert.equal(planProVigente(fila(), AHORA), true);
+  assert.equal(planProVigente(fila({ plan_expires_at: null }), AHORA), true);
+  assert.equal(planProVigente(fila({ plan_expires_at: '2026-11-01T06:00:00Z' }), AHORA), false);
+  assert.equal(planProVigente(fila({ plan_expires_at: AHORA }), AHORA), false, 'el instante en que vence ya no es Pro');
+  assert.equal(planProVigente(fila({ plan_expires_at: 'mañana' }), AHORA), false);
+  assert.equal(planProVigente(fila({ plan: 'free', plan_expires_at: null }), AHORA), false);
+  assert.equal(planProVigente(null, AHORA), false);
+});
+
+test('al público le llega el número solo cuando la vitrina lleva el botón', () => {
+  const encendido = organizacionParaQuienLaVe(fila(), { ahora: AHORA });
+  assert.equal(encendido.storefront_whatsapp, '+52 998 123 4567');
+
+  const apagados = [
+    fila({ plan: 'free', plan_expires_at: null }),               // sin plan
+    fila({ plan_expires_at: new Date('2026-11-01T06:00:00Z') }), // plan vencido
+    fila({ whatsapp_display_number: null }),                     // sin número
+    fila({ whatsapp_display_number: '   ' }),
+    fila({ type: 'media' }),                                     // no es una tienda: no tiene vitrina
+  ];
+  for (const org of apagados) {
+    assert.equal(organizacionParaQuienLaVe(org, { ahora: AHORA }).storefront_whatsapp, null, JSON.stringify(org));
+    assert.equal(whatsappDeVitrina(org, AHORA), null);
+  }
+});
+
+test('sin decir quién pregunta, es el público', () => {
+  const vista = organizacionParaQuienLaVe(fila());
+  assert.ok(!('plan' in vista));
 });
