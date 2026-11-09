@@ -138,3 +138,18 @@ export const IconExternal = () => (
     <path d="M14 4h6v6M20 4l-8.5 8.5M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
   </Icon>
 );
+
+// Los del panel de un medio (2026-11-08): Transmisiones, una cámara, y Partidos,
+// un calendario.
+export const IconBroadcast = () => (
+  <Icon>
+    <rect x="3" y="7" width="12.5" height="10" rx="1.6" />
+    <path d="m15.5 10.6 5.5-3v8.8l-5.5-3" />
+  </Icon>
+);
+export const IconCalendar = () => (
+  <Icon>
+    <rect x="3.5" y="5" width="17" height="15" rx="1.8" />
+    <path d="M3.5 10h17M8 3v4M16 3v4" />
+  </Icon>
+);

@@ -640,6 +640,10 @@ export const api = {
     request(`/broadcasts/match/${matchId}`),
   getOrganizationBroadcasts: (organizationId, token) =>
     request(`/broadcasts/organization/${organizationId}`, { token }),
+  // Lo que se juega en las ligas públicas, con la transmisión de este medio si ya
+  // está en el partido: la sección Partidos de su panel.
+  getMediaUpcomingMatches: (organizationId, token) =>
+    request(`/broadcasts/organization/${organizationId}/upcoming`, { token }),
   createBroadcast: (payload, token) =>
     request('/broadcasts', { method: 'POST', body: payload, token }),
   deleteBroadcast: (id, token) =>

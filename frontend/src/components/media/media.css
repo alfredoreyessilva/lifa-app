@@ -1,0 +1,170 @@
+/* ==========================================================================
+   PANEL DE UN MEDIO (/panel/medio/:id)
+   Es el panel de una tienda con el medio adentro: las piezas del Panel Admin
+   (components/admin/admin.css), la barra y la fila de partido de la liga (`.lws`,
+   components/league/league.css). Aquí va solo lo del medio: el link de una
+   transmisión, el aviso de que todavía no puede transmitir y sus dos tablas.
+   README, "El panel de un medio".
+
+   Los colores siguen la regla de admin.css: amarillo es "esto te toca" (lo que
+   viene sin link, lo que le falta a su ficha), verde son datos —"Transmites"—,
+   rojo es lo que no se deshace.
+   ========================================================================== */
+
+/* ---------- Piezas ---------- */
+.mws-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--ws-ink);
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.mws-link svg { flex-shrink: 0; color: var(--ws-ink-dim); }
+.mws-link:hover { color: var(--flag); }
+.mws-link:hover svg { color: currentColor; }
+.mws-missing { color: var(--flag); }
+.mws-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: var(--space-4);
+  color: var(--flag);
+  font-size: 13px;
+  text-decoration: none;
+}
+.mws-more:hover { text-decoration: underline; }
+.mws-intro { max-width: 760px; margin: 0 0 var(--space-4); }
+
+/* Por qué todavía no puede sumarse: informa y no pide nada, así que no va en
+   amarillo. */
+.mws-gate {
+  max-width: 760px;
+  margin-bottom: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--ws-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--ws-surface-2);
+}
+.mws-gate .adm-status { color: var(--ws-ink); font-weight: 600; }
+.mws-gate p { margin: 6px 0 0; color: var(--ws-ink-dim); font-size: 13px; line-height: 1.55; }
+
+/* ---------- Resumen ---------- */
+.mws-subhead {
+  margin: var(--space-5) 0 var(--space-3);
+  color: var(--ws-ink-dim);
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+/* El link de una transmisión, debajo del partido y con la sangría de su escudo, como
+   la línea de la liga. */
+.mws-feed-link { display: block; margin: 6px 0 0 30px; }
+.mws-feed-link .mws-link,
+.mws-feed-link .adm-status { font-size: 12.5px; }
+
+/* ---------- Las dos tablas ---------- */
+.mws-table tbody td { padding-top: 12px; padding-bottom: 12px; }
+/* Un partido donde ya transmites, en Partidos: el filo es verde porque es dato, no
+   pendiente. */
+.adm-table.mws-schedule tbody tr.is-mine { box-shadow: inset 3px 0 0 var(--positive); }
+.mws-mine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2) var(--space-3);
+}
+.mws-mine-state { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.mws-schedule td .adm-status.is-live { display: flex; margin-top: 4px; }
+
+/* ---------- La ventana del link ---------- */
+.mws-link-match {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-md);
+  background: var(--ws-surface-2);
+}
+.mws-link-match-teams { min-width: 0; }
+.mws-link-match .lws-when { align-items: flex-end; text-align: right; }
+.mws-field-hint { margin: -8px 0 4px; color: var(--ws-ink-dim); font-size: 12px; line-height: 1.45; }
+
+/* ---------- Según el ancho del lienzo ---------- */
+/* La sede tiene su ancho aquí y no en el encabezado, para poder plegarla. */
+.mws-schedule th.mws-col-venue { width: 24%; }
+
+/* Las dos columnas del Resumen necesitan unos 940 px de lienzo: más angostas, el
+   renglón de un partido dejaba los nombres en "BORREGOS TEC G…". */
+@container (max-width: 960px) {
+  .mws .lws-board { grid-template-columns: minmax(0, 1fr); }
+}
+/* La sede se pliega a cero en vez de esconderse: con `display: none` la tabla perdía
+   una columna, el encabezado de cada día seguía abarcando cuatro, y la columna
+   fantasma se comía la mitad del ancho (el partido quedaba en 203 px de 749). */
+@container (max-width: 980px) {
+  .adm-table.mws-schedule th.mws-col-venue,
+  .adm-table.mws-schedule td.mws-col-venue {
+    width: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    visibility: hidden;
+    white-space: nowrap;
+  }
+}
+/* Sin lugar para columnas, cada partido es una ficha de dos renglones: el partido a
+   todo lo ancho, y debajo su fecha (o su hora), su link y sus botones. Con la fecha a
+   un lado del partido, los nombres se cortaban en "BORREGOS TE…". */
+@container (max-width: 760px) {
+  .adm-table.mws-table tbody tr:not(.lws-group) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "match match match"
+      "when link actions";
+    align-items: center;
+    gap: 10px var(--space-3);
+  }
+  .adm-table.mws-table tbody td:nth-child(1) { grid-area: match; }
+  .adm-table.mws-table tbody td:nth-child(2) { grid-area: when; }
+  .adm-table.mws-table tbody td:nth-child(3) { grid-area: link; min-width: 0; }
+  .adm-table.mws-table tbody td:nth-child(4) { grid-area: actions; }
+  .adm-table.mws-table:not(.mws-schedule) .adm-row-actions { flex-wrap: nowrap; justify-content: flex-end; }
+  .adm-table.mws-schedule tbody td.mws-col-venue { display: none; }
+  .adm-table.mws-schedule tbody tr:not(.lws-group) {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "match match"
+      "when actions";
+  }
+  .adm-table.mws-schedule tbody td.col-actions { display: flex; justify-content: flex-end; min-width: 0; }
+  .mws-mine { justify-content: flex-end; }
+  .mws-mine-state { flex-direction: row; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
+  .adm-table.mws-table tbody tr.lws-group { display: block; padding: 0; border-bottom: 0; }
+  .adm-table.mws-table tbody tr.lws-group th { display: block; padding: 14px var(--space-4) 8px; }
+  .mws-feed .lws-feed-row { grid-template-columns: 80px minmax(0, 1fr); }
+  .mws-feed .lws-feed-row > .btn { grid-column: 2; justify-self: start; }
+}
+/* En el teléfono más angosto, la fecha de un renglón del Resumen sube a su propio
+   renglón: a su lado, el partido se quedaba en 147 px. */
+@container (max-width: 420px) {
+  .mws-feed .lws-feed-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .mws-feed .lws-feed-row > .btn { grid-column: 1; }
+  .mws-feed .lws-feed-when { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+  .mws-feed .lws-feed-when .lws-when { flex-direction: row; gap: 6px; }
+}
+/* La ventana vive en un portal, fuera del lienzo: aquí manda la pantalla, no el
+   contenedor. */
+@media (max-width: 480px) {
+  .mws-link-match { grid-template-columns: minmax(0, 1fr); }
+  .mws-link-match .lws-when { align-items: flex-start; text-align: left; }
+}

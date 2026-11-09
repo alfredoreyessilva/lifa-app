@@ -204,7 +204,8 @@ function BranchCalendar({ entry, calendar, filter, onClearFilter, logos, venues,
                 <tr>
                   <th>Partido</th>
                   <th style={{ width: 120 }}>Fecha</th>
-                  <th className="lws-col-venue" style={{ width: '23%' }}>Sede</th>
+                  {/* Su ancho vive en league.css, que la pliega en un lienzo angosto. */}
+                  <th className="lws-col-venue">Sede</th>
                   <th style={{ width: 150 }}>Estado</th>
                   <th className="col-actions" style={{ width: 120 }}><span className="adm-sr-only">Acciones</span></th>
                 </tr>

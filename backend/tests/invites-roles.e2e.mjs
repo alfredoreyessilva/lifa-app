@@ -1021,6 +1021,115 @@ const estadosOculta = [];
 for (const ruta of lecturasVP) estadosOculta.push((await call(ruta)).status);
 ok(estadosOculta.every((s) => s === 404), 'oculta otra vez: el público vuelve al 404', JSON.stringify(estadosOculta));
 
+console.log('\n=== 22. El panel de un medio: sus transmisiones y lo que se juega ===');
+// README, "El panel de un medio" (2026-11-08). El medio de la 18 terminó oculto
+// y sin verificar; aquí se le devuelven las dos, y al final se le quitan.
+await call(`/admin/organizations/${MEDIA}/publish`, { method: 'PUT', token: PLAT2 });
+await call(`/admin/organizations/${MEDIA}/verify`, { method: 'PUT', token: PLAT2 });
+
+const listaDelMedio = (token = MEDIO) => call(`/broadcasts/organization/${MEDIA}`, { token });
+const suLista = await listaDelMedio();
+const laDe18 = suLista.data.broadcasts?.find((b) => b.match_id === MATCH);
+ok(suLista.status === 200 && !!laDe18, 'el medio ve en su lista la transmisión de la 18', `=${suLista.status}`);
+const CAMPOS_DEL_PANEL = [
+  'home_logo_url', 'away_logo_url', 'timezone', 'auto_status_enabled', 'auto_status_window_hours',
+  'league_name', 'tournament_name', 'phase_type', 'week_label', 'home_score', 'away_score',
+];
+ok(!!laDe18 && CAMPOS_DEL_PANEL.every((k) => k in laDe18),
+  'con lo que su panel enseña de cada partido', JSON.stringify(laDe18 && Object.keys(laDe18)));
+ok(laDe18?.url === 'https://example.com/en-vivo' && laDe18?.league_name && laDe18?.week_label === '3',
+  'su link, su liga y su jornada', JSON.stringify({ url: laDe18?.url, liga: laDe18?.league_name, j: laDe18?.week_label }));
+ok((await listaDelMedio(FAN)).status === 403, 'alguien que no lo administra no ve su lista');
+ok((await listaDelMedio(PLAT2)).status === 200, 'el admin de la plataforma sí');
+ok((await call('/broadcasts/organization/abc', { token: PLAT2 })).status === 403,
+  'un id que no es número no llega a la consulta (antes era un 500)');
+
+// Partidos para "lo que se juega": uno en 3 días, uno sin fecha, uno a 20 días
+// y un borrador, en la liga de la suite, que en este punto está oculta.
+const enDias = (dias) => new Date(Date.now() + dias * 86400000).toISOString().slice(0, 16);
+const crearPartido = async (match_date_local) => {
+  const r = await call(`/manage/categories/${CAT}/matches`, {
+    method: 'POST', token: LIGA,
+    body: { home_team: `Equipo Roles ${stamp}`, away_team: `Equipo Sin Entregar ${stamp}`, match_date_local, branch_id: BRANCH },
+  });
+  return r.data.match?.id ?? r.data.id;
+};
+const PRONTO = await crearPartido(enDias(3));
+const SIN_FECHA = await crearPartido(null);
+const LEJOS = await crearPartido(enDias(20));
+const BORRADOR = await crearPartido(enDias(4));
+await call(`/manage/matches/${BORRADOR}`, { method: 'PUT', token: LIGA, body: { is_draft: true } });
+ok(PRONTO && SIN_FECHA && LEJOS && BORRADOR, 'la liga crea cuatro partidos', JSON.stringify({ PRONTO, SIN_FECHA, LEJOS, BORRADOR }));
+
+const loQueSeJuega = (token = MEDIO) => call(`/broadcasts/organization/${MEDIA}/upcoming`, { token });
+const idsDe = (r) => (r.data.matches || []).map((m) => m.match_id);
+let juega = await loQueSeJuega();
+ok(juega.status === 200 && !idsDe(juega).includes(PRONTO), 'de una liga privada no sale nada: ahí no se llega buscando',
+  `=${juega.status}`);
+await call(`/admin/leagues/${LEAGUE}/publish`, { method: 'PUT', token: PLAT2 });
+juega = await loQueSeJuega();
+ok(idsDe(juega).includes(PRONTO), 'publicada, sale el partido de dentro de 3 días');
+ok(idsDe(juega).includes(SIN_FECHA), 'y el que no tiene fecha, porque su categoría tiene uno por jugar');
+ok(!idsDe(juega).includes(LEJOS), 'el de dentro de 20 días no: son 14');
+ok(!idsDe(juega).includes(BORRADOR), 'ni el borrador');
+ok(!idsDe(juega).includes(MATCH), 'ni el de la 18, que ya terminó');
+const pronto = juega.data.matches.find((m) => m.match_id === PRONTO);
+ok(pronto?.broadcast_id === null && pronto?.league_name && CAMPOS_DEL_PANEL.every((k) => k in pronto),
+  'trae lo mismo que la lista del medio, y todavía no lo transmite', JSON.stringify(pronto && { b: pronto.broadcast_id, l: pronto.league_name }));
+ok((await loQueSeJuega(FAN)).status === 403, 'con su transmisión adentro, es del medio: alguien más da 403');
+
+// Sumarse a un borrador da 404, como su página, y a la liga no le llega aviso.
+const avisosALaLiga = async () => (await pool.query(
+  "SELECT COUNT(*)::int AS n FROM notifications WHERE type='broadcast_added' AND recipient_type='league' AND recipient_id=$1",
+  [LEAGUE],
+)).rows[0].n;
+const avisosAntes = await avisosALaLiga();
+const aUnBorrador = await call('/broadcasts', { method: 'POST', token: MEDIO, body: { match_id: BORRADOR, organization_id: MEDIA } });
+ok(aUnBorrador.status === 404, 'sumarse a un borrador da 404', `=${aUnBorrador.status} ${aUnBorrador.data.error}`);
+ok((await call(`/leagues/matches/${BORRADOR}`)).status === 404, 'que es lo mismo que contesta su página');
+ok((await avisosALaLiga()) === avisosAntes, 'y la liga no recibe el aviso de un partido que nadie ve');
+
+// Sumarse desde el panel, sin link, y ponérselo después.
+const sumarse = await call('/broadcasts', { method: 'POST', token: MEDIO, body: { match_id: PRONTO, organization_id: MEDIA, url: null } });
+ok(sumarse.status === 201 && sumarse.data.url === null, 'el medio se suma sin link', `=${sumarse.status}`);
+const { rows: [elAviso] } = await pool.query(
+  "SELECT body FROM notifications WHERE type='broadcast_added' AND recipient_type='league' AND recipient_id=$1 ORDER BY id DESC LIMIT 1",
+  [LEAGUE],
+);
+ok((await avisosALaLiga()) === avisosAntes + 1 && /se sumó a transmitir/.test(elAviso?.body || '') && !/enlace/.test(elAviso?.body || ''),
+  'a la liga le llega un aviso que dice que se sumó, no que puso un enlace', elAviso?.body);
+const yaEsta = (await loQueSeJuega()).data.matches.find((m) => m.match_id === PRONTO);
+ok(yaEsta?.broadcast_id === sumarse.data.id && yaEsta?.broadcast_url === null, 'lo que se juega ya dice que lo transmite',
+  JSON.stringify(yaEsta && { b: yaEsta.broadcast_id, u: yaEsta.broadcast_url }));
+const conLink = await call('/broadcasts', {
+  method: 'POST', token: MEDIO, body: { match_id: PRONTO, organization_id: MEDIA, url: 'https://youtube.com/live/e2e' },
+});
+ok(conLink.status === 201 && conLink.data.id === sumarse.data.id && conLink.data.url === 'https://youtube.com/live/e2e',
+  'ponerle el link después edita la misma fila', JSON.stringify(conLink.data));
+ok((await avisosALaLiga()) === avisosAntes + 1, 'y no vuelve a avisar');
+
+// Se resuelve al leer: vuelto borrador, sale del panel sin que se borre la fila.
+await call(`/manage/matches/${PRONTO}`, { method: 'PUT', token: LIGA, body: { is_draft: true } });
+ok(!(await listaDelMedio()).data.broadcasts.some((b) => b.match_id === PRONTO), 'vuelto borrador, sale de la lista del medio');
+ok(!idsDe(await loQueSeJuega()).includes(PRONTO), 'y de lo que se juega');
+const { rows: filaPronto } = await pool.query('SELECT id FROM match_broadcasts WHERE match_id=$1 AND organization_id=$2', [PRONTO, MEDIA]);
+ok(filaPronto.length === 1, 'pero su fila sigue ahí', `filas=${filaPronto.length}`);
+await call(`/manage/matches/${PRONTO}`, { method: 'PUT', token: LIGA, body: { is_draft: false } });
+ok((await listaDelMedio()).data.broadcasts.some((b) => b.match_id === PRONTO && b.url === 'https://youtube.com/live/e2e'),
+  'y vuelve con su link en cuanto se publica');
+
+// Sin verificar, ve lo que se juega igual, pero no se suma.
+await call(`/admin/organizations/${MEDIA}/unverify`, { method: 'PUT', token: PLAT2 });
+const sinVerificar = await loQueSeJuega();
+ok(sinVerificar.status === 200 && idsDe(sinVerificar).includes(SIN_FECHA), 'sin verificar, el medio ve lo que se juega igual');
+ok((await call('/broadcasts', { method: 'POST', token: MEDIO, body: { match_id: SIN_FECHA, organization_id: MEDIA } })).status === 403,
+  'pero no se suma');
+
+// Que la suite no deje nada a la vista: la liga y el medio, como estaban.
+ok((await call(`/leagues/${LEAGUE}/unpublish`, { method: 'PUT', token: LIGA })).status === 200, 'la liga se oculta otra vez');
+ok((await call(`/admin/organizations/${MEDIA}/unpublish`, { method: 'PUT', token: PLAT2 })).data.is_public === false,
+  'y el medio también');
+
 await pool.query("UPDATE users SET role='rep' WHERE id=$1", [idPlat]);
 
 

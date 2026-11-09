@@ -3,7 +3,9 @@ import { fechaCorta, getMatchParts, initials } from '../../utils/matchDisplay.js
 
 // Cómo se escribe un partido en el panel de una liga: los dos equipos uno sobre
 // otro con su marcador a la derecha, como en cualquier tabla de resultados. Lo
-// usan el calendario de una rama y el Resumen.
+// usan el calendario de una rama y el Resumen, y el panel de un medio, cuyos
+// partidos ya traen sus escudos (`home_logo_url`, `away_logo_url`) y no pasan
+// `logos`.
 
 // El escudo de cada equipo de la liga, por id. El partido trae solo el nombre y
 // el id de sus equipos.
@@ -24,13 +26,13 @@ export function MatchTeams({ match, logos }) {
     <div className="lws-match">
       <TeamLine
         name={match.home_team}
-        logo={logos.get(match.home_team_id)}
+        logo={logos?.get(match.home_team_id) ?? match.home_logo_url}
         score={conMarcador ? match.home_score : null}
         lost={conMarcador && local < visita}
       />
       <TeamLine
         name={match.away_team}
-        logo={logos.get(match.away_team_id)}
+        logo={logos?.get(match.away_team_id) ?? match.away_logo_url}
         score={conMarcador ? match.away_score : null}
         lost={conMarcador && visita < local}
       />

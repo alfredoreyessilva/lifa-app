@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { initials } from '../utils/matchDisplay.js';
-import { storeHref } from '../utils/storePanel.js';
+import { organizationHref } from '../utils/dashboard.js';
 
 // Barra de logos de las ligas/equipos que administras, para cambiar de
 // organización sin tener que volver a /panel. Antes solo vivía dentro de
@@ -33,7 +33,7 @@ export default function OrgLogoBar({ selectedKind, selectedId }) {
 
   function linkFor(org) {
     if (org.kind === 'liga') return `/panel/liga/${org.id}/estructura`;
-    if (org.kind === 'organizacion') return org.type === 'store' ? storeHref(org.id) : `/panel/organizacion/${org.id}?edit=1`;
+    if (org.kind === 'organizacion') return organizationHref(org);
     return `/panel/${org.kind}/${org.id}`;
   }
 

@@ -816,6 +816,9 @@ lifa-app/
         StorePanel.jsx           El panel de una tienda: pide la tienda y su
                                  inventario una vez y monta la sección de
                                  `?seccion=` (ver "El panel de una tienda")
+        MediaPanel.jsx           El panel de un medio: pide el medio, sus
+                                 transmisiones y lo que se juega, y monta la
+                                 sección de `?seccion=` (ver "El panel de un medio")
         PlayerStatementPage.jsx  /cuenta/:token — estado de cuenta del jugador,
                                  público y sin sesión
         PublicRosterPage.jsx     /partidos/:matchId/equipos/:teamId/roster — el
@@ -832,9 +835,13 @@ lifa-app/
         store/                   El panel de una tienda, con las mismas piezas y la
                                  barra de la liga: una sección por archivo, sus
                                  ventanas y store.css (ver "El panel de una tienda")
+        media/                   El panel de un medio, igual que el de una tienda,
+                                 con la fila de partido de la liga (ver "El panel
+                                 de un medio")
         OrganizationProfileForm.jsx  El perfil de un medio, una tienda, una clínica
-                                 o una marca. Lo comparten la página de un medio y
-                                 la ventana "Editar perfil" de una tienda
+                                 o una marca. Lo comparten la página de una clínica
+                                 o una marca y la ventana "Editar perfil" del panel
+                                 de una tienda y del de un medio
         MatchHero.jsx            La portada de un partido: la cancha de noche, las
                                  end zones y los dos cascos (ver "La página de un
                                  partido"). Junto a ella, las secciones: MatchPoll,
@@ -5971,7 +5978,8 @@ nadie, y Alfredo pidió borrarla. `/panel/organizacion/:id` queda así:
 | Tipo | Quien la administra | Cualquier otro (el "Ver" del panel admin, un link viejo) |
 |-|-|-|
 | Tienda | Su página, con "Administrar tienda", que lleva a su panel (ver "El panel de una tienda") | Su página: catálogo y WhatsApp |
-| Medio, clínica, marca | Directo al formulario; "Ver como público" abre la ficha encima | La ficha; cerrarla lleva al home |
+| Medio | Su panel (ver "El panel de un medio"); "Ver como público", en Perfil, abre la ficha encima | La ficha; cerrarla lleva al home |
+| Clínica, marca | Directo al formulario; "Ver como público" abre la ficha encima | La ficha; cerrarla lleva al home |
 
 Clínica y marca van con el medio: no salen en el home, así que su página
 tampoco tenía otra entrada, y la ficha enseña lo mismo que enseñaba esa vista.
@@ -6193,6 +6201,10 @@ fondo está escrita en el código y conviene no revertirla por descuido: **la
 verificación certifica quién es el medio, no que tenga derechos sobre ese
 partido.** Es identidad, no licencia.
 
+Y el partido tiene que estar publicado: desde el 2026-11-08, sumarse a un
+borrador contesta 404, igual que su página. Ver "Qué partidos ve el medio", en
+"El panel de un medio".
+
 ### El aviso a la liga sale una sola vez
 
 Cuando un medio se suma por primera vez, a la bandeja de la liga le llega un
@@ -6200,15 +6212,19 @@ Cuando un medio se suma por primera vez, a la bandeja de la liga le llega un
 avisar** — si no, cada corrección de una URL sería un aviso nuevo y la bandeja
 se volvería inservible.
 
-La liga se entera, pero no aprueba: el medio ya quedó puesto.
+La liga se entera, pero no aprueba: el medio ya quedó puesto. El aviso dice que
+el medio "se sumó a transmitir" el partido, con link o sin él. Hasta el
+2026-11-08 decía que "agregó un enlace de transmisión" también cuando no había
+ninguno, y sumarse sin link es lo más fácil desde el panel del medio.
 
 ### Endpoints — `routes/broadcasts.js` (`/api/broadcasts`)
 
 | Método | Ruta | Quién |
 |---|---|---|
 | GET | `/match/:matchId` | **Público** — quién transmite este partido (solo medios publicados y verificados), con lo que enseña su ficha |
-| GET | `/organization/:organizationId` | El medio — qué está transmitiendo, para su panel |
-| POST | `/` | El medio — se suma a un partido (o edita su link) |
+| GET | `/organization/:organizationId` | El medio o el admin — lo que está transmitiendo, con lo que su panel enseña de cada partido (escudos, marcador, fecha y su zona, liga, torneo, ronda, sede). Sin borradores |
+| GET | `/organization/:organizationId/upcoming` | El medio o el admin — lo que se juega en las ligas públicas, con su transmisión si ya está en el partido. Ver "Sumarse desde el panel" |
+| POST | `/` | El medio — se suma a un partido publicado (o edita su link); un borrador da 404 |
 | DELETE | `/:id` | El medio — se quita |
 
 El `GET` público va **sin sesión** a propósito: la ficha de un partido tiene que
@@ -6219,7 +6235,9 @@ del jugador.
 
 `MatchBroadcasters.jsx` (quién transmite, para cualquiera) y
 `MediaBroadcastControl.jsx` (el control para sumarse o quitarse, si administras
-ese medio), los dos dentro de `MatchPage`.
+ese medio), los dos dentro de `MatchPage`. Desde el 2026-11-08 el medio también
+ve sus transmisiones y se suma a lo que se juega desde su panel (ver "El panel
+de un medio"); el control del partido no cambió.
 
 El logo de un medio en "También transmiten" abre **su link para ese partido**,
 si lo puso. Si no, abre su ficha encima del partido (`OrganizationInfoPanel`,
@@ -6542,7 +6560,13 @@ categorías y ramas, y cada rama dice cuántos equipos y partidos tiene, cuánto
   `groupByJornada`). Los dos equipos van uno sobre otro, con su escudo y el marcador a la
   derecha, como en cualquier tabla de resultados; el que perdió va apagado. Buscar "jornada 3"
   o "J3" trae esa jornada: buscando palabra por palabra,
-  el 3 encontraba la sede "23 de Octubre" y metía partidos de la jornada 2.
+  el 3 encontraba la sede "23 de Octubre" y metía partidos de la jornada 2. Con un lienzo de
+  980 px o menos la columna Sede **se pliega a cero, no se esconde** (`league.css`): con
+  `display: none` la tabla perdía una columna, el encabezado de cada jornada seguía abarcando
+  cinco, y esa columna fantasma se comía el ancho. A 1024 px el partido quedaba en 163 px de
+  715; ahora mide 325, y de 1440 a 800 px las celdas suman lo que mide la tabla. En el
+  teléfono, donde cada partido es una ficha, no cambió nada. Salió el 2026-11-08 al probar el
+  panel de un medio, que había copiado la regla.
 - **Equipos**, agrupados por su conferencia, con los que no tienen hasta abajo y en amarillo.
   Inscribir uno de la liga se hace aquí.
 - **Conferencias y grupos**, con cuántos equipos tiene cada una.
@@ -6756,9 +6780,10 @@ a consultar", y sin existencias el panel dice "Sin registrar", que no es cero.
 
 "Editar perfil" abre en una ventana el mismo formulario que tenía "Editar organización":
 salió a `components/OrganizationProfileForm.jsx`, con los mismos campos y las mismas
-validaciones, y un medio, una clínica o una marca lo siguen viendo en su página, sobre la
-tarjeta negra. Sus etiquetas perdieron los emojis, y el error sale junto al botón: en una
-ventana larga, arriba quedaba fuera de la vista de quien acababa de apretar "Guardar".
+validaciones; una clínica o una marca lo siguen viendo en su página, sobre la tarjeta negra,
+y un medio, en la misma ventana de su panel (ver "El panel de un medio"). Sus etiquetas
+perdieron los emojis, y el error sale junto al botón: en una ventana larga, arriba quedaba
+fuera de la vista de quien acababa de apretar "Guardar".
 
 Lo que la tienda no puede cambiar se dice sin botón: publicarla y verificarla lo decide
 CFBAMX (ver "Organizaciones: publicar y verificar"), y el plan Pro y el número de WhatsApp
@@ -6778,8 +6803,8 @@ rutas de invitaciones ya aceptaban cualquier tipo de organización.
 
 ### Lo que cambió de lugar
 
-- La tienda de "Mi panel" y de la barra de logos abre `/panel/tienda/:id`. Un medio, una
-  clínica o una marca siguen abriendo su formulario.
+- La tienda de "Mi panel" y de la barra de logos abre `/panel/tienda/:id`. Un medio abre su
+  panel (ver "El panel de un medio"); una clínica o una marca siguen abriendo su formulario.
 - La vitrina le ofrece a quien la administra "Administrar tienda" en vez de "Editar
   organización", y su catálogo vacío lleva a Productos.
 - `/panel/organizacion/:id/inventario` y el `?edit=1` de una tienda tuya llevan al panel,
@@ -6790,11 +6815,163 @@ rutas de invitaciones ya aceptaban cualquier tipo de organización.
 
 - **Cambiar las existencias desde la tabla**, sin abrir la ventana. Es lo que más va a
   hacer una tienda el día que venda en serio; hoy son tres clics.
-- **El panel de un medio** (y el de una clínica o una marca) sigue con su formulario.
-  Llevarle estas piezas se ve con Alfredo antes.
+- **El panel de una clínica o una marca** sigue con su formulario. El de un medio se
+  rehízo con estas piezas el mismo día (ver "El panel de un medio").
 - **Las conversaciones del bot.** `bot_messages` guarda las de cada cliente, pero el bot no
   está conectado y antes hay que cubrirlas en el Aviso de Privacidad (ver "Dos cosas de
   `bot_messages`").
+
+## El panel de un medio
+
+`/panel/medio/:id` es donde un medio lleva lo que hace en CFBAMX: los partidos que
+transmite, su ficha y quién lo administra. **Rehecho el 2026-11-08**, cuando Alfredo pidió
+profesionalizar el panel de trabajo de los medios. Lo que había era el formulario de
+"Editar organización" con un aviso arriba, y nada de lo que un medio hace aquí tenía lugar
+en él: para saber en qué partidos estaba, ponerle el link a uno o quitarse, había que
+encontrar cada partido en el calendario. Medido ese día en la API pública: ESPN Mx
+transmitía 9 partidos de ONEFA (8 con link) y TERCER CUARTO 1, el último el 7 de noviembre.
+`GET /broadcasts/organization/:id` existía "para su panel" desde que nacieron las
+transmisiones, y ninguna pantalla lo leía.
+
+### El panel de una tienda, con el medio adentro
+
+No se inventó ninguna pieza: es el panel de una tienda (ver "El panel de una tienda") con
+el medio adentro. La barra lateral en verde noche lleva su logo, su nombre, "Medio · " con
+tu rol y si puede transmitir; abajo, sus secciones. Las piezas vienen de
+`components/admin/`, la barra y la piel de Staff de `components/league/` (`.lws`), y un
+partido se escribe como en el calendario de una rama, con los dos escudos uno sobre otro
+(`LeagueMatchBits.jsx`). Lo que es solo del medio vive en `components/media/`
+(`media.css`, `.mws`). Partidos pliega su columna Sede en un lienzo angosto igual que el
+calendario de una rama (ver "El panel de una liga", Calendario): copió la regla vieja, y con
+ella la columna fantasma.
+
+| Sección | Marcador | Trabajo |
+|-|-|-|
+| Resumen | Próximas, sin link, transmitidas, si puede transmitir | Lo que te toca; tus próximas transmisiones; lo que se juega pronto y no transmites |
+| Transmisiones | Transmisiones, próximas, en vivo, transmitidas, sin link | Tabla con búsqueda, en tramos |
+| Partidos | Partidos, una celda por liga, los que ya transmites | Lo que se juega en las ligas públicas, por día, con "Transmitir" |
+| Perfil | En el sitio, verificación, si puede transmitir | Quién lo ve, y lo que publica su ficha |
+| Staff | — | Quién tiene acceso, ya abierto |
+
+Las celdas de Transmisiones y de Partidos filtran la tabla, y el filtro vive en la
+dirección (`?filtro=`), como en /admin. La sección va en `?seccion=` por la misma razón que
+en la liga: una ruta por sección desmontaría la página en cada clic. Medio tiene dos roles,
+dueño y administrador, y los dos ven las cinco; sumarse a un partido lo puede cualquiera de
+los dos, como siempre (`isOrgMember`).
+
+### Sumarse desde el panel
+
+Hasta ese día un medio se sumaba a un partido solo desde la página del partido
+(`MediaBroadcastControl`, "+ Transmitir como…"): el control se hizo para reusar la
+navegación que ya existía en vez de construir una búsqueda. Alfredo eligió que también se
+pueda desde el panel. La sección **Partidos** enseña lo que se juega y cada renglón lleva
+"Transmitir"; la página del partido no cambió.
+
+- **Lo que sale** (`GET /broadcasts/organization/:id/upcoming`): los partidos publicados de
+  las ligas públicas, de hace 12 horas a 14 días adelante, que nadie dio por terminados. Al
+  leer se quitan los que ya terminaron por el estado automático de su categoría o ya
+  debieron terminar (`matchState`, la cuenta del panel de una liga). Dos semanas son dos
+  fines de semana, que es lo que planea un medio.
+- **Y los que no tienen fecha.** El día que se rehízo el panel, de lo que faltaba por jugar
+  en las ligas públicas solo un partido tenía fecha: los cuartos y las semifinales de ONEFA
+  se cargaron con fecha por definir. Sin ellos la sección habría enseñado un partido. Salen
+  al final, en su propio tramo, y solo si su categoría tiene un partido con fecha en los
+  últimos 60 días o por venir: uno sin fecha de una temporada que ya pasó no se va a jugar,
+  y se quedaría ahí para siempre.
+- **Por día**, en la zona de cada partido ("Sábado 15 de noviembre"), y las celdas del
+  marcador filtran por liga: un medio suele cubrir una.
+- **"Transmitir" abre una ventana** con el partido y el link, que es opcional. En uno donde
+  ya estás, el renglón dice "Transmites" y lleva "Editar link". Es la misma petición que la
+  página del partido (`POST /broadcasts`), así que el aviso a la liga sale igual, una sola
+  vez.
+- **Un medio que todavía no puede transmitir ve la sección igual**, con el botón apagado y la
+  razón arriba: le falta que CFBAMX lo publique, que lo verifique, o las dos. Ver lo que se
+  juega le sirve para planear, y esconderlo no le diría qué le falta.
+
+### Lo que le toca al medio
+
+Dos cosas, en amarillo, cada una con su renglón en el Resumen que lleva a donde se arregla:
+
+- **Una transmisión por venir sin link.** Sin link, su logo en "También transmiten" abre su
+  ficha en vez de su transmisión: quien llega al partido a verlo no encuentra dónde. Por eso
+  "Sin link" cuenta solo lo que viene. A uno ya jugado se le puede poner la repetición, y la
+  tabla dice que no tiene, pero ya no le urge a nadie.
+- **Lo que le falta a su ficha**: el logo, la descripción o dónde seguirlo, que es una red o
+  su sitio web. Un medio vive de que lo sigan en sus redes (ver "Lo que enseña su ficha"); el
+  teléfono, el correo y la portada no cuentan para esto.
+
+El número amarillo de "Transmisiones" en la barra son las que vienen sin link. Si puede
+transmitir no va en amarillo: no es algo que el medio arregle desde aquí, lo decide CFBAMX.
+Se dice en el marcador y en Perfil, sin botón. **Y mientras no pueda, lo que viene sin link
+tampoco va en amarillo**: `POST /broadcasts` le contesta 403 también para cambiar un link, y
+el amarillo le pediría algo que no está en su mano. Se cuenta igual, sin color, en la barra,
+en el Resumen y en Transmisiones (`pendingLinks`). Todo se resuelve al leer
+(`utils/mediaPanel.js`, con sus pruebas) y no se guarda nada.
+
+### Una transmisión, un botón
+
+Cada renglón de Transmisiones lleva "Editar link" a la vista y lo demás en "⋯": ver la
+página del partido, abrir tu transmisión y, al final y en rojo, dejar de transmitir, que
+pasa por `ConfirmDialog` y dice qué cambia: tu logo sale de "También transmiten". La tabla
+va en tramos —en vivo, próximas y transmitidas—, y el link se lee por su plataforma
+("YouTube", "Facebook") con `plataformaDe`, la de "Ver partido en…" de la página del
+partido.
+
+En un teléfono cada transmisión es una ficha de dos renglones: el partido a todo lo ancho y,
+debajo, su fecha, su link y sus botones. Con la fecha a un lado del partido, los nombres se
+cortaban en "BORREGOS TE…". En Partidos la hora sí va a un lado: ahí el día ya lo dice el
+tramo, y la hora es corta. El renglón de dónde es el partido ("ONEFA · LIGA MAYOR 2026 ·
+Jornada 5") se parte donde debe: el número va pegado a "Jornada" y cada punto a lo que lo
+antecede, para que ninguno abra un renglón.
+
+**Un medio que deja de poder transmitir**, porque CFBAMX lo ocultó o le quitó la
+verificación, conserva sus transmisiones, pero su logo sale de "También transmiten" en cada
+partido: la lectura pública pide las dos cosas (`puedeTransmitirSql`) y se resuelve al leer.
+Transmisiones se lo dice arriba, con lo que le falta, y "Editar link" va apagado en cada
+renglón, aquí y en Partidos, porque el backend ya no lo deja. Dejar de transmitir sí se
+puede: para quitarse basta con administrar el medio (`DELETE /broadcasts/:id`). Todo vuelve
+solo en cuanto lo publiquen y lo verifiquen.
+
+El link se revisa antes de mandar con la misma regla del backend (una dirección que empiece
+con `http://` o `https://`), y borrarlo en la ventana lo guarda vacío: el medio se queda en
+el partido, sin link.
+
+### Qué partidos ve el medio
+
+- **Los de una liga privada, sí.** La página de un partido se abre por su link aunque su liga
+  no esté publicada (ver "La vista previa de una liga sin publicar"), y "También transmiten"
+  sale ahí también. Pero en Partidos solo salen las ligas públicas: a una privada no se llega
+  buscando.
+- **Un borrador, no.** Hasta el 2026-11-08 `POST /broadcasts` aceptaba el id de cualquier
+  partido, también el de un borrador, que no se publica en ningún lado, y la lista del medio
+  devolvía sus equipos y su fecha: un medio verificado podía leer por la API un calendario
+  que la liga todavía no publica, y mandarle a la liga el aviso de un partido que nadie ve.
+  Ninguna pantalla llegaba ahí, y en la API pública no había ninguna transmisión fuera de los
+  partidos públicos (revisados los 711 ids que no salen en el sitemap). Ahora sumarse a un
+  borrador contesta 404, como su página, y la lista se resuelve al leer (regla 4): un
+  partido que vuelve a borrador sale del panel sin que se borre su fila, y vuelve si se
+  publica.
+
+### Lo que cambió de lugar
+
+- "Mi panel", la barra de logos y la página de un medio que administras llevan a
+  `/panel/medio/:id`, también con el `?edit=1` de antes, para que un link guardado no se
+  rompa. Una clínica o una marca siguen con su formulario.
+- "Ver como público" está en Perfil y abre la ficha encima (`OrganizationInfoPanel`), con lo
+  ya guardado. "Editar perfil" abre en una ventana el mismo formulario
+  (`OrganizationProfileForm`).
+- Lo que el aviso de un medio decía arriba del formulario —si es público y que para
+  transmitir tiene que estar publicado y verificado— lo dicen ahora el marcador y Perfil, con
+  lo que le falta.
+
+### Fuera de esta versión
+
+- **Más de 14 días adelante, o buscar un partido en todas las ligas.** Para uno más lejano
+  sigue estando su página.
+- **Cuánta gente abrió el link.** No se mide: el link sale de CFBAMX directo a la plataforma.
+- **Pedir que lo publiquen o lo verifiquen desde el panel.** Falta dónde avisarle de vuelta
+  (ver "Organizaciones: publicar y verificar", Fuera de esta versión).
+- **El panel de una clínica o una marca** sigue con su formulario.
 
 ## Seguridad — decisiones ya tomadas
 

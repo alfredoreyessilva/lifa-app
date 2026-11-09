@@ -27,6 +27,7 @@ const MatchStatsPage = lazy(() => import('./pages/MatchStatsPage.jsx'));
 const RegisterOrganizationPage = lazy(() => import('./pages/RegisterOrganizationPage.jsx'));
 const OrganizationDetailPage = lazy(() => import('./pages/OrganizationDetailPage.jsx'));
 const StorePanel = lazy(() => import('./pages/StorePanel.jsx'));
+const MediaPanel = lazy(() => import('./pages/MediaPanel.jsx'));
 const BillingLeaguePanel = lazy(() => import('./pages/BillingLeaguePanel.jsx'));
 const TeamPanel = lazy(() => import('./pages/TeamPanel.jsx'));
 const PlayerStatementPage = lazy(() => import('./pages/PlayerStatementPage.jsx'));
@@ -207,6 +208,13 @@ export default function App() {
             <Route
               path="/panel/organizacion/:id/inventario"
               element={<ProtectedRoute><RedirectToStoreProducts /></ProtectedRoute>}
+            />
+            {/* El panel de un medio: Resumen, Transmisiones, Partidos, Perfil y
+                Staff en `?seccion=` — ver pages/MediaPanel.jsx. Hasta el
+                2026-11-08 un medio solo tenía su formulario. */}
+            <Route
+              path="/panel/medio/:id"
+              element={<ProtectedRoute><MediaPanel /></ProtectedRoute>}
             />
             <Route
               path="/notificaciones"

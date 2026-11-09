@@ -7,6 +7,7 @@ import { ORG_TYPE_LABELS, formatNumber, pluralize, toNumber } from './adminPanel
 import { matchState } from './leaguePanel.js';
 import { fechaCorta } from './matchDisplay.js';
 import { getMatchStatus } from './matchStatus.js';
+import { mediaHref } from './mediaPanel.js';
 import { etiquetaDeMiRol } from './permisos.js';
 import { storeHref } from './storePanel.js';
 
@@ -65,11 +66,19 @@ export function organizationsOf({ leagues, teams, organizations } = {}) {
       logo: org.logo_url || null,
       what: ORG_TYPE_LABELS[org.type] || 'Organización',
       role: etiquetaDeMiRol(org),
-      // Una tienda tiene su panel; lo demás, su formulario.
-      href: org.type === 'store' ? storeHref(org.id) : `/panel/organizacion/${org.id}?edit=1`,
+      href: organizationHref(org),
     }));
 
   return [...ligas, ...equipos, ...otras];
+}
+
+// A dónde lleva una organización que no es liga ni equipo: una tienda y un medio
+// tienen su panel; una clínica o una marca, su formulario. Lo usa también la
+// barra de logos (OrgLogoBar).
+export function organizationHref(org) {
+  if (org.type === 'store') return storeHref(org.id);
+  if (org.type === 'media') return mediaHref(org.id);
+  return `/panel/organizacion/${org.id}?edit=1`;
 }
 
 // Cómo se cuenta cada cosa debajo de "Organizaciones": "1 liga · 2 equipos · 1

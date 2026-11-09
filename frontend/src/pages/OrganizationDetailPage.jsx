@@ -8,9 +8,10 @@ import OrganizationProfileForm from '../components/OrganizationProfileForm.jsx';
 import { imagenAjustada } from '../utils/imagenes.js';
 import { catalogPrice } from '../utils/money.js';
 import { storeHref, whatsappStatus } from '../utils/storePanel.js';
+import { mediaHref } from '../utils/mediaPanel.js';
 
 // La página pública de una tienda —su vitrina (StoreFront, abajo)— y el
-// formulario de un medio, una clínica o una marca.
+// formulario de una clínica o una marca.
 //
 // Solo la TIENDA tiene vista pública aquí: es donde el público ve su catálogo
 // y el botón de WhatsApp, que no caben en la ficha. Sale para todos, sea o no
@@ -21,16 +22,21 @@ import { storeHref, whatsappStatus } from '../utils/storePanel.js';
 // A un medio, una clínica o una marca el público lo ve en su ficha
 // (OrganizationInfoPanel): el home y "También transmiten" la abren encima, y
 // la vista pública que vivía aquí se borró el 2026-10-30 porque ya nadie
-// llegaba a ella. Quien lo administra cae directo en edición, y "Ver como
-// público" le abre la ficha. Quien llega por la URL sin administrarlo —el
-// botón "Ver" del panel admin, un link viejo— ve la ficha.
+// llegaba a ella. Quien llega por la URL sin administrarlo —el botón "Ver" del
+// panel admin, un link viejo— ve la ficha. Un medio tuyo lleva a su panel
+// (/panel/medio/:id, README, "El panel de un medio"), con o sin el `?edit=1` de
+// antes; una clínica o una marca tuya cae directo en edición, y "Ver como
+// público" le abre la ficha.
 export default function OrganizationDetailPage() {
   const { id } = useParams();
   const { token, organizations, refreshLeagues } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const isMine = (organizations || []).some((o) => String(o.id) === String(id));
+  const mine = (organizations || []).find((o) => String(o.id) === String(id));
+  const isMine = Boolean(mine);
+  // Se sabe por la sesión, antes de pedir nada.
+  const toMediaPanel = mine?.type === 'media';
   const wantsEdit = searchParams.get('edit') === '1';
   const [showFicha, setShowFicha] = useState(false);
 
@@ -43,6 +49,7 @@ export default function OrganizationDetailPage() {
   // público (404), y esta misma página es el panel de quien la administra
   // (README, "Organizaciones: publicar y verificar").
   useEffect(() => {
+    if (toMediaPanel) return;
     load();
     // Catálogo público (ya viene filtrado por el backend: is_active Y
     // show_on_platform). Se pide para cualquier tipo de organización sin
@@ -53,7 +60,7 @@ export default function OrganizationDetailPage() {
     api.getPublicProducts(id, token)
       .then((d) => setProducts(d.products))
       .catch(() => { setProducts([]); setProductsError(true); });
-  }, [id, token]);
+  }, [id, token, toMediaPanel]);
 
   async function load() {
     setError('');
@@ -63,6 +70,8 @@ export default function OrganizationDetailPage() {
       setError(e.message);
     }
   }
+
+  if (toMediaPanel) return <Navigate to={mediaHref(id)} replace />;
 
   if (error && !org) {
     return (
@@ -97,7 +106,7 @@ export default function OrganizationDetailPage() {
     return <StoreFront org={org} products={products} productsError={productsError} isMine={isMine} />;
   }
 
-  // Medio, clínica o marca, para quien lo administra: su formulario. "Ver como
+  // Clínica o marca, para quien la administra: su formulario. "Ver como
   // público" le abre la ficha, con lo ya guardado.
   return (
     <div className="container" style={{ maxWidth: 520 }}>
@@ -334,12 +343,13 @@ function SelloVerificada() {
   );
 }
 
-// Lo que solo ve quien la administra: si la plataforma la muestra y, si es un
-// medio, qué le pide para transmitir. Desde su sesión la página se ve igual
-// sea pública o privada, así que sin esto no tendría cómo saber que nadie más
-// la ve. Sin botón, a diferencia del aviso de una liga: a una organización la
-// publica únicamente el admin de la plataforma. Liga y equipo no pasan por
-// aquí (tienen su propio interruptor).
+// Lo que solo ve quien la administra: si la plataforma la muestra. Desde su
+// sesión la página se ve igual sea pública o privada, así que sin esto no
+// tendría cómo saber que nadie más la ve. Sin botón, a diferencia del aviso de
+// una liga: a una organización la publica únicamente el admin de la
+// plataforma. Liga y equipo no pasan por aquí (tienen su propio interruptor), y
+// un medio tampoco desde el 2026-11-08: su panel dice además qué le falta para
+// transmitir (README, "El panel de un medio").
 function EstadoDePublicacion({ org }) {
   if (org.type === 'league' || org.type === 'team') return null;
   return (
@@ -359,9 +369,7 @@ function EstadoDePublicacion({ org }) {
 // El texto del aviso, aparte: la vitrina de una tienda se lo enseña a su dueño
 // en su propia barra, con un punto de color en vez de la palomita.
 function avisoDePublicacion(org) {
-  const faltaParaTransmitir = org.type === 'media' && !(org.is_public && org.is_verified);
-  const estado = org.is_public
+  return org.is_public
     ? 'Es pública: aparece en el home y cualquiera puede ver esta página.'
     : 'Es privada por ahora: no aparece en el home y esta página solo la ven quienes la administran. La publica el equipo de CFBAMX.';
-  return faltaParaTransmitir ? `${estado} Para transmitir partidos, el medio tiene que estar publicado y verificado.` : estado;
 }

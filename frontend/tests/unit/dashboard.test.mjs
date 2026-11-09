@@ -53,7 +53,8 @@ test('las organizaciones van ligas, equipos y lo demás, por abecedario dentro d
   ]);
   assert.deepEqual(lista.map((o) => o.href), [
     '/panel/liga/1/estructura', '/panel/liga/2/estructura', '/panel/equipo/3', '/panel/equipo/4', '/panel/equipo/5',
-    '/panel/tienda/8', '/panel/organizacion/9?edit=1',
+    // Desde el 2026-11-08 un medio también tiene su panel (README, "El panel de un medio").
+    '/panel/tienda/8', '/panel/medio/9',
   ]);
   assert.deepEqual(lista.map((o) => o.what), [
     'Liga', 'Liga', 'Equipo · ONEFA', 'Equipo · ONEFA', 'Equipo independiente', 'Tienda / proveedor', 'Medio de comunicación',

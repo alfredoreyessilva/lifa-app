@@ -9,6 +9,7 @@ import StoreProductsSection from '../components/store/StoreProductsSection.jsx';
 import StoreProfileSection from '../components/store/StoreProfileSection.jsx';
 import StoreModal from '../components/store/StoreModals.jsx';
 import { Band } from '../components/admin/AdminKit.jsx';
+import { organizationHref } from '../utils/dashboard.js';
 
 // El panel de una tienda. Ruta: /panel/tienda/:id
 //
@@ -71,10 +72,10 @@ export default function StorePanel() {
       </div>
     );
   }
-  // Un medio, una clínica o una marca siguen con su formulario. La organización de
-  // una liga o un equipo no se edita por aquí: su panel es otro.
+  // Un medio tiene su panel; una clínica o una marca siguen con su formulario. La
+  // organización de una liga o un equipo no se edita por aquí: su panel es otro.
   if (!isStore) {
-    const destino = ['league', 'team'].includes(store.type) ? '/panel' : `/panel/organizacion/${id}?edit=1`;
+    const destino = ['league', 'team'].includes(store.type) ? '/panel' : organizationHref(store);
     return <Navigate to={destino} replace />;
   }
 

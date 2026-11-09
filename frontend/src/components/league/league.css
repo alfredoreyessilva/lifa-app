@@ -428,8 +428,22 @@ body:has(.lws) .modal {
 }
 
 /* ---------- Según el ancho del lienzo ---------- */
+/* La sede tiene su ancho aquí y no en el encabezado, para poder plegarla. */
+.lws-cal th.lws-col-venue { width: 23%; }
+/* La sede se pliega a cero en vez de esconderse. Con `display: none` la tabla perdía
+   una columna, el encabezado de cada jornada seguía abarcando cinco, y la columna
+   fantasma se comía el ancho: a 1024 px el partido quedaba en 163 px de 715. Salió el
+   2026-11-08 al rehacer el panel de un medio, que copió esta regla. */
 @container (max-width: 980px) {
-  .lws-col-venue { display: none; }
+  .adm-table.lws-cal th.lws-col-venue,
+  .adm-table.lws-cal td.lws-col-venue {
+    width: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    visibility: hidden;
+    white-space: nowrap;
+  }
 }
 @container (max-width: 860px) {
   .lws-board { grid-template-columns: minmax(0, 1fr); }

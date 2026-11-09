@@ -15,6 +15,63 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **El panel de un medio, con las piezas del panel de una tienda (2026-11-08).** Lo
+  pidió Alfredo: había que profesionalizar el panel de trabajo de los medios. Era el
+  formulario de "Editar organización" con un aviso arriba, y nada de lo que un medio hace
+  en CFBAMX tenía lugar en él: para saber en qué partidos estaba, ponerle el link a uno o
+  quitarse, había que encontrar cada partido en el calendario. `GET
+  /broadcasts/organization/:id` existía "para su panel" desde que nacieron las
+  transmisiones, y ninguna pantalla lo leía. Ahora es `/panel/medio/:id`, con la barra
+  lateral en verde noche (su logo, "Medio · " con tu rol y si puede transmitir) y cinco
+  secciones: **Resumen** (lo que te toca, tus próximas transmisiones y lo que se juega
+  pronto y no transmites), **Transmisiones** (una tabla en tramos —en vivo, próximas,
+  transmitidas— con "Editar link" a la vista y lo demás en "⋯", y dejar de transmitir con
+  confirmación), **Partidos** (lo que se juega en las ligas públicas, por día, con
+  "Transmitir"), **Perfil** y **Staff**. Lo que le toca va en amarillo: una transmisión
+  por venir sin link, y lo que le falta a su ficha para que lo sigan. Detalle en el
+  README, "El panel de un medio".
+
+  En el backend, dos lecturas: la lista del medio trae ahora lo que el panel enseña de
+  cada partido (escudos, marcador, fecha y su zona, liga, torneo, ronda, sede), y
+  `/organization/:id/upcoming` trae lo que se juega de hace 12 horas a 14 días, más los
+  playoffs sin fecha de una temporada viva, que es como ONEFA cargó sus cuartos y
+  semifinales. De paso se cerró un hueco: `POST /broadcasts` aceptaba el id de un
+  borrador, y la lista del medio devolvía sus equipos y su fecha. Nadie lo usó —en la API
+  pública no había ninguna transmisión fuera de los partidos públicos, revisados los 711
+  ids que no salen en el sitemap—, y ahora un borrador da 404, como su página, y sale de
+  las dos listas al leer, sin borrar la fila. El aviso a la liga dice que el medio "se
+  sumó a transmitir", porque desde el panel se suma sin link y lo pone después. Un medio
+  que no puede transmitir ve lo que se juega con el botón apagado y la razón, y si lo
+  ocultaron o le quitaron la verificación, sus links no se cambian ni van en amarillo,
+  pero quitarse sí puede. "Mi panel", la barra de logos, la página de un medio que
+  administras y los enlaces viejos (`?edit=1`) llevan al panel.
+
+  Verificado: las dos consultas en solo lectura contra `desarrollo-local`, sin filas
+  repetidas por los JOIN, y la cartelera con el reloj puesto en la copia de septiembre (24
+  y 34 partidos de ONEFA, uno en vivo, todos con escudos). `invites-roles.e2e.mjs` con 322
+  ok y 0 fallas, 31 de ellas nuevas (sección 22): quién ve cada lista, lo que sale y lo que
+  no (liga privada, borrador, terminado, sin fecha, a más de 14 días), sumarse sin link y
+  ponérselo después
+  sin un segundo aviso, el borrador que sale y vuelve con su link, y el medio sin
+  verificar. En el navegador sin backend ni cuenta: ESPN Mx con sus 9 transmisiones y los
+  9 partidos por jugar de la API pública de producción, leídos en solo lectura, y nueve
+  escenarios armados en la memoria de la ventana (una semana con partidos en vivo, sin
+  verificar, ficha a medias, muchos partidos, vacío, cargando, un 500 y el backend de
+  antes). 48 comprobaciones de los botones y las rutas, leyendo lo que la página manda; las
+  cinco secciones en 10 anchos de 1440 a 320 px, sin nada fuera de la pantalla, sin
+  desplazamiento de lado y sin nombres reales cortados (el detector, con control
+  positivo). 702 unitarias, 19 de ellas nuevas en `mediaPanel.test.mjs`. Sin probar con
+  una cuenta real ni en un teléfono real.
+
+- **El calendario de una rama ya no pierde ancho en una columna fantasma (2026-11-08).**
+  En el panel de una liga, con un lienzo de 980 px o menos, la columna Sede se escondía
+  con `display: none`, pero el encabezado de cada jornada seguía abarcando cinco columnas,
+  y la que sobraba se comía el ancho: a 1024 px el partido quedaba en 163 px de 715. Ahora
+  la sede se pliega a cero (`league.css`) y el partido mide 325; de 1440 a 800 px las
+  celdas suman lo que mide la tabla, y en el teléfono no cambió nada. Salió al probar el
+  panel de un medio, que había copiado la regla y tenía lo mismo. Medido en el navegador
+  con la liga inventada del arnés del panel de una liga, sin tocar ninguna base.
+
 - **Quien administra una liga sin publicar ya ve su página (2026-11-08).** "Ver mi
   página", en el Perfil del panel de una liga, le contestaba "No encontramos esta liga"
   a su propio dueño mientras CFBAMX no la publicara: justo quien la está armando para
