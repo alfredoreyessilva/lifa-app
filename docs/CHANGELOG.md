@@ -50,7 +50,19 @@ entradas traen el post-mortem del bug que las provocó.
   `invites-roles.e2e.mjs` con 322 ok y 0 fallas. En el navegador, con la bandeja simulada
   y lo demás de la API pública en solo lectura: las cinco formas del texto en 1280 y 360 px,
   sin nada desbordado, y "Votar →" abre la jornada PLAYOFF del calendario de ONEFA; 0
-  errores en consola y ninguna escritura a la API. Sin probar en un teléfono real.
+  errores en consola y ninguna escritura a la API.
+
+  Desplegado ese día (`f87b910`): CI verde y Vercel lo sirvió, con el texto, el tipo y la
+  tarjeta del aviso en los archivos publicados y la hoja de estilos sin cambios
+  (`index-BNLOkVLf.css`, el mismo nombre con hash). Render no le reporta sus despliegues a
+  GitHub y este cambio no toca ninguna ruta pública: con permiso de Alfredo, una consulta
+  de solo lectura a la base de producción encontró la migración aplicada (el CHECK de
+  `match_events` ya acepta `published`), y esa migración solo corre al arrancar el código
+  nuevo. El ranking de ONEFA salió idéntico antes y después en sus 38 filas, con control
+  negativo. En el sitio público, con la bandeja simulada en la ventana y un candado sobre
+  la API, la tarjeta sale en celular y en escritorio, y "Votar →" abre la jornada PLAYOFF
+  con PUMAS UNAM CU vs BURROS BLANCOS IPN, sin errores y sin una sola escritura. Sigue sin
+  probarse con una cuenta real y en un teléfono real.
 
 - **El panel de un medio, con las piezas del panel de una tienda (2026-11-08).** Lo
   pidió Alfredo: había que profesionalizar el panel de trabajo de los medios. Era el
