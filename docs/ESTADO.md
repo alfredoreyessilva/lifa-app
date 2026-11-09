@@ -4,7 +4,7 @@ Una foto de qué productos hay y a qué nivel está cada uno, para no tener que
 reconstruirla leyendo el README. Lo que falta vive en
 [`PENDIENTES.md`](PENDIENTES.md), con ID y prioridad; aquí solo se nombra.
 
-**Actualizado: 2026-11-08.** Cuando un producto cambia de nivel, su renglón se
+**Actualizado: 2026-11-09.** Cuando un producto cambia de nivel, su renglón se
 mueve en el mismo commit que lo movió.
 
 ## Los niveles
@@ -71,7 +71,7 @@ respaldos se resolvieron el 2026-09-23.
 | Roster público y pase de lista | 4 | Sin medir | PD-25 |
 | Estadísticas por jugada y captura sin señal | 4, **sin validar en cancha** | Solo Chromium con red apagada | PD-09, PD-10 |
 | El panel de una tienda (Resumen, Productos, Perfil y Staff) | 4 | Rehecho el 2026-11-08 y verificado en el navegador sin backend: la tienda real de producción (Deportes Cancún, leída en solo lectura) y un inventario inventado en la memoria de la ventana; 31 comprobaciones de los botones de Productos, 19 de rutas, 9 casos y 12 anchos de 1440 a 320 px. Desplegado ese día (`edf0866`): CI verde, Vercel sirve la misma hoja que la compilación revisada, y en el sitio público salen las cuatro secciones en escritorio y en tamaño de celular, sin errores ni escrituras a la API. Sin probar con una cuenta real ni en un teléfono. Desde PD-46 (2026-11-08) la página pública ya no manda el plan: el botón de WhatsApp lo decide el backend | — |
-| El panel de un medio (Resumen, Transmisiones, Partidos, Perfil y Staff) | **3** | Rehecho el 2026-11-08. Sus dos lecturas nuevas, en solo lectura contra `desarrollo-local`, y `invites-roles.e2e.mjs` con 322 ok y 0 fallas, 31 de ellas nuevas (sección 22). En el navegador sin backend: ESPN Mx con sus transmisiones y lo que se juega en producción, leídos en solo lectura, y nueve escenarios en la memoria de la ventana; 48 comprobaciones de botones y rutas, y 10 anchos de 1440 a 320 px. Sin desplegar, sin probar con una cuenta real ni en un teléfono | — |
+| El panel de un medio (Resumen, Transmisiones, Partidos, Perfil y Staff) | 4 | Rehecho el 2026-11-08. Sus dos lecturas nuevas, en solo lectura contra `desarrollo-local`, y `invites-roles.e2e.mjs` con 322 ok y 0 fallas, 31 de ellas nuevas (sección 22). En el navegador sin backend: ESPN Mx con sus transmisiones y lo que se juega en producción, leídos en solo lectura, y nueve escenarios en la memoria de la ventana; 48 comprobaciones de botones y rutas, y 10 anchos de 1440 a 320 px. Desplegado el 2026-11-09 (`cb1aa9c`): CI verde, Vercel sirve las mismas hojas que la compilación revisada, Render contesta la ruta nueva de lo que se juega (401 sin sesión), y en el sitio público, con la sesión simulada, salen las cinco secciones de ESPN Mx con sus 9 transmisiones y los 9 partidos por jugar, en escritorio y en tamaño de celular, sin desplazamiento de lado y sin una sola escritura a la API. Sin probar con una cuenta real ni en un teléfono | — |
 | Tienda y bot de WhatsApp | 2 | Código completo, sin conectar | Siguiente alcance |
 
 ## Plataforma y operación

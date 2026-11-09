@@ -63,6 +63,18 @@ entradas traen el post-mortem del bug que las provocó.
   positivo). 702 unitarias, 19 de ellas nuevas en `mediaPanel.test.mjs`. Sin probar con
   una cuenta real ni en un teléfono real.
 
+  Desplegado el 2026-11-09 (`cb1aa9c`): CI verde y Vercel lo sirvió, con las seis hojas
+  idénticas a las de la compilación revisada (el mismo nombre con hash, la del panel y la
+  del calendario de una liga incluidas), y el JS publicado ya trae el panel y la llamada a
+  `/upcoming`. Render contestó la ruta nueva en el cuarto intento: 401 sin sesión, donde
+  antes daba 404. En el sitio público, con la sesión simulada en la ventana y las lecturas
+  públicas yendo a la API real sin sesión: el panel de ESPN Mx con sus 9 transmisiones y
+  los 9 partidos por jugar de ONEFA y PFL, sus cinco secciones, "Transmitir" en uno de
+  Partidos (contestado en memoria), "Mi panel" y el `?edit=1` de antes llevando al panel,
+  y Resumen, Transmisiones y Partidos en tamaño de celular sin desplazamiento de lado.
+  Ninguna escritura salió a la API; los dos 401 de la consola son de "Mi panel", que
+  pide lo suyo con la sesión simulada.
+
 - **El calendario de una rama ya no pierde ancho en una columna fantasma (2026-11-08).**
   En el panel de una liga, con un lienzo de 980 px o menos, la columna Sede se escondía
   con `display: none`, pero el encabezado de cada jornada seguía abarcando cinco columnas,
