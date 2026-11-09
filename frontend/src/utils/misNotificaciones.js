@@ -9,7 +9,7 @@ import { getMatchParts, jornadaLabel, MESES } from './matchDisplay.js';
 //
 // Los de lo que sigues son cuatro: marcador final y cambio de fecha o sede
 // (de `match_events`, config/db.js) más los dos que el backend calcula con la
-// hora del partido (utils/bandeja.js). Los de tus predicciones, tres, van
+// hora del partido (utils/bandeja.js). Los de tus predicciones, cuatro, van
 // abajo. Un tipo nuevo se agrega en los tres lados o en ninguno (regla 6).
 
 // La pantalla de notificaciones lo dispara en cuanto marca la bandeja como
@@ -69,7 +69,7 @@ export function textoDeSeguimiento(aviso) {
 // ── Los avisos de tus predicciones ────────────────────────────────────────
 //
 // README, "Los avisos de tus predicciones". El backend los calcula al leer y
-// manda solo los datos (utils/bandeja.js); aquí se dicen. Tres tipos, que se
+// manda solo los datos (utils/bandeja.js); aquí se dicen. Cuatro tipos, que se
 // repiten en pages/Notifications.jsx (regla 6).
 
 // La jornada del aviso: su etiqueta ("Jornada 4", "SEMIFINAL"), o el día de
@@ -85,6 +85,18 @@ export function nombreDeJornada(jornada) {
 
 const lugar = (n) => `${n}.º`;
 const puntos = (n) => `${n} ${n === 1 ? 'punto' : 'puntos'}`;
+const conMayuscula = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+// ": PLAYOFFS (4) y SEMIFINAL (2)": las jornadas de lo que te falta votar, con
+// cuántos de cada una. Con una sola no hace falta (va en el título), y con más
+// de tres se dice solo cuántas son: una liga que sube media temporada de golpe
+// no cabe en una línea.
+function repartoPorJornada(jornadas) {
+  if (jornadas.length < 2) return '';
+  if (jornadas.length > 3) return ` de ${jornadas.length} jornadas`;
+  const partes = jornadas.map((j) => `${nombreDeJornada(j.jornada)} (${Number(j.missing) || 0})`);
+  return `: ${partes.slice(0, -1).join(', ')} y ${partes[partes.length - 1]}`;
+}
 
 function tituloDeHito(hito, dondeTexto, empatados) {
   switch (hito) {
@@ -164,6 +176,31 @@ export function textoDePrediccion(aviso) {
         body: n === 1
           ? `Te falta 1 partido: ${cruce}${cuando ? `, el ${cuando}` : ''}.`
           : `Te faltan ${n} partidos. El primero empieza el ${cuando}.`,
+      };
+    }
+
+    // La liga agregó partidos a un calendario donde votas (README, "Partidos
+    // nuevos para predecir"). El número es lo que todavía puedes votar: baja
+    // conforme votas, y el backend quita el aviso cuando llega a cero. El
+    // partido del aviso es el primero que te falta.
+    case 'prediction_new_matches': {
+      const faltan = Number(d.missing) || 0;
+      const agregados = Math.max(Number(d.added) || 0, faltan);
+      const jornadas = Array.isArray(d.jornadas) ? d.jornadas : [];
+      const unaJornada = jornadas.length === 1 ? conMayuscula(nombreDeJornada(jornadas[0].jornada)) : null;
+      const cuando = cuandoEs(m);
+      const elPartido = `${cruce}, ${cuando ? `el ${cuando}` : 'con fecha por definir'}`;
+      const reparto = repartoPorJornada(jornadas);
+
+      let body;
+      if (agregados === 1) body = `${elPartido}.`;
+      else if (faltan === 1) body = `Se agregaron ${agregados} partidos y te falta 1: ${elPartido}.`;
+      else if (faltan === agregados) body = `Se agregaron ${agregados} partidos${reparto}. Haz tus predicciones antes de que empiecen.`;
+      else body = `Se agregaron ${agregados} partidos y te faltan ${faltan}${reparto}.`;
+
+      return {
+        title: `${faltan === 1 ? 'Partido nuevo' : 'Partidos nuevos'} para predecir${unaJornada ? ` — ${unaJornada}` : ''}`,
+        body,
       };
     }
 

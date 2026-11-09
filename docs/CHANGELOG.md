@@ -15,6 +15,43 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Partidos nuevos para predecir, en "Mis notificaciones" (2026-11-09).** Lo pidió
+  Alfredo: la noche del 7 de noviembre agregó seis partidos de playoffs y semifinales a
+  ONEFA, y quien predice ahí no se enteraba. Medido en la API pública dos días después: de
+  las 38 personas del concurso, 37 no habían votado ninguno. El recordatorio de "te falta
+  votar" no los cubría —cinco no tienen fecha, y él se ancla en la hora de los partidos—, y
+  el sexto salía dentro del recordatorio de PLAYOFFS fechado el 5 de noviembre, tres días
+  antes de existir. Ahora, cuando aparecen partidos en un calendario donde ya votaste,
+  llega un aviso (`prediction_new_matches`): uno por tanda (los que llegan con menos de 3
+  horas entre uno y otro), solo de lo que apareció después de tu primer voto ahí, contando
+  lo que todavía puedes votar —sin fecha también—, y se quita solo cuando ya no queda nada.
+  Lleva a la jornada del primero que te falta. Se calcula al leer, como los otros tres.
+
+  Para saber cuándo apareció un borrador que se publicó después, "Publicar" y "Publicar
+  todos" dejan un evento `published` en `match_events` (el CHECK se rehace al final de
+  `db.js`; "Publicar todos" lo escribe en la misma sentencia que publica, con un CTE). Y el
+  recordatorio ya no cuenta un partido que apareció después de su hora cuando el aviso nuevo
+  ya lo anuncia; si llegó antes de tu primer voto en ese calendario, se queda, porque ningún
+  otro aviso lo diría. Detalle en el README, "Partidos nuevos para predecir".
+
+  Verificado: 8 unitarias nuevas en el backend (349) y 3 en el frontend (364), una con los
+  ids y las horas reales de ONEFA, con controles: sin el ajuste al recordatorio fallan
+  exactamente las dos que lo cubren, y con la primera versión del ajuste falla la del hueco
+  que encontró la suite (quien empezó a votar después de que apareció un partido se quedaba
+  sin ningún aviso de él). La consulta, en solo lectura contra `desarrollo-local`: las
+  columnas de antes salen idénticas en 3 usuarios (133 partidos cada uno), y `appeared_at`
+  es la hora de captura en los 266 partidos, en ~50 ms. La función, con los 151 partidos
+  de ONEFA de la API pública: quien votó todo menos lo nuevo recibe un aviso con los seis
+  (PLAYOFFS 4, SEMIFINAL 2), fechado el 7 a las 23:57, y ya no el recordatorio del 5; quien
+  ya los votó, o empezó a votar después, nada. `predicciones.e2e.mjs` con 76 ok y 0
+  fallas, 20 de ellas nuevas (sección 9: la tanda, el balón que se vuelve a prender cuando
+  la tanda crece, el aviso que baja y se quita, un borrador que se publica 40 días después
+  de capturado, y "Publicar todos" con su evento), dos corridas seguidas; e
+  `invites-roles.e2e.mjs` con 322 ok y 0 fallas. En el navegador, con la bandeja simulada
+  y lo demás de la API pública en solo lectura: las cinco formas del texto en 1280 y 360 px,
+  sin nada desbordado, y "Votar →" abre la jornada PLAYOFF del calendario de ONEFA; 0
+  errores en consola y ninguna escritura a la API. Sin probar en un teléfono real.
+
 - **El panel de un medio, con las piezas del panel de una tienda (2026-11-08).** Lo
   pidió Alfredo: había que profesionalizar el panel de trabajo de los medios. Era el
   formulario de "Editar organización" con un aviso arriba, y nada de lo que un medio hace

@@ -358,6 +358,7 @@ No hace falta seguir nada: basta con haber votado.
 | `prediction_result` | "✅ Acertaste · +2 pts" o "❌ No se dio", con el marcador y cuánta gente votó como tú | Por cada partido que votaste, en su `gradable_at`. Los amistosos no, porque no reparten puntos |
 | `prediction_round` | "Jornada 4: acertaste 9 de 14 · +9 pts · vas 4.º de 36 (↑2)", más una línea por cada quiniela tuya | Al cerrar una jornada en la que votaste |
 | `prediction_reminder` | "Te faltan 6 partidos de la Jornada 5 · el primero empieza el viernes 18:00" | 24 horas antes del primer partido de una jornada, en un calendario donde ya votaste. Se quita solo cuando votas todos o cuando ya no queda ninguno por empezar |
+| `prediction_new_matches` | "Partidos nuevos para predecir: se agregaron 6, PLAYOFFS (4) y SEMIFINAL (2)" | Cuando la liga agrega partidos a un calendario donde ya votaste (ver "Partidos nuevos para predecir", abajo). Se quita igual que el recordatorio |
 
 Si sigues un partido **y** lo predijiste, llega un solo aviso: el de tu
 predicción, que ya trae el marcador. Es la misma regla de "un aviso por
@@ -418,6 +419,60 @@ como nuevos. Es exactamente lo que se quiere que vea. Quien sí la había abiert
 después del cierre no los vio contar en el balón, porque la marca decía que ya
 los había visto; se arregló el 2026-09-28 (ver "Lo nuevo y el numerito del
 balón").
+
+#### Partidos nuevos para predecir
+
+Definido el 2026-11-09, a pedido de Alfredo. La noche del 7 de noviembre agregó
+seis partidos a ONEFA —las dos semifinales de una conferencia y los cuatro
+cuartos de final de la otra— y de las 38 personas que predicen ahí, 37 no habían
+votado ninguno dos días después. Nada les avisó: cinco no tienen fecha, y el
+recordatorio de "te falta votar" se ancla en la hora de los partidos, así que no
+los cubre. El sexto sí aparecía, pero dentro del recordatorio de PLAYOFFS
+**fechado el 5 de noviembre**, tres días antes de existir: ONEFA usa esa etiqueta
+para los cuartos de las dos conferencias, que se juegan con una semana de
+diferencia, y la jornada ya tenía su hora.
+
+Ahora, cuando aparecen partidos en un calendario donde ya votaste, llega un
+aviso: *"Partidos nuevos para predecir — se agregaron 6 partidos: PLAYOFFS (4) y
+SEMIFINAL (2)"*. Como los otros tres, se calcula al leer.
+
+- **Cuándo aparece un partido: al crearse, o al publicarse si nació borrador.**
+  El Excel a nivel torneo importa borradores, y "Publicar" o "Publicar todos"
+  los saca cuando la liga decide, a veces días después: es entonces cuando la
+  afición los ve. Esa hora no se podía saber después —`is_draft` no dice desde
+  cuándo es falso—, así que publicar deja un evento `published` en
+  `match_events`, como `finished`. Si un partido vuelve a borrador y se publica
+  otra vez, cuenta la última.
+- **Una tanda, un aviso.** La liga carga los partidos uno por uno: los seis de
+  ONEFA fueron seis guardados en cinco minutos. Los que aparecen con menos de 3
+  horas entre uno y otro son una tanda, y la tanda es un aviso, con la hora del
+  último. Si la liga agrega otro dentro de esas 3 horas, el aviso lo suma y
+  vuelve a contar como nuevo.
+- **Solo lo que apareció después de tu primer voto en ese calendario.** Es la
+  regla de "desde que empezaste a seguir": quien empieza a predecir a media
+  temporada ya vio el calendario que había.
+- **Cuenta lo que todavía puedes votar.** Ni amistosos, ni lo que ya votaste, ni
+  lo que ya empezó; un partido sin fecha sí, porque se vota hasta que lo marcan
+  En vivo (ver "Partidos con fecha por definir"). Un partido que se cargó ya
+  jugado —un resultado que faltaba— nunca entra. El número baja conforme votas,
+  y el aviso se quita solo cuando ya no queda nada, como el recordatorio.
+- **Lleva al calendario, en la jornada del primero que te falta**: el más
+  próximo; los que no tienen fecha van al final.
+- **El recordatorio ya no cuenta un partido que apareció después de su hora.**
+  Un aviso no puede recordar lo que todavía no existía, y ese partido ya lo
+  anuncia el aviso de partidos nuevos con su hora de verdad. En ONEFA eso quita
+  el recordatorio de PLAYOFFS fechado el 5 de noviembre: lo que decía ya va en
+  el aviso del 7.
+
+Lo que no cubre: el único de los seis con fecha (PUMAS UNAM CU vs BURROS BLANCOS
+IPN, el 15 de noviembre) no tendrá su recordatorio de 24 horas el 14, porque la
+jornada PLAYOFFS ya tuvo el suyo antes de los cuartos de la otra conferencia.
+Antes de este cambio tampoco lo tenía. Lo que sí tiene es el aviso de partidos
+nuevos, que sigue en la bandeja hasta que lo votes o empiece.
+
+**Al desplegar**, quien predice en ONEFA y no ha votado esos seis verá el aviso
+como nuevo, con la hora del último que se agregó (el 7 de noviembre a las
+23:57). Es lo que se quiere que vea.
 
 ### Lo nuevo y el numerito del balón
 

@@ -2499,6 +2499,23 @@ export async function initSchema() {
     // fila cambia, y sobre una columna que ya acepta NULL no hace nada.
     await run(`ALTER TABLE matches ALTER COLUMN match_date DROP NOT NULL`);
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Cuándo se PUBLICÓ un partido (README, "Partidos nuevos para predecir",
+    // 2026-11-09, lo pidió Alfredo). El aviso de partidos nuevos necesita la
+    // hora en que un partido apareció en el calendario: `created_at` si nació
+    // publicado, pero un borrador del Excel a nivel torneo se publica días
+    // después, e `is_draft` no dice desde cuándo es falso. Lo escriben
+    // "Publicar" (PUT /manage/matches/:id) y "Publicar todos"
+    // (PATCH …/publish-drafts) en routes/manage.js; lo lee
+    // routes/notifications.js. El frontend nunca lo ve (regla 6).
+    //
+    // Mismo patrón que `finished`: el CHECK se rehace con DROP + ADD. El ADD
+    // de arriba, sin 'published', va a fallar en cuanto exista una fila de este
+    // tipo; su SAVEPOINT lo deshace sin tocar lo demás (ver run()), y este par
+    // deja el CHECK completo.
+    await run(`ALTER TABLE match_events DROP CONSTRAINT IF EXISTS match_events_type_check`);
+    await run(`ALTER TABLE match_events ADD CONSTRAINT match_events_type_check CHECK (type IN ('final_score', 'schedule_change', 'finished', 'published'))`);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se

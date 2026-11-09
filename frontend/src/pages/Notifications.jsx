@@ -64,6 +64,9 @@ const TYPE_META = {
   prediction_result:   { icon: '🎯', label: 'Tu predicción', tone: 'cal',   cta: 'Ver partido →' },
   prediction_round:    { icon: '🏅', label: 'Ranking',       tone: 'oro',    cta: 'Ver ranking →' },
   prediction_reminder: { icon: '🗳️', label: 'Por votar',     tone: 'oro',    cta: 'Votar →' },
+  // La liga agregó partidos a un calendario donde votas (README, "Partidos
+  // nuevos para predecir").
+  prediction_new_matches: { icon: '📣', label: 'Partidos nuevos', tone: 'oro', cta: 'Votar →' },
 };
 
 const SIN_META = { icon: '📢', label: 'Aviso', tone: 'gris' };

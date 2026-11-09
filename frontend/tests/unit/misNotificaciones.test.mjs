@@ -140,6 +140,42 @@ test('te falta votar: cuántos y cuándo empieza el primero, en la zona del part
   assert.equal(nombreDeJornada({ week_label: null, fecha: '2026-10-03' }), 'los partidos del 3 OCT');
 });
 
+// ── Partidos nuevos para predecir (README, mismo nombre) ──────────────────
+
+const nuevos = (data, match = partido) => textoDePrediccion({ type: 'prediction_new_matches', match, data });
+const j = (week_label, missing) => ({ jornada: { key: `J:${week_label}`, week_label, fecha: null }, missing });
+
+test('partidos nuevos: cuántos se agregaron y de qué jornadas, y que hay que votarlos', () => {
+  const t = nuevos({ added: 6, missing: 6, jornadas: [j('PLAYOFF', 4), j('SEMIFINAL', 2)] });
+  assert.equal(t.title, 'Partidos nuevos para predecir');
+  assert.equal(t.body, 'Se agregaron 6 partidos: PLAYOFFS (4) y SEMIFINAL (2). Haz tus predicciones antes de que empiecen.');
+
+  const unaJornada = nuevos({ added: 4, missing: 4, jornadas: [j('5', 4)] });
+  assert.equal(unaJornada.title, 'Partidos nuevos para predecir — Jornada 5', 'con una sola jornada, va en el título');
+  assert.equal(unaJornada.body, 'Se agregaron 4 partidos. Haz tus predicciones antes de que empiecen.');
+});
+
+test('partidos nuevos: conforme votas, dice cuántos te faltan; y el último, cuál es y cuándo', () => {
+  assert.equal(
+    nuevos({ added: 6, missing: 2, jornadas: [j('PLAYOFF', 1), j('SEMIFINAL', 1)] }).body,
+    'Se agregaron 6 partidos y te faltan 2: PLAYOFFS (1) y SEMIFINAL (1).',
+  );
+  const uno = nuevos({ added: 6, missing: 1, jornadas: [j('SEMIFINAL', 1)] });
+  assert.equal(uno.title, 'Partido nuevo para predecir — SEMIFINAL');
+  assert.match(uno.body, /^Se agregaron 6 partidos y te falta 1: HALCONES vs TIGRES, el 3 OCT .*Hora Centro MX\)\.$/);
+});
+
+test('partidos nuevos: uno solo, con o sin fecha; y una tanda de muchas jornadas no se enumera', () => {
+  assert.match(nuevos({ added: 1, missing: 1, jornadas: [j('9', 1)] }).body, /^HALCONES vs TIGRES, el 3 OCT/);
+  assert.equal(
+    nuevos({ added: 1, missing: 1, jornadas: [j('SEMIFINAL', 1)] }, { ...partido, match_date: null }).body,
+    'HALCONES vs TIGRES, con fecha por definir.',
+  );
+  const media = nuevos({ added: 40, missing: 40, jornadas: ['9', '10', '11', '12', '13'].map((w) => j(w, 8)) });
+  assert.equal(media.title, 'Partidos nuevos para predecir');
+  assert.equal(media.body, 'Se agregaron 40 partidos de 5 jornadas. Haz tus predicciones antes de que empiecen.');
+});
+
 // ── Fecha por definir (README, "Partidos con fecha por definir") ──────────
 
 test('si le quitaron la fecha, el cambio de programación lo dice', () => {

@@ -289,6 +289,94 @@ const sinPartidos = (await call(`/pools/${CODE}/ranking`, { token: F1 })).data.r
 ok(sinPartidos.length === 2 && sinPartidos.every((r) => r.correctFinalPhase === 0),
   'una quiniela sin partidos todavía manda el conteo en 0, no vacío', JSON.stringify(sinPartidos));
 
+console.log('\n=== 9. Partidos nuevos para predecir ===');
+// README, "Partidos nuevos para predecir". En un calendario aparte, la rama
+// Femenil, para contar solo lo de esta sección: en la Varonil, F3 ya tiene
+// partidos nuevos de las secciones 7 y 8 (el de la jornada 1 sin fecha).
+const br2 = await call(`/manage/categories/${CAT}/branches`, { method: 'POST', token: LIGA, body: { name: 'Femenil' } });
+const BRANCH2 = br2.data.branch?.id ?? br2.data.id;
+const crearEn2 = async (local, visita, week_label, match_date_local = '2026-12-19T18:00') => {
+  const r = await call(`/manage/categories/${CAT}/matches`, {
+    method: 'POST', token: LIGA,
+    body: { home_team: `${local} ${stamp}`, away_team: `${visita} ${stamp}`, match_date_local, week_label, branch_id: BRANCH2 },
+  });
+  return r.data.match?.id ?? r.data.id;
+};
+const nuevosDe = async (token) => deTipo(await bandeja(token), 'prediction_new_matches')
+  .filter((i) => i.key.startsWith(`new-rama-${BRANCH2}-`));
+
+const P1 = await crearEn2('Panteras', 'Leonas', '1');
+ok(!!BRANCH2 && !!P1 && (await votar(F3, P1, 'home')).status === 201, 'F3 vota su primer partido en la rama Femenil');
+ok((await nuevosDe(F3)).length === 0, 'lo que ya estaba cuando votó no es nuevo');
+
+const P2 = await crearEn2('Gacelas', 'Osas', 'SEMIFINAL');
+const P3 = await crearEn2('Cobras', 'Abejas', 'SEMIFINAL', null);
+let nuevo = (await nuevosDe(F3))[0];
+ok(nuevo?.data?.added === 2 && nuevo?.data?.missing === 2 && nuevo?.match?.id === P2,
+  'la liga agrega dos semifinales, una sin fecha: a F3 le llega UN aviso con las dos, empezando por la que tiene fecha',
+  JSON.stringify({ data: nuevo?.data, match: nuevo?.match?.id }));
+ok(nuevo?.key === `new-rama-${BRANCH2}-${P2}` && nuevo?.is_new === true && nuevo?.origin === 'prediction',
+  'nombrado por el primero de la tanda, y como nuevo', JSON.stringify({ key: nuevo?.key, is_new: nuevo?.is_new }));
+ok(nuevo?.url === `/categorias/${CAT}/calendario?view=jornada&sel=SEMIFINAL`, 'con link a esa jornada', nuevo?.url);
+ok((await nuevosDe(F1)).length === 0, 'F1 nunca votó en la rama Femenil: no le llega');
+
+await call('/notifications/mine/seen', { method: 'POST', token: F3 });
+ok((await nuevas(F3)) === 0, 'F3 abre su bandeja: el balón en cero', `=${await nuevas(F3)}`);
+const P4 = await crearEn2('Halconas', 'Lobas', '2');
+nuevo = (await nuevosDe(F3))[0];
+ok(nuevo?.key === `new-rama-${BRANCH2}-${P2}` && nuevo?.data?.added === 3 && nuevo?.data?.missing === 3,
+  'la liga agrega otro dentro de las 3 horas: el mismo aviso, ahora con tres', JSON.stringify({ key: nuevo?.key, data: nuevo?.data }));
+ok(nuevo?.is_new === true && (await nuevas(F3)) === 1, 'y vuelve a prender el balón', `=${await nuevas(F3)}`);
+
+await votar(F3, P2, 'home');
+nuevo = (await nuevosDe(F3))[0];
+ok(nuevo?.data?.missing === 2 && nuevo?.data?.added === 3, 'F3 vota uno: le faltan dos', JSON.stringify(nuevo?.data));
+await votar(F3, P3, 'away');
+await votar(F3, P4, 'home');
+ok((await nuevosDe(F3)).length === 0, 'vota los otros dos: el aviso se quita solo');
+
+// Un borrador aparece cuando se publica, no cuando se capturó: el Excel a
+// nivel torneo importa borradores y la liga los publica días después. Su hora
+// de captura se mueve 40 días atrás —fuera de la ventana de la bandeja y antes
+// del primer voto de F3—, así que solo el evento `published` lo puede traer.
+const P5 = await crearEn2('Venadas', 'Tigresas', '2');
+const aBorrador = await call(`/manage/matches/${P5}`, { method: 'PUT', token: LIGA, body: { is_draft: true } });
+ok(aBorrador.status === 200 && aBorrador.data.is_draft === true, 'la liga regresa un partido a borrador', `=${aBorrador.status}`);
+await pool.query(`UPDATE matches SET created_at = created_at - INTERVAL '40 days' WHERE id = $1`, [P5]);
+ok((await nuevosDe(F3)).length === 0, 'un borrador no es un partido nuevo: nadie lo ve');
+const publicar = await call(`/manage/matches/${P5}`, { method: 'PUT', token: LIGA, body: { is_draft: false } });
+ok(publicar.status === 200 && (await esperarEvento(P5, 'published')) === 1, '"Publicar" deja la hora en que apareció (published)', `=${publicar.status}`);
+nuevo = (await nuevosDe(F3))[0];
+ok(nuevo?.match?.id === P5 && nuevo?.data?.missing === 1,
+  'y le llega a F3 como partido nuevo, aunque se capturó hace 40 días', JSON.stringify({ match: nuevo?.match?.id, data: nuevo?.data }));
+const editar = await call(`/manage/matches/${P5}`, { method: 'PUT', token: LIGA, body: { home_score: null } });
+ok(editar.status === 200 && (await pool.query(`SELECT COUNT(*)::int AS n FROM match_events WHERE match_id = $1 AND type = 'published'`, [P5])).rows[0].n === 1,
+  'editarlo ya publicado no deja otro evento');
+
+// "Publicar todos" deja el mismo evento, en la misma sentencia que publica.
+const trnP = await call(`/leagues/${LEAGUE}/tournaments`, { method: 'POST', token: LIGA, body: { name: `Torneo Pred ${stamp}`, year: 2026 } });
+const TRNP = trnP.data.id;
+const catP = await call(`/leagues/tournaments/${TRNP}/categories`, { method: 'POST', token: LIGA, body: { name: `Pred Torneo ${stamp}` } });
+const CATP = catP.data.id;
+const brP = await call(`/manage/categories/${CATP}/branches`, { method: 'POST', token: LIGA, body: { name: 'Varonil' } });
+const BRP = brP.data.branch?.id ?? brP.data.id;
+const mP = await call(`/manage/categories/${CATP}/matches`, {
+  method: 'POST', token: LIGA,
+  body: { home_team: `Rayos ${stamp}`, away_team: `Truenos ${stamp}`, match_date_local: '2026-12-19T18:00', week_label: '1', branch_id: BRP },
+});
+const MP = mP.data.match?.id ?? mP.data.id;
+const borradorP = await call(`/manage/matches/${MP}`, { method: 'PUT', token: LIGA, body: { is_draft: true } });
+ok(!!TRNP && !!CATP && !!BRP && !!MP && borradorP.data.is_draft === true, 'un torneo con un borrador', JSON.stringify({ TRNP, CATP, BRP, MP }));
+const todos = await call(`/manage/tournaments/${TRNP}/publish-drafts`, { method: 'PATCH', token: LIGA });
+ok(todos.status === 200 && todos.data.published === 1 && todos.data.skipped === 0,
+  '"Publicar todos" lo publica y lo cuenta como antes', JSON.stringify(todos.data));
+const filaP = (await pool.query(
+  `SELECT m.is_draft, (SELECT COUNT(*)::int FROM match_events e WHERE e.match_id = m.id AND e.type = 'published') AS eventos
+   FROM matches m WHERE m.id = $1`, [MP])).rows[0];
+ok(filaP?.is_draft === false && filaP?.eventos === 1, 'y deja su evento published', JSON.stringify(filaP));
+const otraVezTodos = await call(`/manage/tournaments/${TRNP}/publish-drafts`, { method: 'PATCH', token: LIGA });
+ok(otraVezTodos.status === 200 && otraVezTodos.data.published === 0, 'sin borradores no publica nada ni deja eventos', JSON.stringify(otraVezTodos.data));
+
 console.log(`\n========  ${pass} ok, ${fail} fallas  ========`);
 await pool.end();
 process.exit(fail ? 1 : 0);

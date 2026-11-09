@@ -200,11 +200,12 @@ export function avisosDeSeguimiento({ seguimientos, partidos, eventos, ahora }) 
 //
 // README, "Los avisos de tus predicciones". Se CALCULAN al leer, como
 // "próximo" y "en vivo": no hay una fila por aviso. No hace falta seguir nada,
-// basta con haber votado. Tres tipos:
+// basta con haber votado. Cuatro tipos:
 //
-//   prediction_result    uno por partido que votaste, cuando terminó
-//   prediction_round     al cerrar una jornada: tu lugar, y el de tus quinielas
-//   prediction_reminder  24 h antes de una jornada en la que te falta votar
+//   prediction_result       uno por partido que votaste, cuando terminó
+//   prediction_round        al cerrar una jornada: tu lugar, y el de tus quinielas
+//   prediction_reminder     24 h antes de una jornada en la que te falta votar
+//   prediction_new_matches  la liga agregó partidos a un calendario donde votas
 
 // El alcance de "el ranking" es el del calendario que lo muestra: la rama del
 // partido, o su categoría en el modelo viejo sin ramas.
@@ -229,14 +230,39 @@ export function urlDelCalendario(partido, params = {}) {
 
 export const HORAS_DE_RECORDATORIO = 24;
 
+// Los partidos que aparecen con menos de esto entre uno y otro son una tanda,
+// y una tanda es UN aviso de partidos nuevos: la liga los carga uno por uno, y
+// los seis de ONEFA del 7 de noviembre fueron seis guardados en cinco minutos.
+export const HORAS_ENTRE_TANDAS = 3;
+
 const msDe = (v) => (v == null ? NaN : new Date(v).getTime());
+
+// ¿Todavía se puede votar? La regla de POST /predictions: no ha empezado —sin
+// fecha cuenta como abierto— y nadie lo marcó En vivo o Finalizado.
+function abiertoParaVotar(p, ahoraMs) {
+  if (p.status === 'live' || p.status === 'finished') return false;
+  const inicio = msDe(p.match_date);
+  return Number.isNaN(inicio) || inicio > ahoraMs;
+}
+
+// Lo más próximo primero; los que no tienen fecha, al final y en orden de
+// captura. Es el orden en que conviene votarlos.
+function porFecha(a, b) {
+  const fa = msDe(a.match_date);
+  const fb = msDe(b.match_date);
+  if (Number.isNaN(fa) !== Number.isNaN(fb)) return Number.isNaN(fa) ? 1 : -1;
+  if (!Number.isNaN(fa) && fa !== fb) return fa - fb;
+  return a.id - b.id;
+}
 
 /**
  * @param {object} p
  * @param {number} p.userId
  * @param {Array}  p.partidos      todos los de tus alcances: { id, branch_id, category_id,
- *                                 tournament_id, week_label, match_date, timezone,
- *                                 gradable_at, exhibition, ... }
+ *                                 tournament_id, week_label, match_date, timezone, status,
+ *                                 gradable_at, exhibition, appeared_at, ... }
+ *                                 `appeared_at`: cuándo apareció en el calendario (Date);
+ *                                 sin él, el partido no cuenta como nuevo
  * @param {Array}  p.predicciones  las de TODOS en esos partidos: { user_id, match_id,
  *                                 pick, created_at, correct, points }
  * @param {Array}  p.quinielas     las tuyas: { id, name, join_code, miembros: [userId] }
@@ -301,6 +327,22 @@ export function avisosDePrediccion({ userId, partidos, predicciones, quinielas =
     const oficiales = alcance.partidos.filter((p) => !p.exhibition);
     if (oficiales.length === 0) continue;
     const muestra = oficiales[0];
+
+    // ¿Este partido es nuevo para ti? Apareció en este calendario después de
+    // tu primer voto aquí (la regla de "desde que empezaste a seguir"),
+    // dentro de la ventana, y se podía votar cuando apareció: uno que se cargó
+    // ya jugado —un resultado que faltaba— no es un partido para predecir.
+    // Lo usan el aviso de partidos nuevos (4) y el recordatorio (3), que no
+    // repite lo que aquel ya anuncia. Sin votos aquí, nada es nuevo.
+    const primerVoto = Math.min(
+      ...alcance.predicciones.filter((pr) => pr.user_id === userId).map((pr) => msDe(pr.created_at))
+    );
+    const esNuevoParaTi = (p) => {
+      const aparecio = msDe(p.appeared_at);
+      if (Number.isNaN(aparecio) || !(aparecio > primerVoto) || !enVentana(aparecio)) return false;
+      const inicio = msDe(p.match_date);
+      return Number.isNaN(inicio) || inicio > aparecio;
+    };
 
     // 2. El cierre de cada jornada: tu lugar en el calendario y en cada
     //    quiniela tuya donde vote alguien más (una quiniela de una sola
@@ -408,8 +450,16 @@ export function avisosDePrediccion({ userId, partidos, predicciones, quinielas =
       const primero = Math.min(...dela.map((p) => msDe(p.match_date)));
       const at = primero - HORAS_DE_RECORDATORIO * HORA_MS;
       if (Number.isNaN(at) || !enVentana(at)) continue;
+      // Un partido que apareció DESPUÉS de la hora del recordatorio, y que ya
+      // anuncia el aviso de partidos nuevos, no se cuenta: un aviso no puede
+      // recordar lo que todavía no existía, y aquel lo dice con su hora de
+      // verdad. Antes, el cuarto de final que ONEFA agregó el 7 de noviembre
+      // salía en el recordatorio de PLAYOFFS fechado el 5 (README, "Partidos
+      // nuevos para predecir"). Si llegó antes de tu primer voto aquí, ningún
+      // otro aviso lo dice, y se queda; sin `appeared_at`, también.
+      const loAnunciaOtro = (p) => msDe(p.appeared_at) > at && esNuevoParaTi(p);
       const faltan = dela
-        .filter((p) => msDe(p.match_date) > ahoraMs && !miVoto.has(p.id))
+        .filter((p) => msDe(p.match_date) > ahoraMs && !miVoto.has(p.id) && !loAnunciaOtro(p))
         .sort((a, b) => msDe(a.match_date) - msDe(b.match_date));
       if (faltan.length === 0) continue;
       avisos.push({
@@ -419,6 +469,52 @@ export function avisosDePrediccion({ userId, partidos, predicciones, quinielas =
         url: urlDelCalendario(faltan[0], jornada.week_label ? { view: 'jornada', sel: jornada.week_label } : {}),
         partido: faltan[0],
         data: { jornada, missing: faltan.length },
+      });
+    }
+
+    // 4. Partidos nuevos (esNuevoParaTi, arriba). Uno por tanda, con la hora
+    //    del último que llegó. Cuenta lo que todavía puedes votar, y se quita
+    //    solo cuando ya no queda nada, como el recordatorio. README,
+    //    "Partidos nuevos para predecir".
+    const aparecidos = oficiales
+      .filter(esNuevoParaTi)
+      .sort((a, b) => msDe(a.appeared_at) - msDe(b.appeared_at) || a.id - b.id);
+
+    const tandas = [];
+    for (const p of aparecidos) {
+      const aparecio = msDe(p.appeared_at);
+      const ultima = tandas[tandas.length - 1];
+      if (ultima && aparecio - ultima.hasta <= HORAS_ENTRE_TANDAS * HORA_MS) {
+        ultima.partidos.push(p);
+        ultima.hasta = aparecio;
+      } else {
+        tandas.push({ partidos: [p], hasta: aparecio });
+      }
+    }
+
+    for (const tanda of tandas) {
+      const faltan = tanda.partidos
+        .filter((p) => !miVoto.has(p.id) && abiertoParaVotar(p, ahoraMs))
+        .sort(porFecha);
+      if (faltan.length === 0) continue;
+      // Cuántos te faltan de cada jornada, en el orden en que conviene votarlos.
+      const porJornada = new Map();
+      for (const p of faltan) {
+        const j = jornadaDe(p);
+        if (!porJornada.has(j.key)) porJornada.set(j.key, { jornada: j, missing: 0 });
+        porJornada.get(j.key).missing += 1;
+      }
+      const primero = faltan[0];
+      const suJornada = jornadaDe(primero);
+      avisos.push({
+        // El primero de la tanda le da nombre: si la tanda crece, es el mismo
+        // aviso con otra hora, y vuelve a contar como nuevo por esa hora.
+        key: `new-${clave}-${tanda.partidos[0].id}`,
+        type: 'prediction_new_matches',
+        at: new Date(tanda.hasta),
+        url: urlDelCalendario(primero, suJornada.week_label ? { view: 'jornada', sel: suJornada.week_label } : {}),
+        partido: primero,
+        data: { added: tanda.partidos.length, missing: faltan.length, jornadas: [...porJornada.values()] },
       });
     }
   }

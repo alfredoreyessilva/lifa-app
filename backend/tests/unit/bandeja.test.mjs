@@ -418,6 +418,160 @@ test('nada de hace más de 30 días', () => {
   assert.deepEqual(avisosDePrediccion({ userId: YO, partidos: viejos, predicciones: votosJ1, ahora: AHORA }), []);
 });
 
+// ── Partidos nuevos para predecir (README, mismo nombre) ──────────────────
+//
+// YO votó la jornada 1 hace 72 horas: es su primer voto en la rama 17. Lo
+// que aparece después, y todavía se puede votar, es nuevo.
+
+const aparecido = (id, aparecio, extra = {}) => deRama(id, despues(24 * 6), { week_label: 'SEMIFINAL', appeared_at: aparecio, ...extra });
+const nuevos = (avisos) => deTipo(avisos, 'prediction_new_matches');
+
+test('partidos nuevos: un aviso por tanda, con la hora del último, y lleva a la jornada del primero que te falta', () => {
+  const partidos = [
+    ...jornada1, ...jornada2,
+    aparecido(10, antes(5), { match_date: null }),
+    aparecido(11, antes(4.9), { match_date: null }),
+    aparecido(12, antes(4.5), { week_label: 'PLAYOFF' }),
+  ];
+  const [aviso, ...otros] = nuevos(avisosDePrediccion({ userId: YO, partidos, predicciones: votosJ1, ahora: AHORA }));
+  assert.deepEqual(otros, [], 'los tres en cinco minutos son una tanda');
+  assert.equal(aviso.key, 'new-rama-17-10', 'el primero de la tanda le da nombre');
+  assert.equal(aviso.at.getTime(), antes(4.5).getTime(), 'con la hora del último que llegó');
+  assert.equal(aviso.partido.id, 12, 'el primero que te falta: el que tiene fecha va antes que los de fecha por definir');
+  assert.equal(aviso.url, '/torneos/7?rama=17&view=jornada&sel=PLAYOFF');
+  assert.deepEqual(
+    { ...aviso.data, jornadas: aviso.data.jornadas.map((j) => [j.jornada.week_label, j.missing]) },
+    { added: 3, missing: 3, jornadas: [['PLAYOFF', 1], ['SEMIFINAL', 2]] },
+  );
+  assert.ok(!avisosDePrediccion({ userId: YO, partidos: [...jornada1, ...jornada2], predicciones: votosJ1, ahora: AHORA })
+    .some((a) => a.type === 'prediction_new_matches'), 'un partido sin appeared_at no cuenta como nuevo');
+});
+
+test('partidos nuevos: más de 3 horas entre uno y otro son dos avisos; si llega otro antes, la tanda crece', () => {
+  const partidos = [
+    ...jornada1,
+    aparecido(10, antes(10)),
+    aparecido(11, antes(6.5)),  // 3.5 h después del 10: otra tanda
+    aparecido(12, antes(4)),    // 2.5 h después del 11: la misma
+  ];
+  const avisos = nuevos(avisosDePrediccion({ userId: YO, partidos, predicciones: votosJ1, ahora: AHORA }));
+  assert.deepEqual(
+    avisos.map((a) => [a.key, a.data.added, a.at.getTime()]),
+    [['new-rama-17-10', 1, antes(10).getTime()], ['new-rama-17-11', 2, antes(4).getTime()]],
+  );
+});
+
+test('partidos nuevos: el número baja conforme votas, lo que ya empezó no cuenta, y el aviso se quita solo', () => {
+  const partidos = [
+    ...jornada1,
+    aparecido(10, antes(5)),
+    aparecido(11, antes(5), { match_date: null }),
+    aparecido(12, antes(5), { match_date: antes(1).toISOString() }),       // ya empezó
+    aparecido(13, antes(5), { match_date: null, status: 'live' }),          // sin fecha, pero ya lo marcaron En vivo
+  ];
+  let [aviso] = nuevos(avisosDePrediccion({ userId: YO, partidos, predicciones: votosJ1, ahora: AHORA }));
+  assert.deepEqual([aviso.data.added, aviso.data.missing], [4, 2], 'se agregaron cuatro; se pueden votar dos');
+
+  [aviso] = nuevos(avisosDePrediccion({ userId: YO, partidos, predicciones: [...votosJ1, voto(YO, 10, 'home', false)], ahora: AHORA }));
+  assert.deepEqual([aviso.data.missing, aviso.partido.id], [1, 11], 'votas uno: queda el de fecha por definir');
+
+  const todos = [...votosJ1, voto(YO, 10, 'home', false), voto(YO, 11, 'away', false)];
+  assert.deepEqual(nuevos(avisosDePrediccion({ userId: YO, partidos, predicciones: todos, ahora: AHORA })), []);
+});
+
+test('partidos nuevos: solo después de tu primer voto en ese calendario; ni un resultado cargado ya jugado, ni un amistoso', () => {
+  const partidos = [
+    ...jornada1,
+    aparecido(10, antes(80)),                                               // antes de tu primer voto (hace 72 h)
+    aparecido(11, antes(2), { match_date: antes(24).toISOString() }),      // se cargó ya jugado
+    aparecido(12, antes(2), { exhibition: true, week_label: 'SCRIMMAGE' }),
+    aparecido(13, antes(2), { branch_id: 18 }),                             // otra rama, donde no votas
+  ];
+  assert.deepEqual(nuevos(avisosDePrediccion({ userId: YO, partidos, predicciones: votosJ1, ahora: AHORA })), []);
+
+  // A votó por primera vez en la rama 18 hace 3 horas: el 13 llegó después y
+  // es nuevo para él; el 14 ya estaba cuando votó.
+  const enLa18 = [{ ...voto(A, 15, 'home', false), created_at: antes(3) }];
+  const rama18 = [
+    deRama(15, despues(24), { branch_id: 18 }),
+    aparecido(13, antes(2), { branch_id: 18 }),
+    aparecido(14, antes(24 * 2), { branch_id: 18 }),
+  ];
+  const deA = nuevos(avisosDePrediccion({ userId: A, partidos: rama18, predicciones: enLa18, ahora: AHORA }));
+  assert.deepEqual(deA.map((a) => [a.key, a.data.missing]), [['new-rama-18-13', 1]]);
+});
+
+test('partidos nuevos: nada de hace más de 30 días', () => {
+  const desdeHaceMucho = [{ ...voto(YO, 1, 'home', true), created_at: antes(24 * 40) }];
+  const partidos = [jornada1[0], aparecido(10, antes(24 * 31), { match_date: null }), aparecido(11, antes(24 * 29), { match_date: null })];
+  assert.deepEqual(
+    nuevos(avisosDePrediccion({ userId: YO, partidos, predicciones: desdeHaceMucho, ahora: AHORA })).map((a) => a.key),
+    ['new-rama-17-11'],
+  );
+});
+
+test('el recordatorio no cuenta un partido que apareció después de su hora: lo anuncia el de partidos nuevos', () => {
+  // La jornada 2 empieza en 20 h, así que su recordatorio es de hace 4 h. El 14
+  // apareció media hora antes de esa hora; el 13, dos horas después.
+  const tarde = deRama(13, despues(30), { week_label: '2', appeared_at: antes(2) });
+  const aTiempo = deRama(14, despues(32), { week_label: '2', appeared_at: antes(4.5) });
+  const partidos = [...jornada1, ...jornada2, tarde, aTiempo];
+  let avisos = avisosDePrediccion({ userId: YO, partidos, predicciones: votosJ1, ahora: AHORA });
+  assert.equal(deTipo(avisos, 'prediction_reminder')[0].data.missing, 3, 'el 3, el 4 y el 14, que ya existía a esa hora');
+  assert.deepEqual(nuevos(avisos).map((a) => a.data.missing), [2], 'el 13 y el 14 llegaron en la misma tanda');
+
+  // Votados el 3, el 4 y el 14, el recordatorio se va; el 13 sigue anunciado.
+  const votos = [...votosJ1, voto(YO, 3, 'home', false), voto(YO, 4, 'home', false), voto(YO, 14, 'home', false)];
+  avisos = avisosDePrediccion({ userId: YO, partidos, predicciones: votos, ahora: AHORA });
+  assert.deepEqual(deTipo(avisos, 'prediction_reminder'), []);
+  assert.deepEqual(nuevos(avisos).map((a) => a.partido.id), [13]);
+});
+
+test('el recordatorio sí cuenta uno que llegó tarde si ya estaba cuando empezaste a votar ahí: ningún otro aviso lo dice', () => {
+  // La liga crea la jornada 2 hace 2 h, después de la hora de su recordatorio
+  // (hace 4 h), y YO vota por primera vez hace 1 h, solo el 3. Es lo que hace
+  // predicciones.e2e.mjs, sección 4.
+  const j2 = jornada2.map((p) => ({ ...p, appeared_at: antes(2) }));
+  const votos = [{ ...voto(YO, 3, 'home', false), created_at: antes(1) }];
+  const avisos = avisosDePrediccion({ userId: YO, partidos: j2, predicciones: votos, ahora: AHORA });
+  const [recordatorio] = deTipo(avisos, 'prediction_reminder');
+  assert.deepEqual([recordatorio?.data.missing, recordatorio?.partido.id], [1, 4]);
+  assert.deepEqual(nuevos(avisos), [], 'ya estaba cuando votó: para él no es nuevo');
+});
+
+test('el caso de ONEFA del 7 de noviembre: un aviso con los seis, y ya no el recordatorio de PLAYOFFS fechado el 5', () => {
+  // Ids, fechas y horas de captura de la API pública de producción (2026-11-09).
+  const ahora = new Date('2026-11-09T18:00:00.000Z');
+  const onefa = (id, week_label, match_date, appeared_at, extra = {}) =>
+    deRama(id, ahora, { week_label, match_date, appeared_at: new Date(appeared_at), ...extra });
+  const partidos = [
+    onefa(798, 'PLAYOFF', '2026-11-06T21:00:00.000Z', '2026-11-02T02:13:49.189Z', { status: 'finished' }),
+    onefa(799, 'PLAYOFF', '2026-11-07T00:00:00.000Z', '2026-11-02T02:16:09.716Z'),
+    onefa(800, 'PLAYOFF', '2026-11-07T18:00:00.000Z', '2026-11-02T02:16:46.232Z'),
+    onefa(801, 'PLAYOFF', '2026-11-08T00:00:00.000Z', '2026-11-02T02:17:20.480Z'),
+    onefa(932, 'SEMIFINAL', null, '2026-11-08T05:52:25.191Z'),
+    onefa(933, 'SEMIFINAL', null, '2026-11-08T05:53:20.017Z'),
+    onefa(934, 'PLAYOFF', null, '2026-11-08T05:54:58.473Z'),
+    onefa(935, 'PLAYOFF', null, '2026-11-08T05:55:30.438Z'),
+    onefa(936, 'PLAYOFF', null, '2026-11-08T05:56:41.351Z'),
+    onefa(937, 'PLAYOFF', '2026-11-15T17:00:00.000Z', '2026-11-08T05:57:29.803Z'),
+  ];
+  const votos = [798, 799, 800, 801].map((id) => ({ ...voto(YO, id, 'home', false), created_at: new Date('2026-11-04T12:00:00.000Z') }));
+  const avisos = avisosDePrediccion({ userId: YO, partidos, predicciones: votos, ahora });
+
+  assert.deepEqual(deTipo(avisos, 'prediction_reminder'), [], 'el cuarto del 15 ya no sale en un recordatorio del 5');
+  const [aviso, ...otros] = nuevos(avisos);
+  assert.deepEqual(otros, []);
+  assert.equal(aviso.key, 'new-rama-17-932');
+  assert.equal(aviso.at.toISOString(), '2026-11-08T05:57:29.803Z', 'el 7 de noviembre, 23:57 en el centro de México');
+  assert.equal(aviso.partido.id, 937);
+  assert.equal(aviso.url, '/torneos/7?rama=17&view=jornada&sel=PLAYOFF');
+  assert.deepEqual(
+    { ...aviso.data, jornadas: aviso.data.jornadas.map((j) => [j.jornada.week_label, j.missing]) },
+    { added: 6, missing: 6, jornadas: [['PLAYOFF', 4], ['SEMIFINAL', 2]] },
+  );
+});
+
 test('si sigues el partido Y lo predijiste, queda solo el aviso de tu predicción', () => {
   const deLoQueSigue = [
     { key: 'final_score-1', type: 'final_score', match: { id: 1 } },

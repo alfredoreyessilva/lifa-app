@@ -112,6 +112,17 @@ async function avisosDeEdicionDePartido(before, after) {
     `).run(after.id);
   }
 
+  // 1c. Se publicó: era borrador y ya no. Es la hora en que el partido
+  //     apareció en el calendario, la que usa el aviso de partidos nuevos para
+  //     predecir (README, "Partidos nuevos para predecir"); `is_draft` no dice
+  //     desde cuándo es falso. Solo bandeja. "Publicar todos" deja el mismo
+  //     evento desde su propia ruta.
+  if (before.is_draft && !after.is_draft) {
+    await db.prepare(`
+      INSERT INTO match_events (match_id, type) VALUES (?, 'published')
+    `).run(after.id);
+  }
+
   // 2. Arranque manual: el organizador marcó "en vivo" antes de que el cron
   //    lo detectara (o en una categoría sin auto-status). Solo es push: la
   //    bandeja calcula "en vivo" con la hora del partido.
@@ -462,13 +473,22 @@ router.get('/tournaments/:tournamentId/matches', authRequired, tournamentOwnerRe
 // Los que sí necesitan revisión se quedan como borrador — igual que ya
 // pasa con el botón "Publicar" individual, aquí nomás en lote.
 router.patch('/tournaments/:tournamentId/publish-drafts', authRequired, tournamentOwnerRequired, asyncHandler(async (req, res) => {
+  // Cada partido que se publica deja su evento `published`: la hora en que
+  // apareció en el calendario (README, "Partidos nuevos para predecir"). En
+  // UNA sola sentencia, para que no haya partido publicado sin su hora: del
+  // otro lado hay un pooler en modo transacción.
   const published = await db.prepare(`
-    UPDATE matches
-    SET is_draft = FALSE
-    WHERE is_draft = TRUE
-      AND category_id IN (SELECT id FROM categories WHERE tournament_id = ? AND is_placeholder = FALSE)
-      AND (branch_id IS NULL OR branch_id IN (SELECT id FROM branches WHERE is_placeholder = FALSE))
-    RETURNING id
+    WITH publicados AS (
+      UPDATE matches
+      SET is_draft = FALSE
+      WHERE is_draft = TRUE
+        AND category_id IN (SELECT id FROM categories WHERE tournament_id = ? AND is_placeholder = FALSE)
+        AND (branch_id IS NULL OR branch_id IN (SELECT id FROM branches WHERE is_placeholder = FALSE))
+      RETURNING id
+    )
+    INSERT INTO match_events (match_id, type)
+    SELECT id, 'published' FROM publicados
+    RETURNING match_id AS id
   `).all(req.tournament.id);
 
   const stillDraft = await db.prepare(`

@@ -724,7 +724,13 @@ async function avisosDeLoQueSigue(userId, ahora) {
 // algún partido de los últimos 60 días: una temporada que ya terminó no se
 // vuelve a repasar en cada cambio de página. De esos alcances se traen TODOS
 // los partidos y TODAS las predicciones, porque tu lugar depende de los demás.
-// En ONEFA son ~130 partidos y ~1,800 predicciones.
+// En ONEFA son ~150 partidos y ~2,100 predicciones (2026-11-09).
+//
+// `appeared_at` es cuándo apareció el partido en el calendario, para el aviso
+// de partidos nuevos (README, "Partidos nuevos para predecir"): su
+// `created_at`, o la última vez que se publicó si nació borrador (el evento
+// `published` de routes/manage.js). `created_at` es TIMESTAMP sin zona,
+// guardado en UTC, y se convierte antes de compararlo, como en scoring.js.
 async function avisosDePredicciones(userId, ahora) {
   const partidos = await db.prepare(`
     WITH mis_alcances AS (
@@ -736,11 +742,15 @@ async function avisosDePredicciones(userId, ahora) {
         AND (m.match_date IS NULL OR m.match_date::timestamptz > NOW() - INTERVAL '60 days')
     )
     SELECT m.id, m.branch_id, m.category_id, c.tournament_id,
-           m.week_label, m.match_date, m.timezone,
+           m.week_label, m.match_date, m.timezone, m.status,
            m.home_team, m.away_team, m.home_score, m.away_score,
            l.name AS league_name, c.name AS category_name, b.name AS branch_name,
            ${MATCH_GRADABLE_AT_SQL} AS gradable_at,
-           ${MATCH_IS_EXHIBITION_SQL} AS exhibition
+           ${MATCH_IS_EXHIBITION_SQL} AS exhibition,
+           GREATEST(
+             m.created_at AT TIME ZONE 'UTC',
+             (SELECT MAX(me.created_at) FROM match_events me WHERE me.match_id = m.id AND me.type = 'published')
+           ) AS appeared_at
     FROM matches m
     JOIN categories c    ON c.id = m.category_id
     LEFT JOIN leagues l  ON l.id = c.league_id
