@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { generateBracketCard, SHARE_CARD_FORMATS } from '../utils/bracketShareCard.js';
 import { bracketTitle } from '../utils/bracketFormat.js';
+import Modal from './Modal.jsx';
 import { IconoImagen } from './MatchIcons.jsx';
 
 // Botón "Generar imagen" de UN bracket (una conferencia). Mismo mecanismo que
@@ -109,56 +110,56 @@ export default function BracketImageButton({ bracket, header = {} }) {
     setBlobByFormat({});
   }
 
-  if (status === 'idle' || status === 'generating') {
-    return (
-      <button className="btn btn-outline btn-sm" type="button" onClick={handleOpen} disabled={status === 'generating'}>
-        {status === 'generating' ? 'Generando imagen…' : <><IconoImagen /> Generar imagen</>}
-      </button>
-    );
-  }
-
-  if (status === 'error') {
-    return (
-      <button className="btn btn-outline btn-sm" type="button" onClick={handleOpen}>
-        No se pudo generar, reintentar
-      </button>
-    );
-  }
-
+  // Como en la imagen de un partido y en la de la tabla, el botón se queda en su
+  // lugar y la vista previa va en una ventana encima: dentro del bracket
+  // empujaba hacia abajo todo lo que seguía. La imagen y los botones se acomodan
+  // al ancho de la ventana, para que en un celular angosto no se deslice de lado.
   return (
-    <div className="bracket-image-panel">
-      <div style={{ display: 'flex', gap: 8 }}>
-        {Object.keys(SHARE_CARD_FORMATS).map((key) => (
-          <button
-            key={key}
-            type="button"
-            className={`btn btn-sm ${activeFormat === key ? 'btn-flag' : 'btn-outline'}`}
-            onClick={() => selectFormat(key)}
-          >
-            {SHARE_CARD_FORMATS[key].label}
-          </button>
-        ))}
-      </div>
+    <>
+      <button className="btn btn-outline btn-sm" type="button" onClick={handleOpen} disabled={status === 'generating'}>
+        {status === 'generating'
+          ? 'Generando imagen…'
+          : status === 'error' ? 'No se pudo generar, reintentar' : <><IconoImagen /> Generar imagen</>}
+      </button>
 
-      {previewUrl && (
-        <img
-          src={previewUrl}
-          alt="Vista previa del bracket"
-          style={{ maxWidth: 260, borderRadius: 12, border: '1px solid var(--line-strong)' }}
-        />
+      {status === 'ready' && (
+        <Modal title="Imagen del bracket" onClose={handleClose}>
+          <div className="share-image-panel">
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+              {Object.keys(SHARE_CARD_FORMATS).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`btn btn-sm ${activeFormat === key ? 'btn-flag' : 'btn-outline'}`}
+                  onClick={() => selectFormat(key)}
+                >
+                  {SHARE_CARD_FORMATS[key].label}
+                </button>
+              ))}
+            </div>
+
+            {previewUrl && (
+              <img
+                src={previewUrl}
+                alt="Vista previa del bracket"
+                style={{ width: '100%', maxWidth: 260, borderRadius: 12, border: '1px solid var(--line-strong)' }}
+              />
+            )}
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+              <button className="btn btn-flag btn-sm" type="button" onClick={handleNativeShare} disabled={isSharing}>
+                {isSharing ? 'Compartiendo…' : 'Compartir'}
+              </button>
+              <button className="btn btn-outline btn-sm" type="button" onClick={handleDownload}>
+                Descargar
+              </button>
+              <button className="btn btn-ghost btn-sm" type="button" onClick={handleClose}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
-
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button className="btn btn-flag btn-sm" type="button" onClick={handleNativeShare} disabled={isSharing}>
-          {isSharing ? 'Compartiendo…' : 'Compartir'}
-        </button>
-        <button className="btn btn-outline btn-sm" type="button" onClick={handleDownload}>
-          Descargar
-        </button>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={handleClose}>
-          Cerrar
-        </button>
-      </div>
-    </div>
+    </>
   );
 }

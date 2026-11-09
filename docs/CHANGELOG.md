@@ -15,6 +15,37 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Las imágenes para compartir se abren en una ventana (2026-11-09).** Lo pidió
+  Alfredo: "Generar imagen" de la tabla de posiciones abría la vista previa dentro de la
+  tabla, junto a su nombre, y empujaba hacia abajo la tabla y todo lo que seguía. Ahora
+  se abre encima, en la misma ventana que la imagen de un partido (`Modal`), y el botón
+  se queda en su lugar; si el dibujo falla, dice "No se pudo generar, reintentar", como
+  antes. Después pidió lo mismo para las otras tres que lo hacían: el bracket de los
+  playoffs, el ranking de predicciones (también el de una quiniela) y la tarjeta de un
+  jugador. Al medirlas en celulares salió que la ventana se deslizaba de lado a 320 px:
+  la imagen medía 260 px fijos y los tres botones no bajaban de renglón. Ahora, en las
+  cinco, la imagen se encoge con la ventana y los botones bajan; de 412 px para arriba
+  se ven igual que antes. Se borró `.bracket-image-panel`, que ya nadie usa.
+
+  La tarjeta de un jugador traía además dos diferencias con las otras cuatro, que se
+  igualaron: "Descargar" soltaba el archivo en cuanto lo pedía —lo que, según las otras,
+  hace que algunos navegadores cancelen la descarga sin avisar—, y "Compartir" no hacía
+  nada cuando el navegador rechaza el panel sin mostrarlo (Brave): ahora descarga la
+  imagen en ese caso, y no se puede apretar dos veces mientras comparte.
+
+  Verificado en el navegador con los datos públicos de producción, en solo lectura (lo
+  único que intentó escribir fue el registro de visitas, y se bloqueó); la quiniela, su
+  sesión y el jugador, inventados. Lo de abajo de cada botón se midió antes, durante y
+  después de la ventana: con el código anterior bajaba entre 381 y 427 px en el bracket,
+  el ranking, la quiniela y la tarjeta (y 440 la tabla, en el sitio público), y con el
+  nuevo no se mueve en ninguna, en escritorio y en celular. En esas cinco la ventana
+  cabe en la pantalla, cambia a historia, descarga con su nombre y se cierra con
+  "Cerrar" y con un clic afuera; con un error forzado queda el botón de reintentar, sin
+  ventana. A 320 y 360 px nada se sale de lado en las seis vistas —con la del partido,
+  que ya era ventana—, y una sonda de 400 px sí se detecta. 364 unitarias del frontend
+  y la compilación, en verde. **Compartir** no se ejercitó: abre el panel nativo del
+  sistema.
+
 - **Partidos nuevos para predecir, en "Mis notificaciones" (2026-11-09).** Lo pidió
   Alfredo: la noche del 7 de noviembre agregó seis partidos de playoffs y semifinales a
   ONEFA, y quien predice ahí no se enteraba. Medido en la API pública dos días después: de

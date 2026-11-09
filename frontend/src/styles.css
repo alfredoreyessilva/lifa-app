@@ -4182,15 +4182,6 @@ button.league-card {
   margin: 2px 0 0;
 }
 .bracket-head-action { margin-left: auto; max-width: 100%; }
-.bracket-image-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 16px;
-}
 .bracket-note {
   font-size: 13px;
   color: var(--flag);
@@ -6630,6 +6621,9 @@ body.is-storefront .footer-links a:hover { color: var(--sf-ink); }
 
 /* Las dos ventanas que abre la página: necesitan más que los 480 px de siempre. */
 .modal:has(.flight-widget) { max-width: 720px; }
+/* Lo de adentro de la ventana de "Generar imagen", la misma en las cinco: un
+   partido, una tabla de posiciones, un bracket, un ranking de predicciones y la
+   tarjeta de un jugador (los *ImageButton.jsx y PlayerShareButton.jsx). */
 .share-image-panel {
   display: flex;
   flex-direction: column;

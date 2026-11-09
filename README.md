@@ -4215,6 +4215,14 @@ protagonismo a las cifras y le quitaba neutralidad al medio.
   con un logo de menos es mejor que un botón atorado en "Generando imagen…".
 - **Solo en la página pública.** La vista previa del panel de la liga no lleva
   el botón: ahí la tabla todavía se está configurando.
+- **La imagen se abre en una ventana encima**, la misma de la imagen de un partido,
+  y el botón se queda en su lugar. Hasta el 2026-11-09 se abría dentro de la tabla,
+  junto a su nombre, y la empujaba hacia abajo —440 px en un celular de 390—; lo
+  pidió Alfredo, y ese mismo día pasaron a la misma ventana las otras tres que lo
+  hacían: el bracket, el ranking de predicciones (también el de una quiniela) y la
+  tarjeta de un jugador. En las cinco la imagen se encoge con la ventana, sin pasar
+  de 260 px, y los botones bajan a otro renglón si no caben: a 320 px se deslizaban
+  de lado.
 - Cómo se escribe cada cifra (`.750`, `3-1-1`, `+12`) salió de
   `StandingsTable.jsx` a `utils/standingsFormat.js`, para que la tabla y la
   imagen no puedan decir cosas distintas.

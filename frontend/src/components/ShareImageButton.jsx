@@ -147,11 +147,15 @@ export default function ShareImageButton({ match, dateParts, matchStatus, pintur
               ))}
             </div>
 
+            {/* La vista previa y los botones se acomodan al ancho de la ventana:
+                en un celular de 320 a 360 px no caben 260 px de imagen ni los
+                tres botones en un renglón, y la ventana se deslizaba de lado. */}
             {previewUrl && (
               <img
                 src={previewUrl}
                 alt="Vista previa"
                 style={{
+                  width: '100%',
                   maxWidth: activeFormat === 'landscape' ? '100%' : 260,
                   borderRadius: 12,
                   border: '1px solid var(--line-strong)',
@@ -159,7 +163,7 @@ export default function ShareImageButton({ match, dateParts, matchStatus, pintur
               />
             )}
 
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
               <button
                 className="btn btn-flag btn-sm"
                 type="button"

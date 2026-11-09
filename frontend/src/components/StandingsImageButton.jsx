@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { generateStandingsCard, SHARE_CARD_FORMATS } from '../utils/standingsShareCard.js';
 import { scopeLabel } from '../utils/standingsFormat.js';
+import Modal from './Modal.jsx';
 import { IconoImagen } from './MatchIcons.jsx';
 
 // Botón "Generar imagen" de UNA tabla de posiciones: cada conferencia o grupo
@@ -113,78 +114,68 @@ export default function StandingsImageButton({ table, usesPoints, header = {} })
     setBlobByFormat({});
   }
 
-  if (status === 'idle' || status === 'generating') {
-    return (
+  // Como en la imagen de un partido, el botón se queda en su lugar mientras
+  // la imagen está abierta: la vista previa va en una ventana encima y no
+  // empuja la tabla hacia abajo, que es lo que hacía cuando iba dentro de ella.
+  return (
+    <>
       <button
         className="btn btn-outline btn-sm"
         type="button"
         onClick={handleOpen}
         disabled={status === 'generating'}
       >
-        {status === 'generating' ? 'Generando imagen…' : <><IconoImagen /> Generar imagen</>}
+        {status === 'generating'
+          ? 'Generando imagen…'
+          : status === 'error' ? 'No se pudo generar, reintentar' : <><IconoImagen /> Generar imagen</>}
       </button>
-    );
-  }
 
-  if (status === 'error') {
-    return (
-      <button className="btn btn-outline btn-sm" type="button" onClick={handleOpen}>
-        No se pudo generar, reintentar
-      </button>
-    );
-  }
+      {status === 'ready' && (
+        <Modal title="Imagen de la tabla" onClose={handleClose}>
+          <div className="share-image-panel">
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+              {Object.keys(SHARE_CARD_FORMATS).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`btn btn-sm ${activeFormat === key ? 'btn-flag' : 'btn-outline'}`}
+                  onClick={() => selectFormat(key)}
+                >
+                  {SHARE_CARD_FORMATS[key].label}
+                </button>
+              ))}
+            </div>
 
-  // status === 'ready' → mini panel de previsualización
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 12,
-        padding: 16,
-        background: 'rgba(0,0,0,0.15)',
-        borderRadius: 16,
-        width: '100%',
-      }}
-    >
-      <div style={{ display: 'flex', gap: 8 }}>
-        {Object.keys(SHARE_CARD_FORMATS).map((key) => (
-          <button
-            key={key}
-            type="button"
-            className={`btn btn-sm ${activeFormat === key ? 'btn-flag' : 'btn-outline'}`}
-            onClick={() => selectFormat(key)}
-          >
-            {SHARE_CARD_FORMATS[key].label}
-          </button>
-        ))}
-      </div>
+            {/* La vista previa y los botones se acomodan al ancho de la ventana:
+                en un celular de 320 a 360 px no caben 260 px de imagen ni los
+                tres botones en un renglón, y la ventana se deslizaba de lado. */}
+            {previewUrl && (
+              <img
+                src={previewUrl}
+                alt="Vista previa de la tabla de posiciones"
+                style={{ width: '100%', maxWidth: 260, borderRadius: 12, border: '1px solid var(--line-strong)' }}
+              />
+            )}
 
-      {previewUrl && (
-        <img
-          src={previewUrl}
-          alt="Vista previa de la tabla de posiciones"
-          style={{ maxWidth: 260, borderRadius: 12, border: '1px solid var(--line-strong)' }}
-        />
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+              <button
+                className="btn btn-flag btn-sm"
+                type="button"
+                onClick={handleNativeShare}
+                disabled={isSharing}
+              >
+                {isSharing ? 'Compartiendo…' : 'Compartir'}
+              </button>
+              <button className="btn btn-outline btn-sm" type="button" onClick={handleDownload}>
+                Descargar
+              </button>
+              <button className="btn btn-ghost btn-sm" type="button" onClick={handleClose}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
-
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button
-          className="btn btn-flag btn-sm"
-          type="button"
-          onClick={handleNativeShare}
-          disabled={isSharing}
-        >
-          {isSharing ? 'Compartiendo…' : 'Compartir'}
-        </button>
-        <button className="btn btn-outline btn-sm" type="button" onClick={handleDownload}>
-          Descargar
-        </button>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={handleClose}>
-          Cerrar
-        </button>
-      </div>
-    </div>
+    </>
   );
 }
