@@ -844,6 +844,9 @@ lifa-app/
         LeagueContacts.jsx       Sus botones de contacto, con el logo de cada red
         TeamStrip.jsx            Un equipo en su franja de cancha. La comparten la
                                  página de una liga y el filtro "Equipo" del calendario
+        PreviewBanner.jsx        El aviso "Vista previa" de una liga sin publicar, en la
+                                 página de la liga, de un torneo, de un roster y de un
+                                 partido (ver "La vista previa de una liga sin publicar")
         FlightSearchWidget.jsx   Botón "Vuelo" de "Cómo llegar" — abre en una ventana
                                  el widget de búsqueda de Aviasales (ver "Monetización")
         StandingsTable.jsx       Una tabla de posiciones. Solo pinta: el orden y
@@ -1281,12 +1284,14 @@ juega esa jornada. Nadie guarda nada de esto (regla 4).
 - **Los playoffs cuentan como resultado, no como récord.** No suman a la tabla,
   pero son lo último que jugó el equipo. Un scrimmage no cuenta para ninguno.
 - **Los enfrentamientos anteriores cruzan temporadas y ligas**, y solo de ligas
-  públicas: un cruce de hace dos años es justo lo que esa lista quiere contar.
+  públicas: un cruce de hace dos años es justo lo que esa lista quiere contar. En la vista
+  previa de una liga sin publicar, también los de esa misma liga.
 - **Va en su propia llamada.** Calcular las tablas de una rama no es gratis, y el
   partido se pinta sin esperarlas. Si falla, o durante un despliegue en que Vercel
   ya terminó y Render todavía no, solo faltan esas secciones.
 - **Una liga sin publicar responde 200 y vacío**, el mismo filtro que la tabla. El
-  partido se sigue viendo por su link, como siempre.
+  partido se sigue viendo por su link, como siempre. A quien la administra sí le responde,
+  con `preview: true` (ver "La vista previa de una liga sin publicar").
 
 "Cara a cara" marca quién va mejor solo donde la comparación es justa: en tablas
 distintas no hay ventaja que marcar, porque ser 2.º de un grupo no es mejor ni
@@ -1611,8 +1616,71 @@ podría creer que esta es la página oficial.
   en un renglón: con más de tres se dice cuántos son (`regionDeLiga`), y la lista completa
   queda en el `title`.
 
+### La vista previa de una liga sin publicar
+
+**Decidido el 2026-11-08, a pedido de Alfredo.** Una liga nace privada y la publica
+CFBAMX cuando ella lo pide (ver "Organizaciones: publicar y verificar"). Hasta ese día,
+"Ver mi página", en el Perfil de su panel, le contestaba "No encontramos esta liga" a quien
+la administra: la página pública solo existía con `leagues.is_public`, también para su
+dueño. Justo quien está armando su liga para pedir que la publiquen no podía ver cómo iba a
+quedar, ni sacar la imagen de su tabla.
+
+Ahora una liga sin publicar se abre entera para quien la administra, como la verá el
+público:
+
+| Quién | Ve la liga sin publicar |
+|-|-|
+| Dueño y administrador de la liga | Sí, con el aviso de vista previa |
+| El admin de la plataforma | Sí, con el mismo aviso: es quien decide publicarla, y el "Ver" de su panel también llevaba a "No encontramos esta liga" |
+| Tesorero y visor de la liga | No |
+| Cualquier otro, con o sin sesión | No: el mismo 404 de una liga que no existe |
+
+- **Es la misma página, no una copia.** Cambió la puerta y nada más: las ocho lecturas
+  públicas que preguntaban `is_public` —la liga, sus equipos, sus sedes, el torneo, la
+  tabla, el bracket, lo que rodea a un partido y el roster público— ahora preguntan "¿es
+  pública, o la administras?" (`puedeVerLiga`, en `utils/orgMembers.js`) y llevan
+  `optionalAuth`. Es el modelo que ya tenía una organización privada. Por eso funciona todo
+  lo de la página pública sin tocarlo: generar imagen, el bracket, el ranking. Y lo que ve
+  quien la administra es lo que va a ver el público: el roster recortado, la foto solo si la
+  categoría la permite, la tabla con lo publicado. Una vista previa armada aparte se habría
+  separado de la página de verdad en cuanto alguien cambiara una de las dos.
+- **Dueño y administrador son el permiso `perfil`**, no una lista de roles: la página es el
+  perfil de la liga a la vista, y "Ver mi página" vive en la sección Perfil, que pide ese
+  permiso. El visor y el tesorero no deciden qué publica la liga. Quien se quedó con la liga
+  en `owner_user_id` sin fila en `organization_members` entra igual que en las guardas
+  (`guardaDeLiga`).
+- **El aviso.** Arriba de la página de la liga, de un torneo y de un roster: *"Vista previa.
+  Esta liga todavía no es pública: el público no ve esta página hasta que CFBAMX la
+  publique."* Desde su sesión la ve igual que siempre, y sin el aviso no tendría cómo saber
+  que nadie más la ve: mandaría el link por WhatsApp y a los demás les saldría "No
+  encontramos esta liga". Lo decide el backend, con `preview: true` en la respuesta, y no la
+  pantalla adivinando por los permisos de la sesión: el admin de la plataforma no trae en su
+  sesión las ligas que revisa.
+- **El partido.** Su página ya se veía por su link en una liga sin publicar (ver "La página
+  de un partido"), pero sin lo que sale de la tabla. Quien administra la liga ve también eso
+  —cómo llegan, la jornada, los enfrentamientos anteriores—, y el aviso dice qué parte es
+  solo suya: *"el público ve este partido, pero no cómo llegan los equipos, sus
+  enfrentamientos anteriores ni el resto de la jornada"*. Sale solo si de verdad hay algo de
+  eso: un partido sin rama no trae nada. Los enfrentamientos anteriores cuentan los de ligas
+  públicas **y los de esta
+  misma liga**, que son los que el público verá cuando se publique; los de otra liga
+  privada, no.
+- **Compartir sigue ahí.** "Compartir este torneo", "Compartir calendario" y "Compartir" en
+  un partido copian el link que va a servir el día que se publique, y el aviso ya dice que hoy
+  no le abre a nadie más. Las imágenes no llevan el aviso: una imagen lleva los datos de la
+  pantalla, no sus controles (ver "La imagen para compartir"), y lo que dice es cierto aunque
+  la liga no sea pública.
+- **No sale de esa puerta.** El home, la lista de ligas, el sitemap, la tarjeta del link en
+  WhatsApp (`api/social-preview.js`) y los equipos del home no mandan sesión, y siguen sin la
+  liga.
+- **No queda donde otro la alcance.** El service worker no cachea `/api/`, entre el navegador
+  y Render no hay ningún caché, y el backend no manda `Cache-Control`, así que el navegador
+  vuelve a preguntar cada vez: lo que recibe quien la administra no se le sirve a otra sesión.
+
 ### Fuera de esta versión
 
+- **Pedir la publicación desde el aviso.** El aviso informa y no lleva botón: la solicitud
+  vive en el Perfil del panel, de donde viene "Ver mi página".
 - **La lista de estados no se alcanza en un teléfono:** el `title` solo sale con cursor.
 - **El tope de 800 px de `routes/upload.js`** se nota solo en una portada apilada en una
   computadora, que se estira a 1032. Subirlo cambia también los logos, que pasan por ahí.

@@ -11,7 +11,7 @@ import {
   centroDelPartido, cuentaRegresiva, detalleDelPartido, fechaLarga, partirHora,
   plataformaDe, rondaDelPartido, sedeDelPartido, torneoDelPartido,
 } from '../../src/utils/matchDisplay.js';
-import { filasCaraACara, lineaDelEquipo, ordinal, rachaLabel } from '../../src/utils/matchCompare.js';
+import { detalleDelEnfrentamiento, filasCaraACara, lineaDelEquipo, ordinal, rachaLabel } from '../../src/utils/matchCompare.js';
 
 // Un cuadro de lado × lado con pixeles [r, g, b, a].
 const cuadro = (lado, pixel) => {
@@ -268,4 +268,13 @@ test('lineaDelEquipo: récord y el lugar de la tabla más específica', () => {
 test('lineaDelEquipo: sin juegos no dice nada', () => {
   assert.equal(lineaDelEquipo(equipo({ played: 0, wins: 0, losses: 0 })), '');
   assert.equal(lineaDelEquipo(null), '');
+});
+
+test('detalleDelEnfrentamiento: la coma va solo entre dos cosas que existen', () => {
+  assert.equal(detalleDelEnfrentamiento({ tournament_name: 'ONEFA', tournament_year: 2025, week_label: '3' }), 'ONEFA 2025, Jornada 3');
+  // Una categoría sin torneo (el modelo viejo) decía ", Jornada 3".
+  assert.equal(detalleDelEnfrentamiento({ tournament_name: null, tournament_year: null, week_label: '3' }), 'Jornada 3');
+  assert.equal(detalleDelEnfrentamiento({ tournament_name: 'ONEFA', tournament_year: 2025, week_label: null }), 'ONEFA 2025');
+  assert.equal(detalleDelEnfrentamiento({ tournament_name: 'ONEFA', tournament_year: 2025, week_label: 'PLAYOFF' }), 'ONEFA 2025, PLAYOFFS');
+  assert.equal(detalleDelEnfrentamiento({}), '');
 });

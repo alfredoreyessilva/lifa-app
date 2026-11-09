@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import Loading from '../components/Loading.jsx';
+import PreviewBanner from '../components/PreviewBanner.jsx';
 import { initials, getMatchParts } from '../utils/matchDisplay.js';
 import { guardarPartido, leerPartido, hayAlmacenLocal } from '../utils/offlineDb.js';
 import { agregarPendiente, suscribir, reintentarTodo, cargar as cargarCola } from '../utils/offlineOutbox.js';
@@ -56,7 +57,10 @@ export default function PublicRosterPage() {
 
     (async () => {
       const [pub, asis] = await Promise.all([
-        api.getPublicMatchTeamRoster(matchId, teamId).catch(() => null),
+        // Con la sesión: de una liga sin publicar, el roster público solo le
+        // llega a quien la administra, con `preview: true` (README, "La vista
+        // previa de una liga sin publicar").
+        api.getPublicMatchTeamRoster(matchId, teamId, token).catch(() => null),
         // Se pide siempre que haya sesión, y el 403 se ignora en silencio. NO se
         // pregunta antes con `puede()` por dos razones: el permiso vive en la
         // liga, cuyo id solo se conoce DESPUÉS de cargar, y el pase de lista
@@ -314,6 +318,8 @@ export default function PublicRosterPage() {
         {' '}/ <Link to={`/partidos/${matchId}`}>Partido</Link>
         {' '}/ Roster de {equipo.name}
       </div>
+
+      {publico?.preview === true && <PreviewBanner />}
 
       <div className="public-roster-head">
         <div className="public-roster-logo">

@@ -1291,6 +1291,41 @@ button.league-card {
 .crumb a { color: var(--ink-dim); text-decoration: none; }
 .crumb a:hover { color: var(--flag); }
 
+/* ---------- Vista previa de una liga sin publicar ----------
+   PreviewBanner.jsx. En el azul informativo de los paneles y no en amarillo:
+   es un mensaje de la herramienta para quien administra la liga, no parte de
+   la página que verá el público, y el amarillo ya es el único acento de la
+   página de una liga. En un teléfono la etiqueta va en su propio renglón. */
+.preview-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: var(--mp-noche);
+  background: color-mix(in srgb, var(--info) 14%, var(--mp-noche));
+  border: 1px solid rgba(90, 169, 230, 0.5);
+  border-radius: 12px;
+  color: var(--mp-cal);
+}
+.preview-banner-tag {
+  font-family: var(--font-eyebrow);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--info);
+  white-space: nowrap;
+}
+.preview-banner-text {
+  flex: 1 1 260px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.mp-wrap > .preview-banner { margin-top: 20px; }
+
 /* ---------- Loading ---------- */
 .loading {
   padding: 80px 0;

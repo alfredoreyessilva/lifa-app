@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useParams, useSearchParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import CalendarHead from '../components/CalendarHead.jsx';
+import PreviewBanner from '../components/PreviewBanner.jsx';
 import TeamCard from '../components/TeamCard.jsx';
 import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
 import Loading from '../components/Loading.jsx';
@@ -17,8 +19,14 @@ import BracketView from '../components/BracketView.jsx';
 // La navegación a Categoría/Rama es "inteligente": si no hay nada que
 // elegir en un nivel, se salta ese paso y la info queda como texto, no
 // como clic. Ver comentarios junto a `mode` más abajo.
+//
+// El torneo, la tabla y el bracket se piden con la sesión, si la hay: de una
+// liga sin publicar, solo los ve quien la administra, y el torneo trae
+// `preview: true` para el aviso (README, "La vista previa de una liga sin
+// publicar").
 export default function TournamentPage() {
   const { tournamentId } = useParams();
+  const { token } = useAuth();
   const [data, setData]   = useState(null);
   const [error, setError] = useState('');
 
@@ -43,11 +51,19 @@ export default function TournamentPage() {
   // se guardan para ir y venir entre pestañas sin volver a pedirlos.
   const [brackets, setBrackets] = useState({});
 
+  // La sesión va en la petición y no en las dependencias: entrar para votar
+  // desde una tarjeta del calendario no debe recargar el torneo, que te sacaría
+  // de la jornada que estabas viendo. Quien administra una liga sin publicar ya
+  // llega con sesión: viene de su panel.
   useEffect(() => {
+    let vigente = true;
     setData(null); setError('');
     setSelectedCategoryId(null); setSelectedBranchId(ramaDelLink); setSelectedTeam(null);
     setStandings({}); setStandingsError(''); setBrackets({});
-    api.getTournamentPublic(tournamentId).then(setData).catch((e) => setError(e.message));
+    api.getTournamentPublic(tournamentId, token)
+      .then((d) => { if (vigente) setData(d); })
+      .catch((e) => { if (vigente) setError(e.message); });
+    return () => { vigente = false; };
   }, [tournamentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -186,7 +202,7 @@ export default function TournamentPage() {
   function openStandings(branchId) {
     if (!branchId || standings[branchId]) return;
     setStandingsError('');
-    api.getBranchStandings(branchId)
+    api.getBranchStandings(branchId, token)
       .then((d) => setStandings((prev) => ({ ...prev, [branchId]: d })))
       .catch((e) => setStandingsError(e.message));
   }
@@ -211,6 +227,8 @@ export default function TournamentPage() {
         {tournament.league_slug && <> / <Link to={`/ligas/${tournament.league_slug}`}>{tournament.league_name}</Link></>}
         {' / '}{tournament.name}
       </div>
+
+      {data.preview === true && <PreviewBanner />}
 
       <div className="league-header-panel">
         {tournament.logo_url && (
@@ -357,10 +375,11 @@ export default function TournamentPage() {
 // ninguno, no pinta nada. Si la petición falla, el calendario se queda como
 // estaba: el bracket es un extra al final.
 function BracketSection({ branchId, data, onData, shareImage }) {
+  const { token } = useAuth();
   useEffect(() => {
     if (!branchId || data !== undefined) return undefined;
     let vigente = true;
-    api.getBranchBracket(branchId)
+    api.getBranchBracket(branchId, token)
       .then((d) => { if (vigente) onData(d); })
       .catch(() => { if (vigente) onData({ brackets: [] }); });
     return () => { vigente = false; };

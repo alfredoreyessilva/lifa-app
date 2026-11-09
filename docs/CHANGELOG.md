@@ -15,6 +15,44 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Quien administra una liga sin publicar ya ve su página (2026-11-08).** "Ver mi
+  página", en el Perfil del panel de una liga, le contestaba "No encontramos esta liga"
+  a su propio dueño mientras CFBAMX no la publicara: justo quien la está armando para
+  pedir que la publiquen no podía ver cómo iba a quedar, ni sacar la imagen de su tabla.
+  Lo pidió Alfredo como una "vista previa completamente funcional".
+
+  No es una pantalla aparte: las ocho lecturas públicas que preguntaban
+  `leagues.is_public` —la liga, sus equipos, sus sedes, el torneo, la tabla, el bracket,
+  el contexto de un partido y el roster público— ahora preguntan "¿es pública, o la
+  administras?" (`puedeVerLiga`, en `utils/orgMembers.js`) y llevan `optionalAuth`, el
+  modelo que ya tenía una organización privada. Por eso funciona todo lo de la página
+  pública sin tocarlo, y lo que ve quien la administra es lo que va a ver el público. La
+  administran el dueño y el administrador (el permiso `perfil`, el de la sección donde
+  vive el botón) y el admin de la plataforma; el visor y el tesorero, no. A los demás, el
+  mismo 404 de siempre. Las respuestas que salen por ahí traen `preview: true`, y la
+  página de la liga, la de un torneo, la de un roster y la de un partido (cuando trae algo
+  que el público no ve) ponen el aviso "Vista previa": sin él, quien la administra
+  mandaría un link que a los demás les dice "No encontramos esta liga". La sesión va en
+  la petición y no en las dependencias de las pantallas: entrar para votar en el
+  calendario no recarga el torneo. En la vista previa, "Antes se enfrentaron" cuenta
+  también los partidos de la misma liga, que son los que el público verá cuando se
+  publique. Detalle en el README, "La vista previa de una liga sin publicar".
+
+  Verificado contra `desarrollo-local`: `invites-roles.e2e.mjs` con 291 ok y 0 fallas, 40
+  de ellas nuevas (sección 21), rol por rol, más la liga publicada y vuelta a ocultar como
+  control. La API pública sin sesión se fotografió antes y después del cambio: 930
+  respuestas de las 4 ligas públicas, con todos sus partidos, y de 98 privadas, sin una
+  sola diferencia y con `preview` en false las 440 veces que sale; un control alterado a
+  propósito sí salió. En el navegador, como dueño, de "Ver mi página" a la página, el
+  torneo, la tabla con su imagen, el partido con su imagen y el roster, con el aviso en los
+  cuatro y en 360 px; como visor y sin sesión, "No encontramos esta liga". 683 unitarias.
+  Sin desplegar; sin probar en un teléfono real.
+
+- **"Antes se enfrentaron" ya no empieza con coma (2026-11-08).** Un partido anterior
+  de una categoría sin torneo, el modelo viejo, decía ", Jornada 3". Salió al probar la
+  vista previa, en la misma pantalla. La línea se arma en `detalleDelEnfrentamiento`
+  (`utils/matchCompare.js`), con su prueba: la coma va solo entre dos cosas que existen.
+
 - **La página de una tienda ya no le dice al público su plan (2026-11-08, cierra
   PD-46).** `GET /organizations/:id` respondía la fila entera: quien abriera las
   herramientas del navegador en una vitrina veía si la tienda pagaba el Pro y hasta

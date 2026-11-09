@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import TeamMark from './TeamMark.jsx';
-import { filasCaraACara } from '../utils/matchCompare.js';
-import { jornadaLabel } from '../utils/matchDisplay.js';
+import { detalleDelEnfrentamiento, filasCaraACara } from '../utils/matchCompare.js';
 
 const RESULTADO = { G: 'Ganó', P: 'Perdió', E: 'Empató' };
 
@@ -104,10 +103,7 @@ export default function MatchCompare({ match, contexto, terminado }) {
                     <b>{p.home_score}-{p.away_score}</b>
                     <span>{p.away_team}</span>
                   </span>
-                  <small>
-                    {[p.tournament_name, p.tournament_year].filter(Boolean).join(' ')}
-                    {p.week_label ? `, ${jornadaLabel(p.week_label)}` : ''}
-                  </small>
+                  <small>{detalleDelEnfrentamiento(p)}</small>
                 </Link>
               </li>
             ))}

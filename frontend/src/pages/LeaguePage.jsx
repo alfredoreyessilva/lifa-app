@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import LeagueHero from '../components/LeagueHero.jsx';
+import PreviewBanner from '../components/PreviewBanner.jsx';
 import TeamStrip from '../components/TeamStrip.jsx';
 import TeamInfoPanel from '../components/TeamInfoPanel.jsx';
 import VenueCard from '../components/VenueCard.jsx';
@@ -14,6 +16,10 @@ import { useTeamPaint } from '../utils/useTeamPaint.js';
 // que tocar nada: de quién es (el encabezado, con sus contactos), cuándo se
 // juega (los calendarios) y quién juega (los equipos). README, "La página de
 // una liga".
+//
+// Se pide con la sesión, si la hay: a quien administra una liga sin publicar
+// el backend se la enseña igual, con `preview: true`, y aquí sale el aviso
+// (README, "La vista previa de una liga sin publicar").
 
 function Calendarios({ torneos }) {
   const { vigentes, anteriores } = calendariosDeLiga(torneos);
@@ -52,6 +58,7 @@ function Calendarios({ torneos }) {
 
 export default function LeaguePage() {
   const { slug } = useParams();
+  const { token } = useAuth();
   const [league, setLeague]               = useState(null);
   const [teams,  setTeams]                = useState(null);
   const [venues, setVenues]               = useState(null);
@@ -64,12 +71,19 @@ export default function LeaguePage() {
   const pintura = useTeamPaint(league?.logo_url, null, { alInstante: true });
 
   useEffect(() => {
+    // La sesión va en la petición y no en las dependencias: entrar desde la
+    // ficha de un equipo, para que te avise de sus partidos, no debe recargar la
+    // página ni cerrarte la ficha. Quien administra una liga sin publicar ya
+    // llega con sesión: viene de "Ver mi página", en su panel.
+    let vigente = true;
+    const si = (fn) => (v) => { if (vigente) fn(v); };
     setLeague(null); setTeams(null); setVenues(null); setError('');
     setVerSedes(false); setSelectedTeam(null); setSelectedVenue(null);
-    api.getLeague(slug).then(setLeague).catch((e) => setError(e.message));
-    api.getTeams(slug).then(setTeams).catch(() => setTeams([]));
-    api.getVenues(slug).then(setVenues).catch(() => setVenues([]));
-  }, [slug]);
+    api.getLeague(slug, token).then(si(setLeague)).catch(si((e) => setError(e.message)));
+    api.getTeams(slug, token).then(si(setTeams)).catch(si(() => setTeams([])));
+    api.getVenues(slug, token).then(si(setVenues)).catch(si(() => setVenues([])));
+    return () => { vigente = false; };
+  }, [slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (error) {
     return (
@@ -99,6 +113,8 @@ export default function LeaguePage() {
   return (
     <div className="container">
       <div className="crumb"><Link to="/">Inicio</Link> / {league.name}</div>
+
+      {league.preview === true && <PreviewBanner />}
 
       <div className="league-header-panel" style={zona}>
         <LeagueHero league={league} pintura={pintura} />

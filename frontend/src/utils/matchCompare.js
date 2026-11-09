@@ -4,6 +4,7 @@
 // decide cómo se escribe y qué renglones se enseñan.
 
 import { recordLabel } from './standingsFormat.js';
+import { jornadaLabel } from './matchDisplay.js';
 
 export function ordinal(n) {
   return `${n}.º`;
@@ -105,6 +106,16 @@ export function filasCaraACara(home, away) {
     { key: 'visita', label: 'De visitante', home: recordLabel(home.away_record), away: recordLabel(away.away_record), lead: null },
     { key: 'racha', label: 'Racha', home: rachaLabel(home.streak), away: rachaLabel(away.streak), lead: null },
   ];
+}
+
+// El renglón chico debajo de un enfrentamiento anterior: "ONEFA 2025, Jornada
+// 3". La coma va solo entre dos cosas que existen: un partido de una categoría
+// sin torneo (el modelo viejo) decía ", Jornada 3".
+export function detalleDelEnfrentamiento(p) {
+  return [
+    [p?.tournament_name, p?.tournament_year].filter(Boolean).join(' '),
+    p?.week_label ? jornadaLabel(p.week_label) : null,
+  ].filter(Boolean).join(', ');
 }
 
 // La línea corta debajo de cada casco: "7-2, 2.º en BAJÍO". Toma el lugar de la

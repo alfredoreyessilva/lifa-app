@@ -18,6 +18,7 @@ import { getMatchParts, plataformaDe, sedeDelPartido } from '../utils/matchDispl
 import { shareLink } from '../utils/share.js';
 import { useTeamPaint } from '../utils/useTeamPaint.js';
 import ShareImageButton from '../components/ShareImageButton.jsx';
+import PreviewBanner from '../components/PreviewBanner.jsx';
 import MatchBroadcasters from '../components/MatchBroadcasters.jsx';
 import MediaBroadcastControl from '../components/MediaBroadcastControl.jsx';
 import { buildHotelSearchUrl } from '../utils/matchServices.js';
@@ -44,6 +45,11 @@ export default function MatchPage() {
   // El partido no espera a su contexto: va en otra llamada porque calcular las
   // tablas cuesta, y si falla solo faltan esas secciones. Lo mismo pasa durante
   // un despliegue, cuando Vercel ya terminó y Render todavía no tiene la ruta.
+  //
+  // El contexto se pide con la sesión: de una liga sin publicar solo le llega a
+  // quien la administra, con `preview: true` (README, "La vista previa de una
+  // liga sin publicar"). La sesión no va en las dependencias: entrar para votar
+  // en la encuesta no debe recargar el partido.
   useEffect(() => {
     let vigente = true;
     setMatch(null);
@@ -52,11 +58,11 @@ export default function MatchPage() {
     api.getMatch(matchId)
       .then((m) => { if (vigente) setMatch(m); })
       .catch((e) => { if (vigente) setError(e.message); });
-    api.getMatchContext(matchId)
+    api.getMatchContext(matchId, token)
       .then((c) => { if (vigente) setContexto(c); })
       .catch(() => {});
     return () => { vigente = false; };
-  }, [matchId]);
+  }, [matchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pinturaLocal  = useTeamPaint(match?.home_logo_url, match?.home_team_details?.brand_color);
   const pinturaVisita = useTeamPaint(match?.away_logo_url, match?.away_team_details?.brand_color);
@@ -238,6 +244,12 @@ export default function MatchPage() {
   const venueUrl = esLink(match.venue_address) ? match.venue_address : null;
 
   const hayEquipos = match.home_team_details || match.away_team_details;
+  // El partido de una liga sin publicar lo ve cualquiera con su link; lo que
+  // sale de la tabla, solo quien la administra. El aviso sale cuando de verdad
+  // hay algo que el público no ve: un partido sin rama no trae nada de eso.
+  const soloQuienAdministra = contexto?.preview === true && Boolean(
+    contexto.home || contexto.away || contexto.week?.length || contexto.head_to_head?.length
+  );
   const pinturas = { home: pinturaLocal, away: pinturaVisita };
   const coloresDelPartido = {
     '--home': pinturaLocal.fondo,
@@ -281,6 +293,12 @@ export default function MatchPage() {
 
       <div className="mp-plate">
         <div className="mp-wrap">
+          {soloQuienAdministra && (
+            <PreviewBanner>
+              Esta liga todavía no es pública: el público ve este partido, pero no cómo llegan los equipos, sus
+              enfrentamientos anteriores ni el resto de la jornada.
+            </PreviewBanner>
+          )}
           <div className="mp-tools">
             {isScheduled && (
               <SubscribeButton
@@ -368,7 +386,7 @@ export default function MatchPage() {
                 await api.updateMatch(match.id, payload, token);
                 const updated = await api.getMatch(matchId);
                 setMatch(updated);
-                api.getMatchContext(matchId).then(setContexto).catch(() => {});
+                api.getMatchContext(matchId, token).then(setContexto).catch(() => {});
                 setEditing(false);
               }}
             />

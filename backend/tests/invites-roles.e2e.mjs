@@ -915,6 +915,112 @@ ok(!!filaIndep && filaIndep.league_id === null && filaIndep.league_name === null
 ok(filaIndep?.team?.id === (indep5.data.id ?? indep5.data.team?.id), 'y su "Ver" también abre su ficha de equipo', JSON.stringify(filaIndep?.team)?.slice(0, 80));
 ok((await call('/admin/organizations', { token: PLAT2 })).data.every((o) => o.type !== 'league'), 'y las ligas siguen sin salir aquí: tienen su pestaña');
 
+console.log('\n=== 21. La vista previa de una liga sin publicar ===');
+// README, "La vista previa de una liga sin publicar". La liga de esta suite
+// nunca se publicó: su página y lo que cuelga de ella no existen para el
+// público, pero quien la administra los ve como los verá el público. Se le arma
+// un torneo de verdad, porque la tabla y el bracket cuelgan de uno, y un
+// partido entre los mismos dos equipos que el de la sección 14 —que es de esta
+// misma liga, terminó 21-14 y es anterior—, para ver los enfrentamientos.
+const { rows: [ligaVP] } = await pool.query('SELECT slug, is_public FROM leagues WHERE id=$1', [LEAGUE]);
+ok(ligaVP.is_public === false, 'la liga de la suite sigue sin publicar', JSON.stringify(ligaVP));
+const SLUG = ligaVP.slug;
+
+const trn = await call(`/leagues/${LEAGUE}/tournaments`, { method: 'POST', token: LIGA, body: { name: `Torneo Vista ${stamp}`, year: 2026 } });
+const TRN = trn.data.id;
+const catVP = await call(`/leagues/tournaments/${TRN}/categories`, { method: 'POST', token: LIGA, body: { name: 'Vista', roster_public: true } });
+const CATVP = catVP.data.id;
+const brVP = await call(`/manage/categories/${CATVP}/branches`, { method: 'POST', token: LIGA, body: { name: 'Varonil' } });
+const BRVP = brVP.data.branch?.id ?? brVP.data.id;
+for (const team_id of [TEAM, TEAM2]) {
+  await call(`/manage/branches/${BRVP}/teams`, { method: 'POST', token: LIGA, body: { team_id } });
+}
+const mVP = await call(`/manage/categories/${CATVP}/matches`, {
+  method: 'POST', token: LIGA,
+  body: {
+    home_team: `Equipo Roles ${stamp}`, away_team: `Equipo Sin Entregar ${stamp}`,
+    match_date_local: '2026-11-20T18:00', branch_id: BRVP, status: 'finished', home_score: 7, away_score: 3,
+  },
+});
+const MVP = mVP.data.match?.id ?? mVP.data.id;
+ok(!!TRN && !!CATVP && !!BRVP && !!MVP, 'torneo, categoría con roster público, rama con los dos equipos y un partido terminado',
+  JSON.stringify({ TRN, CATVP, BRVP, MVP, e: mVP.data.error }));
+
+// El administrador de la liga: alguien que todavía no estaba en nada (sección
+// 7d), para no gastar otro registro del limitador de /auth.
+const invAdminLiga = await call(`/invites/organizations/${ORGLIGA}/admins`, { method: 'POST', token: LIGA, body: { role: 'admin' } });
+await call(`/invites/${invAdminLiga.data.token}/claim`, { method: 'POST', token: NUEVO });
+ok(await rolDe(ORGLIGA, await idDe('Nuevo')) === 'admin', 'la liga tiene un administrador');
+
+const lecturasVP = [
+  `/leagues/${SLUG}`,
+  `/leagues/${SLUG}/teams`,
+  `/leagues/${SLUG}/venues`,
+  `/leagues/tournaments/${TRN}/public`,
+  `/leagues/branches/${BRVP}/standings`,
+  `/leagues/branches/${BRVP}/bracket`,
+  `/leagues/matches/${MVP}/teams/${TEAM}/roster`,
+];
+const contextoVP = (token) => call(`/leagues/matches/${MVP}/context`, { token });
+
+// Los de fuera: el mismo 404 de una liga que no existe, y el contexto vacío.
+// El visor y el tesorero trabajan en la liga, pero no deciden lo que publica.
+for (const [quien, token] of [['sin sesión', undefined], ['un aficionado con sesión', FAN], ['el visor de la liga', VISOR], ['el tesorero de la liga', TESOLIGA]]) {
+  const estados = [];
+  for (const ruta of lecturasVP) estados.push((await call(ruta, { token })).status);
+  ok(estados.every((s) => s === 404), `${quien}: 404 en la página, los equipos, las sedes, el torneo, la tabla, el bracket y el roster`, JSON.stringify(estados));
+  const ctx = await contextoVP(token);
+  ok(ctx.status === 200 && ctx.data.preview !== true && ctx.data.home === null && ctx.data.head_to_head?.length === 0,
+    `${quien}: el contexto del partido llega vacío, sin aviso`, JSON.stringify(ctx.data).slice(0, 140));
+}
+ok((await call(`/leagues/matches/${MVP}`)).status === 200, 'el partido mismo sigue abriendo por su link, como siempre');
+
+// Los de dentro: todo, como lo verá el público, y con el aviso.
+for (const [quien, token] of [['el dueño', LIGA], ['el administrador', NUEVO], ['el admin de la plataforma', PLAT2]]) {
+  const r = [];
+  for (const ruta of lecturasVP) r.push(await call(ruta, { token }));
+  ok(r.every((x) => x.status === 200), `${quien}: 200 en la página, los equipos, las sedes, el torneo, la tabla, el bracket y el roster`,
+    JSON.stringify(r.map((x) => x.status)));
+  const [pagina, equipos, , torneo, tabla, bracket, roster] = r.map((x) => x.data);
+  ok(pagina.preview === true && pagina.tournaments?.some((t) => t.id === TRN) && equipos.some?.((t) => t.id === TEAM),
+    `${quien}: la página trae su torneo y sus equipos, con preview`, JSON.stringify({ p: pagina.preview, t: pagina.tournaments?.length }));
+  ok(torneo.preview === true && torneo.matches?.some((m) => m.id === MVP) && torneo.branches?.some((b) => b.id === BRVP),
+    `${quien}: el torneo trae el partido y la rama, con preview`, JSON.stringify({ p: torneo.preview, m: torneo.matches?.length }));
+  ok(tabla.branch?.id === BRVP && !('league_is_public' in tabla.branch) && !('league_id' in tabla.branch),
+    `${quien}: la tabla es la de siempre, sin lo que usó la puerta`, JSON.stringify(tabla.branch));
+  ok(Array.isArray(bracket.brackets), `${quien}: el bracket contesta (vacío: la rama no tiene playoffs)`);
+  ok(roster.preview === true && roster.team?.id === TEAM && !JSON.stringify(roster).includes('curp') && !JSON.stringify(roster).includes('birth_date'),
+    `${quien}: el roster público, recortado como al público, con preview`, JSON.stringify({ p: roster.preview, t: roster.team?.id }));
+  const ctx = (await contextoVP(token)).data;
+  ok(ctx.preview === true && ctx.head_to_head?.some((m) => m.id === MATCH),
+    `${quien}: el contexto trae el enfrentamiento anterior de esta misma liga`, JSON.stringify({ p: ctx.preview, h: ctx.head_to_head?.map((m) => m.id) }));
+}
+
+// La regla de lo que se publica no cambia en la vista previa: con la categoría
+// sin roster público, tampoco quien la administra lo ve.
+await pool.query('UPDATE categories SET roster_public = FALSE WHERE id=$1', [CATVP]);
+ok((await call(`/leagues/matches/${MVP}/teams/${TEAM}/roster`, { token: LIGA })).status === 404,
+  'una categoría que no publica su roster sigue en 404, también para el dueño');
+await pool.query('UPDATE categories SET roster_public = TRUE WHERE id=$1', [CATVP]);
+
+// Control: publicada, la ve cualquiera, sin aviso; oculta otra vez, vuelve el 404.
+const publicarLiga = await call(`/admin/leagues/${LEAGUE}/publish`, { method: 'PUT', token: PLAT2 });
+ok(publicarLiga.status === 200 && publicarLiga.data.is_public === true, 'el admin publica la liga', `=${publicarLiga.status}`);
+const estadosPublica = [];
+for (const ruta of lecturasVP) estadosPublica.push((await call(ruta)).status);
+ok(estadosPublica.every((s) => s === 200), 'publicada: el público abre todo', JSON.stringify(estadosPublica));
+const paginaPublica = (await call(`/leagues/${SLUG}`)).data;
+const torneoPublico = (await call(`/leagues/tournaments/${TRN}/public`)).data;
+const ctxPublico = (await contextoVP()).data;
+ok(paginaPublica.preview === false && torneoPublico.preview === false && ctxPublico.preview === false,
+  'y sin el aviso: ya no es vista previa', JSON.stringify({ p: paginaPublica.preview, t: torneoPublico.preview, c: ctxPublico.preview }));
+ok(ctxPublico.head_to_head?.some((m) => m.id === MATCH), 'el público ve el mismo enfrentamiento que veía el dueño');
+const ocultar = await call(`/leagues/${LEAGUE}/unpublish`, { method: 'PUT', token: LIGA });
+ok(ocultar.status === 200, '"Ocultar mi liga"', `=${ocultar.status}`);
+const estadosOculta = [];
+for (const ruta of lecturasVP) estadosOculta.push((await call(ruta)).status);
+ok(estadosOculta.every((s) => s === 404), 'oculta otra vez: el público vuelve al 404', JSON.stringify(estadosOculta));
+
 await pool.query("UPDATE users SET role='rep' WHERE id=$1", [idPlat]);
 
 

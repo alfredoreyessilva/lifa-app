@@ -1,5 +1,6 @@
 import db from '../config/db.js';
 import { esPrivadaAlPublico } from './orgVisibility.js';
+import { rolesConPermiso } from './orgRoles.js';
 
 // Reemplaza la comparación repetida "owner_user_id === req.user.id" que hoy
 // vive en las 10 funciones de middleware/ownership.js. En vez de reescribir
@@ -87,4 +88,33 @@ export async function administraOrganizacion(user, org) {
   if (!user || !org) return false;
   if (user.role === 'admin') return true;
   return isOrgMember(user.id, org.id);
+}
+
+// ¿Puede esta persona ver la página pública de esta liga y lo que cuelga de
+// ella: sus equipos y sedes, sus torneos, la tabla, el bracket, lo que rodea a
+// un partido y el roster público? La misma pregunta que una organización
+// privada, del lado de las ligas: una sin publicar no existe para el público,
+// y quien la administra la ve entera, como la verá el público el día que
+// CFBAMX la publique — su vista previa. README, "La vista previa de una liga
+// sin publicar". `user` es el de `optionalAuth`, así que puede no venir.
+//
+// `league` necesita `is_public`, `owner_user_id` y `organization_id`.
+export async function puedeVerLiga(user, league) {
+  if (!league) return false;
+  if (league.is_public === true) return true;
+  return administraLiga(user, league);
+}
+
+// ¿La administra? Dueño y administrador, que es el permiso `perfil`: la página
+// es el perfil de la liga a la vista, y "Ver mi página" vive en la sección
+// Perfil de su panel. Entra también quien la registró y se quedó en
+// `owner_user_id` sin fila en organization_members, con el mismo respaldo que
+// `guardaDeLiga` (middleware/ownership.js), y el admin de la plataforma, que es
+// quien decide publicarla. El visor y el tesorero no: no deciden lo que la liga
+// publica.
+export async function administraLiga(user, league) {
+  if (!user || !league) return false;
+  if (user.role === 'admin') return true;
+  if (league.owner_user_id != null && league.owner_user_id === user.id) return true;
+  return isOrgMember(user.id, league.organization_id, rolesConPermiso('league', 'perfil'));
 }

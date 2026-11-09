@@ -101,16 +101,21 @@ export const api = {
   confirmPasswordReset: (payload) => request('/auth/password-reset/confirm', { method: 'POST', body: payload }),
 
   // Ligas públicas
+  //
+  // Las lecturas que cuelgan de una liga aceptan la sesión, opcional: con ella,
+  // quien administra una liga sin publicar la ve entera, y la respuesta trae
+  // `preview: true` (README, "La vista previa de una liga sin publicar"). Sin
+  // sesión, o de una liga publicada, contestan lo de siempre.
   getLeagues: () => request('/leagues'),
-  getLeague: (slug) => request(`/leagues/${slug}`),
+  getLeague: (slug, token) => request(`/leagues/${slug}`, { token }),
   getPublicTeams: () => request('/leagues/all-teams'),
   getMatches: (categoryId) => request(`/leagues/categories/${categoryId}/matches`),
-  getTournamentPublic: (tournamentId) => request(`/leagues/tournaments/${tournamentId}/public`),
+  getTournamentPublic: (tournamentId, token) => request(`/leagues/tournaments/${tournamentId}/public`, { token }),
   getMatch: (matchId) => request(`/leagues/matches/${matchId}`),
   // Lo que rodea a un partido: cómo llegó cada equipo y qué más se juega esa
   // jornada. Aparte del partido porque calcula tablas (README, "La página de un
   // partido").
-  getMatchContext: (matchId) => request(`/leagues/matches/${matchId}/context`),
+  getMatchContext: (matchId, token) => request(`/leagues/matches/${matchId}/context`, { token }),
 
   // Crear / editar liga
   createLeague: (payload, token) => request('/leagues', { method: 'POST', body: payload, token }),
@@ -205,10 +210,10 @@ export const api = {
   // La tabla pública NO viene dentro del payload del torneo: se pide aparte,
   // cuando alguien abre esa pestaña. Calcularla en cada carga del calendario
   // le costaría a todos los visitantes un trabajo que casi ninguno pidió.
-  getBranchStandings: (branchId) => request(`/leagues/branches/${branchId}/standings`),
+  getBranchStandings: (branchId, token) => request(`/leagues/branches/${branchId}/standings`, { token }),
   // El bracket de los playoffs de una rama: solo los que ya se publican
   // (README, "El bracket de los playoffs").
-  getBranchBracket: (branchId) => request(`/leagues/branches/${branchId}/bracket`),
+  getBranchBracket: (branchId, token) => request(`/leagues/branches/${branchId}/bracket`, { token }),
   getBranchStandingsAdmin: (branchId, token) =>
     request(`/manage/branches/${branchId}/standings`, { token }),
 
@@ -287,8 +292,8 @@ export const api = {
   // Cuelga del PARTIDO y no de la rama: es la misma lista que abre el pase de
   // lista, y la asistencia es a un partido. Devuelve quién estaba en el roster
   // ESE día, no hoy.
-  getPublicMatchTeamRoster: (matchId, teamId) =>
-    request(`/leagues/matches/${matchId}/teams/${teamId}/roster`),
+  getPublicMatchTeamRoster: (matchId, teamId, token) =>
+    request(`/leagues/matches/${matchId}/teams/${teamId}/roster`, { token }),
 
   // ── Pase de lista ──
   // Leerlo lo puede la liga (los dos equipos) y el equipo (solo el suyo);
@@ -540,7 +545,7 @@ export const api = {
     request(`/playbook/teams/${teamId}/images/${imageId}`, { method: 'DELETE', token }),
 
   // Equipos
-  getTeams: (slug) => request(`/leagues/${slug}/teams`),
+  getTeams: (slug, token) => request(`/leagues/${slug}/teams`, { token }),
   createTeam: (leagueId, payload, token) =>
     request(`/manage/leagues/${leagueId}/teams`, { method: 'POST', body: payload, token }),
   // Equipo independiente: sin liga, se registra directo desde /registrar-equipo.
@@ -562,7 +567,7 @@ export const api = {
     request(`/players/matches/${matchId}/stats/${playerId}`, { method: 'PUT', body: payload, token }),
 
   // Sedes
-  getVenues: (slug) => request(`/leagues/${slug}/venues`),
+  getVenues: (slug, token) => request(`/leagues/${slug}/venues`, { token }),
   createVenue: (leagueId, payload, token) =>
     request(`/manage/leagues/${leagueId}/venues`, { method: 'POST', body: payload, token }),
   updateVenue: (venueId, payload, token) =>

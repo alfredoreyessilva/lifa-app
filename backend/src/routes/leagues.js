@@ -1,7 +1,8 @@
 import express from 'express';
 import db from '../config/db.js';
-import { authRequired } from '../middleware/auth.js';
+import { authRequired, optionalAuth } from '../middleware/auth.js';
 import { leagueOwnerRequired, tournamentOwnerRequired } from '../middleware/ownership.js';
+import { puedeVerLiga } from '../utils/orgMembers.js';
 import { isValidUrl, isNonEmptyString } from '../utils/validation.js';
 import { isValidTimezone } from '../utils/timezones.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -22,6 +23,37 @@ function slugify(str) {
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
+}
+
+// ── La puerta de las lecturas públicas ───────────────────────────────────
+//
+// Una liga publicada la ve cualquiera; una sin publicar, solo quien la
+// administra, que así ve su página antes de que CFBAMX la publique (README,
+// "La vista previa de una liga sin publicar"). Las ocho lecturas públicas de
+// este archivo preguntan lo mismo y por eso llevan `optionalAuth`. A quien no
+// puede verla se le contesta como si no existiera —el mismo 404 de siempre—,
+// para no confirmarle que hay algo detrás.
+//
+// Las respuestas que salen por la vista previa dicen `preview: true`, y la
+// pantalla pone el aviso con eso: el backend es quien sabe por qué la dejó
+// pasar.
+
+// Una liga por su slug: la fila entera si se puede ver, null si no.
+async function ligaVisiblePorSlug(req, slug) {
+  const league = await db.prepare('SELECT * FROM leagues WHERE slug = ?').get(slug);
+  return league && (await puedeVerLiga(req.user, league)) ? league : null;
+}
+
+// Para las que llegan por algo que cuelga de la liga (un torneo, una rama, un
+// partido) y ya leyeron su `is_public`: publicada, no pregunta nada más; sin
+// publicar, lee la liga para saber si quien pregunta la administra.
+async function puedeVerLigaPorId(req, leagueId, isPublic) {
+  if (isPublic === true) return true;
+  if (!req.user || !leagueId) return false;
+  const league = await db.prepare(
+    'SELECT id, is_public, owner_user_id, organization_id FROM leagues WHERE id = ?'
+  ).get(leagueId);
+  return puedeVerLiga(req.user, league);
 }
 
 router.get('/', asyncHandler(async (req, res) => {
@@ -231,16 +263,17 @@ router.get('/matches/:matchId', asyncHandler(async (req, res) => {
 // las tablas de una rama no es gratis, y la página tiene que pintar el partido
 // sin esperarlas. Si esta llamada falla, solo faltan esas secciones.
 //
-// El filtro es el de la tabla (l.is_public): una liga sin publicar no expone su
-// tabla por aquí. El partido se sigue viendo por su link, como siempre, pero
-// sin esto. El 200 vacío es a propósito: no es un error que enseñarle a nadie.
-router.get('/matches/:matchId/context', asyncHandler(async (req, res) => {
+// El filtro es el de la tabla: una liga sin publicar no expone su tabla por
+// aquí, salvo a quien la administra (su vista previa, con `preview: true`). Al
+// público, el partido se le sigue viendo por su link, como siempre, pero sin
+// esto. El 200 vacío es a propósito: no es un error que enseñarle a nadie.
+router.get('/matches/:matchId/context', optionalAuth, asyncHandler(async (req, res) => {
   const matchId = Number(req.params.matchId);
   if (!Number.isInteger(matchId)) return res.status(404).json({ error: 'Partido no encontrado' });
 
   const match = await db.prepare(`
     SELECT m.id, m.branch_id, m.week_label, m.match_date, m.home_team_id, m.away_team_id,
-           l.is_public
+           l.id AS league_id, l.is_public
     FROM matches m
     JOIN categories c ON c.id = m.category_id
     JOIN leagues l    ON l.id = c.league_id
@@ -249,13 +282,16 @@ router.get('/matches/:matchId/context', asyncHandler(async (req, res) => {
   if (!match) return res.status(404).json({ error: 'Partido no encontrado' });
 
   const empty = { home: null, away: null, week: [], head_to_head: [] };
-  if (!match.is_public) return res.json(empty);
+  if (!(await puedeVerLigaPorId(req, match.league_id, match.is_public))) return res.json(empty);
 
   const context = match.branch_id ? await buildMatchContext(match) : null;
 
   // Los enfrentamientos anteriores no se limitan a la rama ni a la liga: un
   // equipo puede jugar en varias, y un cruce de hace dos temporadas es
-  // justamente lo que esta lista quiere contar. Solo los de ligas públicas.
+  // justamente lo que esta lista quiere contar. Solo los de ligas públicas, y
+  // los de la liga de este partido aunque todavía no lo sea: en su vista previa
+  // son los que el público verá el día que se publique. En una publicada,
+  // `l.id = ?` no agrega nada que no estuviera ya.
   const { home_team_id: homeId, away_team_id: awayId } = match;
   let headToHead = [];
   if (homeId && awayId) {
@@ -269,16 +305,16 @@ router.get('/matches/:matchId/context', asyncHandler(async (req, res) => {
       JOIN categories c ON c.id = m.category_id
       JOIN leagues l    ON l.id = c.league_id
       LEFT JOIN tournaments tr ON tr.id = c.tournament_id
-      WHERE m.id <> ? AND m.is_draft = FALSE AND l.is_public = TRUE
+      WHERE m.id <> ? AND m.is_draft = FALSE AND (l.is_public = TRUE OR l.id = ?)
         AND ((m.home_team_id = ? AND m.away_team_id = ?) OR (m.home_team_id = ? AND m.away_team_id = ?))
         AND ${MATCH_GRADABLE_SQL}
         ${antesDeEste}
       ORDER BY m.match_date::timestamptz DESC
       LIMIT 5
-    `).all(match.id, homeId, awayId, awayId, homeId, ...(match.match_date ? [match.match_date] : []));
+    `).all(match.id, match.league_id, homeId, awayId, awayId, homeId, ...(match.match_date ? [match.match_date] : []));
   }
 
-  res.json({ ...empty, ...context, head_to_head: headToHead });
+  res.json({ ...empty, ...context, head_to_head: headToHead, preview: match.is_public !== true });
 }));
 
 // Todos los equipos que aparecen en la sección "Equipos" del home: los que
@@ -311,10 +347,8 @@ router.get('/all-teams', asyncHandler(async (req, res) => {
   res.json(teams);
 }));
 
-router.get('/:slug', asyncHandler(async (req, res) => {
-  const league = await db.prepare(`
-    SELECT * FROM leagues WHERE slug = ? AND is_public = TRUE
-  `).get(req.params.slug);
+router.get('/:slug', optionalAuth, asyncHandler(async (req, res) => {
+  const league = await ligaVisiblePorSlug(req, req.params.slug);
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
 
   const categories = await db.prepare(`
@@ -342,13 +376,11 @@ router.get('/:slug', asyncHandler(async (req, res) => {
     ORDER BY year ASC, sort_order ASC, id ASC
   `).all(league.id);
 
-  res.json({ ...league, categories, teams, tournaments });
+  res.json({ ...league, categories, teams, tournaments, preview: league.is_public !== true });
 }));
 
-router.get('/:slug/teams', asyncHandler(async (req, res) => {
-  const league = await db.prepare(`
-    SELECT * FROM leagues WHERE slug = ? AND is_public = TRUE
-  `).get(req.params.slug);
+router.get('/:slug/teams', optionalAuth, asyncHandler(async (req, res) => {
+  const league = await ligaVisiblePorSlug(req, req.params.slug);
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
 
   // Equipos "de la casa" de la liga = los que están en su roster
@@ -369,10 +401,8 @@ router.get('/:slug/teams', asyncHandler(async (req, res) => {
   res.json(teams);
 }));
 
-router.get('/:slug/venues', asyncHandler(async (req, res) => {
-  const league = await db.prepare(`
-    SELECT * FROM leagues WHERE slug = ? AND is_public = TRUE
-  `).get(req.params.slug);
+router.get('/:slug/venues', optionalAuth, asyncHandler(async (req, res) => {
+  const league = await ligaVisiblePorSlug(req, req.params.slug);
   if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
 
   const venues = await db.prepare(`
@@ -1158,16 +1188,21 @@ router.patch('/:leagueId/roster/sync-matches', authRequired, leagueOwnerRequired
 //
 // La conferencia y el grupo ya no se leen crudos de la fila: los resuelve
 // MATCH_SCOPE_COLUMNS a partir de los equipos que juegan (ver utils/matchScope.js).
-router.get('/tournaments/:tournamentId/public', asyncHandler(async (req, res) => {
-  const tournament = await db.prepare(`
+//
+// De una liga sin publicar, solo a quien la administra (su vista previa).
+router.get('/tournaments/:tournamentId/public', optionalAuth, asyncHandler(async (req, res) => {
+  const fila = await db.prepare(`
     SELECT t.id, t.name, t.year, t.logo_url,
            l.id AS league_id, l.name AS league_name, l.slug AS league_slug,
-           l.logo_url AS league_logo_url
+           l.logo_url AS league_logo_url, l.is_public AS league_is_public
     FROM tournaments t
     JOIN leagues l ON l.id = t.league_id
-    WHERE t.id = ? AND l.is_public = TRUE
+    WHERE t.id = ?
   `).get(req.params.tournamentId);
-  if (!tournament) return res.status(404).json({ error: 'Torneo no encontrado' });
+  if (!fila || !(await puedeVerLigaPorId(req, fila.league_id, fila.league_is_public))) {
+    return res.status(404).json({ error: 'Torneo no encontrado' });
+  }
+  const { league_is_public: ligaPublica, ...tournament } = fila;
 
   const matches = await db.prepare(`
     SELECT
@@ -1236,7 +1271,7 @@ router.get('/tournaments/:tournamentId/public', asyncHandler(async (req, res) =>
     ORDER BY c.sort_order ASC, c.name ASC, b.sort_order ASC, b.name ASC
   `).all(tournament.id);
 
-  res.json({ tournament, matches, teams, branches });
+  res.json({ tournament, matches, teams, branches, preview: ligaPublica !== true });
 }));
 
 
@@ -1247,19 +1282,25 @@ router.get('/tournaments/:tournamentId/public', asyncHandler(async (req, res) =>
 // carga del calendario le costaría a todos los visitantes un trabajo que casi
 // ninguno pidió.
 //
-// El filtro de visibilidad es el mismo de siempre (l.is_public): una liga que
-// no está publicada no expone su tabla aunque alguien adivine el id de la rama.
-router.get('/branches/:branchId/standings', asyncHandler(async (req, res) => {
-  const branch = await db.prepare(`
+// El filtro de visibilidad es el de la página de la liga: una que no está
+// publicada no expone su tabla aunque alguien adivine el id de la rama, salvo a
+// quien la administra (su vista previa).
+router.get('/branches/:branchId/standings', optionalAuth, asyncHandler(async (req, res) => {
+  const fila = await db.prepare(`
     SELECT b.id, b.name, c.name AS category_name, t.id AS tournament_id,
-           t.name AS tournament_name, t.year
+           t.name AS tournament_name, t.year,
+           l.id AS league_id, l.is_public AS league_is_public
     FROM branches b
     JOIN categories c   ON c.id = b.category_id
     JOIN tournaments t  ON t.id = c.tournament_id
     JOIN leagues l      ON l.id = t.league_id
-    WHERE b.id = ? AND l.is_public = TRUE
+    WHERE b.id = ?
   `).get(req.params.branchId);
-  if (!branch) return res.status(404).json({ error: 'Rama no encontrada' });
+  if (!fila || !(await puedeVerLigaPorId(req, fila.league_id, fila.league_is_public))) {
+    return res.status(404).json({ error: 'Rama no encontrada' });
+  }
+  // Lo que la puerta necesitó no viaja: la respuesta es la de siempre.
+  const { league_id: _liga, league_is_public: _publica, ...branch } = fila;
 
   const standings = await buildBranchStandings(branch.id, { publicOnly: true });
   if (!standings) return res.status(404).json({ error: 'Rama no encontrada' });
@@ -1273,16 +1314,18 @@ router.get('/branches/:branchId/standings', asyncHandler(async (req, res) => {
 // temporada regular o ya empezó sus playoffs. Mismo filtro de visibilidad que
 // la tabla, y aparte del calendario por la misma razón: la página lo pide solo
 // en las ramas con `has_playoffs`, y sin hacer esperar al calendario.
-router.get('/branches/:branchId/bracket', asyncHandler(async (req, res) => {
+router.get('/branches/:branchId/bracket', optionalAuth, asyncHandler(async (req, res) => {
   const branch = await db.prepare(`
-    SELECT b.id
+    SELECT b.id, l.id AS league_id, l.is_public AS league_is_public
     FROM branches b
     JOIN categories c   ON c.id = b.category_id
     JOIN tournaments t  ON t.id = c.tournament_id
     JOIN leagues l      ON l.id = t.league_id
-    WHERE b.id = ? AND l.is_public = TRUE
+    WHERE b.id = ?
   `).get(req.params.branchId);
-  if (!branch) return res.status(404).json({ error: 'Rama no encontrada' });
+  if (!branch || !(await puedeVerLigaPorId(req, branch.league_id, branch.league_is_public))) {
+    return res.status(404).json({ error: 'Rama no encontrada' });
+  }
 
   const data = await buildBranchBrackets(branch.id);
   if (!data) return res.status(404).json({ error: 'Rama no encontrada' });
@@ -1301,7 +1344,8 @@ router.get('/branches/:branchId/bracket', asyncHandler(async (req, res) => {
 // Vive aquí, en el router de ligas, y no bajo un prefijo `/public` como decía
 // el plan: esta app no tiene tal prefijo — su superficie pública son estos
 // endpoints sin `authRequired`, y el vecino natural de este es
-// `/branches/:branchId/standings`, que ya filtra por `l.is_public` igual.
+// `/branches/:branchId/standings`, que tiene la misma puerta (arriba, "La
+// puerta de las lecturas públicas").
 //
 // Responde 404 —y no 403— a un roster privado, por la misma razón que la
 // tarjeta del jugador: desde afuera no se debe poder distinguir "existe pero no
@@ -1315,7 +1359,11 @@ router.get('/branches/:branchId/bracket', asyncHandler(async (req, res) => {
 //
 // Es también lo que permite contestar la pregunta correcta: quién estaba en el
 // roster **ese día**, no hoy.
-router.get('/matches/:matchId/teams/:teamId/roster', asyncHandler(async (req, res) => {
+//
+// De una liga sin publicar, solo a quien la administra, y con las mismas reglas
+// que al público —la categoría que no publica su roster sigue en 404—: es su
+// vista previa, no una lista más completa.
+router.get('/matches/:matchId/teams/:teamId/roster', optionalAuth, asyncHandler(async (req, res) => {
   const teamId = Number(req.params.teamId);
 
   // La inscripción (branch_teams) es el punto de partida: sin ella, este equipo
@@ -1329,7 +1377,8 @@ router.get('/matches/:matchId/teams/:teamId/roster', asyncHandler(async (req, re
            c.roster_public, c.roster_photos, bt.show_photos,
            t.id   AS team_id, t.name AS team_name, t.logo_url AS team_logo_url,
            tr.id  AS tournament_id, tr.name AS tournament_name,
-           l.id   AS league_id, l.name AS league_name, l.slug AS league_slug
+           l.id   AS league_id, l.name AS league_name, l.slug AS league_slug,
+           l.is_public AS league_is_public
     FROM matches m
     JOIN branches b       ON b.id = m.branch_id
     JOIN categories c     ON c.id = b.category_id
@@ -1337,15 +1386,18 @@ router.get('/matches/:matchId/teams/:teamId/roster', asyncHandler(async (req, re
     JOIN branch_teams bt  ON bt.branch_id = b.id AND bt.team_id = ?
     JOIN teams t          ON t.id = bt.team_id
     LEFT JOIN tournaments tr ON tr.id = c.tournament_id
-    WHERE m.id = ? AND m.is_draft = FALSE AND l.is_public = TRUE
+    WHERE m.id = ? AND m.is_draft = FALSE
       AND (m.home_team_id = ? OR m.away_team_id = ?)
   `).get(teamId, req.params.matchId, teamId, teamId);
 
   // Un solo 404 para todo lo que puede faltar —el partido, la rama, el vínculo
-  // con los equipos, la inscripción, o que la categoría sea privada— por la
-  // misma razón que la tarjeta del jugador: desde afuera no se debe poder
-  // distinguir "existe pero no te lo muestro" de "no existe".
-  if (!ctx || !rosterEsPublico(ctx)) return res.status(404).json({ error: 'Roster no encontrado' });
+  // con los equipos, la inscripción, que la categoría sea privada o que la liga
+  // no esté publicada y no la administres— por la misma razón que la tarjeta
+  // del jugador: desde afuera no se debe poder distinguir "existe pero no te lo
+  // muestro" de "no existe".
+  if (!ctx || !rosterEsPublico(ctx) || !(await puedeVerLigaPorId(req, ctx.league_id, ctx.league_is_public))) {
+    return res.status(404).json({ error: 'Roster no encontrado' });
+  }
 
   const conFoto = fotoSePublica(ctx, ctx);
 
@@ -1373,6 +1425,7 @@ router.get('/matches/:matchId/teams/:teamId/roster', asyncHandler(async (req, re
     },
     photos:     conFoto,
     roster,
+    preview:    ctx.league_is_public !== true,
   });
 }));
 
