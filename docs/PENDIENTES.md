@@ -29,7 +29,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | **P1** | Hoy no daña, pero frena el siguiente paso: la primera liga que cobre, la prueba en cancha, el siguiente cliente |
 | **P2** | Deuda y pulido. Se toma cuando hay tiempo o cuando se toca ese archivo |
 
-## Índice (2026-11-08)
+## Índice (2026-11-09)
 
 | ID | P | Qué | Tipo |
 |-|-|-|-|
@@ -68,6 +68,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-43 | P2 | El recordatorio de WhatsApp a un tutor no le pone el 52 a un número de diez dígitos | código |
 | PD-44 | P2 | La página de un torneo se quedó con su portada gigante y sus tarjetas verdes | código |
 | PD-45 | P2 | Un logo que no carga se ve como un cuadro roto | código |
+| PD-47 | P2 | Cancelar un cargo llega a la bandeja como "Pago registrado" | código |
 
 ---
 
@@ -369,8 +370,10 @@ enciende en minutos:
 - `cron.yml` se queda como respaldo: llamar de más es inofensivo por diseño.
 - La sección Cron de `/admin` mide la cadencia nueva sin tocar nada.
 
-**Antes de encenderlo, además de la cadencia**, cuatro fallas del push que se
-encontraron el 2026-09-24 y que no se arreglaron porque quedó apagado:
+**Antes de encenderlo, además de la cadencia**, cinco fallas del push que no se
+arreglaron porque quedó apagado (las cuatro primeras se encontraron el
+2026-09-24; la quinta, el 2026-11-09, al armar el catálogo de avisos del Panel
+Admin):
 
 1. **Primero manda y después marca.** `faseDePartidos()` pone
    `notified_upcoming`/`notified_live` después de enviar. Dos corridas encimadas
@@ -388,6 +391,11 @@ encontraron el 2026-09-24 y que no se arreglaron porque quedó apagado:
    diferencian: uno truena sin llaves VAPID y el otro se calla. Al encenderlo,
    que el push lea los avisos de `match_events` —el mismo registro de la
    bandeja— en vez de tener su propia lógica.
+5. **"Marcador final" sale con el primer marcador completo**
+   (`routes/manage.js`), aunque sea el parcial del primer cuarto. Es lo que la
+   bandeja corrigió el 2026-09-27 con `gradable_at` (README, "Cuándo terminó un
+   partido"); el push se quedó con la regla vieja. Leer de `match_events`, como
+   dice el punto 4, lo arregla de paso.
 
 ### PD-15 · `PUT /manage/teams/:id` no es atómico
 
@@ -665,6 +673,18 @@ Visto el 2026-11-07 al probar el muro del home con una URL que no existe: `Casco
 (`MatchField.jsx`) pinta el `<img>` y deja el cuadro de imagen rota dentro del disco, y lo mismo
 pasa en el calendario, la portada de un partido y la página de una liga. Hoy no le pasa a nadie:
 los 58 logos públicos cargan. Se resuelve con un `onError` en `Casco` que caiga a las iniciales.
+
+### PD-47 · Cancelar un cargo llega a la bandeja como "Pago registrado"
+
+Salió el 2026-11-09 al armar el catálogo de avisos del Panel Admin. `billing_payment_recorded`
+se usa para tres cosas en `routes/billing.js`: la liga registra un pago, **cancela un cargo**, o
+confirma un pago que reportó el equipo. Los tres llevan en la bandeja la etiqueta y el ícono del
+tipo, "✅ PAGO REGISTRADO", así que un cargo cancelado se anuncia como un pago. El título sí dice
+"Tu liga canceló un cargo ✅". Por eso es P2: el título lo aclara, y en el último censo
+(`docs/ESTADO.md`) los libros de dinero de producción tenían 0 movimientos; no se volvió a medir
+al anotarlo. Se resuelve con un tipo propio (`billing_charge_voided`) en los cuatro lados —ruta,
+`PERMISO_POR_AVISO`, `TYPE_META` y el catálogo— y las dos suites e2e de cobranza antes y después;
+los avisos que ya se guardaron se quedan con el tipo viejo (regla 4).
 
 ---
 

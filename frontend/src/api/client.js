@@ -596,6 +596,9 @@ export const api = {
   // Admin — salud del cron externo (¿sigue vivo? ¿cada cuánto corre?)
   adminGetCron: (token) => request('/admin/cron', { token }),
 
+  // Admin — el catálogo de todo lo que la app avisa, con cuántos salieron
+  adminGetNotifications: (token) => request('/admin/notifications', { token }),
+
   // Admin — patrocinadores
   adminCreateSponsor: (payload, token) =>
     request('/admin/sponsors', { method: 'POST', body: payload, token }),

@@ -15,6 +15,36 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Panel Admin → Notificaciones: el catálogo de todo lo que la app avisa (2026-11-09).** Lo
+  pidió Alfredo para ver qué notificaciones tiene el programa, no para recibirlas, y así no
+  crear avisos repetidos. Es una sección nueva del panel con los 29 avisos que existen: 19 que
+  se guardan para una liga o un equipo, 8 que se calculan al abrir la bandeja (lo que sigues y
+  tus predicciones) y 2 correos. Por tema, con lo que dice cada uno, cuándo sale, a quién le
+  llega y quién de adentro lo ve, y cuántos salieron en 30 días; "Ver" lo enseña con la misma
+  tarjeta de "Mis notificaciones", las reglas que ya evitan que se repita y su versión de push.
+  Lo escrito a mano vive en `utils/catalogoDeAvisos.js` del backend (`GET
+  /api/admin/notifications`); quién lo ve sale de los permisos, los conteos de la base y el
+  estado de cada canal de sus interruptores. Una prueba nueva lee el código y no deja pasar un
+  aviso que no esté en el catálogo, uno del catálogo que ya nadie mande, ni un texto que cambió
+  en un lado y no en el otro; de paso exige que cada aviso de la bandeja tenga su ícono, que
+  antes nada pedía. Para compartirlos, la tarjeta de la bandeja pasó a
+  `components/NotificationCard.jsx` y `TYPE_META` a `utils/misNotificaciones.js`.
+
+  Verificado: 733 unitarias (20 nuevas); las cuatro consultas del endpoint, tal cual están en
+  `routes/admin.js`, contra `desarrollo-local` en sesión de solo lectura (~0.6 s, ningún tipo
+  desconocido); la prueba del catálogo con dos controles (un tipo y un texto cambiados a
+  propósito la hacen fallar); la tarjeta de la bandeja antes y después del cambio, con 14 avisos
+  de todos los tipos y estados, con el HTML idéntico; y en el navegador con datos simulados
+  —sin sesión, sin backend, 0 peticiones escapadas, 0 errores— en diez anchos de 1440 a 320 px,
+  más filtros, búsqueda, "Ver" con teclado y los casos de error, ruta vieja (404) y tipo
+  desconocido. Al probarlo se arreglaron tres cosas antes de entregarlo: la columna "Canal"
+  dejaba los nombres cortados a 1280 px (se quitó, y el canal se dice solo cuando no es la
+  bandeja), los nombres se cortaban a 1024 y 320 px (ahora bajan de renglón), y "Ver" abría
+  desplazado hasta el final porque el foco caía en "Cerrar".
+
+  Salieron dos pendientes: PD-47 (P2, cancelar un cargo llega como "Pago registrado") y una
+  quinta falla en la lista de PD-02 (el push de "Marcador final" sale con el marcador parcial).
+
 - **Las imágenes para compartir se abren en una ventana (2026-11-09).** Lo pidió
   Alfredo: "Generar imagen" de la tabla de posiciones abría la vista previa dentro de la
   tabla, junto a su nombre, y empujaba hacia abajo la tabla y todo lo que seguía. Ahora

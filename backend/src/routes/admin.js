@@ -5,6 +5,9 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { HOY_MX } from '../utils/sqlDates.js';
 import { TIPOS_PUBLICABLES } from '../utils/orgVisibility.js';
 import { orgTieneMiembrosSql } from '../utils/orgMembers.js';
+import { armarCatalogo } from '../utils/catalogoDeAvisos.js';
+import { pushEncendido } from '../utils/pushNotifier.js';
+import { emailAvailable } from '../utils/email.js';
 
 const router = express.Router();
 
@@ -86,6 +89,76 @@ router.get(`/cron`, authRequired, adminRequired, asyncHandler(async (req, res) =
     cobranza_corrio_hoy: hoy ? Boolean(hoy.cobranza_ok) : false,
     dias,
   });
+}));
+
+/* ===================== NOTIFICACIONES ===================== */
+
+// El catálogo de todo lo que la app avisa (README, "Notificaciones: todo lo que
+// la app avisa"). Lo que se escribe a mano vive en utils/catalogoDeAvisos.js;
+// aquí se le suma lo que solo sabe la base: cuántos de cada uno salieron, y a
+// cuántas personas les puede llegar uno de los que se calculan al leer.
+//
+// `created_at` de `notifications` y de `email_verification_codes` es TIMESTAMP
+// sin zona, guardado en UTC: se convierte antes de comparar, como en la bandeja.
+router.get('/notifications', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  const [envios, codigos, seguidores, predicen] = await Promise.all([
+    db.prepare(`
+      SELECT type AS tipo,
+             COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE (created_at AT TIME ZONE 'UTC') > NOW() - INTERVAL '30 days')::int AS ultimos_30,
+             COUNT(DISTINCT recipient_type || '-' || recipient_id)
+               FILTER (WHERE (created_at AT TIME ZONE 'UTC') > NOW() - INTERVAL '30 days')::int AS destinatarios_30,
+             MAX(created_at) AT TIME ZONE 'UTC' AS ultimo
+      FROM notifications
+      GROUP BY type
+    `).all(),
+    // Cada código es un correo: se manda en cuanto se crea, y con el correo
+    // apagado no se crea ninguno.
+    db.prepare(`
+      SELECT 'email_verification_codes' AS tabla,
+             COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE (created_at AT TIME ZONE 'UTC') > NOW() - INTERVAL '30 days')::int AS ultimos_30,
+             COUNT(DISTINCT user_id) FILTER (WHERE (created_at AT TIME ZONE 'UTC') > NOW() - INTERVAL '30 days')::int AS destinatarios_30,
+             MAX(created_at) AT TIME ZONE 'UTC' AS ultimo
+      FROM email_verification_codes
+      UNION ALL
+      SELECT 'password_reset_codes',
+             COUNT(*)::int,
+             COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days')::int,
+             COUNT(DISTINCT user_id) FILTER (WHERE created_at > NOW() - INTERVAL '30 days')::int,
+             MAX(created_at)
+      FROM password_reset_codes
+    `).all(),
+    // Quien tiene marcada cada casilla en algo que sigue, con la bandeja
+    // encendida: la misma condición con que la bandeja arma sus avisos
+    // (routes/notifications.js, avisosDeLoQueSigue). Una casilla en NULL cuenta
+    // como marcada.
+    db.prepare(`
+      SELECT COUNT(DISTINCT user_id) FILTER (WHERE notify_upcoming IS DISTINCT FROM FALSE)::int AS notify_upcoming,
+             COUNT(DISTINCT user_id) FILTER (WHERE notify_live     IS DISTINCT FROM FALSE)::int AS notify_live,
+             COUNT(DISTINCT user_id) FILTER (WHERE notify_final    IS DISTINCT FROM FALSE)::int AS notify_final,
+             COUNT(DISTINCT user_id) FILTER (WHERE notify_changes  IS DISTINCT FROM FALSE)::int AS notify_changes
+      FROM push_subscriptions
+      WHERE user_id IS NOT NULL AND in_app IS DISTINCT FROM FALSE
+    `).get(),
+    // Quien votó en un calendario que la bandeja todavía repasa: con algún
+    // partido de los últimos 60 días, o sin fecha (routes/notifications.js,
+    // avisosDePredicciones). A los demás no se les calcula nada.
+    db.prepare(`
+      SELECT COUNT(DISTINCT p.user_id)::int AS personas
+      FROM predictions p
+      JOIN matches m ON m.id = p.match_id
+      WHERE m.match_date IS NULL OR m.match_date::timestamptz > NOW() - INTERVAL '60 days'
+    `).get(),
+  ]);
+
+  res.json(armarCatalogo({
+    envios,
+    codigos: Object.fromEntries(codigos.map(({ tabla, ...fila }) => [tabla, fila])),
+    seguidores,
+    predicen: predicen?.personas ?? 0,
+    canales: { push: pushEncendido(), correo: emailAvailable() },
+  }));
 }));
 
 /* ===================== ESTADÍSTICAS ===================== */

@@ -18,6 +18,8 @@ backend/    Node 22 + Express, ESM. Postgres en Neon.
   src/middleware/       auth (JWT) · ownership (24 guardas, por permiso) · rateLimit
   src/utils/            Funciones PURAS — lo único que se puede probar sin Postgres
     orgRoles.js         Qué puede cada rol, por tipo de organización. Fuente única
+    catalogoDeAvisos.js Todo lo que la app avisa. Antes de crear un aviso, buscar aquí
+                        si ya existe; uno nuevo se agrega aquí o su prueba no pasa
   scripts/              Diagnóstico y limpieza de un solo uso
 frontend/   React 18 + Vite. Rutas en español, API en inglés.
   src/api/client.js     Única puerta al backend. Ningún componente hace fetch por su cuenta.

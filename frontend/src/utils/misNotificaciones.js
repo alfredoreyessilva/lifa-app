@@ -10,12 +10,72 @@ import { getMatchParts, jornadaLabel, MESES } from './matchDisplay.js';
 // Los de lo que sigues son cuatro: marcador final y cambio de fecha o sede
 // (de `match_events`, config/db.js) más los dos que el backend calcula con la
 // hora del partido (utils/bandeja.js). Los de tus predicciones, cuatro, van
-// abajo. Un tipo nuevo se agrega en los tres lados o en ninguno (regla 6).
+// abajo. Un tipo nuevo se agrega en los tres lados o en ninguno (regla 6), y
+// en el catálogo del backend (utils/catalogoDeAvisos.js): su prueba revisa
+// que cada aviso de la bandeja tenga aquí su TYPE_META.
 
 // La pantalla de notificaciones lo dispara en cuanto marca la bandeja como
 // vista, para que el balón de la barra de arriba se ponga en cero sin volver a
 // preguntar.
 export const EVENTO_NOTIFICACIONES_VISTAS = 'cfbamx:notificaciones-vistas';
+
+// Ícono, etiqueta, color y texto del botón de cada tipo. Los usan la bandeja y
+// el catálogo del Panel Admin, que enseña cada aviso como lo ve quien lo
+// recibe. `tone` es la franja y la insignia de la tarjeta: oro, rojo, cal, gris.
+export const TYPE_META = {
+  league_approved:   { icon: '🎉', label: 'Liga aprobada', tone: 'oro' },
+  league_unapproved: { icon: '⚠️', label: 'Publicación', tone: 'gris' },
+  // Rechazo de la SOLICITUD de publicación (admin.js, decline-publish). No es
+  // lo mismo que league_unapproved, que es ocultar una liga que ya era pública.
+  league_publish_declined: { icon: '📝', label: 'Solicitud rechazada', tone: 'rojo' },
+  league_verified:   { icon: '⭐', label: 'Verificada', tone: 'cal' },
+  league_unverified: { icon: '⚠️', label: 'Verificación retirada', tone: 'gris' },
+  team_claimed:      { icon: '🤝', label: 'Equipo reclamado', tone: 'oro' },
+  org_admin_claimed: { icon: '👋', label: 'Nuevo miembro', tone: 'oro' },
+  broadcast_added:   { icon: '🎥', label: 'Transmisión', tone: 'rojo' },
+  score_reminder:    { icon: '⏳', label: 'Marcador pendiente', tone: 'gris', cta: 'Ir al partido →' },
+  match_not_started: { icon: '📅', label: 'Partido sin actualizar', tone: 'gris', cta: 'Ir al partido →' },
+  billing_charge_new:       { icon: '🧾', label: 'Nuevo cargo',     tone: 'oro',     cta: 'Ver estado de cuenta →' },
+  billing_due_soon:         { icon: '⏰', label: 'Cargo por vencer', tone: 'gris', cta: 'Ver estado de cuenta →' },
+  billing_overdue:          { icon: '🔴', label: 'Cargo vencido',    tone: 'rojo',    cta: 'Ver estado de cuenta →' },
+  billing_payment_recorded: { icon: '✅', label: 'Pago registrado',  tone: 'cal',   cta: 'Ver estado de cuenta →' },
+  // El equipo le reporta un pago a su liga (lo lee la LIGA), y el aviso de
+  // vuelta si se lo rechazan (lo lee el EQUIPO).
+  team_payment_reported:    { icon: '🧾', label: 'Pago por confirmar', tone: 'oro', cta: 'Ir a Cobranza →' },
+  billing_payment_rejected: { icon: '⚠️', label: 'Pago rechazado',     tone: 'rojo', cta: 'Ver estado de cuenta →' },
+  // Cuotas del club a sus jugadores (routes/playerBilling.js). Los dos de
+  // vencimiento llegan agregados, uno por equipo y no uno por jugador —
+  // ver utils/billingReminders.js.
+  player_payment_reported:  { icon: '🧾', label: 'Pago por confirmar', tone: 'oro',     cta: 'Ir a Finanzas →' },
+  player_billing_due_soon:  { icon: '⏰', label: 'Cuotas por vencer',  tone: 'gris', cta: 'Ir a Finanzas →' },
+  player_billing_overdue:   { icon: '🔴', label: 'Cuotas vencidas',    tone: 'rojo',    cta: 'Ir a Finanzas →' },
+  // Lo que sigues.
+  upcoming:        { icon: '⏰', label: 'Próximo',        tone: 'oro',     cta: 'Ver partido →' },
+  live:            { icon: '🔴', label: 'En vivo',        tone: 'rojo',     cta: 'Ver partido →' },
+  final_score:     { icon: '🏆', label: 'Marcador final', tone: 'cal',    cta: 'Ver partido →' },
+  schedule_change: { icon: '📅', label: 'Cambio',         tone: 'gris', cta: 'Ver partido →' },
+  // Tus predicciones (utils/bandeja.js › avisosDePrediccion). El del resultado
+  // cambia de ícono según acertaste, así que su texto lo trae.
+  prediction_result:   { icon: '🎯', label: 'Tu predicción', tone: 'cal',   cta: 'Ver partido →' },
+  prediction_round:    { icon: '🏅', label: 'Ranking',       tone: 'oro',    cta: 'Ver ranking →' },
+  prediction_reminder: { icon: '🗳️', label: 'Por votar',     tone: 'oro',    cta: 'Votar →' },
+  // La liga agregó partidos a un calendario donde votas (README, "Partidos
+  // nuevos para predecir").
+  prediction_new_matches: { icon: '📣', label: 'Partidos nuevos', tone: 'oro', cta: 'Votar →' },
+};
+
+// Un tipo sin TYPE_META sale así en la bandeja. La prueba del catálogo cuida
+// que no pase.
+export const SIN_META = { icon: '📢', label: 'Aviso', tone: 'gris' };
+
+// El texto de un aviso como lo enseña la bandeja: los de organización traen el
+// suyo guardado; los de lo que sigues y los de tus predicciones se arman al
+// leer, con los datos de hoy.
+export function textoDeAviso(item) {
+  if (item?.origin === 'follow') return textoDeSeguimiento(item);
+  if (item?.origin === 'prediction') return textoDePrediccion(item);
+  return { title: item?.title ?? '', body: item?.body ?? '' };
+}
 
 // Lo que enseña el balón de la barra de arriba.
 export function etiquetaDelContador(n) {
@@ -69,8 +129,8 @@ export function textoDeSeguimiento(aviso) {
 // ── Los avisos de tus predicciones ────────────────────────────────────────
 //
 // README, "Los avisos de tus predicciones". El backend los calcula al leer y
-// manda solo los datos (utils/bandeja.js); aquí se dicen. Cuatro tipos, que se
-// repiten en pages/Notifications.jsx (regla 6).
+// manda solo los datos (utils/bandeja.js); aquí se dicen. Cuatro tipos, con su
+// TYPE_META arriba (regla 6).
 
 // La jornada del aviso: su etiqueta ("Jornada 4", "SEMIFINAL"), o el día de
 // los partidos cuando la liga no puso jornada.

@@ -4,13 +4,14 @@ import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { formatNumber, leagueHasRequest } from '../utils/adminPanel.js';
 import {
-  IconClock, IconLeague, IconOrganization, IconOverview, IconSponsor, IconUsers,
+  IconBell, IconClock, IconLeague, IconOrganization, IconOverview, IconSponsor, IconUsers,
 } from '../components/admin/AdminIcons.jsx';
 import AdminOverviewSection from '../components/admin/AdminOverviewSection.jsx';
 import AdminLeaguesSection from '../components/admin/AdminLeaguesSection.jsx';
 import AdminOrganizationsSection from '../components/admin/AdminOrganizationsSection.jsx';
 import AdminUsersSection from '../components/admin/AdminUsersSection.jsx';
 import AdminSponsorsSection from '../components/admin/AdminSponsorsSection.jsx';
+import AdminNotificationsSection from '../components/admin/AdminNotificationsSection.jsx';
 import AdminCronSection, { CRON_STATES } from '../components/admin/AdminCronSection.jsx';
 import '../components/admin/admin.css';
 
@@ -23,12 +24,14 @@ const SECTIONS = [
   { key: 'organizaciones', label: 'Organizaciones', icon: IconOrganization },
   { key: 'usuarios',       label: 'Usuarios',       icon: IconUsers },
   { key: 'patrocinadores', label: 'Patrocinadores', icon: IconSponsor },
+  { key: 'notificaciones', label: 'Notificaciones', icon: IconBell },
   { key: 'cron',           label: 'Cron',           icon: IconClock },
 ];
 
 const SOURCES = {
   stats:         (token) => api.adminGetStats(token),
   cron:          (token) => api.adminGetCron(token),
+  notifications: (token) => api.adminGetNotifications(token),
   sponsors:      () => api.getSponsors(),
   leagues:       (token) => api.adminGetLeagues(token),
   organizations: (token) => api.adminGetOrganizations(token),
@@ -109,6 +112,9 @@ export default function AdminPanel() {
             reload={() => Promise.all([reload('sponsors'), reload('stats')])}
             token={token}
           />
+        )}
+        {section === 'notificaciones' && (
+          <AdminNotificationsSection catalog={data.notifications} error={errors.notifications} />
         )}
         {section === 'cron' && (
           <AdminCronSection cron={data.cron} error={errors.cron} reload={() => reload('cron')} />

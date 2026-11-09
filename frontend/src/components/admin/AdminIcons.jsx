@@ -58,6 +58,12 @@ export const IconClock = () => (
     <path d="M12 7v5.2l3.2 1.8" />
   </Icon>
 );
+export const IconBell = () => (
+  <Icon>
+    <path d="M6 16.5v-5a6 6 0 0 1 12 0v5l1.5 2h-15z" />
+    <path d="M10 20.5a2.2 2.2 0 0 0 4 0" />
+  </Icon>
+);
 export const IconSearch = () => (
   <Icon size={16}>
     <circle cx="11" cy="11" r="6.5" />

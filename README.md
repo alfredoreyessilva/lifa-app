@@ -197,6 +197,12 @@ compartieron nada: ningún aviso salía por los dos.
 | Depende del cron | No | Sí, para "próximo" y "en vivo" |
 | Hoy | Encendida | **En pausa** (ver abajo) |
 
+**La lista de todos los avisos** —qué dice cada uno, cuándo sale, a quién le llega y cuántos
+han salido— está en Panel Admin → Notificaciones, y sale de `utils/catalogoDeAvisos.js` (ver
+"Notificaciones: todo lo que la app avisa", en "Panel Admin"). Antes de crear un aviso se
+busca ahí si ya hay uno que lo diga; uno nuevo se agrega a ese catálogo en el mismo commit, o
+su prueba no pasa.
+
 Antes de este cambio cada organización tenía **su propia bandeja**, a la que se
 entraba tocando su logo en una cuadrícula, y el aficionado no tenía ninguna: la
 opción "En mi bandeja de CFBAMX" del botón de avisos solo guardaba el partido en
@@ -6451,7 +6457,8 @@ bot.
 ## Panel Admin
 
 `/admin` es desde donde se opera la plataforma: qué ligas publicar, qué organizaciones
-verificar, quién entró, cómo van los patrocinadores y si el cron sigue vivo. **Rehecho el
+verificar, quién entró, cómo van los patrocinadores, qué le avisa la app a la gente y si el
+cron sigue vivo. **Rehecho el
 2026-11-06**, cuando Alfredo pidió que se viera como un panel profesional. Lo que había
 funcionaba, pero eran seis pestañas dentro de la tarjeta negra, tarjetas verdes con emojis,
 listas de cientos de filas sin buscador y cuatro o cinco botones repetidos en cada renglón.
@@ -6474,6 +6481,7 @@ que moverse entre ellas no obligue a volver a aprender dónde está cada cosa:
 | Organizaciones | Registradas, sin verificar y una celda por tipo con filas | Tabla |
 | Usuarios | Registrados, nuevos este mes, dueños de liga, administradores | Tabla |
 | Patrocinadores | Lugares ocupados, impresiones, clics, CTR | Los cuatro lugares de la barra lateral |
+| Notificaciones | Avisos que existen, y a quién le llegan: al aficionado, a la liga, al equipo, por correo | El catálogo, por tema (ver abajo) |
 | Cron | Estado, última llamada, cadencia, llamadas hoy, cobranza de hoy | Los últimos 14 días |
 
 El alcance de cada patrocinador estaba en Estadísticas, lejos del logo al que se refiere.
@@ -6481,7 +6489,7 @@ Ahora vive adentro de su lugar, y el Resumen ya no lo repite.
 
 ### Las celdas del marcador son los filtros
 
-En Ligas, Organizaciones y Usuarios cada celda filtra la tabla. El número de "Públicas" y un
+En Ligas, Organizaciones, Usuarios y Notificaciones cada celda filtra la tabla. El número de "Públicas" y un
 filtro "Públicas" serían dos renglones diciendo lo mismo: es un solo control. El filtro vive
 en la dirección (`?filtro=`), así que recargar no te saca de donde estabas y "Revisar", en
 el Resumen, llega ya filtrado.
@@ -6542,12 +6550,130 @@ anterior, para que la tabla no parpadee.
 
 ### Lo que no se ve
 
-Las reglas puras están en `utils/adminPanel.js`, con sus pruebas. Cada sección es un archivo
-en `components/admin/`, y su CSS (`admin.css`) se carga con el panel: quien entra a ver un
-calendario no lo descarga. `styles.css` bajó 274 líneas en vez de crecer.
+Las reglas puras están en `utils/adminPanel.js`, con sus pruebas; las de Notificaciones, en
+`utils/adminNotifications.js`. Cada sección es un archivo en `components/admin/`, y su CSS
+(`admin.css`) se carga con el panel: quien entra a ver un calendario no lo descarga.
+`styles.css` bajó 274 líneas en vez de crecer.
+
+### Notificaciones: todo lo que la app avisa
+
+Pedida por Alfredo el 2026-11-09: *"una sección para que yo vea todos los tipos de
+notificaciones que existen, no es para que me lleguen notificaciones sino para ver qué
+notificaciones tiene el programa … así evito repetir o crear notificaciones redundantes"*. No
+es una bandeja: es el **catálogo** de lo que la app le avisa a alguien —qué dice cada aviso,
+cuándo sale, a quién le llega y cuántos han salido—, para que antes de crear uno se vea si ya
+hay otro que lo diga.
+
+Al 2026-11-09 son **29**: 19 que se guardan como fila en `notifications` (los que le llegan a
+una liga o a un equipo), 8 que se calculan al abrir la bandeja (los de lo que sigues y los de
+tus predicciones; cuatro tienen además su versión de push, en pausa) y 2 correos con un
+código.
+
+**La forma es la de las demás secciones.** El marcador cuenta avisos —no envíos— y filtra por
+a quién le llegan: al aficionado, a la liga, al equipo o por correo. El de un miembro nuevo le
+llega a la liga o al equipo y cuenta en las dos celdas, así que suman más que "Todos". Abajo,
+una tabla agrupada por tema —los partidos que sigues, predicciones, marcadores por capturar,
+cobranza, cuotas del club, la liga en CFBAMX, quién entra y quién transmite, los correos—, con
+una línea que dice a quién le llegan los de ese tema. Cada renglón trae el nombre y el ícono
+del aviso como salen en la bandeja, su título de muestra, cuándo sale, a quién le llega y
+quién de adentro lo ve, y cuántos salieron en los últimos 30 días. La búsqueda mira el nombre,
+el texto, cuándo sale y las reglas: "pago" encuentra también "Cargo vencido", que dice
+"regulariza tu pago" sin decirlo en el nombre.
+
+**"Ver" enseña el aviso como le llega a quien lo recibe**: con la misma tarjeta de "Mis
+notificaciones" y datos de muestra, y el correo como lo manda `utils/email.js`. Para eso la
+tarjeta salió de la página de la bandeja a `components/NotificationCard.jsx`; con la bandeja
+de antes y la de ahora pintando los mismos 14 avisos de todos los tipos y estados, el HTML
+sale idéntico. Debajo va lo que hay que saber antes de crear otro aviso parecido: las reglas
+que ya evitan que se repita ("si también predijo el partido, no sale: lo dice «Tu
+predicción»"), los otros textos del mismo tipo, su versión de push, y su tipo y su archivo.
+Es lo único que hace un renglón: no hay menú `⋯`, porque en el catálogo no hay nada que
+decidir.
+
+**No hay columna de canal.** 27 de los 29 salen solo por la bandeja: la columna repetía
+"Bandeja" en cada renglón y le quitaba ancho al nombre, que a 1280 px salía cortado. Debajo
+del nombre se dice solo el canal que no es la bandeja, con su estado en ese servidor: "Push en
+pausa", en gris, porque se apagó a propósito, o "Correo apagado", en rojo, porque es un hueco
+(PD-38). El nombre baja de renglón antes que cortarse. Y una columna que se esconde con
+`display: none` en esta tabla no libera su lugar: los renglones de tema ocupan todas
+(`colSpan`), y la escondida se quedaba con su ancho.
+
+#### De dónde sale cada cosa
+
+Lo que se escribe a mano es lo que el código no puede decir solo: el tema, cuándo sale dicho
+en palabras, las reglas contra repetidos y una muestra. Lo demás se lee de donde ya vive, para
+que la pantalla no pueda decir otra cosa que la app:
+
+| Lo que enseña | De dónde sale |
+|-|-|
+| La lista, cuándo sale, las reglas, las muestras | `utils/catalogoDeAvisos.js` (backend), por `GET /api/admin/notifications` |
+| Nombre, ícono y botón de cada aviso | `TYPE_META`, el de la bandeja; se movió a `utils/misNotificaciones.js` para compartirlo |
+| El texto de un aviso calculado | Las funciones de la bandeja (`textoDeSeguimiento`, `textoDePrediccion`), con los datos de muestra |
+| Quién lo ve dentro de una liga o un equipo | `PERMISO_POR_AVISO` y `utils/orgRoles.js`: el mismo cálculo de la bandeja |
+| Cuántos salieron | `notifications`, al abrir el panel. Un correo, por sus códigos (`email_verification_codes`, `password_reset_codes`): cada código es un correo |
+| A cuántos les puede llegar uno calculado | Quien sigue algo con esa casilla marcada; quien votó en un calendario con partidos de los últimos 60 días, que son los que repasa la bandeja |
+| Si el push y el correo están encendidos | Los interruptores del backend: `PUSH_NOTIFICATIONS` y `emailAvailable()` |
+
+**Un aviso calculado no se cuenta, porque no se guarda.** "Próximo" o "Acertaste" no son
+filas: se arman cada vez que alguien abre su bandeja. Su renglón dice "Al leer" y a cuántas
+personas les puede llegar hoy.
+
+**Un tipo guardado que el catálogo no conoce sale arriba, en amarillo**, con cuántos hay. Es la
+red de los datos: si un aviso se manda sin pasar por el catálogo, o uno viejo dejó filas,
+aparece ahí. En `desarrollo-local`, al construirlo, no había ninguno: los 14 tipos guardados
+que tiene la base están en el catálogo.
+
+#### La prueba que lo mantiene al día
+
+Un catálogo escrito a mano se queda viejo en silencio, y una lista a la que le falta un aviso
+es peor que no tenerla, porque se usa para decidir que no existe.
+`tests/unit/catalogoDeAvisos.test.mjs` (backend) lee el código, como la de los signos de
+interrogación, y corre en el CI:
+
+- **Cada tipo que el backend escribe en `notifications` está en el catálogo, y cada tipo
+  guardado del catálogo se escribe en algún lado.** El tipo se busca en la columna `type` de
+  cada `INSERT INTO notifications`, en el argumento del `.run()` que le toca, o en cada llamada
+  a la función que lo envuelve (`notifyTeam(…, 'billing_overdue', …)`). Un tipo que llegue en
+  una variable hace fallar la prueba: no se podría comprobar.
+- Los calculados son exactamente los que arma `utils/bandeja.js`, y los correos, las funciones
+  `send…Email` de `utils/email.js`.
+- Los guardados son exactamente los de `PERMISO_POR_AVISO`, y cada aviso de la bandeja tiene su
+  `TYPE_META`. Antes nada pedía lo segundo: uno sin él salía en la bandeja como "📢 Aviso".
+- **Los textos siguen en su archivo.** Cada entrada dice en qué archivo vive y qué pedazos de su
+  texto —y de su cadencia: "cada 3 días, hasta 4 veces"— tienen que aparecer ahí. Si alguien
+  cambia "Cargo vencido 🔴" en el código, la prueba pide cambiarlo también en el catálogo.
+
+Lleva control: cambiar el tipo de una entrada la hace fallar con el archivo y la línea donde se
+escribe (`broadcasts.js:215`), y cambiar un texto, con el pedazo que ya no está. Del lado del
+frontend, `tests/unit/adminNotifications.test.mjs` arma el catálogo real del backend —es puro y
+vive en el mismo repositorio— y comprueba que los 29 se lean completos con las funciones de la
+bandeja, sin un "undefined": si el backend cambia el nombre de un dato de muestra, sale ahí.
+
+Por eso **un aviso nuevo se agrega al catálogo en el mismo commit**, o el CI no pasa.
+
+#### Lo que no entra
+
+- **Los mensajes que la app deja escritos para WhatsApp**: el recordatorio de una cuota al
+  tutor, la invitación con su link, "Pedir por WhatsApp" a una tienda. Los manda una persona
+  desde su teléfono, no la app.
+- **Las respuestas del bot de WhatsApp de una tienda.** Contestan a quien escribió; no avisan
+  de nada.
+
+#### Lo que dejó a la vista
+
+- **Cancelar un cargo llega con la etiqueta "Pago registrado"**: el mismo tipo sirve para
+  registrar un pago, cancelar un cargo y confirmar un pago reportado (PD-47).
+- **El push de "Marcador final" sale con el primer marcador completo**, aunque sea el parcial
+  del primer cuarto: lo que la bandeja corrigió el 2026-09-27 con `gradable_at`. Se sumó a la
+  lista de PD-02, para cuando el push se encienda.
+- **A un medio o una tienda no le llega nada**: ni que la publicaron o verificaron, ni quién
+  aceptó una invitación a su equipo de trabajo. La bandeja solo recibe avisos de ligas y
+  equipos; ya estaba en "Siguiente alcance" de `docs/PENDIENTES.md`.
 
 ### Fuera de esta versión
 
+- **Contar los avisos calculados.** No se guardan: contarlos sería armar la bandeja de cada
+  persona. Si algún día hace falta, se guarda el conteo al abrir la bandeja, no el aviso.
 - **Ordenar una tabla por columna.** Hoy conserva el orden del backend, con lo pendiente
   arriba, y la búsqueda alcanza para encontrar una fila.
 - **Elegir el rango de las gráficas.** Sería un filtro de una fila arriba del tablero, y el
