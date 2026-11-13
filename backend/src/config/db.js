@@ -2516,6 +2516,75 @@ export async function initSchema() {
     await run(`ALTER TABLE match_events DROP CONSTRAINT IF EXISTS match_events_type_check`);
     await run(`ALTER TABLE match_events ADD CONSTRAINT match_events_type_check CHECK (type IN ('final_score', 'schedule_change', 'finished', 'published'))`);
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Premios por acertar (README, "Premios por acertar", 2026-11-11, lo pidió
+    // Alfredo). Una tienda publicada y verificada le pone a un partido un
+    // descuento en un producto suyo, y quien acierta ese partido lo cobra en la
+    // tienda con un código. Lo lee y lo escribe routes/prizes.js.
+    //
+    // No hay una fila por ganador: quién ganó se calcula al leer, con la misma
+    // pregunta que reparte los puntos (regla 4), y el código se recalcula con
+    // `code_secret`, que nunca sale del backend. Lo que sí se guarda:
+    //   - el premio, con una COPIA del producto, porque un producto se borra de
+    //     verdad y su precio se edita, y una promesa se guarda como se hizo;
+    //   - el canje, porque lo que la tienda ya entregó es un hecho que una
+    //     corrección de marcador no deshace.
+    //
+    // Retirar no borra (`withdrawn_at`), y el índice único es parcial para que
+    // una tienda pueda retirar su premio y poner otro en el mismo partido. Los
+    // rangos de los dos CHECK son los de utils/premios.js y los del formulario
+    // del panel (regla 6).
+    await run(`
+      CREATE TABLE IF NOT EXISTS prediction_prizes (
+        id                   SERIAL PRIMARY KEY,
+        match_id             INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+        organization_id      INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        product_id           INTEGER REFERENCES products(id) ON DELETE SET NULL,
+        product_name         TEXT NOT NULL,
+        product_price        NUMERIC,
+        product_currency     TEXT NOT NULL DEFAULT 'MXN',
+        product_image_url    TEXT,
+        discount_percent     INTEGER NOT NULL CHECK (discount_percent BETWEEN 5 AND 100),
+        valid_days           INTEGER NOT NULL CHECK (valid_days BETWEEN 1 AND 365),
+        code_secret          TEXT NOT NULL,
+        created_by_user_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        withdrawn_at         TIMESTAMPTZ,
+        withdrawn_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+    await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_prediction_prizes_vigente ON prediction_prizes (match_id, organization_id) WHERE withdrawn_at IS NULL`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_prediction_prizes_org ON prediction_prizes (organization_id)`);
+    await run(`
+      CREATE TABLE IF NOT EXISTS prediction_prize_redemptions (
+        id                  SERIAL PRIMARY KEY,
+        prize_id            INTEGER NOT NULL REFERENCES prediction_prizes(id) ON DELETE CASCADE,
+        user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        redeemed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        redeemed_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (prize_id, user_id)
+      )
+    `);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Los interruptores de la plataforma (README, "Premios por acertar" → "El
+    // interruptor", 2026-11-12, lo pidió Alfredo): se prenden y se apagan con un
+    // botón del Panel Admin, no con una variable de Render. Cada vez que alguien
+    // lo mueve se agrega una fila —quién y cuándo— y el estado es la última: nada
+    // se edita y queda el historial. Sin ninguna fila, apagado. Hoy hay uno solo,
+    // el de los premios; uno nuevo se agrega al CHECK con DROP + ADD, como el de
+    // `match_events`. Lo lee y lo escribe utils/interruptores.js.
+    await run(`
+      CREATE TABLE IF NOT EXISTS platform_switches (
+        id                 SERIAL PRIMARY KEY,
+        switch_key         TEXT NOT NULL CHECK (switch_key IN ('prediction_prizes')),
+        enabled            BOOLEAN NOT NULL,
+        changed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        changed_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_platform_switches_key ON platform_switches (switch_key, id DESC)`);
+
     await client.query('COMMIT');
   } catch (err) {
     // El ROLLBACK suelta el candado por sí solo (es de transacción). Se

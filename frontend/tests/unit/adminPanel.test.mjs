@@ -8,7 +8,8 @@ import assert from 'node:assert/strict';
 import {
   ORGANIZATION_FILTERS, LEAGUE_FILTERS, attentionItems, clickRate, countFilters, fillDays, formatNumber,
   isHandedOverTeam, isNewThisMonth, leagueHasRequest, matchesSearch, niceScale, normalize, paginate,
-  planStatus, pluralize, sortLeagues, sponsorTotals, toNumber, topRows, userFilters,
+  planStatus, pluralize, prizesSwitch, sortLeagues, sponsorTotals, switchChangedBy, toNumber, topRows,
+  userFilters,
 } from '../../src/utils/adminPanel.js';
 
 test('un conteo que llega como texto se lee como número', () => {
@@ -194,4 +195,42 @@ test('un día fuera de la ventana no se suma a los 30', () => {
 test('el ranking se recorta hasta que lo abren', () => {
   assert.deepEqual(topRows([1, 2, 3], 2, false), [1, 2]);
   assert.deepEqual(topRows([1, 2, 3], 2, true), [1, 2, 3]);
+});
+
+// La forma de GET /admin/switches: { switches: { prediction_prizes: { label,
+// enabled, history } }, prizes: { active, stores } }.
+test('los premios fallan cerrado: solo un true exacto los prende', () => {
+  assert.equal(prizesSwitch(undefined).enabled, false);
+  assert.equal(prizesSwitch({ switches: {} }).enabled, false);
+  assert.equal(prizesSwitch({ switches: { prediction_prizes: { enabled: 'true' } } }).enabled, false);
+  assert.equal(prizesSwitch({ switches: { prediction_prizes: { enabled: true, history: [] } } }).enabled, true);
+});
+
+test('el interruptor dice desde cuándo, lo último primero, y cuenta aunque llegue como texto', () => {
+  const premios = prizesSwitch({
+    switches: {
+      prediction_prizes: {
+        enabled: true,
+        history: [
+          { enabled: true, changed_at: '2026-11-13T22:00:00.000Z', changed_by_name: 'ALFREDO' },
+          { enabled: false, changed_at: '2026-11-12T10:00:00.000Z', changed_by_name: null },
+        ],
+      },
+    },
+    prizes: { active: '3', stores: 2 },
+  });
+  assert.equal(premios.since, '2026-11-13T22:00:00.000Z');
+  assert.equal(premios.active, 3);
+  assert.equal(premios.stores, 2);
+  assert.equal(switchChangedBy(premios.history[0]), 'ALFREDO');
+  assert.equal(switchChangedBy(premios.history[1]), 'Una cuenta que ya no existe');
+});
+
+test('sin historial nadie lo ha movido: apagado, sin fecha y sin cifras inventadas', () => {
+  const premios = prizesSwitch({ switches: { prediction_prizes: { enabled: false, history: [] } } });
+  assert.equal(premios.enabled, false);
+  assert.equal(premios.since, null);
+  assert.deepEqual(premios.history, []);
+  assert.equal(premios.active, 0);
+  assert.equal(premios.stores, 0);
 });

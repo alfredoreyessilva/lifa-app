@@ -807,6 +807,85 @@ button.league-card {
 }
 .nt-card-cta:hover { background: var(--flag-deep); transform: translateX(2px); }
 
+/* El premio dentro del aviso del resultado (README, "Premios por acertar"). El
+   oro tenue mientras vale; usado o vencido, se apaga a la placa de siempre. El
+   código va en monoespaciada, porque es lo que se dicta en el mostrador. */
+.nt-prizes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.nt-prizes ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.nt-prize {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--flag) 45%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--flag) 9%, var(--mp-noche));
+}
+.nt-prize.is-redeemed,
+.nt-prize.is-expired {
+  border-color: var(--mp-linea);
+  background: var(--mp-noche);
+}
+.nt-prize-photo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--sf-tile);
+  font-size: 24px;
+}
+.nt-prize-photo img { width: 100%; height: 100%; object-fit: contain; }
+.nt-prize-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nt-prize-text strong {
+  font-family: var(--font-eyebrow);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--mp-cal);
+  overflow-wrap: anywhere;
+}
+.nt-prize-meta { font-size: 13px; color: var(--mp-gris); }
+.nt-prize-code {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 3px 9px;
+  border: 1px dashed color-mix(in srgb, var(--flag) 65%, transparent);
+  border-radius: 6px;
+  background: var(--mp-noche);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  color: var(--mp-cal);
+}
+.nt-prize-link {
+  align-self: flex-start;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mp-cal);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .nt-skeleton {
   height: 104px;
   border-radius: 14px;
@@ -881,8 +960,66 @@ button.league-card {
   .nt-card-main { display: contents; }
   .nt-card-icon { width: 34px; height: 34px; font-size: 17px; }
   .nt-card-top { grid-column: 2; }
-  .nt-card-title, .nt-card-body, .nt-card-foot { grid-column: 1 / -1; }
+  .nt-card-title, .nt-card-body, .nt-card-foot, .nt-prizes, .pz-price, .pz-code { grid-column: 1 / -1; }
   .nt-card-title { margin-top: 4px; font-size: 17px; }
+}
+
+/* ---------- Mis premios ----------
+   La pantalla de Mis notificaciones con los premios adentro (README, "Premios
+   por acertar"): la misma placa, una tarjeta por premio y, en lugar del ícono,
+   la foto del producto entera sobre el gris de la vitrina. El código va grande
+   y en monoespaciada: es lo que se enseña en el mostrador. */
+.pz-photo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--sf-tile);
+  font-size: 30px;
+}
+.pz-photo img { width: 100%; height: 100%; object-fit: contain; }
+.pz-card.is-redeemed .pz-photo,
+.pz-card.is-expired .pz-photo { opacity: 0.6; }
+.pz-price { margin: 0; font-size: 14px; color: var(--mp-cal); }
+.pz-price s { color: var(--mp-gris); }
+.pz-price small { color: var(--mp-gris); }
+.pz-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 6px 0 2px;
+}
+.pz-code span {
+  font-family: var(--font-eyebrow);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mp-gris);
+}
+.pz-code code {
+  padding: 6px 12px;
+  border: 2px dashed color-mix(in srgb, var(--flag) 70%, transparent);
+  border-radius: 8px;
+  background: var(--mp-noche);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: clamp(18px, 5vw, 24px);
+  letter-spacing: 0.08em;
+  color: var(--mp-cal);
+}
+.pz-links {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+/* En el teléfono la foto sube al renglón de la etiqueta, como el ícono de un
+   aviso (arriba), y se encoge a su tamaño. */
+@media (max-width: 560px) {
+  .pz-photo { width: 40px; height: 40px; font-size: 20px; border-radius: 8px; }
 }
 
 /* El numerito del balón de la barra de arriba. */
@@ -6466,6 +6603,137 @@ body.is-storefront .footer-links a:hover { color: var(--sf-ink); }
   line-height: 1.2;
   text-align: center;
   color: var(--mp-gris);
+}
+
+/* El premio de una tienda para quien acierte (README, "Premios por acertar").
+   Va con la paleta fija de la página, como todo lo que no es de un equipo: la
+   tienda pone su logo y la foto de su producto, no sus colores. El amarillo se
+   queda en el moño y en el filo, que dicen "premio"; el botón amarillo de la
+   página sigue siendo uno solo. La foto, entera sobre el gris de la vitrina. */
+.mp-prizes-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mp-prizes-title .mp-icon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  color: var(--flag);
+}
+.mp-prize-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mp-prize {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px 14px 14px;
+  border: 1px solid var(--mp-linea);
+  border-left: 4px solid var(--flag);
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--mp-noche-3), var(--mp-noche-2));
+}
+.mp-prize-photo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--sf-tile);
+  color: var(--sf-ink-dim);
+}
+.mp-prize-photo img { width: 100%; height: 100%; object-fit: contain; }
+.mp-prize-photo .mp-icon { width: 34px; height: 34px; }
+.mp-prize-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mp-prize-body p { margin: 0; }
+.mp-prize-what {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+}
+.mp-prize-figure {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1;
+  color: var(--mp-cal);
+}
+.mp-prize-product {
+  min-width: 0;
+  font-family: var(--font-eyebrow);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--mp-cal);
+  overflow-wrap: anywhere;
+}
+.mp-prize-en {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--mp-gris);
+}
+.mp-prize-price { font-size: 14px; color: var(--mp-cal); }
+.mp-prize-price s { margin-right: 2px; color: var(--mp-gris); }
+.mp-prize-price small { color: var(--mp-gris); }
+.mp-prize-valid { font-size: 13px; color: var(--mp-gris); }
+/* El logo se queda a la izquierda y lo demás se acomoda a su lado: en el
+   teléfono, el nombre largo de una tienda baja de renglón sin dejar al logo
+   solo arriba ni a "Ver tienda" suelto abajo. */
+.mp-prize-store {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--mp-cal);
+  text-decoration: none;
+}
+.mp-prize-store-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  min-width: 0;
+}
+.mp-prize-store-logo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #fff;
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: var(--sf-ink);
+}
+.mp-prize-store-logo img { width: 100%; height: 100%; object-fit: contain; }
+.mp-prize-store-name { font-weight: 600; overflow-wrap: anywhere; }
+.mp-prize-check { font-weight: 700; color: var(--flag); }
+.mp-prize-store-cta { font-size: 13px; color: var(--mp-gris); }
+.mp-prize-store:hover .mp-prize-store-name,
+.mp-prize-store:focus-visible .mp-prize-store-name { text-decoration: underline; }
+@media (max-width: 560px) {
+  .mp-prize { align-items: flex-start; gap: 12px; padding: 12px; }
+  .mp-prize-photo { width: 64px; height: 64px; }
+  .mp-prize-figure { font-size: 28px; }
 }
 
 /* La jornada */

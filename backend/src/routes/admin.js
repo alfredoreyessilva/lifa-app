@@ -3,7 +3,8 @@ import db from '../config/db.js';
 import { authRequired } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { HOY_MX } from '../utils/sqlDates.js';
-import { TIPOS_PUBLICABLES } from '../utils/orgVisibility.js';
+import { TIPOS_PUBLICABLES, puedePremiarSql } from '../utils/orgVisibility.js';
+import { INTERRUPTORES, cambiarInterruptor, esInterruptor, historialDeInterruptor } from '../utils/interruptores.js';
 import { orgTieneMiembrosSql } from '../utils/orgMembers.js';
 import { armarCatalogo } from '../utils/catalogoDeAvisos.js';
 import { pushEncendido } from '../utils/pushNotifier.js';
@@ -18,6 +19,47 @@ function adminRequired(req, res, next) {
   }
   next();
 }
+
+/* ===================== INTERRUPTORES ===================== */
+
+// Lo que Alfredo prende y apaga desde el Panel Admin (utils/interruptores.js):
+// hoy, los premios por acertar (README, "Premios por acertar" → "El
+// interruptor"). Cada uno con su estado y quién lo movió y cuándo; el estado es
+// la primera fila del historial, leída de la base y no de la memoria de diez
+// segundos. Junto, lo que ayuda a decidir: cuántos premios hay puestos y cuántas
+// tiendas pueden ponerlos.
+router.get('/switches', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  const claves = Object.keys(INTERRUPTORES);
+  const [historiales, premios] = await Promise.all([
+    Promise.all(claves.map((clave) => historialDeInterruptor(clave))),
+    db.prepare(`
+      SELECT
+        (SELECT COUNT(*)::int FROM prediction_prizes WHERE withdrawn_at IS NULL) AS active,
+        (SELECT COUNT(*)::int FROM organizations o WHERE ${puedePremiarSql('o')}) AS stores
+    `).get(),
+  ]);
+  const switches = {};
+  claves.forEach((clave, i) => {
+    switches[clave] = {
+      label: INTERRUPTORES[clave],
+      enabled: historiales[i][0]?.enabled === true,
+      history: historiales[i],
+    };
+  });
+  res.json({ switches, prizes: premios });
+}));
+
+// Prender o apagar. Cuerpo: { enabled: true | false }. Solo deja fila si cambia.
+router.put('/switches/:key', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  const clave = req.params.key;
+  if (!esInterruptor(clave)) return res.status(404).json({ error: 'No existe ese interruptor' });
+  if (typeof req.body?.enabled !== 'boolean') {
+    return res.status(400).json({ error: 'Falta decir si se prende o se apaga' });
+  }
+  await cambiarInterruptor(clave, req.body.enabled, req.user.id);
+  const historial = await historialDeInterruptor(clave);
+  res.json({ key: clave, label: INTERRUPTORES[clave], enabled: historial[0]?.enabled === true, history: historial });
+}));
 
 /* ===================== SALUD DEL CRON ===================== */
 

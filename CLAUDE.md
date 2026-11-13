@@ -13,9 +13,9 @@ el README; lo histórico, en `docs/CHANGELOG.md`.
 
 ```
 backend/    Node 22 + Express, ESM. Postgres en Neon.
-  src/config/db.js      El esquema COMPLETO (47 tablas) + migraciones al arrancar
+  src/config/db.js      El esquema COMPLETO (51 tablas) + migraciones al arrancar
   src/routes/           Aquí vive todo el SQL — 20 archivos
-  src/middleware/       auth (JWT) · ownership (24 guardas, por permiso) · rateLimit
+  src/middleware/       auth (JWT) · ownership (26 guardas, por permiso) · rateLimit
   src/utils/            Funciones PURAS — lo único que se puede probar sin Postgres
     orgRoles.js         Qué puede cada rol, por tipo de organización. Fuente única
     catalogoDeAvisos.js Todo lo que la app avisa. Antes de crear un aviso, buscar aquí
@@ -30,7 +30,7 @@ frontend/public/sw.js   Service worker: push + que la app abra SIN SEÑAL.
 
 Dónde buscar antes de preguntar: **README** tiene una sección por dominio
 (El home · La página de un partido · El calendario · La página de una liga · Cobranza · Cuotas del club · Tabla de posiciones ·
-Predicciones y quinielas · Roster · Roster público y pase de lista ·
+Predicciones y quinielas · Premios por acertar · Roster · Roster público y pase de lista ·
 Estadísticas por jugada · Capturar sin señal · Equipos independientes · Playbook
 del equipo · Organizaciones: publicar y verificar · Transmisiones · Tiendas y bot
 de WhatsApp · Panel Admin · El panel de una liga · Mi panel · El panel de una
@@ -48,9 +48,10 @@ npm test                                      # en cualquiera de los dos: node -
 
 Las pruebas unitarias de los dos lados corren en el CI en cada push (el número
 al día está en `docs/ESTADO.md`, no aquí, para que no se desfase).
-Las **siete** suites de punta a punta —las dos de cobranza, la de invitaciones
+Las **ocho** suites de punta a punta —las dos de cobranza, la de invitaciones
 y roles, la de estadísticas por jugada, la de un equipo en varias ligas, la de
-predicciones y la de recuperar la contraseña— **no**: necesitan Postgres vivo.
+predicciones, la de premios y la de recuperar la contraseña— **no**: necesitan
+Postgres vivo.
 Instrucciones en `backend/tests/README.md`.
 
 ---
@@ -206,7 +207,11 @@ lo inventaba el mismo código que se estaba probando.
   ve de una organización (publicar, verificar, transmitir) →
   `invites-roles.e2e.mjs`, la tercera. Cambio de puntos, ranking o avisos de
   predicciones → `predicciones.e2e.mjs`, y comparar en solo lectura el ranking
-  de ONEFA antes y después: es el concurso en curso. Cambio de login, sesión o
+  de ONEFA antes y después: es el concurso en curso. Cambio de premios por
+  acertar → `premios.e2e.mjs` (prende el interruptor con su propia cuenta de
+  admin y lo deja como estaba) y
+  `predicciones.e2e.mjs`, porque el premio viaja en el aviso del resultado y
+  cierra con el candado del voto. Cambio de login, sesión o
   `middleware/auth.js` → `recuperar-contrasena.e2e.mjs` (backend con
   `EMAIL_TRANSPORT=log`) y las demás: `authRequired` está en todas las rutas
   con sesión.

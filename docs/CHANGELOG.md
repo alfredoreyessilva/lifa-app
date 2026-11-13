@@ -15,6 +15,80 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Premios por acertar: construido, y apagado hasta la revisión legal (2026-11-12); su
+  interruptor, un botón del Panel Admin (2026-11-13).** Lo
+  pidió Alfredo el 2026-11-11: que quien acierte un partido reciba un premio con su aviso del
+  resultado, y que una tienda verificada pueda ponerle a un partido un descuento en un producto
+  de su vitrina; el carrito y la pasarela quedan para la fase siguiente. Se definió primero en
+  el README ("Premios por acertar"), con cuatro decisiones suyas —el ganador cobra con un código
+  que la tienda revisa en su panel; el premio se anuncia en la página del partido; sin candado
+  contra varias cuentas por ahora; sale apagado— y las demás listadas en el plan para ajustar.
+  Hasta ese día los premios estaban en el "Fuera de esta versión" de las predicciones porque
+  "cambiaría el marco legal de la función": por eso todo vive detrás de un interruptor, y sale
+  apagado. Nació como la variable `PREDICTION_PRIZES` de Render y terminó como un botón (abajo).
+
+  Lo que hay: dos tablas (`prediction_prizes`, con la copia del producto prometido, y
+  `prediction_prize_redemptions`, el canje); el permiso `premios` de dueño y administrador de
+  una tienda, con su guarda (`storePrizesRequired`); `puedePremiar` (tienda publicada y
+  verificada, como un medio para transmitir); `utils/premios.js` (el código `CFB-<premio>-<6>`
+  con un HMAC por premio, leerlo como venga tecleado, la vigencia en días desde que terminó el
+  partido, los estados) y `routes/prizes.js`. Quién gana no se guarda: es la misma pregunta que
+  reparte los puntos, así que corregir un marcador mueve el premio, y lo ya cobrado se queda. El
+  premio va dentro del aviso del resultado (`data.prizes`), no es un aviso nuevo. En pantalla:
+  el bloque debajo de "¿Quién gana?" (`MatchPrizes.jsx`), el premio en la tarjeta del aviso,
+  "Mis premios" (`/premios`) con su celda en Mi panel, la sección Premios del panel de una tienda
+  (cobrar un código, la tabla y "Poner un premio" con su vista previa) y una segunda tarjeta en
+  el catálogo del Panel Admin. De paso, el candado del voto salió de `routes/predictions.js` a
+  `MATCH_VOTING_CLOSED_SQL` (`utils/scoring.js`), porque es el mismo que cierra un premio, y las
+  columnas de un partido del panel de un medio a `utils/partidoDelPanel.js`, porque la tienda
+  las pinta igual.
+
+  **El interruptor es un botón del Panel Admin (2026-11-13).** Al leer el resumen, Alfredo
+  entendió "interruptor" como un botón de su panel y lo pidió así; la sesión se cortó a la mitad
+  por el límite semanal y se terminó al día siguiente. La variable se fue: el estado vive en
+  `platform_switches` —una fila por cambio, con quién y cuándo, y el estado es la última; sin
+  filas, apagado— y solo lo leen y lo escriben `utils/interruptores.js` y dos rutas del Panel
+  Admin (`GET /admin/switches`, `PUT /admin/switches/:key`). La sección nueva **Panel Admin →
+  Premios** tiene el botón con su ventana de confirmar, el estado y desde cuándo, cuántos premios
+  hay puestos y cuántas tiendas pueden ponerlos, qué cambia en cada posición, quién lo movió y, en
+  amarillo mientras están apagados, lo que falta para prenderlos; la barra lateral lleva un punto
+  verde mientras están prendidos. Una prueba unitaria compara la clave en el esquema, en el backend
+  y en el panel, y falla si alguien vuelve a leer la variable.
+
+  Verificado contra `desarrollo-local`: 786 unitarias (30 nuevas del backend y 23 del
+  frontend); la suite nueva `premios.e2e.mjs`, 101 ok y 0 fallas (qué no se puede premiar,
+  poner, retirar y volver a poner, quién entra, el premio solo en el aviso de quien acertó, el
+  código que la tienda cobra una vez —también con dos cobros al mismo tiempo—, el marcador
+  corregido, el vencido, la tienda que pierde la verificación, y el botón: solo el admin lo mueve,
+  apagados no hay premios en ningún lado, prendidos vuelven sin haber borrado nada, y la suite lo
+  deja como lo encontró); `predicciones.e2e.mjs` 76/0 e `invites-roles.e2e.mjs` 322/0, iguales
+  que antes, corridas otra vez el 2026-11-13. En el navegador, con un escenario armado por
+  la API (cuentas `@example.com`) contra el backend del 4100: la página del partido abierta, con
+  dos premios y sin premio; el aviso con un premio vigente y uno usado; "Mis premios" en sus tres
+  tramos; la celda de Mi panel; la tienda cobrando el código de la aficionada (vale, ya se usó,
+  uno inventado), poniendo un premio y retirándolo, y uno en juego que ya no ofrece retirarse; y
+  el catálogo del Panel Admin. Todo en 1280 y 360 px sin desplazamiento de lado, y otra vez con
+  el interruptor apagado: sin sección, sin bloque, sin premios en el aviso y "Mis premios" que
+  dice que todavía no están disponibles. El botón, el 2026-11-13, contra el mismo backend:
+  prenderlos y apagarlos desde la sección, con la página del partido y la sección Premios de una
+  tienda —en otra sesión, con su dueña— apareciendo y desapareciendo; en 320, 360, 390, 768 y
+  1280 px; y simulados en el navegador, el panel sin historial, una cuenta borrada en el
+  historial, sin tiendas verificadas, el error al leerlo y el error al moverlo.
+
+  Al probarlo se arreglaron seis cosas antes de entregarlo: un código con un carácter de menos
+  se leía como el de otro premio (ahora los guiones dicen dónde acaba el número); en el teléfono,
+  la línea de la tienda en la página del partido se partía en tres renglones; el campo para
+  cobrar un código salía blanco sobre el panel negro; "Elige el partido" se quedaba en pantalla
+  con el partido ya elegido; en el teléfono, la ventana "Poner un premio" dejaba los equipos en
+  una letra; y el catálogo enseñaba la variante con premio como un renglón idéntico a la muestra
+  (ahora es una tarjeta). Al probar el botón, dos más: en "Qué cambia", la etiqueta de la caja de
+  ahora salía más tenue que la de la otra, y a 320 px dos etiquetas del marcador se cortaban.
+  `CLAUDE.md` decía 47 tablas y 24 guardas: ya iba atrasado, y con esto son 51 y 26.
+
+  Sin desplegar. Al desplegar sale apagado, porque `platform_switches` nace sin filas. Para
+  prenderlo falta lo de "Antes de prenderlo" en el README —la revisión legal y la sección de los
+  Términos— y después, el botón.
+
 - **Panel Admin → Notificaciones: el catálogo de todo lo que la app avisa (2026-11-09).** Lo
   pidió Alfredo para ver qué notificaciones tiene el programa, no para recibirlas, y así no
   crear avisos repetidos. Es una sección nueva del panel con los 29 avisos que existen: 19 que

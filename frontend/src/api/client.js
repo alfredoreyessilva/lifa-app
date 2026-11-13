@@ -421,6 +421,25 @@ export const api = {
   deleteProduct: (id, token) =>
     request(`/products/${id}`, { method: 'DELETE', token }),
 
+  // Premios por acertar (README, "Premios por acertar"). El interruptor es un
+  // botón del Panel Admin y vive en el backend: apagado, el partido y "Mis
+  // premios" llegan vacíos y las rutas de la tienda contestan 404.
+  getPrizesStatus: () => request('/prizes/status'),
+  getMatchPrizes: (matchId) => request(`/prizes/match/${matchId}`),
+  getMyPrizes: (token) => request('/prizes/mine', { token }),
+  getStorePrizes: (organizationId, token) =>
+    request(`/prizes/organization/${organizationId}`, { token }),
+  getStorePrizeMatches: (organizationId, token) =>
+    request(`/prizes/organization/${organizationId}/matches`, { token }),
+  createStorePrize: (organizationId, payload, token) =>
+    request(`/prizes/organization/${organizationId}`, { method: 'POST', body: payload, token }),
+  withdrawStorePrize: (organizationId, prizeId, token) =>
+    request(`/prizes/organization/${organizationId}/${prizeId}/withdraw`, { method: 'POST', token }),
+  checkPrizeCode: (organizationId, code, token) =>
+    request(`/prizes/organization/${organizationId}/redeem/check`, { method: 'POST', body: { code }, token }),
+  redeemPrizeCode: (organizationId, code, token) =>
+    request(`/prizes/organization/${organizationId}/redeem`, { method: 'POST', body: { code }, token }),
+
   // Pruebas de la nueva jerarquía (Rama -> Conferencia)
   createConference: (branchId, payload, token) =>
     request(`/manage/branches/${branchId}/conferences`, { method: 'POST', body: payload, token }),
@@ -598,6 +617,12 @@ export const api = {
 
   // Admin — el catálogo de todo lo que la app avisa, con cuántos salieron
   adminGetNotifications: (token) => request('/admin/notifications', { token }),
+
+  // Admin — los interruptores de la plataforma (hoy, los premios por acertar):
+  // su estado, quién los movió y cuándo, y el botón para prenderlos o apagarlos.
+  adminGetSwitches: (token) => request('/admin/switches', { token }),
+  adminSetSwitch: (key, enabled, token) =>
+    request(`/admin/switches/${key}`, { method: 'PUT', body: { enabled }, token }),
 
   // Admin — patrocinadores
   adminCreateSponsor: (payload, token) =>

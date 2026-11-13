@@ -2,15 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import { formatNumber, leagueHasRequest } from '../utils/adminPanel.js';
+import { formatNumber, leagueHasRequest, prizesSwitch } from '../utils/adminPanel.js';
 import {
-  IconBell, IconClock, IconLeague, IconOrganization, IconOverview, IconSponsor, IconUsers,
+  IconBell, IconClock, IconGift, IconLeague, IconOrganization, IconOverview, IconSponsor, IconUsers,
 } from '../components/admin/AdminIcons.jsx';
 import AdminOverviewSection from '../components/admin/AdminOverviewSection.jsx';
 import AdminLeaguesSection from '../components/admin/AdminLeaguesSection.jsx';
 import AdminOrganizationsSection from '../components/admin/AdminOrganizationsSection.jsx';
 import AdminUsersSection from '../components/admin/AdminUsersSection.jsx';
 import AdminSponsorsSection from '../components/admin/AdminSponsorsSection.jsx';
+import AdminPrizesSection from '../components/admin/AdminPrizesSection.jsx';
 import AdminNotificationsSection from '../components/admin/AdminNotificationsSection.jsx';
 import AdminCronSection, { CRON_STATES } from '../components/admin/AdminCronSection.jsx';
 import '../components/admin/admin.css';
@@ -24,6 +25,7 @@ const SECTIONS = [
   { key: 'organizaciones', label: 'Organizaciones', icon: IconOrganization },
   { key: 'usuarios',       label: 'Usuarios',       icon: IconUsers },
   { key: 'patrocinadores', label: 'Patrocinadores', icon: IconSponsor },
+  { key: 'premios',        label: 'Premios',        icon: IconGift },
   { key: 'notificaciones', label: 'Notificaciones', icon: IconBell },
   { key: 'cron',           label: 'Cron',           icon: IconClock },
 ];
@@ -32,6 +34,7 @@ const SOURCES = {
   stats:         (token) => api.adminGetStats(token),
   cron:          (token) => api.adminGetCron(token),
   notifications: (token) => api.adminGetNotifications(token),
+  switches:      (token) => api.adminGetSwitches(token),
   sponsors:      () => api.getSponsors(),
   leagues:       (token) => api.adminGetLeagues(token),
   organizations: (token) => api.adminGetOrganizations(token),
@@ -113,6 +116,14 @@ export default function AdminPanel() {
             token={token}
           />
         )}
+        {section === 'premios' && (
+          <AdminPrizesSection
+            data={data.switches}
+            error={errors.switches}
+            reload={() => reload('switches')}
+            token={token}
+          />
+        )}
         {section === 'notificaciones' && (
           <AdminNotificationsSection catalog={data.notifications} error={errors.notifications} />
         )}
@@ -127,6 +138,10 @@ export default function AdminPanel() {
 // Lo único amarillo de la barra es lo que espera a Alfredo. En el teléfono la barra
 // se desliza de lado, y la sección elegida se trae a la vista para que nunca quede
 // escondida a la derecha.
+//
+// Premios lleva un punto verde solo mientras están prendidos: desde cualquier
+// sección se ve que hay algo encendido para toda la plataforma. Apagados, que es
+// como nacen, la barra no dice nada.
 function AdminRail({ section, data }) {
   const current = useRef(null);
 
@@ -139,6 +154,7 @@ function AdminRail({ section, data }) {
   const requests = data.leagues?.filter(leagueHasRequest).length ?? 0;
   const unverified = data.organizations?.filter((org) => !org.is_verified).length ?? 0;
   const cronState = data.cron ? CRON_STATES[data.cron.estado] ?? CRON_STATES.sin_señal : null;
+  const prizesOn = data.switches ? prizesSwitch(data.switches).enabled : false;
 
   const badges = { ligas: requests, organizaciones: unverified };
 
@@ -163,6 +179,14 @@ function AdminRail({ section, data }) {
                 <span className="adm-nav-badge" aria-label={`${badges[key]} por atender`}>
                   {formatNumber(badges[key])}
                 </span>
+              )}
+              {key === 'premios' && prizesOn && (
+                <span
+                  className="adm-nav-dot is-on"
+                  role="img"
+                  aria-label="Prendidos"
+                  title="Prendidos"
+                />
               )}
               {key === 'cron' && cronState && (
                 <span

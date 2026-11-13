@@ -6,7 +6,7 @@ import { initials } from '../../utils/matchDisplay.js';
 import { imagenAjustada } from '../../utils/imagenes.js';
 import { storeHref, storeTotals } from '../../utils/storePanel.js';
 import { Status } from '../admin/AdminKit.jsx';
-import { IconBack, IconOverview, IconProfile, IconTag, IconUsers } from '../admin/AdminIcons.jsx';
+import { IconBack, IconGift, IconOverview, IconProfile, IconTag, IconUsers } from '../admin/AdminIcons.jsx';
 import '../admin/admin.css';
 import '../league/league.css';
 import './store.css';
@@ -20,24 +20,34 @@ import './store.css';
 //
 // Cada sección declara QUÉ PERMISO hace falta para que exista. Esconder no es
 // proteger: el backend vuelve a decidir en cada petición. Hoy una tienda tiene
-// dos roles, dueño y administrador, y los dos ven las cuatro.
+// dos roles, dueño y administrador, y los dos ven las cinco.
+//
+// Premios además necesita el interruptor (README, "Premios por acertar"): con los
+// premios apagados en Panel Admin → Premios la sección no existe, y sus rutas
+// contestan 404.
 export const STORE_SECTIONS = [
   { key: 'resumen',   label: 'Resumen',   icon: IconOverview, permisos: ['ver'] },
   // El inventario lo maneja cualquier miembro (`isOrgMember`, routes/products.js).
   { key: 'productos', label: 'Productos', icon: IconTag,      permisos: ['ver'] },
+  { key: 'premios',   label: 'Premios',   icon: IconGift,     permisos: ['premios'], interruptor: 'premios' },
   { key: 'perfil',    label: 'Perfil',    icon: IconProfile,  permisos: ['perfil'] },
   { key: 'staff',     label: 'Staff',     icon: IconUsers,    permisos: ['miembros'] },
 ];
 
-export const storeSections = (store) => STORE_SECTIONS.filter((s) => puedeAlguno(store, ...s.permisos));
+// `encendidos` dice qué interruptores están prendidos: `{ premios: true }`.
+// Mientras no se sabe, la sección no sale, y aparece sin recargar en cuanto
+// llega la respuesta.
+export const storeSections = (store, encendidos = {}) => STORE_SECTIONS.filter((s) => (
+  puedeAlguno(store, ...s.permisos) && (!s.interruptor || encendidos[s.interruptor] === true)
+));
 
 // `store` es la tienda como la manda /auth/me (con tu rol y tus permisos), y
 // `org` la fila completa de GET /organizations/:id, que llega después: mientras
 // tanto, la barra usa el nombre y el logo de la sesión, y no brinca.
-export default function StoreWorkspace({ store, org, products, section, children }) {
+export default function StoreWorkspace({ store, org, products, section, encendidos, children }) {
   return (
     <div className="adm lws sws">
-      <StoreRail store={store} org={org} products={products} section={section} />
+      <StoreRail store={store} org={org} products={products} section={section} encendidos={encendidos} />
       <div className="adm-main">{children}</div>
     </div>
   );
@@ -60,7 +70,7 @@ export function StoreEyebrow({ store }) {
   return <span className="lws-eyebrow-league">{store.name}</span>;
 }
 
-function StoreRail({ store, org, products, section }) {
+function StoreRail({ store, org, products, section, encendidos }) {
   const current = useRef(null);
   const shown = org ? { ...store, name: org.name, logo_url: org.logo_url, is_public: org.is_public } : store;
 
@@ -97,7 +107,7 @@ function StoreRail({ store, org, products, section }) {
         </div>
 
         <nav className="adm-nav" aria-label="Secciones de la tienda">
-          {storeSections(store).map(({ key, label, icon: Icon }) => (
+          {storeSections(store, encendidos).map(({ key, label, icon: Icon }) => (
             <Link
               key={key}
               ref={key === section ? current : null}

@@ -13,8 +13,8 @@ import { armarCatalogo } from '../../../backend/src/utils/catalogoDeAvisos.js';
 import { matchesSearch } from '../../src/utils/adminPanel.js';
 import {
   NOTIFICATION_FILTERS, channelStates, groupNotifications, notificationAudience, notificationMeta, notificationPreview,
-  notificationReaders, notificationSearchFields, notificationText, notificationVariants, reachLabel,
-  recipientsLabel,
+  notificationPrizePreview, notificationReaders, notificationSearchFields, notificationText, notificationVariants,
+  reachLabel, recipientsLabel,
 } from '../../src/utils/adminNotifications.js';
 
 const catalogo = armarCatalogo({
@@ -45,12 +45,30 @@ test('la muestra de un calculado dice lo que diría la bandeja', () => {
   assert.match(resultado.body, /\+1 punto/);
   assert.match(notificationText(de('prediction_new_matches')).body, /PLAYOFFS \(4\) y SEMIFINAL \(2\)/);
 
-  // Las variantes cambian los datos, no el partido.
+  // Las variantes cambian los datos, no el partido. La del premio no entra en
+  // esta lista: dice el mismo texto que la muestra y sería un renglón repetido;
+  // se enseña como tarjeta aparte (abajo).
   assert.deepEqual(notificationVariants(de('prediction_result')).map((v) => v.title), [
     'No se dio — Halcones vs Coyotes',
     'Acertaste — Halcones vs Coyotes',
   ]);
   assert.match(notificationVariants(de('schedule_change'))[2].body, /por definir/);
+});
+
+test('el aviso con premio se enseña como tarjeta, con el premio como lo manda la bandeja', () => {
+  const muestra = notificationPrizePreview(de('prediction_result'), '2026-11-09T18:00:00.000Z');
+  assert.ok(muestra, 'falta la variante con premio');
+  assert.equal(muestra.origin, 'prediction');
+  assert.equal(muestra.data.correct, true, 'un premio solo le llega a quien acertó');
+  const [premio] = muestra.data.prizes;
+  assert.equal(premio.status, 'valid');
+  assert.match(premio.code, /^CFB-\d+-[0-9A-HJKMNP-TV-Z]{6}$/, 'el código con la forma que reparte el backend');
+  for (const campo of ['discount_percent', 'product', 'store', 'expires_at']) {
+    assert.ok(premio[campo] !== undefined, `al premio de muestra le falta «${campo}»`);
+  }
+  // Los avisos sin premio no traen esa tarjeta.
+  assert.equal(notificationPrizePreview(de('final_score')), null);
+  assert.equal(notificationPrizePreview(de('prediction_round')), null);
 });
 
 test('la muestra se arma con la forma de la API de la bandeja', () => {

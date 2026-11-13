@@ -7,6 +7,7 @@ import { runBillingReminders, runPlayerBillingReminders } from '../utils/billing
 import { runMonthlyChargeGeneration } from '../utils/monthlyCharges.js';
 import { runOncePerDay, registrarLlamada, podarBitacora } from '../utils/cronSchedule.js';
 import { pushEncendido } from '../utils/pushNotifier.js';
+import { premiosGanados } from './prizes.js';
 import {
   filtrosDeBandeja, avisosDeSeguimiento, avisosDePrediccion, sinMarcadorRepetido,
   contarNuevos, juntarBandeja, esNuevo,
@@ -862,8 +863,30 @@ async function avisosCalculados(userId, ahora) {
   return { deLoQueSigue, dePredicciones };
 }
 
+// Los premios de tus aciertos (README, "Premios por acertar") viajan dentro del
+// aviso del resultado, en `data.prizes`: no son un aviso nuevo. Se cuelgan solo
+// aquí y no en /mine/unread, porque no cambian cuántos avisos hay y el balón
+// pregunta en cada cambio de página. Tampoco cambian la `key` del aviso, así que
+// nada vuelve a contar como nuevo. Apagados, premiosGanados() devuelve nada.
+async function conPremios(items, userId) {
+  const esResultadoAcertado = (a) => a.origin === 'prediction' && a.type === 'prediction_result' && a.data?.correct;
+  const partidos = items.filter(esResultadoAcertado).map((a) => a.match.id);
+  if (partidos.length === 0) return items;
+  const premios = await premiosGanados(userId, { matchIds: partidos });
+  if (premios.length === 0) return items;
+  const porPartido = new Map();
+  for (const { match, ...premio } of premios) {
+    if (!porPartido.has(match.id)) porPartido.set(match.id, []);
+    porPartido.get(match.id).push(premio);
+  }
+  return items.map((a) => (esResultadoAcertado(a) && porPartido.has(a.match.id)
+    ? { ...a, data: { ...a.data, prizes: porPartido.get(a.match.id) } }
+    : a));
+}
+
 router.get('/mine', authRequired, asyncHandler(async (req, res) => {
-  const { items, marca, ahora, unread } = await armarBandeja(req.user.id);
+  const { items: avisos, marca, ahora, unread } = await armarBandeja(req.user.id);
+  const items = await conPremios(avisos, req.user.id);
   res.json({
     items: items.map((a) => ({
       ...a,

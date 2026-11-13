@@ -98,6 +98,12 @@ const ETIQUETAS_POR_TIPO = {
 // arma el playbook es el cuerpo técnico entero, no cada quien lo suyo. Solo
 // existe del lado del equipo; ningún rol de liga lo tiene, porque la liga
 // administra también a los rivales.
+//
+// `premios` —ponerle a un partido un descuento para quien lo acierte, y cobrar
+// los códigos en el mostrador (README, "Premios por acertar")— es el primer
+// permiso que solo existe en una tienda. Lo traen el dueño y el administrador,
+// los mismos que ya llevan su inventario: un premio promete uno de sus
+// productos.
 export const PERMISOS = [
   'ver',               // leer el panel: perfil, calendario y roster
   'perfil',            // editar el perfil de la organización
@@ -113,6 +119,7 @@ export const PERMISOS = [
   'duenos',            // invitar y quitar dueños
   'entregar_equipos',  // entregarle a un equipo su perfil (una sola vez, no se deshace)
   'playbook',          // las imágenes de jugadas del equipo: ver, subir, renombrar y borrar
+  'premios',           // los premios de una tienda: ponerlos, retirarlos y cobrar sus códigos
 ];
 
 // Lo que `marcadores` deja cambiar de un partido que ya existe, campo por campo
@@ -150,7 +157,7 @@ const PERMISOS_POR_ROL = {
     coach:         ['ver', 'playbook'],
   },
   media:  { owner: ['ver', 'perfil', 'miembros', 'duenos'], admin: ['ver', 'perfil', 'miembros'] },
-  store:  { owner: ['ver', 'perfil', 'miembros', 'duenos'], admin: ['ver', 'perfil', 'miembros'] },
+  store:  { owner: ['ver', 'perfil', 'miembros', 'duenos', 'premios'], admin: ['ver', 'perfil', 'miembros', 'premios'] },
   clinic: { owner: ['ver', 'perfil', 'miembros', 'duenos'], admin: ['ver', 'perfil', 'miembros'] },
   brand:  { owner: ['ver', 'perfil', 'miembros', 'duenos'], admin: ['ver', 'perfil', 'miembros'] },
 };

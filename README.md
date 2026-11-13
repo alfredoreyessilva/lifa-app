@@ -370,6 +370,10 @@ Si sigues un partido **y** lo predijiste, llega un solo aviso: el de tu
 predicción, que ya trae el marcador. Es la misma regla de "un aviso por
 partido" de lo que sigues.
 
+Si acertaste y una tienda le puso premio a ese partido, el aviso lo trae debajo
+del marcador, en `data.prizes`. Es el mismo aviso, no uno nuevo (ver "Premios
+por acertar").
+
 **El ranking de un aviso es el del calendario.** "El ranking" no existe en la
 base: es la lista de partidos que manda el calendario que estás viendo
 (`/predictions/ranking?matchIds=`). En la práctica esa lista es **una rama**
@@ -1274,6 +1278,11 @@ el botón de ver dice "Ver repetición", "Cómo llegan" pasa a "Cómo llegaron" 
 "¿Quién gana?" se vuelve "Así votó la afición". Mientras se puede votar, el
 resultado se ve hasta después de votar, para que no empuje el voto de nadie; ya
 cerrada la votación no hay voto que empujar.
+
+Si una tienda le puso premio al partido, va justo debajo de "¿Quién gana?"
+(`MatchPrizes.jsx`): "🎁 Premio para quien acierte", y "para quien acertó" ya
+cerrada la votación. Sin premio no hay nada, ni un lugar vacío (ver "Premios por
+acertar").
 
 Hay **un solo botón amarillo**, el primero de la portada. Antes lo eran todos, y
 un botón amarillo entre doce no dice nada. Los demás van de contorno, y los
@@ -4645,12 +4654,275 @@ la lista después de jugarse.
 
 ### Fuera de esta versión
 
-Editar o borrar un voto; premios o dinero de por medio (hoy no hay nada que
-cobrar ni repartir, y meterlo cambiaría el marco legal de la función);
-desempates finos del ranking (rachas, sorpresas). Sobre este último, el
-comentario de `predictions.js` es explícito: eso lo resuelve quien organice un
-concurso leyendo la tabla — aquí solo se rompe el empate con los datos que ya
-hay, para dar un orden estable.
+Editar o borrar un voto; dinero de por medio (cobrar por participar, o apostar:
+cambiaría el marco legal de la función); desempates finos del ranking (rachas,
+sorpresas). Sobre este último, el comentario de `predictions.js` es explícito:
+eso lo resuelve quien organice un concurso leyendo la tabla — aquí solo se rompe
+el empate con los datos que ya hay, para dar un orden estable.
+
+Los premios estuvieron en esta lista hasta el 2026-11-11, por la misma razón
+legal. Ahora los pone una tienda, y salen apagados hasta que esa revisión se
+haga: ver "Premios por acertar", abajo.
+
+## Premios por acertar
+
+Definido el 2026-11-11, a pedido de Alfredo. Una tienda le pone un premio a un
+partido —un descuento en un producto de su vitrina— y quien acierta ese partido
+lo recibe junto con su aviso del resultado. Es lo primero de la plataforma que le
+da algo de valor a quien predice, y lo primero que una tienda hace en la página
+de un partido.
+
+El carrito, la pasarela y el botón Comprar son la fase siguiente. Esta liga el
+acierto con el premio, y deja que la tienda lo cobre en su mostrador con un
+código.
+
+Hasta este día, "premios o dinero de por medio" estaba en el "Fuera de esta
+versión" de las predicciones porque "cambiaría el marco legal de la función".
+Sigue siendo cierto, y por eso **se construye completo pero sale apagado**: ver
+"Antes de prenderlo".
+
+### Quién pone un premio
+
+Una tienda **publicada y verificada** (`puedePremiar`, `utils/orgVisibility.js`):
+la misma regla que se le pide a un medio para transmitir. La verificación
+certifica quién es —el candado contra quien se registra con el nombre de una
+tienda que no es—, y la publicación, porque su nombre y su logo salen en la
+página del partido. Dentro de la tienda, el dueño y el administrador, con el
+permiso `premios` (`utils/orgRoles.js`): los mismos que ya llevan su inventario.
+
+Se resuelve al leer (regla 4): si CFBAMX oculta a la tienda o le quita la
+verificación, **sus premios dejan de verse en todos lados, también para quien ya
+los ganó**, sin borrar una fila, y vuelven en cuanto recupera las dos. Es la
+palanca del admin contra una tienda falsa, como con las transmisiones.
+
+### En qué partido
+
+En uno **público** (su liga publicada, y no es borrador), **que no sea amistoso**
+—un amistoso no reparte puntos ni avisa su resultado— y **que todavía se pueda
+votar**. "Se puede votar" es exactamente el candado del voto,
+`MATCH_VOTING_CLOSED_SQL` (`utils/scoring.js`): ya pasó la hora del partido, o lo
+marcaron En vivo o Finalizado. Uno con fecha por definir acepta premio hasta que
+lo marcan. Es una sola regla para las dos cosas a propósito: con dos copias, una
+tienda podría retirar su premio cuando ya nadie puede votar.
+
+**Uno por tienda por partido**; varias tiendas sí, y quien acierta recibe todos.
+Un índice único parcial (`match_id, organization_id`, mientras no esté retirado)
+lo cuida sin una pregunta previa.
+
+### Qué promete
+
+Un producto de la tienda que esté **a la venta y en su vitrina** (`is_active` y
+`show_on_platform`) al ponerlo, con:
+
+- **Un descuento en porcentaje entero, de 5 a 100.** El 100 se dice "gratis". No
+  hay monto fijo porque el precio puede faltar (`products.price` acepta NULL).
+- **Una vigencia en días desde que terminó el partido** —la pantalla ofrece 7, 15,
+  30 y 60—, no una fecha. Un partido pospuesto o con fecha por definir no la
+  rompe: vence a los N días de su `gradable_at`, el mismo "terminó" que reparte
+  los puntos.
+
+El premio **guarda una copia del producto** (nombre, precio, moneda y foto), no
+solo su id. Un producto se borra de verdad (`DELETE /products/:id`) y su precio se
+edita cuando sea, y el ganador tiene que seguir viendo lo que se le prometió. Por
+eso `product_id` es `ON DELETE SET NULL`: borrar el producto no se lleva el
+premio. Es la excepción a "se resuelve al leer", y por el mismo motivo que los
+libros de dinero: una promesa se guarda como se hizo.
+
+**Se puede retirar mientras se pueda votar, y no se edita.** Después queda fijo:
+es una promesa a quien votó contando con él. Retirar no borra la fila
+(`withdrawn_at`); para cambiar el descuento o el producto se retira y se pone
+otro, y el índice parcial lo deja.
+
+### Quién lo gana
+
+**Todos los que acertaron**, con la misma pregunta que reparte los puntos,
+`PREDICTION_CORRECT_SQL`. No hay una fila por ganador: se calcula al leer, igual
+que el aviso del resultado. Si la liga corrige un marcador, el premio pasa a
+quien de verdad acertó, como los puntos. Lo único que se guarda es **el canje**,
+porque es un hecho: lo que la tienda ya entregó no se deshace con una corrección.
+
+Un partido que nunca califica no entrega su premio: uno cancelado se queda
+programado y sin marcador, porque no existe el estado "cancelado". Si se borra el
+partido, se van sus votos y sus premios (`ON DELETE CASCADE`, como
+`match_broadcasts`).
+
+**Sin tope ni candado contra varias cuentas**, decidido el 2026-11-11: con tres
+cuentas (local, empate y visita) alguien gana siempre, pero es un descuento y el
+producto hay que comprarlo igual. Se mide con el uso. El candado obvio, pedir el
+correo verificado, hoy sería disparejo: Render no manda correos (PD-38), así que
+las cuentas nuevas de correo y contraseña nunca se verifican, y las de Google y
+las anteriores a la verificación sí.
+
+### Dónde se ve
+
+- **En la página del partido**, debajo de "¿Quién gana?": "🎁 Premio para quien
+  acierte", con el producto, el descuento y la tienda, que lleva a su vitrina. Ya
+  cerrada la votación dice "para quien acertó". **Solo aparece si hay premio**: no
+  hay un lugar vacío esperando patrocinador, que es lo que haría que se leyera
+  como anuncio (la misma razón por la que "oportunidades para el club" no se
+  construye sin oferta real, ver "Cuotas del club"). No va en las tarjetas del
+  calendario, ni en la imagen para compartir: no es un dato del partido.
+- **En tu aviso del resultado**, debajo del marcador: "🎁 Ganaste 20% en Jersey
+  oficial", la tienda, tu código y cuándo vence. **No es un aviso nuevo**: es el
+  mismo `prediction_result`, con `data.prizes`. Quien no acertó recibe su aviso de
+  siempre.
+- **En "Mis premios" (`/premios`)**: todos los que ganaste, primero los vigentes
+  con el código grande, después los usados y los vencidos. Existe porque el aviso
+  sale de la bandeja a los 30 días, o por el tope de 100, y un premio puede valer
+  60.
+
+### El código y el canje
+
+Cada ganador tiene su código, como `CFB-27-K7M2Q9`. El 27 es el premio; los seis
+caracteres son el HMAC del id de la persona con un secreto propio de ese premio
+(`code_secret`, que nunca sale del backend), en base32 sin las letras que se
+confunden (I, L, O, U). No se guarda una fila por código: se recalcula, como el
+premio mismo.
+
+La tienda lo escribe en la sección **Premios** de su panel. El backend lee el
+premio —tiene que ser de esa tienda—, calcula sus ganadores y busca cuál
+coincide; tolera minúsculas, espacios, guiones y la O por el cero. Responde si
+**vale**, si **ya se usó** (y cuándo) o si **venció**, y "Marcar como usado"
+guarda el canje en `prediction_prize_redemptions`, con un
+`UNIQUE (prize_id, user_id)` que no deja usarlo dos veces.
+
+**La tienda nunca ve quién ganó**: ni el nombre, ni el correo, ni qué votó cada
+quien. Ve cuántos ganaron y cuántos canjearon. El código es la credencial, como el
+link del estado de cuenta del papá (regla 9): quien lo tiene, lo cobra, y si
+alguien se lo pasa a un amigo, es un regalo. Por lo mismo, **el Aviso de
+Privacidad no cambia**: la plataforma no le entrega a la tienda ningún dato de
+nadie.
+
+### El interruptor: un botón del Panel Admin
+
+Los premios se prenden y se apagan para toda la plataforma desde **Panel Admin →
+Premios**. Hasta el 2026-11-12 iba a ser una variable de Render
+(`PREDICTION_PRIZES`), como `PUSH_NOTIFICATIONS`; Alfredo lo pidió como un botón en
+su panel, y es mejor así: prender algo que decide él no debería pedir entrar a
+Render, y una variable no dice quién la cambió ni cuándo.
+
+- **El estado vive en la base, en `platform_switches`.** Cada vez que alguien mueve
+  el botón se agrega una fila —quién y cuándo— y el estado es la última: nada se
+  edita y queda el historial, que la sección enseña. **Sin ninguna fila, apagado**:
+  falla cerrado, así que producción arranca apagada al desplegar. Mover el botón al
+  estado que ya tiene no deja fila.
+- **Un solo lugar lo lee y lo escribe**, `utils/interruptores.js`. Las rutas de los
+  premios le preguntan (`premiosEncendidos()`), y el frontend no tiene el suyo:
+  pregunta a `GET /prizes/status`. No se puede prender el botón y olvidar el
+  backend.
+- **Se ve al instante.** El backend se acuerda del estado diez segundos, para no
+  preguntarle a la base en cada página de partido y en cada bandeja; apretar el botón
+  actualiza esa memoria en el mismo proceso, y Render corre uno solo. Con varias
+  instancias, las demás tardarían esos diez segundos.
+- **Solo el admin de la plataforma lo mueve**: `GET /admin/switches` (el estado, los
+  últimos 10 cambios y dos conteos) y `PUT /admin/switches/:key` (`{ enabled: true |
+  false }`), las dos con `adminRequired`. La clave viaja en tres lados —el `CHECK` de
+  la tabla, `INTERRUPTORES` y la sección— y `tests/unit/premios.test.mjs` falla si
+  uno cambia solo (regla 6).
+
+Apagado:
+
+- la sección Premios no sale en el panel de la tienda, y sus rutas contestan 404;
+- la página del partido, la bandeja y "Mis premios" no traen premios.
+
+**No se borra nada**: al prenderlo, todo vuelve como estaba. Lo único que no se
+detiene es la vigencia, que cuenta desde que terminó el partido: un premio que pasa
+una semana apagado pierde esa semana, y mientras tanto la tienda no lo puede cobrar.
+Por eso la ventana de "Apagar premios" lo dice antes de confirmar.
+
+Junto al botón, la sección enseña lo que ayuda a decidir: si están prendidos y desde
+cuándo, cuántos premios hay puestos y cuántas tiendas pueden ponerlos, qué cambia en
+cada posición, quién lo movió y, mientras están apagados y en amarillo, lo que falta
+para prenderlos ("Antes de prenderlo", abajo). La barra lateral lleva un punto verde
+junto a "Premios" solo mientras están prendidos.
+
+La tabla sirve para cualquier interruptor de la plataforma, y hoy tiene uno. El del
+push se quedó en Render (`PUSH_NOTIFICATIONS`) a propósito: está en pausa, y lo que
+falta para encenderlo está en PD-02.
+
+Las tablas se crean igual al desplegar (regla 8), vacías.
+
+### Antes de prenderlo
+
+1. **Revisión legal.** Que alguien que sepa revise si un premio por acertar un
+   pronóstico deportivo pide permiso de Gobernación (Ley Federal de Juegos y
+   Sorteos); qué piden las reglas de PROFECO para una promoción —condiciones y
+   vigencia a la vista: por eso la vigencia es obligatoria y sale junto al
+   premio—, y qué pasa con los menores de edad, porque una cuenta no pide edad.
+2. **Una sección en los Términos** (`pages/TermsOfService.jsx`), con su fecha
+   nueva. El borrador, para que lo revise quien haga lo del punto 1:
+
+   > **Premios por acertar una predicción.** Algunas tiendas publicadas y
+   > verificadas en CFBAMX ofrecen un premio a quien acierte el resultado de un
+   > partido. El premio lo ofrece y lo cumple la tienda: CFBAMX lo publica, no
+   > vende el producto, no recibe pagos por él y no garantiza su existencia,
+   > precio ni calidad. Participar en las predicciones no cuesta. Cada premio dice
+   > su producto, su descuento y su vigencia; vence a los días indicados desde
+   > que terminó el partido y se usa una sola vez, con el código que aparece en tu
+   > cuenta. Si el marcador de un partido se corrige, el premio corresponde a
+   > quien acertó el resultado correcto.
+3. Prenderlos en **Panel Admin → Premios**. La ventana de confirmar recuerda los dos
+   puntos de arriba.
+
+### Endpoints — `routes/prizes.js` (`/api/prizes`)
+
+| Método | Ruta | Quién | Para qué |
+|---|---|---|---|
+| GET | `/status` | Público | `{ enabled }` |
+| GET | `/match/:matchId` | Público | Los premios de un partido |
+| GET | `/mine` | Con sesión | Lo que ganaste, con su código y su estado |
+| GET | `/organization/:organizationId` | Permiso `premios` | Sus premios, con votos, ganadores y canjes |
+| GET | `/organization/:organizationId/matches` | Permiso `premios` | Los partidos donde puede poner uno |
+| POST | `/organization/:organizationId` | Permiso `premios` | Poner un premio |
+| POST | `/organization/:organizationId/:prizeId/withdraw` | Permiso `premios` | Retirarlo, mientras se pueda votar |
+| POST | `/organization/:organizationId/redeem/check` | Permiso `premios` | Revisar un código, sin escribir |
+| POST | `/organization/:organizationId/redeem` | Permiso `premios` | Marcarlo como usado |
+
+Las de la tienda pasan por `storePrizesRequired` (`middleware/ownership.js`), que
+es `guardaDeOrganizacion('premios')`: la primera guarda por permiso para una
+organización que no es liga ni equipo, sin el respaldo por `owner_user_id`, que
+una tienda nunca tuvo. Con el interruptor apagado contestan 404 antes de pedir
+sesión. La bandeja (`GET /notifications/mine`) cuelga los
+premios del aviso con la misma lectura que `/mine` (`premiosGanados()`); el balón
+(`/mine/unread`) no los calcula, porque no cambian cuántos avisos hay.
+
+### Frontend
+
+- `MatchPrizes.jsx` — en la página del partido, debajo de `MatchPoll`. Pide sus
+  datos solo, como "También transmiten".
+- `NotificationCard.jsx` — el bloque del premio, en la bandeja y en el catálogo
+  del Panel Admin. Ahí la variante con premio sale como una segunda tarjeta, "Así
+  le llega si además ganó el premio de una tienda", y no en la lista de textos:
+  dice lo mismo que la muestra, y como renglón se leía repetido.
+- `MyPrizes.jsx` — `/premios`, con una celda en el marcador de Mi panel que solo
+  sale si ganaste alguno.
+- `StorePrizesSection.jsx` y la ventana "Poner un premio" (`StoreModals.jsx`) —
+  la sección Premios del panel de una tienda: cobrar un código, el marcador, la
+  tabla por estado y la ventana, que elige el partido con las mismas piezas que el
+  panel de un medio (`MediaMatch`) y enseña el premio tal como sale en la página
+  del partido (`PrizeCard`, la misma de `MatchPrizes.jsx`).
+- Los textos (descuento, vencimiento, estados) salen de `utils/premios.js`.
+- `AdminPrizesSection.jsx` — Panel Admin → Premios: el botón, el estado, los
+  conteos, qué cambia y quién los movió. Lo que calcula (`prizesSwitch`,
+  `switchChangedBy`) está en `utils/adminPanel.js`, con sus pruebas.
+
+Se prueba con `tests/unit/premios.test.mjs` en los dos lados y con la suite
+`premios.e2e.mjs`, que prende los premios con su propia cuenta de admin, comprueba
+que apagados no existen en ningún lado y que prendidos vuelven sin haber borrado
+nada, y los deja como los encontró.
+
+### Fuera de esta versión
+
+- El carrito, la pasarela y el botón Comprar, y que el descuento se aplique solo.
+- El tope de ganadores y los candados contra varias cuentas.
+- El 🎁 en las tarjetas del calendario.
+- Los avisos "un partido que votaste tiene premio" y "tu premio vence pronto".
+- Premios por jornada, o por el ranking del concurso.
+- Avisos para la tienda: no tiene bandeja (ver "Organizaciones: publicar y
+  verificar").
+- Una lista de premios en el Panel Admin. Hoy el admin los apaga todos con el botón
+  de Panel Admin → Premios, o los de una tienda quitándole la verificación.
+- Editar un premio, y "premios en juego" en "Mis premios".
 
 ## Roster de jugadores (plantilla de Excel)
 
@@ -6457,8 +6729,8 @@ bot.
 ## Panel Admin
 
 `/admin` es desde donde se opera la plataforma: qué ligas publicar, qué organizaciones
-verificar, quién entró, cómo van los patrocinadores, qué le avisa la app a la gente y si el
-cron sigue vivo. **Rehecho el
+verificar, quién entró, cómo van los patrocinadores, si los premios por acertar están
+prendidos, qué le avisa la app a la gente y si el cron sigue vivo. **Rehecho el
 2026-11-06**, cuando Alfredo pidió que se viera como un panel profesional. Lo que había
 funcionaba, pero eran seis pestañas dentro de la tarjeta negra, tarjetas verdes con emojis,
 listas de cientos de filas sin buscador y cuatro o cinco botones repetidos en cada renglón.
@@ -6481,6 +6753,7 @@ que moverse entre ellas no obligue a volver a aprender dónde está cada cosa:
 | Organizaciones | Registradas, sin verificar y una celda por tipo con filas | Tabla |
 | Usuarios | Registrados, nuevos este mes, dueños de liga, administradores | Tabla |
 | Patrocinadores | Lugares ocupados, impresiones, clics, CTR | Los cuatro lugares de la barra lateral |
+| Premios | Si están prendidos y desde cuándo, premios puestos, tiendas que pueden ponerlos | El botón para prenderlos o apagarlos, qué cambia y quién los movió (ver "Premios por acertar" → "El interruptor") |
 | Notificaciones | Avisos que existen, y a quién le llegan: al aficionado, a la liga, al equipo, por correo | El catálogo, por tema (ver abajo) |
 | Cron | Estado, última llamada, cadencia, llamadas hoy, cobranza de hoy | Los últimos 14 días |
 
@@ -6913,6 +7186,7 @@ tienda vive en `components/store/` (`store.css`, `.sws`).
 | Resumen | En venta, en tu vitrina, existencias, agotados, si está en el sitio | Lo que te toca; lo que se cambió al último; los primeros productos de tu vitrina y si lleva el botón de WhatsApp |
 | Productos | Productos, en tu vitrina, ocultos, inactivos, agotados, sin foto | Tabla con búsqueda y páginas |
 | Perfil | En el sitio, verificación, plan, botón de WhatsApp | Quién la ve, y lo que publica |
+| Premios | Abiertos, en juego, entregados, canjeados | Revisar un código, y la tabla de sus premios por partido. Solo con los premios prendidos en Panel Admin → Premios; ver "Premios por acertar" |
 | Staff | — | Quién tiene acceso, ya abierto |
 
 Las celdas de Productos filtran la tabla, y el filtro vive en la dirección (`?filtro=`),

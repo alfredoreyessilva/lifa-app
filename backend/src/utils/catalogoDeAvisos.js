@@ -223,10 +223,29 @@ export const CATALOGO_DE_AVISOS = [
     alcance: 'predicciones',
     cuando: 'Por cada partido que votaste, cuando terminó y tiene marcador: la misma hora que reparte los puntos. Los amistosos no.',
     sinRepetir: ['Reemplaza a «Marcador final» para quien sigue el partido y además lo predijo.'],
+    ojo: [
+      'Si acertaste y una tienda le puso premio al partido, la tarjeta lo trae debajo del marcador (data.prizes): no es un aviso aparte. Solo sale con los premios prendidos (Panel Admin → Premios; README, «Premios por acertar»).',
+    ],
     muestra: { match: JUGADO, data: { pick: 'home', correct: true, points: 1, votes: 36, same_pct: 64 } },
     variantes: [
       { data: { pick: 'away', correct: false, points: 0, votes: 36, same_pct: 36 } },
       { data: { pick: 'away', correct: true, points: 2, votes: 36, same_pct: 19 } },
+      {
+        data: {
+          pick: 'home', correct: true, points: 1, votes: 36, same_pct: 64,
+          prizes: [{
+            id: 27,
+            discount_percent: 20,
+            valid_days: 30,
+            product: { name: 'Jersey oficial', price: 899, currency: 'MXN', image_url: null },
+            store: { id: 0, name: 'Deportes Halcón', logo_url: null, is_verified: true },
+            code: 'CFB-27-K7M2Q9',
+            expires_at: '2026-12-15T06:00:00.000Z',
+            redeemed_at: null,
+            status: 'valid',
+          }],
+        },
+      },
     ],
     fuentes: { [BANDEJA]: ["type: 'prediction_result'"] },
   },

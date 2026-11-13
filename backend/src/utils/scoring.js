@@ -104,3 +104,15 @@ export const PREDICTION_CORRECT_ELIMINATION_SQL = `(${PREDICTION_CORRECT_SQL} AN
 // El partido no cuenta para la quiniela (un amistoso/scrimmage). Misma idea:
 // se pregunta a la fase, no a la etiqueta.
 export const MATCH_IS_EXHIBITION_SQL = `(${MATCH_PHASE_TYPE_SQL} = 'exhibition')`;
+
+// Ya no se puede votar este partido: pasó su hora (comparada contra la del
+// servidor, no contra el estado, que alguien puede olvidar mover), o ya lo
+// marcaron En vivo o Finalizado. Lo segundo es lo que cierra a uno con fecha
+// por definir, que no tiene hora contra la cual comparar (README, "Partidos con
+// fecha por definir").
+//
+// Es UNA regla para dos cosas: votar (routes/predictions.js) y poner o retirar
+// un premio (routes/prizes.js). Con dos copias, una tienda podría retirar su
+// premio cuando ya nadie puede votar contando con él (README, "Premios por
+// acertar"). Solo necesita `matches m` en el FROM.
+export const MATCH_VOTING_CLOSED_SQL = `(COALESCE(m.match_date::timestamptz <= NOW(), FALSE) OR m.status IN ('live', 'finished'))`;

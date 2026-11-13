@@ -67,5 +67,12 @@ export const IconoEditar = () => (
   </Icono>
 );
 export const IconoEstadisticas = () => <Icono><path d="M5 20v-7M12 20V5M19 20v-11" /></Icono>;
+// El premio de una tienda (README, "Premios por acertar"): una caja con su moño.
+export const IconoPremio = () => (
+  <Icono>
+    <path d="M4 11h16v9H4zM3 7h18v4H3zM12 7v13" />
+    <path d="M12 7C10.5 4 6.5 3.5 6.5 6c0 1.5 2.5 1 5.5 1zM12 7c1.5-3 5.5-3.5 5.5-1 0 1.5-2.5 1-5.5 1z" />
+  </Icono>
+);
 export const IconoAnterior = () => <Icono><path d="m15 5-7 7 7 7" /></Icono>;
 export const IconoSiguiente = () => <Icono><path d="m9 5 7 7-7 7" /></Icono>;

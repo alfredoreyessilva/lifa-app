@@ -8,6 +8,7 @@ import MatchForm from '../components/MatchForm.jsx';
 import SubscribeButton from '../components/SubscribeButton.jsx';
 import MatchHero from '../components/MatchHero.jsx';
 import MatchPoll from '../components/MatchPoll.jsx';
+import MatchPrizes from '../components/MatchPrizes.jsx';
 import MatchCompare from '../components/MatchCompare.jsx';
 import MatchVenue, { esLink } from '../components/MatchVenue.jsx';
 import MatchWeek from '../components/MatchWeek.jsx';
@@ -322,6 +323,7 @@ export default function MatchPage() {
           <div className="mp-grid">
             <div className="mp-main">
               <MatchPoll match={match} abierta={isScheduled} />
+              <MatchPrizes matchId={match.id} abierta={isScheduled} />
               <MatchCompare match={match} contexto={contexto} terminado={isFinished} />
             </div>
 

@@ -695,6 +695,11 @@ no bloquea nada de lo de arriba.
 
 - **Cobro en línea**: la Fase 2 del roadmap de negocio y el bloqueador de fondo
   para cobrar. Ninguna pasarela instalada.
+- **Prender los premios por acertar**: están construidos y verificados, y salen
+  apagados; se prenden con el botón de Panel Admin → Premios. Antes de
+  apretarlo: la revisión legal (Gobernación, PROFECO y menores de edad) y pasar
+  a los Términos la sección que quedó redactada. Ver README, "Premios por
+  acertar" → "Antes de prenderlo".
 - **Conectar el bot de WhatsApp**: falta el número de WhatsApp Business
   (`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_VERIFY_TOKEN`) y saldo en la cuenta de
   Anthropic. **Antes** de conectarlo: cubrir en el Aviso de Privacidad qué guarda

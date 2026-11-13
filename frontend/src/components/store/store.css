@@ -218,3 +218,234 @@ body:has(.sws) .modal .org-profile-subhead {
 @container (max-width: 420px) {
   .sws-lead { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ==========================================================================
+   PREMIOS (README, "Premios por acertar")
+   Arriba, cobrar un código, que es lo que se hace con alguien enfrente; abajo, la
+   tabla de sus premios por partido. Los colores siguen la regla del panel: verde
+   es "vale", amarillo es "te toca", rojo es lo que no se puede (ya se usó, venció).
+   ========================================================================== */
+
+/* Por qué todavía no puede poner premios. Sin botón: lo decide CFBAMX. */
+.sws-gate {
+  max-width: 760px;
+  margin-bottom: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--ws-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--ws-surface-2);
+}
+.sws-gate .adm-status { color: var(--ws-ink); font-weight: 600; }
+.sws-gate p { margin: 6px 0 0; color: var(--ws-ink-dim); font-size: 13px; line-height: 1.55; }
+
+/* ---------- Cobrar un premio ---------- */
+.sws-redeem {
+  max-width: 760px;
+  margin-bottom: var(--space-5);
+  padding: var(--space-4);
+  border: 1px solid var(--ws-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--ws-surface-2);
+}
+.sws-redeem-head h2 {
+  margin: 0;
+  font-family: var(--font-eyebrow);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ws-ink);
+}
+.sws-redeem-head p { margin: 4px 0 0; color: var(--ws-ink-dim); font-size: 13px; line-height: 1.5; }
+.sws-redeem-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+/* El campo con la piel del buscador del panel (`.adm-search`): sobre el lienzo
+   negro, uno blanco se leía como de otra pantalla. */
+.sws-redeem-form input {
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 320px;
+  padding: 9px 12px;
+  border: 1px solid var(--ws-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--ws-surface);
+  color: var(--ws-ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.sws-redeem-form input::placeholder { color: var(--ws-ink-dim); opacity: 1; letter-spacing: 0.04em; }
+.sws-redeem-form input:disabled { opacity: 0.5; }
+.sws-redeem-result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-left: 3px solid var(--ws-line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--ws-surface-3);
+}
+.sws-redeem-result.is-on { border-left-color: var(--positive); }
+.sws-redeem-result.is-bad { border-left-color: var(--danger); }
+.sws-redeem-result p { margin: 0; color: var(--ws-ink); font-size: 13.5px; line-height: 1.45; }
+.sws-redeem-result .adm-faint { font-size: 12.5px; }
+.sws-redeem-result .btn { margin-top: 4px; }
+.sws-redeem .form-error { margin-top: var(--space-3); }
+
+/* ---------- La tabla ---------- */
+.sws-prize-totals { margin: 0 0 var(--space-3); }
+.sws-prize-when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  margin-top: 4px;
+  color: var(--ws-ink-dim);
+  font-size: 12.5px;
+}
+.sws-prize-what { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.sws-prize-what-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sws-prize-figure {
+  font-family: var(--font-display);
+  font-size: 20px;
+  line-height: 1.1;
+  color: var(--ws-ink);
+}
+.sws-prize-product {
+  overflow: hidden;
+  color: var(--ws-ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sws-prize-what-text .adm-faint { font-size: 12px; }
+.sws-prizes td.sws-col-redeemed { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---------- La ventana: poner un premio ---------- */
+body:has(.sws) .modal:has(.sws-prize-form) { max-width: 860px; }
+.sws-prize-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  align-items: start;
+  gap: var(--space-5);
+}
+.sws-prize-step {
+  min-width: 0;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  border: 0;
+}
+.sws-prize-step legend {
+  margin-bottom: 4px;
+  padding: 0;
+  font-family: var(--font-eyebrow);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ws-ink);
+}
+.sws-prize-step .sws-field-hint { margin: 0 0 var(--space-2); }
+.sws-prize-step .adm-search { margin-bottom: var(--space-2); }
+.sws-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--ws-line);
+  border-radius: var(--radius-md);
+  background: var(--ws-surface);
+}
+.sws-pick-list.is-products { max-height: 220px; }
+.sws-pick-day { display: flex; flex-direction: column; gap: 4px; }
+.sws-pick-day-label {
+  padding: 8px 8px 2px;
+  font-family: var(--font-eyebrow);
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ws-ink-dim);
+}
+.sws-pick {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--ws-ink);
+  cursor: pointer;
+}
+.sws-pick:hover { background: var(--ws-surface-2); }
+.sws-pick.is-on {
+  border-color: color-mix(in srgb, var(--flag) 60%, transparent);
+  background: color-mix(in srgb, var(--flag) 8%, var(--ws-surface-2));
+}
+.sws-pick.is-taken { cursor: default; opacity: 0.55; }
+.sws-pick.is-taken:hover { background: none; }
+.sws-pick input { flex-shrink: 0; width: 16px; height: 16px; margin: 0; accent-color: var(--flag); }
+.sws-pick-main { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.sws-pick-main strong {
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sws-pick-side { flex-shrink: 0; text-align: right; }
+.sws-pick-empty { margin: 0; padding: var(--space-3); color: var(--ws-ink-dim); font-size: 13px; line-height: 1.5; }
+.sws-prize-preview { margin: 0; }
+.sws-prize-preview .mp-prize { padding: 12px; gap: 12px; align-items: flex-start; }
+.sws-prize-preview .mp-prize-photo { width: 64px; height: 64px; }
+.sws-prize-preview .mp-prize-figure { font-size: 28px; }
+
+@media (max-width: 760px) {
+  .sws-prize-grid { grid-template-columns: minmax(0, 1fr); }
+  .sws-prize-form .sws-preview { position: static; }
+}
+/* En el teléfono la ventana mide ~265 px: con la hora al lado, los equipos se
+   quedaban en una letra ("L", "A") y "Ya tiene tu premio" se encimaba. La hora
+   baja abajo del partido, alineada con su texto, y el nombre de un producto
+   puede ocupar dos renglones. */
+@media (max-width: 560px) {
+  .sws-pick { flex-wrap: wrap; row-gap: 4px; }
+  .sws-pick-main { flex-basis: calc(100% - 28px); }
+  .sws-pick-side { flex-basis: 100%; padding-left: 28px; text-align: left; }
+  .sws-pick.is-product { flex-wrap: nowrap; }
+  .sws-pick.is-product .sws-pick-main { flex-basis: auto; }
+  .sws-pick.is-product .sws-pick-main strong {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+  }
+}
+
+/* Sin lugar para las columnas, cada premio es una ficha de tres renglones: el
+   partido a todo lo ancho, el premio, y debajo su estado, lo cobrado y el menú. */
+@container (max-width: 760px) {
+  .sws .adm-table.sws-prizes tbody tr:not(.lws-group) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "match match match"
+      "prize prize prize"
+      "state redeemed actions";
+    align-items: center;
+    gap: 8px var(--space-3);
+  }
+  .sws .adm-table.sws-prizes tbody td:nth-child(1) { grid-area: match; }
+  .sws .adm-table.sws-prizes tbody td:nth-child(2) { grid-area: prize; }
+  .sws .adm-table.sws-prizes tbody td:nth-child(3) { grid-area: state; }
+  .sws .adm-table.sws-prizes tbody td:nth-child(4) { grid-area: redeemed; }
+  .sws .adm-table.sws-prizes tbody td:nth-child(5) { grid-area: actions; }
+}

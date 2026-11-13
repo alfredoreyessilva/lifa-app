@@ -7,13 +7,16 @@ import StoreWorkspace, { StoreEyebrow, storeSections } from '../components/store
 import StoreOverviewSection from '../components/store/StoreOverviewSection.jsx';
 import StoreProductsSection from '../components/store/StoreProductsSection.jsx';
 import StoreProfileSection from '../components/store/StoreProfileSection.jsx';
+import StorePrizesSection from '../components/store/StorePrizesSection.jsx';
 import StoreModal from '../components/store/StoreModals.jsx';
 import { Band } from '../components/admin/AdminKit.jsx';
 import { organizationHref } from '../utils/dashboard.js';
+import { puedeAlguno } from '../utils/permisos.js';
 
 // El panel de una tienda. Ruta: /panel/tienda/:id
 //
-// Una herramienta con secciones —Resumen, Productos, Perfil y Staff— en vez del
+// Una herramienta con secciones —Resumen, Productos, Premios (solo con el
+// interruptor de los premios prendido), Perfil y Staff— en vez del
 // formulario de "Editar organización" y la página aparte de "Inventario" que
 // había hasta el 2026-11-08 (README, "El panel de una tienda"). La página pide la
 // tienda y su inventario una vez y los reparte; cada acción abre su ventana aquí
@@ -36,6 +39,13 @@ export default function StorePanel() {
   const [products, setProducts] = useState(null);
   const [productsError, setProductsError] = useState('');
   const [modal, setModal] = useState(null);
+  // Premios por acertar (README, "Premios por acertar"): la sección existe solo
+  // con el interruptor del backend prendido, y para quien tiene el permiso.
+  const [prizesOn, setPrizesOn] = useState(null);
+  const [prizes, setPrizes] = useState(null);
+  const [prizesError, setPrizesError] = useState('');
+  const [canAward, setCanAward] = useState(null);
+  const canPrize = Boolean(store) && puedeAlguno(store, 'premios');
 
   // Con la sesión: una tienda privada no existe para el público (404), y el
   // inventario de gestión trae también lo inactivo.
@@ -55,7 +65,28 @@ export default function StorePanel() {
     loadProducts();
   }, [token, isStore, loadOrg, loadProducts]);
 
-  const sections = store ? storeSections(store) : [];
+  useEffect(() => {
+    let vigente = true;
+    api.getPrizesStatus()
+      .then((s) => { if (vigente) setPrizesOn(Boolean(s.enabled)); })
+      .catch(() => { if (vigente) setPrizesOn(false); });
+    return () => { vigente = false; };
+  }, []);
+
+  // `can_award` lo decide el backend: publicada y verificada.
+  const loadPrizes = useCallback(() => api.getStorePrizes(id, token)
+    .then((data) => { setPrizes(data.prizes); setCanAward(data.can_award === true); setPrizesError(''); })
+    .catch((e) => setPrizesError(`No se pudieron cargar tus premios: ${e.message}`)), [id, token]);
+
+  useEffect(() => {
+    setPrizes(null);
+    setCanAward(null);
+    if (!token || !isStore || prizesOn !== true || !canPrize) return;
+    loadPrizes();
+  }, [token, isStore, prizesOn, canPrize, loadPrizes]);
+
+  const encendidos = { premios: prizesOn === true };
+  const sections = store ? storeSections(store, encendidos) : [];
   const requested = params.get('seccion');
   const section = sections.some((s) => s.key === requested) ? requested : 'resumen';
 
@@ -82,9 +113,18 @@ export default function StorePanel() {
   const shared = { store, org, products, orgError, productsError, setModal, token, loadProducts };
 
   return (
-    <StoreWorkspace store={store} org={org} products={products} section={section}>
+    <StoreWorkspace store={store} org={org} products={products} section={section} encendidos={encendidos}>
       {section === 'resumen' && <StoreOverviewSection {...shared} />}
       {section === 'productos' && <StoreProductsSection {...shared} />}
+      {section === 'premios' && (
+        <StorePrizesSection
+          {...shared}
+          prizes={prizes}
+          prizesError={prizesError}
+          canAward={canAward}
+          loadPrizes={loadPrizes}
+        />
+      )}
       {section === 'perfil' && <StoreProfileSection {...shared} />}
       {section === 'staff' && (
         <>
@@ -107,9 +147,11 @@ export default function StorePanel() {
           modal={modal}
           store={store}
           org={org}
+          products={products}
           token={token}
           onClose={() => setModal(null)}
           onProductsChanged={loadProducts}
+          onPrizesChanged={loadPrizes}
           // El nombre y el logo también viven en la sesión: la barra de esta
           // página, Mi panel y la barra de arriba los leen de ahí.
           onProfileSaved={(saved) => {

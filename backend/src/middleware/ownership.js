@@ -397,6 +397,45 @@ export const organizationAdminRequired = asyncHandler(async (req, res, next) => 
   return res.status(403).json({ error: 'No tienes permiso sobre esta organización' });
 });
 
+// Lo que hace una organización que no es liga ni equipo, pedido por permiso:
+// `organizationAdminRequired` de arriba, pero con el permiso como parámetro y
+// sin el respaldo por `owner_user_id`, que solo existe en `leagues` y `teams`.
+// Una tienda nunca tuvo esa columna: su acceso vive solo en
+// `organization_members`.
+//
+// El tipo lo decide el catálogo y no esta guarda: un permiso que solo trae una
+// tienda (`premios`) deja fuera, solo, a los miembros de un medio o de un
+// equipo, porque para ellos `rolesConPermiso()` devuelve una lista vacía. El
+// admin de la plataforma pasa como dueño, como en todas las guardas de este
+// archivo; si la ruta es solo de un tipo, lo revisa ella con `req.organization`.
+function guardaDeOrganizacion(permiso) {
+  return asyncHandler(async (req, res, next) => {
+    const organizationId = Number(req.params.organizationId);
+    if (!Number.isInteger(organizationId)) return res.status(404).json({ error: 'Organización no encontrada' });
+    const organization = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(organizationId);
+    if (!organization) return res.status(404).json({ error: 'Organización no encontrada' });
+
+    if (req.user.role === 'admin') {
+      req.organization = organization;
+      req.orgRole = 'owner';
+      return next();
+    }
+    const miembro = await db.prepare(
+      `SELECT role FROM organization_members WHERE organization_id = ? AND user_id = ? AND status = 'active'`
+    ).get(organization.id, req.user.id);
+    if (miembro && rolesConPermiso(organization.type, permiso).includes(miembro.role)) {
+      req.organization = organization;
+      req.orgRole = miembro.role;
+      return next();
+    }
+    return res.status(403).json({ error: 'No tienes permiso sobre esta organización' });
+  });
+}
+
+// Los premios de una tienda: ponerlos, retirarlos y cobrar sus códigos
+// (README, "Premios por acertar").
+export const storePrizesRequired = guardaDeOrganizacion('premios');
+
 export const venueOwnerRequired = asyncHandler(async (req, res, next) => {
   const venueId = Number(req.params.id);
   const venue = await db.prepare('SELECT * FROM venues WHERE id = ?').get(venueId);

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Band, ScoreCell, Scoreboard } from '../components/admin/AdminKit.jsx';
@@ -8,6 +9,7 @@ import { formatNumber } from '../utils/adminPanel.js';
 import {
   accuracyFigure, firstName, organizationsOf, organizationsSummary, pendingFigure, splitBoard, upcomingFigure,
 } from '../utils/dashboard.js';
+import { figuraDePremios } from '../utils/premios.js';
 import '../components/admin/admin.css';
 import '../components/dashboard/dashboard.css';
 
@@ -23,6 +25,7 @@ export default function Dashboard() {
   const [board, setBoard] = useState(null);
   const [boardError, setBoardError] = useState('');
   const [stats, setStats] = useState(null);
+  const [prizes, setPrizes] = useState(null);
 
   useEffect(() => {
     if (!token) return undefined;
@@ -40,6 +43,11 @@ export default function Dashboard() {
     api.getMyPredictionStats(token)
       .then((data) => { if (alive) setStats(data); })
       .catch(() => { if (alive) setStats(false); });
+    // Los premios por acertar (README, "Premios por acertar"). Si no hay, o si
+    // están apagados (la lista llega vacía), no sale su celda.
+    api.getMyPrizes(token)
+      .then((data) => { if (alive) setPrizes(data.prizes || []); })
+      .catch(() => { if (alive) setPrizes([]); });
     return () => { alive = false; };
   }, [token]);
 
@@ -61,6 +69,7 @@ export default function Dashboard() {
     : { value: '—', sub: boardError ? 'No se pudo cargar' : null };
   const accuracy = accuracyFigure(stats);
   const pending = pendingFigure(stats);
+  const prizeCell = figuraDePremios(prizes);
 
   return (
     <div className="adm is-solo">
@@ -78,6 +87,13 @@ export default function Dashboard() {
             />
             <ScoreCell label="Aciertos" value={accuracy.value} sub={accuracy.sub} loading={accuracy.loading} />
             <ScoreCell label="Por calificar" value={pending.value} loading={pending.loading} />
+            {prizeCell && (
+              <ScoreCell
+                label="Premios"
+                value={prizeCell.value}
+                sub={<Link to="/premios" className="dsh-prizes-link">{prizeCell.sub}</Link>}
+              />
+            )}
           </Scoreboard>
         </Band>
 

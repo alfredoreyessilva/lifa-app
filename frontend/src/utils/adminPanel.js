@@ -163,6 +163,29 @@ export function planStatus(org, now = new Date()) {
   return { active, expires };
 }
 
+/* ---------- Premios: el interruptor ---------- */
+
+// Lo que contesta GET /admin/switches, como lo pinta la sección Premios (README,
+// "Premios por acertar" → "El interruptor"). Falla cerrado, igual que el backend:
+// si el interruptor no llega o no dice exactamente `true`, está apagado. `since`
+// es la última vez que alguien lo movió; sin historial nadie lo ha movido nunca,
+// y está apagado desde que se construyó.
+export function prizesSwitch(payload) {
+  const value = payload?.switches?.prediction_prizes;
+  const history = Array.isArray(value?.history) ? value.history : [];
+  return {
+    enabled: value?.enabled === true,
+    since: history[0]?.changed_at ?? null,
+    history,
+    active: toNumber(payload?.prizes?.active),
+    stores: toNumber(payload?.prizes?.stores),
+  };
+}
+
+// Quién lo movió. `changed_by_user_id` es ON DELETE SET NULL: la fila sobrevive a
+// la cuenta, y el nombre llega vacío.
+export const switchChangedBy = (change) => change?.changed_by_name || 'Una cuenta que ya no existe';
+
 /* ---------- Tablas y cifras ---------- */
 
 export function paginate(rows, page, size) {

@@ -28,7 +28,8 @@ entorno, así que el CI las corre en cada push (ver `.github/workflows/ci.yml`).
 | `unit/rankingPredicciones.test.mjs` | El orden del ranking de predicciones (el mismo que tenía el concurso), que un empate exacto comparta lugar, la tabla tal como estaba en cada corte de jornada, y los hitos: el mejor umbral cruzado y solo con más participantes que el umbral |
 | `unit/plays.test.mjs` | La aritmética de acreditación de la **NCAA**: que una captura no sea intento de pase, que se parta entre los taqueadores, que los dos puntos no entren en los totales individuales, y que un partido en `scoring` no derive box score |
 | `unit/sesiones.test.mjs` | Cuándo deja de servir una sesión después de cambiar la contraseña: que el token de antes no pase, que el que se entrega al cambiarla no nazca revocado (se compara al segundo, no al milisegundo), que quien nunca la cambió no pierda nada, y que un `iat` raro falle cerrado |
-| `unit/orgVisibility.test.mjs` | Publicar y verificar una organización: que una recién registrada, o una fila a medias, sea privada; que ni publicado sin verificar ni verificado sin publicar deje transmitir a un medio; que la versión SQL pida lo mismo; y que una liga o un equipo nunca se oculten por `organizations.is_public` |
+| `unit/orgVisibility.test.mjs` | Publicar y verificar una organización: que una recién registrada, o una fila a medias, sea privada; que ni publicado sin verificar ni verificado sin publicar deje transmitir a un medio, ni poner premios a una tienda; que la versión SQL pida lo mismo; y que una liga o un equipo nunca se oculten por `organizations.is_public` |
+| `unit/premios.test.mjs` | Los premios por acertar: que el código de un ganador sea el mismo cada vez (no se guarda: si cambiara, todos los repartidos dejarían de valer) y distinto entre personas y entre premios; que se lea como venga tecleado —minúsculas, espacios, sin guiones, la O por el cero— sin que una firma incompleta se lea como la de otro premio; la vigencia en días desde que terminó el partido; usado, vencido y vigente; los rangos de lo que se valida, que son los del esquema; que el secreto no salga en lo que viaja; y que el interruptor solo prenda con `on` |
 
 Por qué estas y no otras: son las funciones que **se pueden** probar sin
 levantar nada. Todo lo demás en `src/` toca Postgres en la primera línea, y
@@ -42,7 +43,7 @@ mostrar no se separen.
 
 ## Las de punta a punta
 
-No son unitarias y no corren en el CI: son siete scripts que ejercitan contra
+No son unitarias y no corren en el CI: son ocho scripts que ejercitan contra
 un backend vivo lo único que de verdad no se puede revisar leyendo el código —
 que el saldo cuadre después de cancelar, rechazar y retirar, que un lote
 reenviado no duplique nada, y que veinte intentos simultáneos contra un código
@@ -57,6 +58,7 @@ no consigan veinte comparaciones.
 | `billing-multiliga.e2e.mjs` | un equipo en DOS ligas: que los dos libros no se mezclen, que no se adivine de cuál liga es un pago, y que sacarlo de un roster no le esconda la deuda |
 | `recuperar-contrasena.e2e.mjs` | "¿Olvidaste tu contraseña?": la misma respuesta exista o no la cuenta, un código equivocado que gasta un intento y dice cuántos quedan, que solo cuente el código más reciente, que ni el correcto sirva agotado o vencido, **veinte intentos simultáneos desde veinte IP que consiguen cinco comparaciones**, el tope de cinco códigos por hora, y al canjearlo: la contraseña nueva, el correo verificado, los códigos borrados, el token de antes rechazado —también por `optionalAuth`— y el que se entrega aceptado. Además, que un cambio escrito directo en la base (como lo haría otra instancia) saque el token sin pasar por la caché, y que una cuenta de Google se pueda poner contraseña. **Necesita el backend con `EMAIL_TRANSPORT=log`** |
 | `predicciones.e2e.mjs` | los avisos de tus predicciones en "Mis notificaciones": que el marcador parcial no califique a nadie, que "Finalizar" deje la hora en que terminó, el resultado de cada voto con cuánta gente votó igual, un solo aviso si además sigues el partido, tu lugar al cerrar la jornada (el mismo número que la pestaña Ranking) y el de tu quiniela, el recordatorio de votar que se quita solo al votar, y que una jornada que se destraba después de que abriste la bandeja —se pospone el partido que la detenía— prenda el balón aunque cierre con una hora anterior; que un acierto en playoff valga 2 puntos y se cuente igual en el ranking público y en la quiniela; y los partidos nuevos para predecir: un aviso por tanda que crece y vuelve a prender el balón, que baja al votar y se quita solo, y un borrador que aparece cuando se publica —con "Publicar" y con "Publicar todos", que dejan su evento `published`— y no cuando se capturó |
+| `premios.e2e.mjs` | los premios por acertar: que una tienda sin publicar o sin verificar no los ponga, ni en un borrador, un amistoso, un partido de una liga privada o uno que ya empezó, ni con un producto ajeno, oculto o inactivo; uno por tienda por partido; retirarlo antes del partido y no después; que solo entren dueño y administrador de la tienda; que el premio llegue en el aviso del resultado y en "Mis premios" solo de quien acertó, con su código y su vencimiento; que la tienda vea cuántos y nunca quiénes; cobrar el código una sola vez —también con dos cobros al mismo tiempo—, escrito como venga, sin que otra tienda ni un código inventado pasen; que corregir el marcador mueva el premio y deje lo ya cobrado; el vencido; y que quitarle la verificación a la tienda esconda sus premios y devolvérsela los regrese. Y el interruptor, que es un botón del Panel Admin: la suite lo prende con su propia cuenta de admin en su primer paso, y al final prueba que solo el admin lo mueve, que apagados los premios no salen en el partido, en el aviso ni en "Mis premios" y que la tienda recibe 404, que prendidos vuelven sin que se haya borrado nada, y que apagarlo dos veces deja una sola fila. Al final oculta sus tiendas y su liga y deja el interruptor como lo encontró |
 
 Las dos de cobranza **no** cubren nada de roles ni de fronteras: las dos usan
 un equipo independiente cuyo dueño es el propio actor, así que nunca hay una
@@ -86,6 +88,7 @@ node tests/invites-roles.e2e.mjs
 node tests/plays.e2e.mjs
 node tests/billing-multiliga.e2e.mjs
 node tests/predicciones.e2e.mjs
+node tests/premios.e2e.mjs
 node tests/recuperar-contrasena.e2e.mjs
 ```
 

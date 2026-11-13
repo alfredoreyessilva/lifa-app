@@ -11,8 +11,8 @@
 // sin Postgres. Quién administra la organización lo resuelve quien llama
 // (`puedeVerOrganizacion`, en `orgMembers.js`).
 //
-// Las tres FALLAN CERRADO: una fila a medias, o un campo que llegó como
-// `undefined`, responde "privada" y "no transmite".
+// Todas FALLAN CERRADO: una fila a medias, o un campo que llegó como
+// `undefined`, responde "privada", "no transmite" y "no premia".
 
 // Los tipos que se publican con `organizations.is_public`. Liga y equipo quedan
 // fuera a propósito: una liga se publica con `leagues.is_public`, y un equipo
@@ -42,6 +42,22 @@ export function puedeTransmitir(org) {
 export function puedeTransmitirSql(aliasOrganizacion = 'o') {
   const o = aliasOrganizacion;
   return `(${o}.type = 'media' AND ${o}.is_public AND ${o}.is_verified)`;
+}
+
+// ¿Puede esta tienda ponerle un premio a un partido, y que se vea? Es la regla
+// del medio, con la tienda adentro (README, "Premios por acertar"): verificada,
+// porque es quien promete algo a quien acierta, y publicada, porque su nombre y
+// su logo salen en la página del partido.
+export function puedePremiar(org) {
+  return org?.type === 'store' && org?.is_public === true && org?.is_verified === true;
+}
+
+// La misma regla en Postgres. Se resuelve al leer: ocultar a la tienda o
+// quitarle la verificación esconde sus premios en todos lados —también a quien
+// ya los ganó— sin borrar sus filas, y vuelven en cuanto recupera las dos.
+export function puedePremiarSql(aliasOrganizacion = 'o') {
+  const o = aliasOrganizacion;
+  return `(${o}.type = 'store' AND ${o}.is_public AND ${o}.is_verified)`;
 }
 
 // Lo que enseña la ficha pública de una organización además de logo, nombre y

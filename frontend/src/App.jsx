@@ -37,6 +37,7 @@ const RegisterLeague = lazy(() => import('./pages/RegisterLeague.jsx'));
 const RegisterTeamPage = lazy(() => import('./pages/RegisterTeamPage.jsx'));
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
 const Notifications = lazy(() => import('./pages/Notifications.jsx'));
+const MyPrizes = lazy(() => import('./pages/MyPrizes.jsx'));
 const AdminPanel = lazy(() => import('./pages/AdminPanel.jsx'));
 const InviteClaim = lazy(() => import('./pages/InviteClaim.jsx'));
 const PoolJoinPage = lazy(() => import('./pages/PoolJoinPage.jsx'));
@@ -219,6 +220,11 @@ export default function App() {
             <Route
               path="/notificaciones"
               element={<ProtectedRoute><Notifications /></ProtectedRoute>}
+            />
+            {/* Lo que ganaste por acertar (README, "Premios por acertar"). */}
+            <Route
+              path="/premios"
+              element={<ProtectedRoute><MyPrizes /></ProtectedRoute>}
             />
             <Route
               path="/admin"

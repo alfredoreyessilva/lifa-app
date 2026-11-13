@@ -2,7 +2,7 @@ import express from 'express';
 import db from '../config/db.js';
 import { authRequired, optionalAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL, PREDICTION_CORRECT_ELIMINATION_SQL, PREDICTION_POINTS_SQL, MATCH_IS_EXHIBITION_SQL } from '../utils/scoring.js';
+import { MATCH_GRADABLE_SQL, PREDICTION_CORRECT_SQL, PREDICTION_CORRECT_ELIMINATION_SQL, PREDICTION_POINTS_SQL, MATCH_IS_EXHIBITION_SQL, MATCH_VOTING_CLOSED_SQL } from '../utils/scoring.js';
 import { conPosiciones, porcentaje } from '../utils/rankingPredicciones.js';
 
 const router = express.Router();
@@ -23,11 +23,10 @@ router.post('/', authRequired, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Debes indicar match_id y un pick válido (home, away o tie)' });
   }
 
+  // El candado vive en utils/scoring.js porque es el mismo que cierra un premio.
   const match = await db.prepare(`
-    SELECT id,
-           (COALESCE(match_date::timestamptz <= NOW(), FALSE)
-            OR status IN ('live', 'finished')) AS started
-    FROM matches WHERE id = ?
+    SELECT m.id, ${MATCH_VOTING_CLOSED_SQL} AS started
+    FROM matches m WHERE m.id = ?
   `).get(match_id);
   if (!match) return res.status(404).json({ error: 'Partido no encontrado' });
   if (match.started) return res.status(400).json({ error: 'Ya no se puede votar, el partido ya empezó' });

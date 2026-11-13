@@ -4,7 +4,8 @@ import NotificationCard from '../NotificationCard.jsx';
 import { countFilters, formatNumber, matchesSearch, pluralize } from '../../utils/adminPanel.js';
 import {
   NOTIFICATION_FILTERS, channelStates, groupNotifications, notificationAudience, notificationMeta,
-  notificationPreview, notificationReaders, notificationSearchFields, notificationText, notificationVariants,
+  notificationPreview, notificationPrizePreview, notificationReaders, notificationSearchFields, notificationText,
+  notificationVariants,
   reachLabel, recipientsLabel,
 } from '../../utils/adminNotifications.js';
 import {
@@ -211,6 +212,7 @@ function NotificationDetail({ aviso, canales, onClose }) {
   }, [onClose]);
 
   const variantes = notificationVariants(aviso);
+  const conPremio = notificationPrizePreview(aviso);
   const lectores = aviso.lo_ven ? Object.entries(aviso.lo_ven) : [];
   const alcance = reachLabel(aviso);
 
@@ -223,6 +225,14 @@ function NotificationDetail({ aviso, canales, onClose }) {
           <div className="adm-nt-preview">
             <NotificationCard item={notificationPreview(aviso)} preview />
             <p className="adm-nt-preview-note">Así le llega, con datos de muestra.</p>
+            {conPremio && (
+              <>
+                <NotificationCard item={conPremio} preview />
+                <p className="adm-nt-preview-note">
+                  Así le llega si además ganó el premio de una tienda (README, «Premios por acertar»).
+                </p>
+              </>
+            )}
           </div>
         )}
 

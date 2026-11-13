@@ -116,6 +116,16 @@ test('ningún rol de liga alcanza el playbook de un equipo', () => {
   assert.deepEqual(rolesConPermiso('league', 'playbook'), []);
 });
 
+test('los premios son de una tienda: su dueño y su administrador, y de nadie más', () => {
+  // Un premio promete un producto de la tienda (README, "Premios por
+  // acertar"). Si una liga o un equipo trajeran el permiso, la guarda los
+  // dejaría poner premios con el inventario de otro.
+  assert.deepEqual(rolesConPermiso('store', 'premios'), ['owner', 'admin']);
+  for (const tipo of ['league', 'team', 'media', 'clinic', 'brand']) {
+    assert.deepEqual(rolesConPermiso(tipo, 'premios'), [], `${tipo} no debería poner premios`);
+  }
+});
+
 test('el editor de roster no toca dinero', () => {
   assert.ok(puede('team', 'roster_editor', 'roster'));
   assert.ok(!puede('team', 'roster_editor', 'cuotas_club'));

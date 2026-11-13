@@ -72,9 +72,25 @@ export function notificationText(aviso) {
 }
 
 // Los otros textos del mismo tipo: "Tu liga canceló un cargo", "No se dio"…
+// Una variante que solo agrega un premio dice el mismo texto que la muestra: el
+// premio va debajo, en su propio bloque (README, "Premios por acertar"). Por eso
+// no entra en la lista de textos —sería un renglón repetido— y se enseña como
+// tarjeta aparte (`notificationPrizePreview`).
+const conPremio = (variante) => Array.isArray(variante?.data?.prizes) && variante.data.prizes.length > 0;
+
 export function notificationVariants(aviso) {
   if (aviso.como === 'correo') return [];
-  return (aviso.variantes ?? []).map((variante) => textoDeAviso(notificationPreview(aviso, variante)));
+  return (aviso.variantes ?? [])
+    .filter((variante) => !conPremio(variante))
+    .map((variante) => textoDeAviso(notificationPreview(aviso, variante)));
+}
+
+// La tarjeta del aviso cuando además trae un premio, o null si el aviso no
+// tiene esa variante.
+export function notificationPrizePreview(aviso, at) {
+  if (aviso.como === 'correo') return null;
+  const variante = (aviso.variantes ?? []).find(conPremio);
+  return variante ? notificationPreview(aviso, variante, at) : null;
 }
 
 const DESTINO = { liga: 'La liga', equipo: 'El equipo' };

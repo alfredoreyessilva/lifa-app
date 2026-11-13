@@ -24,6 +24,8 @@ import {
   esPrivadaAlPublico,
   puedeTransmitir,
   puedeTransmitirSql,
+  puedePremiar,
+  puedePremiarSql,
   CAMPOS_DE_FICHA,
   camposDeFichaSql,
   CAMPOS_DE_PAGINA,
@@ -87,6 +89,36 @@ test('la versión SQL pide lo mismo: medio, publicado y verificado', () => {
   assert.equal(puedeTransmitirSql('o'), "(o.type = 'media' AND o.is_public AND o.is_verified)");
   assert.equal(puedeTransmitirSql(), puedeTransmitirSql('o'), 'el alias por default es o');
   assert.ok(!puedeTransmitirSql('org').includes('?'), 'sin signos de interrogación: db.prepare los vuelve parámetros');
+});
+
+// ── 2b. Una tienda premia con la misma regla ──────────────────────────────
+//
+// README, "Premios por acertar": verificada porque es quien promete algo, y
+// publicada porque su nombre sale en la página del partido.
+
+test('una tienda premia solo publicada y verificada', () => {
+  assert.equal(puedePremiar({ type: 'store', is_public: true, is_verified: true }), true);
+  assert.equal(puedePremiar({ type: 'store', is_public: true, is_verified: false }), false, 'sin verificar');
+  assert.equal(puedePremiar({ type: 'store', is_public: false, is_verified: true }), false, 'privada');
+  assert.equal(puedePremiar({ type: 'store', is_public: false, is_verified: false }), false, 'recién registrada');
+});
+
+test('solo una tienda premia, aunque esté publicada y verificada', () => {
+  for (const type of ['media', 'clinic', 'brand', 'league', 'team']) {
+    assert.equal(puedePremiar({ type, is_public: true, is_verified: true }), false, type);
+  }
+});
+
+test('una tienda a medias, o sin organización, no premia', () => {
+  for (const org of [undefined, null, {}, { type: 'store' }, { type: 'store', is_public: 'true', is_verified: 'true' }]) {
+    assert.equal(puedePremiar(org), false, JSON.stringify(org));
+  }
+});
+
+test('la versión SQL de premiar pide lo mismo: tienda, publicada y verificada', () => {
+  assert.equal(puedePremiarSql('o'), "(o.type = 'store' AND o.is_public AND o.is_verified)");
+  assert.equal(puedePremiarSql(), puedePremiarSql('o'), 'el alias por default es o');
+  assert.ok(!puedePremiarSql('org').includes('?'), 'sin signos de interrogación: db.prepare los vuelve parámetros');
 });
 
 // ── 3. Liga y equipo no se ocultan por aquí ───────────────────────────────

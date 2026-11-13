@@ -258,3 +258,13 @@
   .adm.is-solo { --adm-pad: var(--space-4); }
   .adm.is-solo .adm-canvas { border-radius: 0; }
 }
+
+/* La celda "Premios" del marcador lleva a /premios (README, "Premios por
+   acertar"). Solo sale si ganaste alguno: el subtítulo es el enlace, con la
+   letra del subtítulo y subrayado, para que se lea como algo que se toca. */
+.dsh-prizes-link {
+  color: var(--mp-cal);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.dsh-prizes-link:hover { color: var(--flag); }

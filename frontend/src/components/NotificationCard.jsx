@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import { SIN_META, TYPE_META, textoDeAviso } from '../utils/misNotificaciones.js';
+import { estadoDelGanador, textoDelPremio } from '../utils/premios.js';
+import { imagenAjustada } from '../utils/imagenes.js';
 
 // Una tarjeta de "Mis notificaciones" (README, "Notificaciones: la bandeja y el
 // push"). Vive aparte porque la usan dos pantallas: la bandeja, y el catálogo
@@ -56,6 +58,41 @@ function Origen({ item }) {
   return null;
 }
 
+// Lo que ganaste con este acierto (README, "Premios por acertar"): va dentro del
+// aviso del resultado, no en uno aparte. Uno por premio, con el código a la
+// vista mientras vale, porque es lo que se enseña en la tienda. El enlace lleva
+// a "Mis premios", donde siguen después de que el aviso sale de la bandeja.
+function PremiosDelAviso({ prizes, preview }) {
+  return (
+    <div className="nt-prizes">
+      <ul>
+        {prizes.map((premio) => {
+          const estado = estadoDelGanador(premio);
+          return (
+            <li key={premio.id} className={`nt-prize is-${premio.status}`}>
+              <span className="nt-prize-photo" aria-hidden="true">
+                {premio.product?.image_url ? <img src={imagenAjustada(premio.product.image_url, 120)} alt="" /> : '🎁'}
+              </span>
+              <span className="nt-prize-text">
+                <strong>Ganaste {textoDelPremio(premio)}</strong>
+                <span className="nt-prize-meta">
+                  {premio.store?.name}{premio.store?.is_verified ? ' ✓' : ''} · {estado.detail}
+                </span>
+                {premio.status === 'valid' && premio.code && (
+                  <code className="nt-prize-code" aria-label={`Tu código: ${premio.code}`}>{premio.code}</code>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      {preview
+        ? <span className="nt-prize-link">Ver mis premios →</span>
+        : <Link to="/premios" className="nt-prize-link">Ver mis premios →</Link>}
+    </div>
+  );
+}
+
 export default function NotificationCard({ item, indice = 0, preview = false }) {
   const meta = TYPE_META[item.type] || SIN_META;
   const { title, body, icon } = textoDeAviso(item);
@@ -78,6 +115,7 @@ export default function NotificationCard({ item, indice = 0, preview = false }) 
         </div>
         <h3 className="nt-card-title">{title}</h3>
         {body && <p className="nt-card-body">{body}</p>}
+        {item.data?.prizes?.length > 0 && <PremiosDelAviso prizes={item.data.prizes} preview={preview} />}
         <div className="nt-card-foot">
           <Origen item={item} />
           {item.url && (preview

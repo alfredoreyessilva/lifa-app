@@ -159,3 +159,12 @@ export const IconCalendar = () => (
     <path d="M3.5 10h17M8 3v4M16 3v4" />
   </Icon>
 );
+
+// El de Premios, del panel de una tienda (2026-11-11): una caja con su moño, la
+// misma que `IconoPremio` de la página del partido.
+export const IconGift = () => (
+  <Icon>
+    <path d="M4 11h16v9H4zM3 7h18v4H3zM12 7v13" />
+    <path d="M12 7C10.5 4 6.5 3.5 6.5 6c0 1.5 2.5 1 5.5 1zM12 7c1.5-3 5.5-3.5 5.5-1 0 1.5-2.5 1-5.5 1z" />
+  </Icon>
+);
