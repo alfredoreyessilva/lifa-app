@@ -85,9 +85,15 @@ entradas traen el post-mortem del bug que las provocó.
   ahora salía más tenue que la de la otra, y a 320 px dos etiquetas del marcador se cortaban.
   `CLAUDE.md` decía 47 tablas y 24 guardas: ya iba atrasado, y con esto son 51 y 26.
 
-  Sin desplegar. Al desplegar sale apagado, porque `platform_switches` nace sin filas. Para
-  prenderlo falta lo de "Antes de prenderlo" en el README —la revisión legal y la sección de los
-  Términos— y después, el botón.
+  **Desplegado el 2026-11-13 (`22e5b3b`), apagado.** CI verde; Vercel sirve la sección con la
+  misma hoja que la compilación revisada (`admin-CEXXgS-0.css`) y los textos nuevos en el JS
+  publicado; Render contestó `{"enabled":false}` en `/prizes/status` a los 52 s del push —con
+  eso, la tabla del interruptor ya existe y está sin filas— y 401 en `/admin/switches` sin
+  sesión; en el sitio público, la página de un partido de ONEFA pidió sus premios (`[]`) y no
+  enseñó nada, sin errores; y el ranking de ONEFA quedó idéntico en sus 38 filas contra una foto
+  tomada justo antes del push. Sin probar con la cuenta de Alfredo en producción ni en un
+  teléfono real. Para prenderlo falta lo de "Antes de prenderlo" en el README —la revisión legal
+  y la sección de los Términos— y después, el botón.
 
 - **Panel Admin → Notificaciones: el catálogo de todo lo que la app avisa (2026-11-09).** Lo
   pidió Alfredo para ver qué notificaciones tiene el programa, no para recibirlas, y así no
