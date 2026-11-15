@@ -29,7 +29,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | **P1** | Hoy no daña, pero frena el siguiente paso: la primera liga que cobre, la prueba en cancha, el siguiente cliente |
 | **P2** | Deuda y pulido. Se toma cuando hay tiempo o cuando se toca ese archivo |
 
-## Índice (2026-11-14)
+## Índice (2026-11-15)
 
 | ID | P | Qué | Tipo |
 |-|-|-|-|
@@ -70,6 +70,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-45 | P2 | Un logo que no carga se ve como un cuadro roto | código |
 | PD-47 | P2 | Cancelar un cargo llega a la bandeja como "Pago registrado" | código |
 | PD-48 | P2 | Reconectar Mercado Pago deja sin confirmar una ficha de OXXO que se pague después | código |
+| PD-49 | P2 | Con las compras apagadas, cada visita a una vitrina deja un 404 en la consola | código |
 
 ---
 
@@ -702,11 +703,25 @@ Lo que sí quedó resuelto ese día: la página de un pedido de la conexión ant
 y, si esperaba una ficha de OXXO, pide avisar a la tienda si ya la pagó (`pay_blocked`, con su caso
 en `compras.e2e.mjs`, sección 18b).
 
-Es P2: las compras están apagadas y sin desplegar, y aun prendidas hace falta que la tienda
-reconecte mientras tiene una ficha a medio pagar; el permiso se renueva solo antes de vencer. Se
-resuelve con que la conexión nueva atienda los pedidos de la anterior **cuando es la misma cuenta
-de Mercado Pago** (`provider_user_id` igual): `permisoDelPedido` y "Pagar" usarían la vigente.
-Con otra cuenta no se puede: ese pago vive en la cuenta de antes.
+Es P2: las compras están apagadas, y aun prendidas hace falta que la tienda reconecte mientras
+tiene una ficha a medio pagar; el permiso se renueva solo antes de vencer. Se resuelve con que la
+conexión nueva atienda los pedidos de la anterior **cuando es la misma cuenta de Mercado Pago**
+(`provider_user_id` igual): `permisoDelPedido` y "Pagar" usarían la vigente. Con otra cuenta no
+se puede: ese pago vive en la cuenta de antes.
+
+### PD-49 · Con las compras apagadas, cada visita a una vitrina deja un 404 en la consola
+
+Salió el 2026-11-15 al revisar en el sitio público el despliegue de las compras (`a91e22e`). Para
+saber si la tienda vende, la vitrina pregunta `GET /api/shop/stores/:id`, y con las compras
+apagadas esa ruta contesta 404, como dice el README ("Compras en la vitrina" → "Apagadas"). La
+vitrina lo toma como "no vende" y se ve igual que antes, pero el navegador anota "Failed to load
+resource: 404" en la consola en cada visita. No llega a Sentry (`Sentry.init` va sin
+`httpClientIntegration`) y nadie lo ve; ensucia la consola, que es lo que se revisa en cada
+despliegue.
+
+Es P2. Se resuelve como los premios, que apagados contestan 200 con `{ prizes: [] }` en la ruta
+que pide cada página de partido: `/shop/stores/:id` contestaría `{ selling: false }`, y se
+ajustan "Apagadas" en el README y la sección 18 de `compras.e2e.mjs`, que hoy esperan el 404.
 
 ---
 
@@ -721,8 +736,8 @@ no bloquea nada de lo de arriba.
   con el Mercado Pago de cada tienda.
 - **Prender las compras en la vitrina**: botón Comprar, carrito y Mercado Pago de
   cada tienda, construidas y verificadas el 2026-11-14 contra un Mercado Pago de
-  mentira, sin desplegar; salen apagadas, con su botón en Panel Admin →
-  Compras. Antes de apretarlo: probarlas una vez con las credenciales de prueba de
+  mentira, y en producción desde el 2026-11-15, apagadas, con su botón en Panel
+  Admin → Compras. Antes de apretarlo: probarlas una vez con las credenciales de prueba de
   Mercado Pago (una aplicación en Mercado Pago Developers y dos usuarios de
   prueba), la revisión fiscal y la legal, pasar a los Términos y al Aviso de
   Privacidad los textos que quedaron redactados, las llaves de producción en

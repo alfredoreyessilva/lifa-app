@@ -15,8 +15,8 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
-- **Compras en la vitrina: botón Comprar, carrito y Mercado Pago de cada tienda; construidas y
-  apagadas, sin desplegar (2026-11-14).** Lo pidió Alfredo el 2026-11-14: continuar con "comprar"
+- **Compras en la vitrina: botón Comprar, carrito y Mercado Pago de cada tienda; construidas
+  (2026-11-14) y en producción, apagadas (2026-11-15).** Lo pidió Alfredo el 2026-11-14: continuar con "comprar"
   y "carrito", que los premios habían dejado para la fase siguiente. Se definió primero en el
   README ("Compras en la vitrina"), con cuatro decisiones suyas —el **Mercado Pago de cada
   tienda**, para que el dinero le llegue directo y CFBAMX nunca lo toque; **sin comisión** por
@@ -57,6 +57,21 @@ entradas traen el post-mortem del bug que las provocó.
   y ofrece hacerlo de nuevo, `pay_blocked`). Salió **PD-48** (P2). Sin probar con el Mercado Pago
   de verdad ni en un teléfono real: eso, las revisiones fiscal y legal, y los textos de los
   Términos y del Aviso de Privacidad son "Antes de prenderlo".
+
+  **Desplegado el 2026-11-15 (`a91e22e`), apagado.** CI verde. Vercel publicó a los 129 s del
+  push las tres hojas nuevas (`shop-BM8Vwpvg.css`, `admin-ATAL38pL.css` y
+  `StorePanel-DT_5kukS.css`) con los mismos nombres que la compilación revisada, la hoja principal
+  sin cambios y los textos nuevos en el JS. Render contestó `{"enabled":false}` en `/shop/status`
+  a los 156 s —sin las variables de Mercado Pago en Render las compras no existen, aunque se
+  apriete el botón—, 404 en la tienda y en un pedido, y 401 sin sesión en el panel de la tienda,
+  Mis pedidos y Panel Admin → Compras. Los productos públicos ya traen `size_stock` (vacío en los
+  tres de Deportes Cancún): la migración corrió, y todo lo demás de cada producto quedó igual que
+  en una foto tomada justo antes del push. En el sitio público, la vitrina de Deportes Cancún
+  sale letra por letra igual que antes, en escritorio y en celular, sin "Comprar" ni carrito y sin
+  una sola escritura a la API; deja en la consola el 404 de `/shop/stores/:id` (PD-49). Con las
+  compras apagadas, lo único nuevo que ve una tienda es la casilla opcional de existencias por
+  talla en la ventana de un producto. Sin probar con la cuenta de Alfredo en producción ni en un
+  teléfono real.
 
 - **Premios por acertar: construido, y apagado hasta la revisión legal (2026-11-12); su
   interruptor, un botón del Panel Admin (2026-11-13).** Lo

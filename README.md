@@ -6997,8 +6997,11 @@ pide confirmar y recuerda que cobrarla vuelve a CFBAMX intermediario con ingreso
 
 ### Apagadas
 
-- No hay Comprar ni carrito, y las rutas de comprar contestan 404.
-- La tienda no ve sus secciones nuevas, **salvo Pedidos si ya tiene pedidos**.
+- No hay Comprar ni carrito, y las rutas de comprar contestan 404 (la vitrina lo toma como "no
+  vende", pero deja el 404 en la consola del navegador: PD-49).
+- La tienda no ve sus secciones nuevas, **salvo Pedidos si ya tiene pedidos**. La ventana de un
+  producto sí trae las existencias por talla, opcionales, y la nota de que el precio es con IVA
+  incluido: son del catálogo, no de vender.
 - **Un pedido ya hecho sigue abierto** para su comprador y su tienda, y los avisos de Mercado Pago
   se siguen registrando: es una venta pagada, y esconderla dejaría al comprador sin su link.
 
