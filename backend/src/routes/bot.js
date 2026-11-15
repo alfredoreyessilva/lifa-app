@@ -58,7 +58,12 @@ function buildKnowledgeBase(org, products) {
   const lines = products.map((p) => {
     const price = p.price != null ? `$${Number(p.price).toLocaleString('es-MX')} ${p.currency}` : 'precio a consultar';
     const size = p.size_variant ? `, talla/variante: ${p.size_variant}` : '';
-    const stock = p.stock != null ? `, stock: ${p.stock}` : '';
+    // Con existencias por talla se le dicen talla por talla: "¿hay en M?" es la
+    // pregunta (README, "Compras en la vitrina" → "Existencias, también por talla").
+    const porTalla = p.size_stock && typeof p.size_stock === 'object'
+      ? Object.entries(p.size_stock).map(([talla, n]) => `${talla} ${n}`).join(', ')
+      : '';
+    const stock = porTalla ? `, stock por talla: ${porTalla}` : (p.stock != null ? `, stock: ${p.stock}` : '');
     return `- ${p.name} — ${price}${size}${stock}${p.description ? `. ${p.description}` : ''}`;
   });
   return `Inventario actual de ${org.name}:\n${lines.join('\n')}`;
@@ -164,7 +169,7 @@ router.post('/webhook', asyncHandler(async (req, res) => {
   // fútbol americano, así que necesita ver todo lo que la tienda vende
   // (is_active), no solo lo que decidió mostrar en el directorio de CFBAMX.
   const products = await db.prepare(`
-    SELECT name, description, price, currency, stock, size_variant
+    SELECT name, description, price, currency, stock, size_stock, size_variant
     FROM products WHERE organization_id = ? AND is_active = TRUE
   `).all(org.id);
 

@@ -4,6 +4,9 @@ import { decidirCandadoProduccion, hoyEnMexico } from '../utils/prodGuard.js';
 import { TODOS_LOS_ROLES } from '../utils/orgRoles.js';
 import { ESTADOS_ASISTENCIA } from '../utils/attendance.js';
 import { NIVELES_DE_CAPTURA, TIPOS_DE_JUGADA, ROLES_DE_PARTICIPANTE } from '../utils/plays.js';
+import {
+  FORMAS_DE_ENTREGA, LADOS, MOVIMIENTOS, RENGLONES_DE_PAGO, RENGLONES_UNICOS, TIPOS_DE_RENGLON,
+} from '../utils/compras.js';
 
 const { Pool } = pg;
 
@@ -2584,6 +2587,186 @@ export async function initSchema() {
       )
     `);
     await run(`CREATE INDEX IF NOT EXISTS idx_platform_switches_key ON platform_switches (switch_key, id DESC)`);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Compras en la vitrina (README, "Compras en la vitrina", 2026-11-14, lo
+    // pidió Alfredo): botón Comprar, carrito y Mercado Pago de cada tienda. El
+    // dinero le llega directo a la tienda; aquí se guarda el pedido. Lo leen y lo
+    // escriben routes/shop.js y routes/storeSales.js.
+    //
+    // Las listas de los CHECK vienen de utils/compras.js, que también usan las
+    // rutas, y el frontend tiene su copia (regla 6).
+    const lista = (valores) => valores.map((v) => `'${v}'`).join(', ');
+
+    // El interruptor de las compras se suma al de los premios. Mismo patrón que
+    // `match_events`: el CHECK se rehace con DROP + ADD.
+    await run(`ALTER TABLE platform_switches DROP CONSTRAINT IF EXISTS platform_switches_switch_key_check`);
+    await run(`ALTER TABLE platform_switches ADD CONSTRAINT platform_switches_switch_key_check CHECK (switch_key IN ('prediction_prizes', 'store_purchases'))`);
+
+    // Los ajustes que no son prender o apagar: hoy la comisión de CFBAMX, que nace
+    // en 0. Como los interruptores, cada cambio es una fila y el valor es la última;
+    // sin filas, el de por defecto (utils/ajustesDePlataforma.js).
+    await run(`
+      CREATE TABLE IF NOT EXISTS platform_settings (
+        id                 SERIAL PRIMARY KEY,
+        setting_key        TEXT NOT NULL CHECK (setting_key IN ('purchase_fee_percent')),
+        value              NUMERIC NOT NULL,
+        changed_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        changed_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_platform_settings_key ON platform_settings (setting_key, id DESC)`);
+
+    // Existencias por talla, opcionales: `{"S": 2, "M": 0}`. Cuando están, `stock`
+    // es su suma (routes/products.js), para que el bot, el panel y "Agotado" sigan
+    // leyendo una sola columna.
+    await run(`ALTER TABLE products ADD COLUMN IF NOT EXISTS size_stock JSONB CHECK (size_stock IS NULL OR jsonb_typeof(size_stock) = 'object')`);
+
+    // Cómo vende una tienda: su domicilio (el del vendedor, y donde se recoge), sus
+    // entregas y su política de devoluciones. Una fila por tienda, y se edita: lo
+    // que se le prometió a cada comprador queda copiado en su pedido.
+    await run(`
+      CREATE TABLE IF NOT EXISTS store_sales_settings (
+        organization_id    INTEGER PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+        address            TEXT,
+        pickup_enabled     BOOLEAN NOT NULL DEFAULT FALSE,
+        pickup_hours       TEXT,
+        shipping_enabled   BOOLEAN NOT NULL DEFAULT FALSE,
+        shipping_fee       NUMERIC(12,2) CHECK (shipping_fee >= 0),
+        free_shipping_from NUMERIC(12,2) CHECK (free_shipping_from > 0),
+        match_enabled      BOOLEAN NOT NULL DEFAULT FALSE,
+        return_policy      TEXT,
+        updated_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // Cada vez que una tienda conecta su Mercado Pago, una fila, con sus llaves
+    // cifradas (utils/mercadoPago.js). Desconectar borra las llaves y deja la fila,
+    // con quién y cuándo. Una sola conectada por tienda.
+    await run(`
+      CREATE TABLE IF NOT EXISTS store_payment_accounts (
+        id                      SERIAL PRIMARY KEY,
+        organization_id         INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        provider                TEXT NOT NULL DEFAULT 'mercadopago' CHECK (provider IN ('mercadopago')),
+        provider_user_id        TEXT NOT NULL,
+        access_token_enc        TEXT,
+        refresh_token_enc       TEXT,
+        public_key              TEXT,
+        live_mode               BOOLEAN,
+        expires_at              TIMESTAMPTZ,
+        connected_by_user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        connected_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        disconnected_at         TIMESTAMPTZ,
+        disconnected_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+    await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_store_payment_accounts_vigente ON store_payment_accounts (organization_id) WHERE disconnected_at IS NULL`);
+
+    // Los partidos donde una tienda va a estar, para entregar ahí. Quitarlo no
+    // borra la fila, y el índice parcial deja volver a ponerlo.
+    await run(`
+      CREATE TABLE IF NOT EXISTS store_match_stands (
+        id                   SERIAL PRIMARY KEY,
+        organization_id      INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        match_id             INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+        note                 TEXT,
+        created_by_user_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        withdrawn_at         TIMESTAMPTZ,
+        withdrawn_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+    await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_store_match_stands_vigente ON store_match_stands (organization_id, match_id) WHERE withdrawn_at IS NULL`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_store_match_stands_match ON store_match_stands (match_id)`);
+
+    // El pedido. `token` es la credencial de quien compró (regla 9), y `promised`
+    // la copia de lo que se le prometió: la tienda (nombre, domicilio, teléfono,
+    // horario, política de devoluciones) y la entrega (el partido, su sede y la
+    // nota). Una tienda con pedidos no se borra: son registros de una venta.
+    await run(`
+      CREATE TABLE IF NOT EXISTS store_orders (
+        id                 SERIAL PRIMARY KEY,
+        token              TEXT NOT NULL UNIQUE,
+        organization_id    INTEGER NOT NULL REFERENCES organizations(id) ON DELETE RESTRICT,
+        user_id            INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        buyer_name         TEXT NOT NULL,
+        buyer_phone        TEXT NOT NULL,
+        buyer_email        TEXT,
+        delivery_method    TEXT NOT NULL CHECK (delivery_method IN (${lista(FORMAS_DE_ENTREGA)})),
+        shipping_address   JSONB,
+        match_id           INTEGER REFERENCES matches(id) ON DELETE SET NULL,
+        stand_id           INTEGER REFERENCES store_match_stands(id) ON DELETE SET NULL,
+        promised           JSONB NOT NULL,
+        subtotal           NUMERIC(12,2) NOT NULL CHECK (subtotal > 0),
+        shipping_fee       NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (shipping_fee >= 0),
+        discount           NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (discount >= 0),
+        total              NUMERIC(12,2) NOT NULL CHECK (total > 0),
+        currency           TEXT NOT NULL DEFAULT 'MXN',
+        fee_percent        NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (fee_percent >= 0 AND fee_percent < 100),
+        fee_amount         NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (fee_amount >= 0),
+        payment_account_id INTEGER REFERENCES store_payment_accounts(id) ON DELETE SET NULL,
+        created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CHECK ((delivery_method = 'shipping') = (shipping_address IS NOT NULL))
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_store_orders_org ON store_orders (organization_id, created_at DESC)`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_store_orders_user ON store_orders (user_id) WHERE user_id IS NOT NULL`);
+
+    // Lo que se compró, copiado: un producto se borra y su precio se edita, y el
+    // pedido tiene que seguir diciendo qué se pagó.
+    await run(`
+      CREATE TABLE IF NOT EXISTS store_order_items (
+        id                SERIAL PRIMARY KEY,
+        order_id          INTEGER NOT NULL REFERENCES store_orders(id) ON DELETE CASCADE,
+        product_id        INTEGER REFERENCES products(id) ON DELETE SET NULL,
+        product_name      TEXT NOT NULL,
+        product_image_url TEXT,
+        size_label        TEXT,
+        unit_price        NUMERIC(12,2) NOT NULL CHECK (unit_price > 0),
+        quantity          INTEGER NOT NULL CHECK (quantity BETWEEN 1 AND 10),
+        line_total        NUMERIC(12,2) NOT NULL CHECK (line_total > 0)
+      )
+    `);
+    await run(`CREATE INDEX IF NOT EXISTS idx_store_order_items_order ON store_order_items (order_id)`);
+
+    // Cada cambio de un pedido es un renglón que no se edita, y el estado es su
+    // cuenta (utils/compras.js, estadoDelPedido). Los índices únicos hacen que un
+    // aviso repetido de Mercado Pago no deje dos renglones, y que un pedido no
+    // tenga dos "pagado": un segundo pago aprobado se guarda como `payment_extra`.
+    await run(`
+      CREATE TABLE IF NOT EXISTS store_order_events (
+        id            SERIAL PRIMARY KEY,
+        order_id      INTEGER NOT NULL REFERENCES store_orders(id) ON DELETE CASCADE,
+        kind          TEXT NOT NULL CHECK (kind IN (${lista(TIPOS_DE_RENGLON)})),
+        mp_payment_id TEXT,
+        data          JSONB,
+        by_side       TEXT NOT NULL CHECK (by_side IN (${lista(LADOS)})),
+        by_user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_store_order_events_unico ON store_order_events (order_id, kind) WHERE kind IN (${lista(RENGLONES_UNICOS)})`);
+    await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_store_order_events_pago ON store_order_events (order_id, kind, mp_payment_id) WHERE mp_payment_id IS NOT NULL AND kind IN (${lista(RENGLONES_DE_PAGO)})`);
+    await run(`CREATE INDEX IF NOT EXISTS idx_store_order_events_order ON store_order_events (order_id, id)`);
+
+    // Lo que pasó con las existencias de cada producto de un pedido pagado:
+    // salieron, no alcanzaron, la tienda no lleva la cuenta, o regresaron al
+    // cancelar. Una salida por renglón del pedido y un regreso, nada más.
+    await run(`
+      CREATE TABLE IF NOT EXISTS store_order_stock_moves (
+        id         SERIAL PRIMARY KEY,
+        order_id   INTEGER NOT NULL REFERENCES store_orders(id) ON DELETE CASCADE,
+        item_id    INTEGER NOT NULL REFERENCES store_order_items(id) ON DELETE CASCADE,
+        product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+        size_label TEXT,
+        quantity   INTEGER NOT NULL CHECK (quantity > 0),
+        kind       TEXT NOT NULL CHECK (kind IN (${lista(MOVIMIENTOS)})),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_store_stock_moves_salida ON store_order_stock_moves (item_id) WHERE kind <> 'back'`);
+    await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_store_stock_moves_regreso ON store_order_stock_moves (item_id) WHERE kind = 'back'`);
 
     await client.query('COMMIT');
   } catch (err) {

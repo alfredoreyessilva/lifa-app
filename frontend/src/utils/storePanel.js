@@ -13,6 +13,7 @@
 //   público, así que los primeros de la vitrina aquí son los primeros allá.
 
 import { formatNumber, planStatus, pluralize } from './adminPanel.js';
+import { LO_QUE_FALTA, tallasParaElegir } from './compras.js';
 
 const MX_DATE = { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Mexico_City' };
 const fecha = (value) => new Date(value).toLocaleDateString('es-MX', MX_DATE);
@@ -165,6 +166,32 @@ export function storeHref(id, section = 'resumen', filter = null) {
 
 // Lo que sale arriba del Resumen. Cada renglón lleva a donde se arregla, ya
 // filtrado. No decide nada por la tienda: cuenta lo que su vitrina enseña.
+// Lo que le toca de sus ventas (README, "Compras en la vitrina"), antes que lo del
+// inventario: un pedido pagado espera a alguien. `sales` es GET /store-sales/:id.
+export function salesAttention(storeId, sales, porPreparar = 0) {
+  const items = [];
+  if (porPreparar > 0) {
+    items.push({
+      key: 'pedidos',
+      text: porPreparar === 1 ? '1 pedido por preparar' : `${formatNumber(porPreparar)} pedidos por preparar`,
+      where: porPreparar === 1 ? 'Ya está pagado' : 'Ya están pagados',
+      to: storeHref(storeId, 'pedidos', 'preparar'),
+    });
+  }
+  if (sales?.enabled === true && Array.isArray(sales.missing) && sales.missing.length > 0) {
+    const tuyos = sales.missing.filter((k) => LO_QUE_FALTA[k]?.quien !== 'cfbamx');
+    items.push({
+      key: 'vender',
+      text: 'Tu vitrina todavía no vende',
+      where: tuyos.length
+        ? `Te falta: ${joinWithAnd(tuyos.map((k) => LO_QUE_FALTA[k].label.toLowerCase()))}`
+        : 'Falta que CFBAMX te publique y te verifique',
+      to: storeHref(storeId, 'cobro'),
+    });
+  }
+  return items;
+}
+
 export function storeAttention(org, products) {
   const items = [];
   const id = org?.id;
@@ -217,6 +244,9 @@ export const EMPTY_PRODUCT = {
   currency: 'MXN',
   stock: '',
   size_variant: '',
+  // Existencias por talla (README, "Compras en la vitrina" → "Existencias,
+  // también por talla"): una casilla por talla, opcionales.
+  size_stock: {},
   image_url: '',
   show_on_platform: true,
 };
@@ -229,9 +259,19 @@ export function productToForm(p) {
     currency: p.currency || 'MXN',
     stock: p.stock ?? '',
     size_variant: p.size_variant || '',
+    size_stock: p.size_stock && typeof p.size_stock === 'object'
+      ? Object.fromEntries(Object.entries(p.size_stock).map(([talla, n]) => [talla, String(n)]))
+      : {},
     image_url: p.image_url || '',
     show_on_platform: p.show_on_platform !== false,
   };
+}
+
+// Las casillas de las tallas que siguen en "Tallas o variantes", llenas.
+function existenciasPorTallaDe(form) {
+  const tallas = tallasParaElegir(form.size_variant);
+  const llenas = tallas.filter((t) => text(form.size_stock?.[t]) !== '');
+  return { tallas, llenas };
 }
 
 const text = (value) => String(value ?? '').trim();
@@ -248,7 +288,22 @@ export function validateProductForm(form) {
   if (stock && (!Number.isInteger(Number(stock)) || Number(stock) < 0)) {
     return 'Las existencias son un número entero, de 0 en adelante.';
   }
+  // Por talla, de todas o de ninguna: la talla sin número no tendría de dónde contar.
+  const { tallas, llenas } = existenciasPorTallaDe(form);
+  if (llenas.length > 0 && llenas.length < tallas.length) {
+    return `Pon las existencias de todas las tallas, o de ninguna (falta ${tallas.filter((t) => !llenas.includes(t)).join(', ')}).`;
+  }
+  if (llenas.some((t) => !Number.isInteger(Number(form.size_stock[t])) || Number(form.size_stock[t]) < 0)) {
+    return 'Las existencias de cada talla son un número entero, de 0 en adelante.';
+  }
   return null;
+}
+
+// Con existencias por talla, el número del producto es su suma.
+export function sumaDeTallas(form) {
+  const { tallas, llenas } = existenciasPorTallaDe(form);
+  if (llenas.length === 0 || llenas.length < tallas.length) return null;
+  return llenas.reduce((suma, t) => suma + Number(form.size_stock[t] || 0), 0);
 }
 
 // Lo que viaja en POST y PUT. Vacío es NULL: "sin precio" sale en la vitrina como
@@ -256,13 +311,18 @@ export function validateProductForm(form) {
 export function productPayload(form) {
   const price = text(form.price);
   const stock = text(form.stock);
+  const { tallas, llenas } = existenciasPorTallaDe(form);
+  const porTalla = llenas.length > 0 && llenas.length === tallas.length
+    ? Object.fromEntries(tallas.map((t) => [t, Number(form.size_stock[t])]))
+    : null;
   return {
     name: text(form.name),
     description: text(form.description) || null,
     price: price === '' ? null : Number(price),
     currency: text(form.currency) || 'MXN',
-    stock: stock === '' ? null : Number(stock),
+    stock: porTalla ? sumaDeTallas(form) : (stock === '' ? null : Number(stock)),
     size_variant: text(form.size_variant) || null,
+    size_stock: porTalla,
     image_url: text(form.image_url) || null,
     show_on_platform: form.show_on_platform !== false,
   };

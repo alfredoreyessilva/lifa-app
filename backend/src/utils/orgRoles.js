@@ -104,6 +104,15 @@ const ETIQUETAS_POR_TIPO = {
 // permiso que solo existe en una tienda. Lo traen el dueño y el administrador,
 // los mismos que ya llevan su inventario: un premio promete uno de sus
 // productos.
+//
+// `pedidos` y `cobros` son las compras en la vitrina (README, "Compras en la
+// vitrina", 2026-11-14), y se separan a propósito. `pedidos` —ver los pedidos
+// con los datos de quien compró, marcarlos, cancelarlos con reembolso y ajustar
+// las entregas— lo traen el dueño y el administrador, que son quienes atienden
+// el mostrador. `cobros` —conectar o desconectar la cuenta de Mercado Pago— solo
+// el dueño: quien conecta decide a dónde va el dinero de cada venta, y un
+// administrador podría mandarlo a su propia cuenta. Por la misma razón su
+// guarda deja fuera al admin de la plataforma (middleware/ownership.js).
 export const PERMISOS = [
   'ver',               // leer el panel: perfil, calendario y roster
   'perfil',            // editar el perfil de la organización
@@ -120,6 +129,8 @@ export const PERMISOS = [
   'entregar_equipos',  // entregarle a un equipo su perfil (una sola vez, no se deshace)
   'playbook',          // las imágenes de jugadas del equipo: ver, subir, renombrar y borrar
   'premios',           // los premios de una tienda: ponerlos, retirarlos y cobrar sus códigos
+  'pedidos',           // las ventas de una tienda: sus pedidos, con quien compró, y sus entregas
+  'cobros',            // conectar o desconectar la cuenta de Mercado Pago de una tienda
 ];
 
 // Lo que `marcadores` deja cambiar de un partido que ya existe, campo por campo
@@ -157,7 +168,7 @@ const PERMISOS_POR_ROL = {
     coach:         ['ver', 'playbook'],
   },
   media:  { owner: ['ver', 'perfil', 'miembros', 'duenos'], admin: ['ver', 'perfil', 'miembros'] },
-  store:  { owner: ['ver', 'perfil', 'miembros', 'duenos', 'premios'], admin: ['ver', 'perfil', 'miembros', 'premios'] },
+  store:  { owner: ['ver', 'perfil', 'miembros', 'duenos', 'premios', 'pedidos', 'cobros'], admin: ['ver', 'perfil', 'miembros', 'premios', 'pedidos'] },
   clinic: { owner: ['ver', 'perfil', 'miembros', 'duenos'], admin: ['ver', 'perfil', 'miembros'] },
   brand:  { owner: ['ver', 'perfil', 'miembros', 'duenos'], admin: ['ver', 'perfil', 'miembros'] },
 };

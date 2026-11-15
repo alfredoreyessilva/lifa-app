@@ -110,7 +110,9 @@ export default function Login() {
         <h2>Iniciar sesión</h2>
         {location.state?.reason && (
           <p style={{ color: 'var(--ink-dim)', fontSize: 14, marginBottom: 16 }}>
-            Para {location.state.reason}, entra a tu cuenta. En cuanto entres, sigues directo con el registro.
+            {/* `next` dice con qué sigue: la compra en una vitrina lo manda, y lo de antes
+                sigue diciendo "con el registro". */}
+            Para {location.state.reason}, entra a tu cuenta. En cuanto entres, sigues directo {location.state.next ?? 'con el registro'}.
           </p>
         )}
         {error && <div className="form-error">{error}</div>}

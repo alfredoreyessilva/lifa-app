@@ -52,3 +52,24 @@ export const reportPaymentLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Demasiados intentos. Espera unos minutos e intenta de nuevo.' },
 });
+
+// Crear un pedido, o abrir Mercado Pago otra vez, es una escritura sin sesión
+// (README, "Compras en la vitrina"): quien compra hace uno o dos, y un script no
+// debe poder llenar la base de pedidos. 20 cada 15 minutos deja reintentar un
+// pago rechazado varias veces.
+export const orderLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiados intentos. Espera unos minutos e intenta de nuevo.' },
+});
+
+// Revisar un carrito no escribe nada: se pide al abrirlo y al cambiarlo.
+export const quoteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas peticiones. Intenta de nuevo en un momento.' },
+});

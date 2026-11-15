@@ -15,6 +15,7 @@ import db from '../config/db.js';
 
 export const INTERRUPTORES = {
   prediction_prizes: 'Premios por acertar',
+  store_purchases: 'Compras en la vitrina',
 };
 
 export const esInterruptor = (clave) => Object.prototype.hasOwnProperty.call(INTERRUPTORES, clave);
@@ -71,3 +72,7 @@ export async function historialDeInterruptor(clave, limite = 10) {
 
 // El de los premios por acertar (README, "Premios por acertar").
 export const premiosEncendidos = () => interruptorEncendido('prediction_prizes');
+
+// El de las compras en la vitrina (README, "Compras en la vitrina"). Prendido no
+// basta: además hacen falta las variables de Mercado Pago (routes/shop.js).
+export const comprasEncendidas = () => interruptorEncendido('store_purchases');

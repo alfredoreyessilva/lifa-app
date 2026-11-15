@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams, Link, Navigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -9,6 +9,12 @@ import { imagenAjustada } from '../utils/imagenes.js';
 import { catalogPrice } from '../utils/money.js';
 import { storeHref, whatsappStatus } from '../utils/storePanel.js';
 import { mediaHref } from '../utils/mediaPanel.js';
+import { agotado, esComprable } from '../utils/compras.js';
+import useCarrito from '../components/shop/useCarrito.js';
+import useVitrina from '../components/shop/useVitrina.js';
+import ProductSheet from '../components/shop/ProductSheet.jsx';
+import CartDrawer, { CartBar } from '../components/shop/CartDrawer.jsx';
+import '../components/shop/shop.css';
 
 // La página pública de una tienda —su vitrina (StoreFront, abajo)— y el
 // formulario de una clínica o una marca.
@@ -103,7 +109,7 @@ export default function OrganizationDetailPage() {
 
   // La vitrina de una tienda, seas o no el dueño.
   if (esTienda) {
-    return <StoreFront org={org} products={products} productsError={productsError} isMine={isMine} />;
+    return <StoreFront org={org} products={products} productsError={productsError} isMine={isMine} token={token} />;
   }
 
   // Clínica o marca, para quien la administra: su formulario. "Ver como
@@ -138,16 +144,40 @@ export default function OrganizationDetailPage() {
 // (README, "La vitrina de una tienda"): una placa en el verde de CFBAMX casi
 // negro lleva el logo y el nombre de la tienda, y el catálogo va en blanco
 // para que el color lo pongan sus productos.
-function StoreFront({ org, products, productsError, isMine }) {
+function StoreFront({ org, products, productsError, isMine, token }) {
   useVitrina(org.name);
+  const navigate = useNavigate();
 
   const redes = redesDeOrganizacion(org);
   const whatsapp = whatsappDeLaTienda(org);
   const tieneCanales = Boolean(org.contact_phone || org.contact_email);
   const tieneContacto = Boolean(whatsapp || tieneCanales);
 
+  // Si la tienda vende (README, "Compras en la vitrina"). Con las compras
+  // apagadas, o una tienda que todavía no vende, la vitrina se queda como era.
+  const [venta, setVenta] = useState(null);
+  useEffect(() => {
+    let vigente = true;
+    api.getShopStore(org.id, token)
+      .then((d) => { if (vigente) setVenta(d); })
+      .catch(() => { if (vigente) setVenta(null); });
+    return () => { vigente = false; };
+  }, [org.id, token]);
+  const vende = venta?.selling === true;
+  const carrito = useCarrito(org.id);
+  const [producto, setProducto] = useState(null);
+  const [carritoAbierto, setCarritoAbierto] = useState(false);
+  const aPagar = () => navigate(`/panel/organizacion/${org.id}/compra`);
+
+  function agregar(p, talla, cantidad, { comprarAhora }) {
+    carrito.agregar(p, talla, cantidad);
+    setProducto(null);
+    if (comprarAhora) aPagar();
+    else setCarritoAbierto(true);
+  }
+
   return (
-    <div className="storefront">
+    <div className={`storefront${vende && carrito.carrito.length ? ' has-cart-bar' : ''}`}>
       <header className="storefront-plate">
         <div className="storefront-inner">
           {isMine && (
@@ -239,7 +269,10 @@ function StoreFront({ org, products, productsError, isMine }) {
           <div className="storefront-catalog-head">
             <h2 id="storefront-catalogo">Catálogo</h2>
             {products && products.length > 0 && (
-              <span>{products.length} {products.length === 1 ? 'producto' : 'productos'}</span>
+              <span>
+                {products.length} {products.length === 1 ? 'producto' : 'productos'}
+                {vende && ' · Compra aquí y paga con Mercado Pago'}
+              </span>
             )}
           </div>
 
@@ -284,6 +317,20 @@ function StoreFront({ org, products, productsError, isMine }) {
                         : <span className="storefront-price is-ask">Precio a consultar</span>}
                       {p.size_variant && <span className="storefront-variant">{p.size_variant}</span>}
                     </div>
+                    {/* Comprar solo lo que se puede cobrar: con precio y en pesos.
+                        "Precio a consultar" se queda como era. */}
+                    {vende && esComprable(p) && (agotado(p) ? (
+                      <span className="shop-soldout">Agotado</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="sf-btn sf-btn-dark sf-btn-sm shop-buy"
+                        aria-label={`Comprar ${p.name}`}
+                        onClick={() => setProducto(p)}
+                      >
+                        Comprar
+                      </button>
+                    ))}
                   </li>
                 );
               })}
@@ -291,33 +338,23 @@ function StoreFront({ org, products, productsError, isMine }) {
           )}
         </div>
       </section>
+
+      {vende && <CartBar cart={carrito} onOpen={() => setCarritoAbierto(true)} />}
+      {producto && (
+        <ProductSheet product={producto} storeName={org.name} onAdd={agregar} onClose={() => setProducto(null)} />
+      )}
+      {carritoAbierto && (
+        <CartDrawer
+          org={org}
+          cart={carrito}
+          token={token}
+          products={products}
+          onClose={() => setCarritoAbierto(false)}
+          onCheckout={() => { setCarritoAbierto(false); aPagar(); }}
+        />
+      )}
     </div>
   );
-}
-
-// Mientras la vitrina está abierta, el <body> deja la cancha: el fondo vive en
-// el body, y la barra de arriba y el pie no son de esta página. También la
-// barra del navegador del celular toma el verde de la placa en vez del de la
-// cancha, y la pestaña lleva el nombre de la tienda, como las demás páginas
-// públicas. Todo se regresa al salir —también al pasar a su panel—. Va en
-// useLayoutEffect para que el primer cuadro ya salga sin cancha.
-function useVitrina(nombre) {
-  useLayoutEffect(() => {
-    document.body.classList.add('is-storefront');
-    const meta = document.querySelector('meta[name="theme-color"]');
-    const colorAntes = meta ? meta.getAttribute('content') : null;
-    const placa = getComputedStyle(document.documentElement).getPropertyValue('--sf-plate').trim();
-    if (meta && placa) meta.setAttribute('content', placa);
-    return () => {
-      document.body.classList.remove('is-storefront');
-      if (meta && colorAntes) meta.setAttribute('content', colorAntes);
-    };
-  }, []);
-
-  useEffect(() => {
-    document.title = `${nombre} · CFBAMX`;
-    return () => { document.title = 'CFBAMX'; };
-  }, [nombre]);
 }
 
 // El botón del bot de WhatsApp con IA — solo aparece si la tienda tiene el

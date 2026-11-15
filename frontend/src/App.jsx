@@ -38,6 +38,10 @@ const RegisterTeamPage = lazy(() => import('./pages/RegisterTeamPage.jsx'));
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
 const Notifications = lazy(() => import('./pages/Notifications.jsx'));
 const MyPrizes = lazy(() => import('./pages/MyPrizes.jsx'));
+const CheckoutPage = lazy(() => import('./pages/CheckoutPage.jsx'));
+const OrderPage = lazy(() => import('./pages/OrderPage.jsx'));
+const MyOrders = lazy(() => import('./pages/MyOrders.jsx'));
+const MercadoPagoConnect = lazy(() => import('./pages/MercadoPagoConnect.jsx'));
 const AdminPanel = lazy(() => import('./pages/AdminPanel.jsx'));
 const InviteClaim = lazy(() => import('./pages/InviteClaim.jsx'));
 const PoolJoinPage = lazy(() => import('./pages/PoolJoinPage.jsx'));
@@ -115,6 +119,10 @@ export default function App() {
                 tiene `estadisticas` ve además el panel de captura. */}
             <Route path="/partidos/:matchId/estadisticas" element={<MatchStatsPage />} />
             <Route path="/panel/organizacion/:id" element={<OrganizationDetailPage />} />
+            {/* Comprar en la vitrina (README, "Compras en la vitrina"): la compra y el
+                pedido no piden cuenta —el link del pedido es la credencial, regla 9—. */}
+            <Route path="/panel/organizacion/:id/compra" element={<CheckoutPage />} />
+            <Route path="/pedido/:token" element={<OrderPage />} />
             <Route path="/iniciar-sesion" element={<Login />} />
             <Route path="/crear-cuenta" element={<Register />} />
             <Route path="/invitaciones/:token" element={<InviteClaim />} />
@@ -225,6 +233,16 @@ export default function App() {
             <Route
               path="/premios"
               element={<ProtectedRoute><MyPrizes /></ProtectedRoute>}
+            />
+            {/* Lo que compraste en las vitrinas, y a donde regresa Mercado Pago
+                cuando una tienda conecta su cuenta. */}
+            <Route
+              path="/pedidos"
+              element={<ProtectedRoute><MyOrders /></ProtectedRoute>}
+            />
+            <Route
+              path="/mercadopago/conectar"
+              element={<ProtectedRoute><MercadoPagoConnect /></ProtectedRoute>}
             />
             <Route
               path="/admin"

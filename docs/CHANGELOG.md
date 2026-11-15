@@ -15,6 +15,49 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Compras en la vitrina: botón Comprar, carrito y Mercado Pago de cada tienda; construidas y
+  apagadas, sin desplegar (2026-11-14).** Lo pidió Alfredo el 2026-11-14: continuar con "comprar"
+  y "carrito", que los premios habían dejado para la fase siguiente. Se definió primero en el
+  README ("Compras en la vitrina"), con cuatro decisiones suyas —el **Mercado Pago de cada
+  tienda**, para que el dinero le llegue directo y CFBAMX nunca lo toque; **sin comisión** por
+  ahora, con su porcentaje en Panel Admin y en 0; **tres entregas**: recoger, envío a domicilio y
+  entrega en un partido; y **se compra sin cuenta**, con la opción de crearla al comprar— y doce
+  más listadas en el plan, que aprobó sin cambios. Como los premios, sale apagado: su botón vive
+  en Panel Admin → Compras.
+
+  Lo que hay: ocho tablas (`store_sales_settings`, `store_payment_accounts` con las llaves
+  cifradas, `store_match_stands`, `store_orders`, `store_order_items`, `store_order_events`,
+  `store_order_stock_moves` y `platform_settings`) y `products.size_stock`; los permisos `pedidos`
+  (dueño y administrador) y `cobros` (solo un dueño de verdad, ni el admin de CFBAMX), con sus
+  guardas; `utils/compras.js`, `utils/mercadoPago.js` (cinco llamadas con `fetch`, sin librería),
+  `utils/ventas.js` y `utils/ajustesDePlataforma.js`; `routes/shop.js` y `routes/storeSales.js`.
+  Crear un pedido y aprobar un pago son una sola sentencia cada uno; el estado de un pedido es la
+  cuenta de sus renglones, que no se editan; las existencias bajan al aprobarse el pago, y dos
+  pagos de la última pieza dejan "Sin existencias" para que la tienda decida. En pantalla: Comprar
+  y la ventana del producto con sus tallas, el carrito con su barra abajo, la compra
+  (`CheckoutPage`), la página del pedido con su link (`OrderPage`), Mis pedidos con su celda en
+  Mi panel, las secciones Pedidos y Cobro y entrega del panel de la tienda, las existencias por
+  talla en la ventana del producto y Panel Admin → Compras.
+
+  Verificado contra `desarrollo-local` y un Mercado Pago de mentira (`tests/fakes/mercadoPago.mjs`):
+  836 unitarias (33 nuevas del backend y 17 del frontend); la suite nueva `compras.e2e.mjs`, 133
+  ok y 0 fallas; `premios.e2e.mjs` 101/0 e `invites-roles.e2e.mjs` 322/0. En el navegador, de 320
+  a 1280 px: la vitrina, el carrito, la compra sin cuenta y con una cuenta creada al comprar (que
+  regresa a la compra con el carrito), las tres entregas; pagar con tarjeta, OXXO pendiente,
+  rechazado, regresar sin pagar, Mercado Pago caído y dos personas pagando la última pieza; Mis
+  pedidos; el panel de la tienda (marcar enviado y entregado, cancelar y reembolsar, desconectar
+  y conectar su Mercado Pago con el permiso negado y aprobado) y Panel Admin → Compras. La sesión
+  se cortó por el límite de 5 horas a media revisión en el navegador; la siguiente la terminó,
+  limpió el escenario que había quedado prendido en la rama y encontró cuatro fallas, ya
+  arregladas: **el carrito no se vaciaba** cuando Mercado Pago no abría (se guardaba dentro del
+  `setState`, y React tira las actualizaciones de la página que se desmonta); **el menú "⋯" de la
+  ventana de un pedido se abría detrás de ella** (`z-index` 40 contra 50), así que la tienda no
+  podía cancelar desde su panel; esa ventana **se deslizaba de lado** a 390 px; y un pedido de una
+  conexión de Mercado Pago anterior ofrecía un **"Pagar" que siempre fallaba** (ahora dice por qué
+  y ofrece hacerlo de nuevo, `pay_blocked`). Salió **PD-48** (P2). Sin probar con el Mercado Pago
+  de verdad ni en un teléfono real: eso, las revisiones fiscal y legal, y los textos de los
+  Términos y del Aviso de Privacidad son "Antes de prenderlo".
+
 - **Premios por acertar: construido, y apagado hasta la revisión legal (2026-11-12); su
   interruptor, un botón del Panel Admin (2026-11-13).** Lo
   pidió Alfredo el 2026-11-11: que quien acierte un partido reciba un premio con su aviso del

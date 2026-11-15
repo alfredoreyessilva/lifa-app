@@ -5,6 +5,10 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { HOY_MX } from '../utils/sqlDates.js';
 import { TIPOS_PUBLICABLES, puedePremiarSql } from '../utils/orgVisibility.js';
 import { INTERRUPTORES, cambiarInterruptor, esInterruptor, historialDeInterruptor } from '../utils/interruptores.js';
+import {
+  AJUSTES, cambiarAjuste, esAjuste, historialDeAjuste, validarAjuste, valorDeAjuste,
+} from '../utils/ajustesDePlataforma.js';
+import { faltanVariables, mercadoPagoConfigurado } from '../utils/mercadoPago.js';
 import { orgTieneMiembrosSql } from '../utils/orgMembers.js';
 import { armarCatalogo } from '../utils/catalogoDeAvisos.js';
 import { pushEncendido } from '../utils/pushNotifier.js';
@@ -59,6 +63,56 @@ router.put('/switches/:key', authRequired, adminRequired, asyncHandler(async (re
   await cambiarInterruptor(clave, req.body.enabled, req.user.id);
   const historial = await historialDeInterruptor(clave);
   res.json({ key: clave, label: INTERRUPTORES[clave], enabled: historial[0]?.enabled === true, history: historial });
+}));
+
+/* ===================== COMPRAS ===================== */
+
+// Panel Admin → Compras (README, "Compras en la vitrina"): el botón, la comisión
+// y lo que ayuda a decidir. Conteos, nunca datos de quien compró: el admin no
+// los necesita para operar la plataforma. "Pagados" son los pedidos con su pago
+// aprobado en los últimos 30 días, sin importar lo que pasó después.
+router.get('/shop', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  const [historial, comision, historialDeComision, conteos] = await Promise.all([
+    historialDeInterruptor('store_purchases'),
+    valorDeAjuste('purchase_fee_percent'),
+    historialDeAjuste('purchase_fee_percent'),
+    db.prepare(`
+      SELECT
+        (SELECT COUNT(*)::int FROM organizations o WHERE ${puedePremiarSql('o')}) AS trusted_stores,
+        (SELECT COUNT(DISTINCT a.organization_id)::int FROM store_payment_accounts a
+          WHERE a.disconnected_at IS NULL AND a.access_token_enc IS NOT NULL) AS connected_stores,
+        (SELECT COUNT(*)::int FROM store_orders) AS orders,
+        (SELECT COUNT(*)::int FROM store_order_events e
+          WHERE e.kind = 'payment_approved' AND e.created_at >= NOW() - INTERVAL '30 days') AS paid_30d,
+        (SELECT COALESCE(SUM(o.total), 0) FROM store_orders o
+          JOIN store_order_events e ON e.order_id = o.id AND e.kind = 'payment_approved'
+          WHERE e.created_at >= NOW() - INTERVAL '30 days') AS paid_amount_30d,
+        (SELECT COALESCE(SUM(o.fee_amount), 0) FROM store_orders o
+          JOIN store_order_events e ON e.order_id = o.id AND e.kind = 'payment_approved'
+          WHERE e.created_at >= NOW() - INTERVAL '30 days') AS fees_30d
+    `).get(),
+  ]);
+  res.json({
+    switch: { label: INTERRUPTORES.store_purchases, enabled: historial[0]?.enabled === true, history: historial },
+    configured: mercadoPagoConfigurado(),
+    missing_variables: faltanVariables(),
+    fee: { percent: comision, limits: AJUSTES.purchase_fee_percent, history: historialDeComision },
+    counts: {
+      ...conteos,
+      paid_amount_30d: Number(conteos.paid_amount_30d),
+      fees_30d: Number(conteos.fees_30d),
+    },
+  });
+}));
+
+// Cambiar un ajuste de la plataforma. Cuerpo: { value }. Solo deja fila si cambia.
+router.put('/settings/:key', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  const clave = req.params.key;
+  if (!esAjuste(clave)) return res.status(404).json({ error: 'No existe ese ajuste' });
+  const { valor, error } = validarAjuste(clave, req.body?.value);
+  if (error) return res.status(400).json({ error });
+  await cambiarAjuste(clave, valor, req.user.id);
+  res.json({ key: clave, value: await valorDeAjuste(clave), history: await historialDeAjuste(clave) });
 }));
 
 /* ===================== SALUD DEL CRON ===================== */

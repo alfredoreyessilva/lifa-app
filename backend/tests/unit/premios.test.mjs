@@ -261,9 +261,11 @@ const RAIZ = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../..')
 const leer = (relativo) => fs.readFileSync(path.join(RAIZ, relativo), 'utf8');
 
 test('el interruptor de los premios se llama igual en el esquema, en el backend y en el Panel Admin', () => {
-  const check = leer('backend/src/config/db.js').match(/switch_key\s+TEXT NOT NULL CHECK \(switch_key IN \(([^)]*)\)\)/);
-  assert.ok(check, 'no se encontró el CHECK de platform_switches en config/db.js');
-  const delEsquema = [...check[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
+  // El CHECK que vale es el último: el de la tabla se rehízo con DROP + ADD al
+  // sumarse el de las compras (2026-11-14).
+  const checks = [...leer('backend/src/config/db.js').matchAll(/CHECK \(switch_key IN \(([^)]*)\)\)/g)];
+  assert.ok(checks.length, 'no se encontró el CHECK de platform_switches en config/db.js');
+  const delEsquema = [...checks.at(-1)[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
 
   const lista = leer('backend/src/utils/interruptores.js').match(/export const INTERRUPTORES = \{([^}]*)\}/);
   assert.ok(lista, 'no se encontró INTERRUPTORES en utils/interruptores.js');

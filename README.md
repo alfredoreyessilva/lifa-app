@@ -4672,9 +4672,10 @@ lo recibe junto con su aviso del resultado. Es lo primero de la plataforma que l
 da algo de valor a quien predice, y lo primero que una tienda hace en la página
 de un partido.
 
-El carrito, la pasarela y el botón Comprar son la fase siguiente. Esta liga el
-acierto con el premio, y deja que la tienda lo cobre en su mostrador con un
-código.
+El carrito, la pasarela y el botón Comprar eran la fase siguiente, y se definieron
+el 2026-11-14 (ver "Compras en la vitrina"). Esta liga el acierto con el premio, y
+deja que la tienda lo cobre en su mostrador con un código; que el descuento se
+aplique solo al comprar es la Fase 2 de las compras.
 
 Hasta este día, "premios o dinero de por medio" estaba en el "Fuera de esta
 versión" de las predicciones porque "cambiaría el marco legal de la función".
@@ -4913,7 +4914,8 @@ nada, y los deja como los encontró.
 
 ### Fuera de esta versión
 
-- El carrito, la pasarela y el botón Comprar, y que el descuento se aplique solo.
+- Que el descuento se aplique solo al comprar en la vitrina: es la Fase 2 de "Compras en
+  la vitrina", que ya trae el carrito, la pasarela y el botón Comprar.
 - El tope de ganadores y los candados contra varias cuentas.
 - El 🎁 en las tarjetas del calendario.
 - Los avisos "un partido que votaste tiene premio" y "tu premio vence pronto".
@@ -6603,6 +6605,9 @@ cobra por sí mismo** — de hecho es lo único que hace el plan `pro`.
 > Anthropic (`ANTHROPIC_API_KEY`). Mientras no estén, el webhook **nunca se
 > ejecuta** y el inventario funciona solo como catálogo público.
 
+Desde el 2026-11-14 la vitrina también vende: botón Comprar, carrito y Mercado Pago
+de cada tienda, apagado hasta su revisión legal. Ver "Compras en la vitrina".
+
 ### La vitrina de una tienda (2026-10-30)
 
 Lo pidió Alfredo: la página pública de una tienda (`/panel/organizacion/:id`)
@@ -6726,6 +6731,409 @@ bot.
 - Checkout self-serve que reemplace la activación manual del plan (Fase 2 del
   roadmap de negocio).
 
+## Compras en la vitrina
+
+Definido el 2026-11-14, a pedido de Alfredo: la vitrina de una tienda deja de ser solo un
+catálogo. Cada producto lleva **Comprar**, hay un **carrito** y se paga con **Mercado Pago**,
+sin salir de CFBAMX más que para pagar. Es la "fase siguiente" que dejaron pendiente los
+premios por acertar el 2026-11-12.
+
+El dinero **no pasa por CFBAMX**: cada tienda conecta su propia cuenta de Mercado Pago y el
+pago le llega directo. CFBAMX publica la vitrina, arma el pedido y le pregunta a Mercado Pago
+si ya se pagó; nada más.
+
+Como los premios, **se construye completo y sale apagado**: comprar y vender toca lo fiscal, lo
+de PROFECO y los datos de personas sin cuenta. Ver "Antes de prenderlo".
+
+Lo que había en producción al definirlo, contado con la API pública: dos tiendas públicas.
+Deportes Cancún, con 3 productos —todos con precio, 10 piezas y "S, M, L, XL" en un solo
+campo—, sin verificar; y TACHONES CANCÚN, verificada y sin productos. Con la regla de "Quién
+vende", ese día ninguna podía vender.
+
+### Lo que decidió Alfredo
+
+En una tanda de cuatro preguntas:
+
+1. **Mercado Pago de cada tienda.** Se descartó que CFBAMX cobrara todo y le pagara a cada
+   tienda: lo habría vuelto intermediario ante el SAT —retenerles impuestos a las tiendas y
+   reportarlas cada mes— y responsable de devoluciones y contracargos. Stripe hace lo mismo,
+   pero en México pocas tiendas chicas tienen cuenta ahí. Con Mercado Pago, las devoluciones y
+   la factura son de la tienda, como en su mostrador.
+2. **Sin comisión por ahora.** El porcentaje existe, vive en Panel Admin y nace en 0. Mientras
+   sea 0, CFBAMX no tiene ingresos por intermediar.
+3. **Tres formas de entrega**: recoger en la tienda, envío a domicilio y **entrega en un
+   partido**, que es lo que solo CFBAMX puede ofrecer. Cada tienda escoge cuáles da. "Lo
+   acuerdan por WhatsApp" se descartó: un pedido tiene que decir cómo llega.
+4. **Se compra sin cuenta**, pero al comprar se ofrece entrar o crearla, "porque da más
+   confianza". Es la regla 9 —a quien viene a pagar no se le pide cuenta— con la puerta abierta.
+
+### Quién vende
+
+Una tienda **publicada y verificada** —la regla de los premios, `puedePremiar`
+(`utils/orgVisibility.js`)— que además tiene:
+
+- **Mercado Pago conectado**;
+- su **domicilio** y un **teléfono**, porque PROFECO pide decir quién vende y dónde
+  encontrarlo antes de cobrar;
+- su **política de cambios y devoluciones**, por lo mismo;
+- al menos **una forma de entrega** lista;
+- y al menos **un producto que se pueda comprar** (abajo).
+
+Es `puedeVender`, y se resuelve al leer (regla 4): si CFBAMX oculta a la tienda o le quita la
+verificación, el botón Comprar desaparece de su vitrina en ese momento, sin tocar una fila. Los
+pedidos que ya existen siguen: son ventas pagadas.
+
+### Qué se puede comprar
+
+Un producto **activo, en la vitrina, con precio y en pesos**. "Precio a consultar" se queda como
+está, sin botón: no se le puede cobrar a nadie un precio que no existe. El precio es el que paga
+el comprador, **con IVA incluido** (lo dice la ventana del producto), porque así lo pide
+PROFECO.
+
+Las **tallas** salen de "Tallas o variantes", separadas por coma: "S, M, L, XL" son cuatro
+opciones, y con más de una el comprador elige. Con una sola no hay nada que elegir. No hay
+migración: el texto que ya estaba se lee así (regla 4).
+
+### Existencias, también por talla
+
+Las existencias de un producto pueden ir **por talla**, y es opcional: en la ventana del producto
+cada talla lleva su casilla, y vacías siguen funcionando como hoy, con un solo número. Una tienda
+de jerseys se queda sin M antes que sin L, y vender una M que no existe obliga a reembolsar.
+Viven en `products.size_stock` (`{"S": 2, "M": 0}`); cuando están, `stock` es su suma, para que
+el bot, el panel y "Agotado" sigan leyendo la misma columna.
+
+**Bajan cuando Mercado Pago aprueba el pago**, no al llenar el carrito. Apartar piezas obligaría
+a soltarlas solas —un cron o un carrito abandonado con la última pieza atorada— y hoy no hay
+volumen que lo justifique. El costo es un caso raro: si dos personas pagan la última pieza, el
+segundo pedido sale **"Sin existencias"** en ese producto, para que la tienda decida si lo
+consigue o lo cancela. Bajan en la misma sentencia que registra el pago, así que un aviso de
+Mercado Pago que llega dos veces no las descuenta dos veces; cada salida queda escrita
+(`store_order_stock_moves`), y **cancelar antes de entregar las regresa**. Si una talla no
+alcanza, ese producto entero queda "Sin existencias" en el pedido: es una sola pregunta por
+producto.
+
+### El carrito
+
+**Uno por tienda**, guardado en el navegador de quien compra: no pide cuenta y sobrevive a
+recargar. Cada tienda cobra por separado en su propio Mercado Pago, así que un carrito con dos
+tiendas serían dos pagos de todas formas.
+
+En la vitrina, **Comprar** abre una ventana con la foto, la talla y la cantidad, y dos botones:
+"Agregar al carrito" y "Comprar ahora". Mientras el carrito tiene algo, una **barra fija abajo**
+dice cuántas piezas lleva y lo abre como panel lateral: en el teléfono es la única forma de verlo
+sin regresar arriba. Lo que guarda el navegador no se le cree: antes de pagar, el servidor vuelve
+a leer precios y existencias (`/quote`) y, si algo cambió, la pantalla lo dice antes del botón de
+pagar.
+
+Se guarda en el navegador **en el momento**, no dentro del `setState` de React: React tira las
+actualizaciones de un componente que se desmonta, y "Pagar" vacía el carrito justo antes de irse.
+Hasta el 2026-11-14, cuando Mercado Pago no abría y la compra saltaba a la página del pedido, el
+carrito se quedaba lleno con un pedido ya hecho (`components/shop/useCarrito.js`).
+
+### La compra: sin cuenta, o con la tuya
+
+`/panel/organizacion/:id/compra`, la misma ruta de la vitrina. Una sola página, de arriba abajo:
+
+1. **Sin sesión, primero se elige**: "Seguir sin cuenta" o "Entrar o crear cuenta". Al entrar o
+   crearla, `Login` y `Register` regresan a la compra (`state.from`) con nombre y correo ya
+   puestos.
+2. **Tus datos**: nombre y WhatsApp, obligatorios; correo, opcional. El WhatsApp es por donde la
+   tienda te encuentra: producción no manda correos (PD-38).
+3. **La entrega**: las que ofrezca la tienda (abajo).
+4. **El resumen**: productos, envío y total; quién vende —nombre, domicilio y teléfono— y su
+   política de devoluciones. Es lo que PROFECO pide enseñar antes de cobrar.
+5. **"Pagar con Mercado Pago"**: el pedido se crea en ese momento y el navegador se va a Mercado
+   Pago. Si Mercado Pago no abre, el pedido ya quedó guardado: la compra salta a su página, que
+   dice "No pudimos abrir Mercado Pago" encima de su "Pagar", y el carrito se vacía igual.
+
+### Mercado Pago: el dinero va directo a la tienda
+
+**Conectar.** Desde su panel, la tienda aprieta "Conectar Mercado Pago", entra a su cuenta en la
+página de Mercado Pago y autoriza a CFBAMX a cobrar a su nombre. Mercado Pago regresa a
+`/mercadopago/conectar`, que le pasa el código al backend con la sesión, y el backend lo cambia
+por el permiso. **Lo conecta solo un dueño de verdad** (permiso `cobros`), y **tampoco el admin de
+CFBAMX**, que en las demás guardas pasa como dueño: quien conecta decide a dónde va el dinero, y
+un administrador de la tienda podría mandarlo a su propia cuenta.
+
+**Cobrar.** Cada pedido abre un cobro de Mercado Pago **a nombre de la tienda**, con su permiso:
+los productos al precio que el servidor acaba de leer, el envío como un renglón más, la
+referencia `cfbamx-<pedido>`, el regreso a la página del pedido y la comisión cuando no sea 0. El
+cobro vence a las **72 horas**, y con él la ficha de OXXO.
+
+**Saber que se pagó.** Mercado Pago avisa a `/api/shop/mercadopago/webhook`. El backend revisa
+la **firma** del aviso, le **pregunta el pago** a Mercado Pago con el permiso de la tienda —nunca le
+cree al aviso solo— y comprueba que la referencia, la moneda y el monto sean los del pedido. Al
+regresar de Mercado Pago, la página del pedido hace la misma pregunta con el `payment_id` que trae
+la dirección: si Render estaba dormido (PD-03) y el aviso tarda, el comprador igual ve su pago.
+
+**Las llaves de la tienda van cifradas** (AES-256-GCM, `node:crypto`, con `MP_TOKEN_KEY`): con
+ellas se cobra y se reembolsa a nombre de la tienda. Nunca salen del backend. Desconectar las
+borra y deja el renglón, con quién y cuándo. El permiso vence y se renueva solo antes de usarse;
+si Mercado Pago ya no lo renueva, la tienda deja de vender y su panel le pide reconectar.
+
+**Sin librería de Mercado Pago**: son cinco llamadas con `fetch` (cambiar el código, renovar,
+abrir el cobro, preguntar un pago, reembolsar). `MP_API_BASE` permite apuntarlas a un Mercado
+Pago de mentira en las pruebas.
+
+**La comisión** se le pide a Mercado Pago en cada cobro (`marketplace_fee`), y Mercado Pago la
+separa sola. Cada pedido guarda el porcentaje y el monto que le tocaron. Hoy es 0 y no viaja.
+
+### Las tres entregas
+
+- **Recoger en la tienda**: su domicilio y su horario.
+- **Envío a domicilio**: una dirección de México (calle y número, colonia, código postal de cinco
+  dígitos, ciudad, estado de `utils/mexicoStates.js` y referencias), un costo fijo que pone la
+  tienda y, si quiere, "gratis desde" un monto. Al marcarlo Enviado, la tienda escribe la
+  paquetería y la guía. Envía a todo el país: los costos por zona quedaron fuera.
+- **Entrega en un partido**: la tienda marca en su panel los partidos donde va a estar, con una
+  nota ("puesto junto a la taquilla"). Son partidos públicos, que no son borrador, con fecha, en
+  los próximos 30 días. El comprador elige uno, y **el pedido cierra 3 horas antes del partido**
+  para que la tienda alcance a prepararlo. La página del pedido enseña la sede. Si el partido
+  cambia de fecha, el pedido lo sigue, porque guarda el partido y no la fecha; si se borra, queda
+  la copia de cómo se prometió.
+
+### El pedido
+
+`/pedido/:token`. **El link es la credencial**, como el estado de cuenta del papá (regla 9): quien
+lo tiene ve el pedido, sin cuenta. El token son 24 bytes al azar; el número que se dice en voz
+alta es el id del pedido.
+
+La página enseña el estado, los productos, el total, la entrega, la política de devoluciones, la
+tienda con su contacto y **"Avisar a la tienda por WhatsApp"**, con el mensaje ya escrito. Un pedido
+sin pagar trae "Pagar" otra vez, **con la cuenta de Mercado Pago con la que se hizo**: ahí vive su
+pago, y con ella se le pregunta. Si la tienda ya conectó otra, ese pedido no se cobra —el pago se
+le preguntaría a la cuenta de antes, que ya no tiene llaves, y nunca quedaría registrado— y su
+página lo dice (`pay_blocked: 'account_changed'`) con "Hacer mi pedido de nuevo" en vez de un
+"Pagar" que siempre fallaría; si esperaba una ficha de OXXO, le pide avisar a la tienda si ya la
+pagó (ver PD-48).
+
+| Estado | Cuándo |
+|-|-|
+| Esperando pago | Recién creado, o se cerró Mercado Pago sin pagar |
+| Pago pendiente | Mercado Pago dice que espera el pago (ficha de OXXO, o en revisión) |
+| Pago rechazado | El último intento se rechazó; se puede volver a intentar |
+| Pagado, por preparar | Mercado Pago lo aprobó |
+| Listo para recoger · Listo para entregar en el partido | La tienda lo marcó |
+| Enviado | La tienda lo marcó, con paquetería y guía |
+| Entregado | La tienda lo marcó |
+| Cancelado · Reembolsado | La tienda lo canceló; Mercado Pago confirmó el reembolso |
+| Contracargo | El comprador desconoció el cargo con su banco |
+| Vencido | Sin pagar a las 72 horas |
+
+**Cada cambio es un renglón que no se edita** (`store_order_events`): pagado, listo, enviado,
+entregado, cancelado, reembolsado, con quién y cuándo. El estado es la cuenta de esos renglones,
+como el interruptor y los libros de dinero (regla 5); "Vencido" ni siquiera se escribe: se calcula
+al leer, sin cron. Un índice único no deja dos "pagado" en el mismo pedido: si llegara un segundo
+pago aprobado —alguien pagó dos veces—, se guarda como **pago repetido** para que la tienda
+reembolse uno.
+
+**El pedido guarda copia de lo que se prometió**: el precio de cada producto, la dirección, el
+domicilio y el horario de la tienda, el partido y su nota, la política de devoluciones y la
+comisión. Es la excepción a "se resuelve al leer", con la misma razón que el premio: una promesa
+se guarda como se hizo. Por eso `product_id` es `SET NULL` y el pedido no se va con el producto.
+Una tienda con pedidos no se puede borrar (`RESTRICT`): son registros de una venta.
+
+**Con sesión**, el pedido nace en tu cuenta y sale en **Mis pedidos** (`/pedidos`), con una celda en
+Mi panel. Un pedido que hiciste sin cuenta se guarda en ella abriendo su link con la sesión puesta
+("Guardar en mis pedidos", que deja su renglón). **No se juntan pedidos por correo**: hoy los
+correos no se verifican (PD-38), y cualquiera podría crear una cuenta con el correo de otro y ver
+sus direcciones.
+
+### Cancelar y reembolsar
+
+Cancela **la tienda**, con **reembolso completo** por Mercado Pago, mientras no se haya entregado;
+las existencias regresan. El comprador que quiere cancelar se lo pide por WhatsApp. Un reembolso
+que la tienda haga directo en Mercado Pago también llega por el aviso y deja el pedido
+Reembolsado. Sin reembolsos parciales.
+
+Si la tienda desconecta Mercado Pago, sus pedidos pagados se reembolsan desde su cuenta de Mercado
+Pago: CFBAMX ya no tiene su permiso. Reconectar —aunque sea la misma cuenta— es una conexión
+nueva, y los pedidos de la anterior se quedan con ella: los sin pagar ya no se cobran (arriba, "El
+pedido"), y una ficha de OXXO que se pague después ya no se puede confirmar aquí (PD-48).
+
+### Cómo se entera cada quien
+
+Sin correo y sin bandeja en esta versión: producción no manda correos (PD-38) y una tienda no
+tiene bandeja.
+
+- **La tienda**: Mercado Pago le avisa de cada pago, como de cualquier venta, y su panel le pone
+  en amarillo los pedidos por preparar, con su número en la barra.
+- **Por WhatsApp, en los dos sentidos, con el mensaje ya escrito**: el comprador tiene "Avisar a
+  la tienda", y cada cambio en el panel de la tienda ofrece "Avisarle por WhatsApp" con el estado y
+  el link del pedido. Es un enlace `wa.me`, sin la API de WhatsApp: no cuesta ni pide nada.
+- **El comprador**: el link de su pedido, y Mis pedidos si tiene cuenta.
+
+### Lo que ve cada quien
+
+- **La tienda** ve de sus pedidos lo que necesita para entregar: nombre, WhatsApp, correo si lo
+  dio, la dirección si es envío, y qué compró. No ve nada más de esa persona ni de su cuenta.
+- **El comprador**, su pedido por el link, o todos en Mis pedidos.
+- **El admin de CFBAMX**, en Panel Admin, cuántas tiendas venden, cuántos pedidos y por cuánto; no
+  los datos de los compradores.
+- **Nadie** ve los datos de la tarjeta: se capturan en Mercado Pago.
+
+### El panel de la tienda: Pedidos y Cobro y entrega
+
+Dos secciones nuevas, con las piezas de siempre (`components/admin/`):
+
+- **Pedidos** — el marcador (por preparar, en amarillo; listos o enviados; entregados; esperando
+  pago; cancelados) filtra la tabla. La ventana de un pedido trae al comprador con su botón de
+  WhatsApp, los productos con su talla (y "Sin existencias" si tocó), la entrega, el pago y la
+  historia. Una acción a la vista —"Marcar listo", "Marcar enviado" o "Marcar entregado"— y
+  "Cancelar y reembolsar" en `⋯`, en rojo, con `ConfirmDialog`. Permiso `pedidos`: dueño y
+  administrador.
+- **Cobro y entrega** — arriba, **lo que le falta para vender**, renglón por renglón; abajo,
+  Mercado Pago (conectar o desconectar, solo un dueño), domicilio, teléfono, horario, las tres
+  entregas con su costo, la política de devoluciones y los partidos donde va a estar.
+
+El Resumen gana "Pedidos por preparar" y la misma lista de lo que falta.
+
+### Panel Admin → Compras
+
+El botón para prenderlas y apagarlas —`platform_switches`, la tabla de los premios, con la clave
+`store_purchases`—, la **comisión** —`platform_settings`: cada cambio es una fila, con quién y cuándo,
+y sin filas es 0—, los conteos de arriba y "Antes de prenderlo" en amarillo. Cambiar la comisión
+pide confirmar y recuerda que cobrarla vuelve a CFBAMX intermediario con ingresos.
+
+### Apagadas
+
+- No hay Comprar ni carrito, y las rutas de comprar contestan 404.
+- La tienda no ve sus secciones nuevas, **salvo Pedidos si ya tiene pedidos**.
+- **Un pedido ya hecho sigue abierto** para su comprador y su tienda, y los avisos de Mercado Pago
+  se siguen registrando: es una venta pagada, y esconderla dejaría al comprador sin su link.
+
+Tampoco existen si al backend le falta alguna variable de Mercado Pago (`MP_CLIENT_ID`,
+`MP_CLIENT_SECRET`, `MP_WEBHOOK_SECRET`, `MP_TOKEN_KEY`, `SITE_URL`, `API_PUBLIC_URL`): falla
+cerrado, como `emailAvailable()`, y Panel Admin lo dice.
+
+### Antes de prenderlo
+
+1. **Revisión fiscal** con un contador: aun sin comisión, CFBAMX conecta compras entre terceros, y
+   el régimen de plataformas digitales cambió en 2026.
+2. **Revisión legal** de lo de PROFECO —lo que se enseña antes de pagar— y de los dos textos de
+   abajo.
+3. **Una sección en los Términos** (`pages/TermsOfService.jsx`), con su fecha nueva. Borrador:
+
+   > **Compras en las tiendas.** Algunas tiendas publicadas y verificadas en CFBAMX venden sus
+   > productos desde su vitrina. La compra es entre tú y la tienda: ella fija el precio, con IVA
+   > incluido, las formas de entrega, su costo y su política de cambios y devoluciones, que ves
+   > antes de pagar; ella te entrega el producto, te da la factura y atiende cambios, devoluciones
+   > y garantías. El pago lo procesa Mercado Pago y llega directo a la cuenta de la tienda: CFBAMX
+   > no recibe ese dinero, no vende los productos y no garantiza su existencia, calidad ni entrega.
+   > Tu pedido tiene un enlace propio: quien lo tenga puede verlo, así que no lo compartas. Si la
+   > tienda cancela un pedido pagado, te reembolsa por Mercado Pago, en sus plazos.
+
+4. **Un apartado en el Aviso de Privacidad** (`pages/PrivacyPolicy.jsx`). Borrador:
+
+   > **Si compras en una tienda.** Para registrar tu pedido te pedimos tu nombre, tu WhatsApp y, si
+   > quieres, tu correo; si eliges envío a domicilio, tu dirección. Se los entregamos a la tienda
+   > que te vende, porque los necesita para entregarte lo que compraste y contactarte. Los datos
+   > de tu tarjeta los capturas en Mercado Pago: CFBAMX no los recibe ni los guarda. Conservamos el
+   > pedido como registro de la compra.
+
+5. **Una vuelta con las credenciales de prueba de Mercado Pago**: una aplicación en Mercado Pago
+   Developers (Checkout Pro, con conexión de cuentas de vendedores) y dos usuarios de prueba,
+   vendedor y comprador, con sus llaves en el `.env` local. Conectar, una tarjeta aprobada, una
+   ficha de OXXO pendiente, una rechazada y un reembolso. Todo lo demás se verificó contra el
+   Mercado Pago de mentira; esto es lo que comprueba que el de verdad contesta como se supuso.
+6. **Las llaves de producción** de Mercado Pago en Render, con la URL del aviso dada de alta en la
+   aplicación.
+7. **Una compra real pequeña** de punta a punta, con una tienda verificada.
+8. Prenderlas en **Panel Admin → Compras**.
+
+### Fase 2
+
+Va después de que lo de arriba esté verificado:
+
+- **El premio se aplica solo.** Con sesión y con los premios prendidos, si ganaste un premio de
+  esa tienda en un producto de tu carrito, el descuento se aplica a una pieza, sobre el menor entre
+  el precio que se prometió y el de hoy: subir el precio no se come el premio. El canje se guarda al
+  aprobarse el pago, con el pedido (`prediction_prize_redemptions.order_id`); si el pedido se
+  cancela, el canje se anula (`voided_at`) y el premio vuelve, porque no se entregó nada.
+- **Un aviso en Mis notificaciones** para quien compró con cuenta: listo, enviado, entregado o
+  cancelado, calculado de los renglones del pedido, con su lugar en `utils/catalogoDeAvisos.js`.
+- **Los correos**, cuando producción pueda mandarlos (PD-38): a la tienda, "pedido pagado"; al
+  comprador, su pedido con el link.
+
+### Endpoints
+
+`routes/shop.js` (`/api/shop`), lo público y lo del comprador:
+
+| Método | Ruta | Quién | Para qué |
+|---|---|---|---|
+| GET | `/status` | Público | `{ enabled }` |
+| GET | `/stores/:organizationId` | Público | Si vende, sus entregas, sus partidos, su domicilio y su política |
+| POST | `/stores/:organizationId/quote` | Público | Revisar un carrito, sin escribir |
+| POST | `/stores/:organizationId/orders` | Público, sesión opcional | Crear el pedido y abrir Mercado Pago |
+| GET | `/orders/:token` | El link | El pedido; con `payment_id`, le pregunta el pago a Mercado Pago |
+| POST | `/orders/:token/pay` | El link | Abrir Mercado Pago otra vez |
+| POST | `/orders/:token/claim` | El link, con sesión | Guardarlo en tu cuenta |
+| GET | `/mine` | Con sesión | Tus pedidos |
+| POST | `/mercadopago/webhook` | Mercado Pago | El aviso de un pago |
+
+`routes/storeSales.js` (`/api/store-sales`), el panel de la tienda:
+
+| Método | Ruta | Permiso | Para qué |
+|---|---|---|---|
+| GET | `/:organizationId` | `pedidos` | Ajustes, Mercado Pago, lo que falta, sus puestos |
+| PUT | `/:organizationId/settings` | `pedidos` | Guardar los ajustes |
+| POST | `/:organizationId/mercadopago/link` | `cobros` | El enlace para conectar |
+| POST | `/:organizationId/mercadopago/connect` | `cobros` | Cambiar el código por el permiso |
+| POST | `/:organizationId/mercadopago/disconnect` | `cobros` | Desconectar |
+| GET | `/:organizationId/matches` | `pedidos` | Partidos donde puede poner un puesto |
+| POST | `/:organizationId/stands` | `pedidos` | Poner un puesto en un partido |
+| POST | `/:organizationId/stands/:standId/withdraw` | `pedidos` | Quitarlo |
+| GET | `/:organizationId/orders` | `pedidos` | Sus pedidos |
+| GET | `/:organizationId/orders/:orderId` | `pedidos` | Un pedido, con el comprador |
+| POST | `/:organizationId/orders/:orderId/:action` | `pedidos` | `ready`, `shipped`, `delivered` o `cancel` |
+
+Panel Admin: `GET /api/admin/shop` y `PUT /api/admin/settings/:key`; el botón es el mismo `PUT
+/api/admin/switches/:key` de los premios.
+
+Límites: crear un pedido y volver a pagar, 20 cada 15 minutos por IP (`orderLimiter`): quien compra
+hace uno o dos, y así puede reintentar varias veces un pago rechazado; revisar un carrito, 60 por
+minuto; ver un pedido, 30 por minuto, como el estado de cuenta del papá.
+
+### Esquema
+
+Al final de `db.js` (regla 8): `store_sales_settings` (una fila por tienda), `store_payment_accounts`
+(cada conexión, con sus llaves cifradas), `store_match_stands`, `store_orders`, `store_order_items`,
+`store_order_events`, `store_order_stock_moves` y `platform_settings`; `products.size_stock`; y
+`store_purchases` en el `CHECK` de `platform_switches`. Crear un pedido —el pedido, sus productos y su
+primer renglón— es una sola sentencia con CTEs, y aprobar un pago —el renglón y las existencias—
+también (ver "Una transacción real no se reparte" en CLAUDE.md).
+
+Las listas que viajan —formas de entrega, tipos de renglón, estados— están en el `CHECK`, en
+`utils/compras.js` del backend y en el del frontend, y una prueba falla si uno cambia solo (regla 6).
+
+### Frontend
+
+- La vitrina (`OrganizationDetailPage.jsx`) lleva Comprar y el carrito, de `components/shop/`.
+- `pages/CheckoutPage.jsx` — la compra.
+- `pages/OrderPage.jsx` — el pedido, con el link.
+- `pages/MyOrders.jsx` — Mis pedidos.
+- `pages/MercadoPagoConnect.jsx` — a donde regresa Mercado Pago al conectar.
+- `StoreOrdersSection.jsx` y `StoreSalesSection.jsx` en el panel de la tienda, y
+  `AdminShopSection.jsx` en Panel Admin.
+- Las cuentas y los textos —totales, tallas, estados, mensajes de WhatsApp— en `utils/compras.js`,
+  con sus pruebas.
+
+Se prueba con `tests/unit/compras.test.mjs` en los dos lados y con la suite `compras.e2e.mjs`, que
+corre contra un **Mercado Pago de mentira** (`tests/fakes/mercadoPago.mjs`): conecta una tienda,
+compra sin cuenta y con cuenta en las tres entregas, aprueba, deja pendiente y rechaza pagos, repite
+avisos, cancela con reembolso y prueba quién puede qué. Con las credenciales de prueba de Mercado
+Pago se repite una vez contra el de verdad.
+
+### Fuera de esta versión
+
+- Un carrito con varias tiendas, y apartar piezas mientras se paga.
+- Que el comprador cancele solo, y los reembolsos parciales.
+- Envío por zonas, o con una paquetería conectada; pagar al recoger.
+- Que CFBAMX emita factura: la pide el comprador a la tienda.
+- Cupones, y una comisión distinta por tienda.
+- Que el bot de WhatsApp venda.
+- Deshacer un "listo" o un "entregado" marcado por error.
+
 ## Panel Admin
 
 `/admin` es desde donde se opera la plataforma: qué ligas publicar, qué organizaciones
@@ -6754,6 +7162,7 @@ que moverse entre ellas no obligue a volver a aprender dónde está cada cosa:
 | Usuarios | Registrados, nuevos este mes, dueños de liga, administradores | Tabla |
 | Patrocinadores | Lugares ocupados, impresiones, clics, CTR | Los cuatro lugares de la barra lateral |
 | Premios | Si están prendidos y desde cuándo, premios puestos, tiendas que pueden ponerlos | El botón para prenderlos o apagarlos, qué cambia y quién los movió (ver "Premios por acertar" → "El interruptor") |
+| Compras | Si están prendidas, tiendas que venden, con Mercado Pago, pedidos pagados en 30 días y su monto, la comisión | El botón, la comisión y quién movió cada uno (ver "Compras en la vitrina") |
 | Notificaciones | Avisos que existen, y a quién le llegan: al aficionado, a la liga, al equipo, por correo | El catálogo, por tema (ver abajo) |
 | Cron | Estado, última llamada, cadencia, llamadas hoy, cobranza de hoy | Los últimos 14 días |
 
@@ -7186,6 +7595,8 @@ tienda vive en `components/store/` (`store.css`, `.sws`).
 | Resumen | En venta, en tu vitrina, existencias, agotados, si está en el sitio | Lo que te toca; lo que se cambió al último; los primeros productos de tu vitrina y si lleva el botón de WhatsApp |
 | Productos | Productos, en tu vitrina, ocultos, inactivos, agotados, sin foto | Tabla con búsqueda y páginas |
 | Perfil | En el sitio, verificación, plan, botón de WhatsApp | Quién la ve, y lo que publica |
+| Pedidos | Por preparar, listos o enviados, entregados, esperando pago, cancelados | Tabla, y la ventana de cada pedido con su siguiente paso. Solo con las compras prendidas en Panel Admin → Compras, o si ya tiene pedidos; ver "Compras en la vitrina" |
+| Cobro y entrega | Lo que le falta para vender | Mercado Pago, domicilio, entregas, política de devoluciones y los partidos donde va a estar. Solo con las compras prendidas |
 | Premios | Abiertos, en juego, entregados, canjeados | Revisar un código, y la tabla de sus premios por partido. Solo con los premios prendidos en Panel Admin → Premios; ver "Premios por acertar" |
 | Staff | — | Quién tiene acceso, ya abierto |
 
@@ -7607,7 +8018,7 @@ Objetivo: que la plataforma genere flujo de cobro real sin que cada venta depend
 - ⏳ Pendiente: rotar `CLOUDINARY_API_SECRET` (`PD-21`).
 
 **Fase 2 — Automatizar el cobro (el bloqueador real de fondo)**
-No iniciado. Hoy `PUT /organizations/:id/plan` (`admin.js`) requiere que el admin active el plan "pro" a mano después de un pago fuera de la plataforma (transferencia/PayPal). Lo único que ese plan **hace** hoy es prender el bot de WhatsApp de una tienda — ver "Tiendas y bot de WhatsApp". Reemplazar por checkout self-serve + webhook (Conekta o Stripe — Conekta tiene ventaja en México por soportar OXXO/SPEI) que actualice `plan`/`plan_expires_at` solo, con downgrade automático si el pago falla. Después, evaluar extender el mismo mecanismo a `billing.js`: cobro en línea liga→equipo, y eventualmente equipo→jugador (para que los equipos cobren a sus propios jugadores).
+No iniciado para el plan Pro. Lo que sí arrancó el 2026-11-14 es comprar en la vitrina de una tienda, con **Mercado Pago de cada tienda**: el dinero le llega directo a ella y CFBAMX no lo toca (ver "Compras en la vitrina"). Lo que se aprenda ahí —la conexión con Mercado Pago, el aviso de pago firmado— sirve después para el plan Pro y para la cobranza. Hoy `PUT /organizations/:id/plan` (`admin.js`) requiere que el admin active el plan "pro" a mano después de un pago fuera de la plataforma (transferencia/PayPal). Lo único que ese plan **hace** hoy es prender el bot de WhatsApp de una tienda — ver "Tiendas y bot de WhatsApp". Reemplazar por checkout self-serve + webhook (Conekta o Stripe — Conekta tiene ventaja en México por soportar OXXO/SPEI) que actualice `plan`/`plan_expires_at` solo, con downgrade automático si el pago falla. Después, evaluar extender el mismo mecanismo a `billing.js`: cobro en línea liga→equipo, y eventualmente equipo→jugador (para que los equipos cobren a sus propios jugadores).
 
 **Fase 3 — Red de seguridad técnica**
 En marcha. **Hecho**: las pruebas unitarias corren solas en cada push, con

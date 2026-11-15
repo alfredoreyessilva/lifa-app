@@ -205,7 +205,7 @@ test('el formulario de un producto: vacío es NULL, y el precio que llega como t
 
   assert.deepEqual(productPayload({ ...EMPTY_PRODUCT, name: '  Jersey Hellfish  ', price: '850', stock: '0' }), {
     name: 'Jersey Hellfish', description: null, price: 850, currency: 'MXN', stock: 0,
-    size_variant: null, image_url: null, show_on_platform: true,
+    size_variant: null, size_stock: null, image_url: null, show_on_platform: true,
   });
   assert.deepEqual(
     productPayload({ ...form, price: '', stock: '' }),

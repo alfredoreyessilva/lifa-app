@@ -4,6 +4,7 @@ import { authRequired, optionalAuth } from '../middleware/auth.js';
 import { isNonEmptyString, isValidUrl } from '../utils/validation.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { isOrgMember, puedeVerOrganizacion } from '../utils/orgMembers.js';
+import { existenciasSiguenValiendo, leerExistenciasPorTalla } from '../utils/compras.js';
 
 const router = express.Router();
 
@@ -25,6 +26,12 @@ async function assertOrgAccess(req, res, organizationId) {
   return org;
 }
 
+// Vacío es NULL —"Precio a consultar", "Sin registrar"—, venga como '' o como
+// null. Hasta el 2026-11-14 un null se volvía 0 con Number(null): la ventana del
+// producto manda null cuando el campo va vacío, así que un producto sin precio
+// salía en la vitrina en "$0" y uno sin existencias, "Agotado".
+const numeroOpcional = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+
 function validateProductFields(body, { partial } = {}) {
   const { name, price, stock } = body;
   if (!partial || name !== undefined) {
@@ -37,6 +44,23 @@ function validateProductFields(body, { partial } = {}) {
     return 'El stock debe ser un número entero';
   }
   if (body.image_url && !isValidUrl(body.image_url)) return 'La imagen no es una dirección web válida';
+  return null;
+}
+
+// Las existencias por talla (README, "Compras en la vitrina" → "Existencias,
+// también por talla"): opcionales, de todas las tallas o de ninguna. Cuando
+// están, `stock` es su suma, para que el bot, el panel y "Agotado" sigan leyendo
+// una sola columna. Si la tienda cambia sus tallas sin tocar las casillas, las
+// existencias por talla viejas ya no dicen nada y el producto vuelve a un solo
+// número, el que ya tenía.
+function existenciasDelCuerpo(body, existing = null) {
+  const tallas = body.size_variant !== undefined ? body.size_variant : existing?.size_variant;
+  if (body.size_stock !== undefined) {
+    const r = leerExistenciasPorTalla(body.size_stock, tallas);
+    if (r.error) return { error: r.error };
+    return r.sizeStock ? { sizeStock: r.sizeStock, stock: r.stock } : { sizeStock: null };
+  }
+  if (existing?.size_stock && !existenciasSiguenValiendo(existing.size_stock, tallas)) return { sizeStock: null };
   return null;
 }
 
@@ -56,7 +80,7 @@ router.get('/organization/:organizationId', optionalAuth, asyncHandler(async (re
     return res.status(404).json({ error: 'Organización no encontrada' });
   }
   const products = await db.prepare(`
-    SELECT id, organization_id, name, description, price, currency, stock, size_variant, image_url
+    SELECT id, organization_id, name, description, price, currency, stock, size_stock, size_variant, image_url
     FROM products
     WHERE organization_id = ? AND is_active = TRUE AND show_on_platform = TRUE
     ORDER BY created_at DESC
@@ -82,19 +106,22 @@ router.post('/organization/:organizationId', authRequired, asyncHandler(async (r
 
   const error = validateProductFields(req.body);
   if (error) return res.status(400).json({ error });
+  const porTalla = existenciasDelCuerpo(req.body);
+  if (porTalla?.error) return res.status(400).json({ error: porTalla.error });
 
   const { name, description, price, currency, stock, size_variant, image_url, show_on_platform } = req.body;
   const product = await db.prepare(`
-    INSERT INTO products (organization_id, name, description, price, currency, stock, size_variant, image_url, show_on_platform)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO products (organization_id, name, description, price, currency, stock, size_stock, size_variant, image_url, show_on_platform)
+    VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?)
     RETURNING *
   `).get(
     org.id,
     name.trim(),
     description || null,
-    price === '' || price === undefined ? null : Number(price),
+    numeroOpcional(price),
     currency || 'MXN',
-    stock === '' || stock === undefined ? null : Number(stock),
+    porTalla?.sizeStock ? porTalla.stock : numeroOpcional(stock),
+    porTalla?.sizeStock ? JSON.stringify(porTalla.sizeStock) : null,
     size_variant || null,
     image_url || null,
     show_on_platform !== undefined ? show_on_platform : true
@@ -112,20 +139,32 @@ router.put('/:id', authRequired, asyncHandler(async (req, res) => {
 
   const error = validateProductFields(req.body, { partial: true });
   if (error) return res.status(400).json({ error });
+  const porTalla = existenciasDelCuerpo(req.body, existing);
+  if (porTalla?.error) return res.status(400).json({ error: porTalla.error });
 
   const { name, description, price, currency, stock, size_variant, image_url, is_active, show_on_platform } = req.body;
+  // Con existencias por talla, el número del producto es su suma, y uno suelto que
+  // llegue no la pisa; si se quitaron, el que mande la ventana, o el que ya tenía.
+  let existencias;
+  if (porTalla?.sizeStock) existencias = porTalla.stock;
+  else if (porTalla === null && existing.size_stock) existencias = existing.stock;
+  else existencias = stock !== undefined ? numeroOpcional(stock) : existing.stock;
+  const existenciasPorTalla = porTalla
+    ? (porTalla.sizeStock ? JSON.stringify(porTalla.sizeStock) : null)
+    : (existing.size_stock ? JSON.stringify(existing.size_stock) : null);
   const updated = await db.prepare(`
     UPDATE products SET
-      name = ?, description = ?, price = ?, currency = ?, stock = ?,
+      name = ?, description = ?, price = ?, currency = ?, stock = ?, size_stock = ?::jsonb,
       size_variant = ?, image_url = ?, is_active = ?, show_on_platform = ?, updated_at = NOW()
     WHERE id = ?
     RETURNING *
   `).get(
     name !== undefined ? name.trim() : existing.name,
     description !== undefined ? description : existing.description,
-    price !== undefined ? (price === '' ? null : Number(price)) : existing.price,
+    price !== undefined ? numeroOpcional(price) : existing.price,
     currency !== undefined ? currency : existing.currency,
-    stock !== undefined ? (stock === '' ? null : Number(stock)) : existing.stock,
+    existencias,
+    existenciasPorTalla,
     size_variant !== undefined ? size_variant : existing.size_variant,
     image_url !== undefined ? image_url : existing.image_url,
     is_active !== undefined ? is_active : existing.is_active,

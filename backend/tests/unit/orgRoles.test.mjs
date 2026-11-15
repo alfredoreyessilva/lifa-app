@@ -201,14 +201,28 @@ test('solo el dueño reparte el puesto de dueño', () => {
   }
 });
 
-test('el administrador puede todo lo del dueño salvo nombrar dueños', () => {
+// Las dos cosas que solo hace un dueño: nombrar dueños y conectar la cuenta de
+// Mercado Pago de una tienda, que decide a dónde va su dinero (README, "Compras
+// en la vitrina"). Cualquier otra diferencia entre los dos es un error.
+const SOLO_DEL_DUENO = ['duenos', 'cobros'];
+
+test('el administrador puede todo lo del dueño salvo nombrar dueños y conectar el cobro', () => {
   for (const tipo of TIPOS) {
     if (!esRolValido(tipo, 'admin')) continue;
     for (const permiso of PERMISOS) {
-      if (permiso === 'duenos') continue;
+      if (SOLO_DEL_DUENO.includes(permiso)) continue;
       if (!puede(tipo, 'owner', permiso)) continue;
       assert.ok(puede(tipo, 'admin', permiso), `en ${tipo}, el admin no puede "${permiso}" y el owner sí`);
     }
+  }
+});
+
+test('solo el dueño de una tienda conecta su Mercado Pago, y el administrador lleva los pedidos', () => {
+  assert.deepEqual(rolesConPermiso('store', 'cobros'), ['owner']);
+  assert.deepEqual(rolesConPermiso('store', 'pedidos'), ['owner', 'admin']);
+  for (const tipo of TIPOS.filter((t) => t !== 'store')) {
+    assert.deepEqual(rolesConPermiso(tipo, 'cobros'), [], `${tipo} no vende y tiene "cobros"`);
+    assert.deepEqual(rolesConPermiso(tipo, 'pedidos'), [], `${tipo} no vende y tiene "pedidos"`);
   }
 });
 

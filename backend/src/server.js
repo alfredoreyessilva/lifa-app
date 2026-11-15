@@ -28,6 +28,8 @@ import billingRoutes       from './routes/billing.js';
 import playerBillingRoutes from './routes/playerBilling.js';
 import playbookRoutes      from './routes/playbook.js';
 import prizeRoutes         from './routes/prizes.js';
+import shopRoutes          from './routes/shop.js';
+import storeSalesRoutes    from './routes/storeSales.js';
 
 // Orígenes permitidos para llamar a la API desde el navegador. Se definen en
 // la variable de entorno ALLOWED_ORIGINS (separados por coma), por ejemplo:
@@ -108,6 +110,10 @@ app.use('/api/player-billing', playerBillingRoutes);
 // El playbook cuelga del equipo, como el padrón: `/api/playbook/teams/:teamId/…`.
 app.use('/api/playbook',      playbookRoutes);
 app.use('/api/prizes',        prizeRoutes);
+// Las compras en la vitrina (README, "Compras en la vitrina"): lo público y del
+// comprador, con el aviso de Mercado Pago, y el panel de la tienda.
+app.use('/api/shop',          shopRoutes);
+app.use('/api/store-sales',   storeSalesRoutes);
 
 // Debe ir después de todas las rutas y antes de nuestro manejador de
 // errores propio: reporta el error a Sentry y lo deja pasar (next(err))

@@ -8,6 +8,9 @@ import StoreOverviewSection from '../components/store/StoreOverviewSection.jsx';
 import StoreProductsSection from '../components/store/StoreProductsSection.jsx';
 import StoreProfileSection from '../components/store/StoreProfileSection.jsx';
 import StorePrizesSection from '../components/store/StorePrizesSection.jsx';
+import StoreOrdersSection from '../components/store/StoreOrdersSection.jsx';
+import StoreSalesSection from '../components/store/StoreSalesSection.jsx';
+import { OrderModal, StandModal } from '../components/store/StoreSalesModals.jsx';
 import StoreModal from '../components/store/StoreModals.jsx';
 import { Band } from '../components/admin/AdminKit.jsx';
 import { organizationHref } from '../utils/dashboard.js';
@@ -85,7 +88,37 @@ export default function StorePanel() {
     loadPrizes();
   }, [token, isStore, prizesOn, canPrize, loadPrizes]);
 
-  const encendidos = { premios: prizesOn === true };
+  // Las compras en la vitrina (README, "Compras en la vitrina"): lo de vender y los
+  // pedidos, para quien tiene el permiso. Pedidos sale también con las compras
+  // apagadas si la tienda ya tiene pedidos: son ventas pagadas.
+  const canSell = Boolean(store) && puedeAlguno(store, 'pedidos');
+  const [sales, setSales] = useState(null);
+  const [salesError, setSalesError] = useState('');
+  const [orders, setOrders] = useState(null);
+  const [ordersError, setOrdersError] = useState('');
+
+  const loadSales = useCallback(() => api.getStoreSales(id, token)
+    .then((data) => { setSales(data); setSalesError(''); })
+    .catch((e) => setSalesError(`No se pudo cargar cómo vende tu tienda: ${e.message}`)), [id, token]);
+
+  const loadOrders = useCallback(() => api.getStoreOrders(id, token)
+    .then((data) => { setOrders(data.orders); setOrdersError(''); })
+    .catch((e) => setOrdersError(`No se pudieron cargar tus pedidos: ${e.message}`)), [id, token]);
+
+  useEffect(() => {
+    setSales(null);
+    if (!token || !isStore || !canSell) return;
+    loadSales();
+  }, [token, isStore, canSell, loadSales]);
+
+  const pedidosVisibles = sales?.enabled === true || (sales?.orders_count ?? 0) > 0;
+  useEffect(() => {
+    setOrders(null);
+    if (!token || !isStore || !canSell || !pedidosVisibles) return;
+    loadOrders();
+  }, [token, isStore, canSell, pedidosVisibles, loadOrders]);
+
+  const encendidos = { premios: prizesOn === true, compras: sales?.enabled === true, pedidos: pedidosVisibles };
   const sections = store ? storeSections(store, encendidos) : [];
   const requested = params.get('seccion');
   const section = sections.some((s) => s.key === requested) ? requested : 'resumen';
@@ -112,10 +145,18 @@ export default function StorePanel() {
 
   const shared = { store, org, products, orgError, productsError, setModal, token, loadProducts };
 
+  const porPreparar = (orders || []).filter((o) => o.status === 'paid').length || (sales?.to_prepare ?? 0);
+
   return (
-    <StoreWorkspace store={store} org={org} products={products} section={section} encendidos={encendidos}>
-      {section === 'resumen' && <StoreOverviewSection {...shared} />}
+    <StoreWorkspace store={store} org={org} products={products} section={section} encendidos={encendidos} porPreparar={porPreparar}>
+      {section === 'resumen' && <StoreOverviewSection {...shared} sales={sales} porPreparar={porPreparar} />}
       {section === 'productos' && <StoreProductsSection {...shared} />}
+      {section === 'pedidos' && (
+        <StoreOrdersSection {...shared} orders={orders} ordersError={ordersError} sales={sales} />
+      )}
+      {section === 'cobro' && (
+        <StoreSalesSection {...shared} sales={sales} salesError={salesError} loadSales={loadSales} />
+      )}
       {section === 'premios' && (
         <StorePrizesSection
           {...shared}
@@ -142,7 +183,24 @@ export default function StorePanel() {
         </>
       )}
 
-      {modal && (
+      {modal?.type === 'order' && (
+        <OrderModal
+          store={org ? { ...store, name: org.name } : store}
+          orderId={modal.orderId}
+          token={token}
+          onClose={() => setModal(null)}
+          onChanged={() => { loadOrders(); loadSales(); }}
+        />
+      )}
+      {modal?.type === 'stand' && (
+        <StandModal
+          store={store}
+          token={token}
+          onClose={() => setModal(null)}
+          onSaved={async () => { await loadSales(); setModal(null); }}
+        />
+      )}
+      {modal && !['order', 'stand'].includes(modal.type) && (
         <StoreModal
           modal={modal}
           store={store}

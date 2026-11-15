@@ -168,3 +168,19 @@ export const IconGift = () => (
     <path d="M12 7C10.5 4 6.5 3.5 6.5 6c0 1.5 2.5 1 5.5 1zM12 7c1.5-3 5.5-3.5 5.5-1 0 1.5-2.5 1-5.5 1z" />
   </Icon>
 );
+
+// Los de las compras en la vitrina (2026-11-14): Compras y Pedidos, una bolsa;
+// Cobro y entrega, un camión de reparto.
+export const IconBag = () => (
+  <Icon>
+    <path d="M5 8h14l-1.2 11.2a1 1 0 0 1-1 .8H7.2a1 1 0 0 1-1-.8z" />
+    <path d="M9 10V7a3 3 0 0 1 6 0v3" />
+  </Icon>
+);
+export const IconTruck = () => (
+  <Icon>
+    <path d="M3 6.5h11v9H3zM14 9.5h3.6l3 3.2v2.8H14z" />
+    <circle cx="7" cy="17.5" r="1.7" />
+    <circle cx="17" cy="17.5" r="1.7" />
+  </Icon>
+);

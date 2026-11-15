@@ -13,9 +13,9 @@ el README; lo histórico, en `docs/CHANGELOG.md`.
 
 ```
 backend/    Node 22 + Express, ESM. Postgres en Neon.
-  src/config/db.js      El esquema COMPLETO (51 tablas) + migraciones al arrancar
-  src/routes/           Aquí vive todo el SQL — 20 archivos
-  src/middleware/       auth (JWT) · ownership (26 guardas, por permiso) · rateLimit
+  src/config/db.js      El esquema COMPLETO (59 tablas) + migraciones al arrancar
+  src/routes/           Aquí vive todo el SQL — 23 archivos
+  src/middleware/       auth (JWT) · ownership (28 guardas, por permiso) · rateLimit
   src/utils/            Funciones PURAS — lo único que se puede probar sin Postgres
     orgRoles.js         Qué puede cada rol, por tipo de organización. Fuente única
     catalogoDeAvisos.js Todo lo que la app avisa. Antes de crear un aviso, buscar aquí
@@ -33,8 +33,8 @@ Dónde buscar antes de preguntar: **README** tiene una sección por dominio
 Predicciones y quinielas · Premios por acertar · Roster · Roster público y pase de lista ·
 Estadísticas por jugada · Capturar sin señal · Equipos independientes · Playbook
 del equipo · Organizaciones: publicar y verificar · Transmisiones · Tiendas y bot
-de WhatsApp · Panel Admin · El panel de una liga · Mi panel · El panel de una
-tienda · Seguridad), cada una con el porqué de sus decisiones. **`docs/ESTADO.md`** dice
+de WhatsApp · Compras en la vitrina · Panel Admin · El panel de una liga · Mi panel ·
+El panel de una tienda · Seguridad), cada una con el porqué de sus decisiones. **`docs/ESTADO.md`** dice
 qué producto está a qué nivel, y **`docs/PENDIENTES.md`** es la lista única de lo
 que falta, con prioridad.
 
@@ -48,10 +48,10 @@ npm test                                      # en cualquiera de los dos: node -
 
 Las pruebas unitarias de los dos lados corren en el CI en cada push (el número
 al día está en `docs/ESTADO.md`, no aquí, para que no se desfase).
-Las **ocho** suites de punta a punta —las dos de cobranza, la de invitaciones
+Las **nueve** suites de punta a punta —las dos de cobranza, la de invitaciones
 y roles, la de estadísticas por jugada, la de un equipo en varias ligas, la de
-predicciones, la de premios y la de recuperar la contraseña— **no**: necesitan
-Postgres vivo.
+predicciones, la de premios, la de recuperar la contraseña y la de compras—
+**no**: necesitan Postgres vivo.
 Instrucciones en `backend/tests/README.md`.
 
 ---
@@ -211,7 +211,11 @@ lo inventaba el mismo código que se estaba probando.
   acertar → `premios.e2e.mjs` (prende el interruptor con su propia cuenta de
   admin y lo deja como estaba) y
   `predicciones.e2e.mjs`, porque el premio viaja en el aviso del resultado y
-  cierra con el candado del voto. Cambio de login, sesión o
+  cierra con el candado del voto. Cambio de compras en la vitrina →
+  `compras.e2e.mjs`, que levanta su propio Mercado Pago de mentira en el 4200
+  (el backend del 4100 arranca con las variables `MP_*` de su cabecera); si
+  toca los productos, también `premios.e2e.mjs`, y si toca permisos de una
+  tienda, `invites-roles.e2e.mjs`. Cambio de login, sesión o
   `middleware/auth.js` → `recuperar-contrasena.e2e.mjs` (backend con
   `EMAIL_TRANSPORT=log`) y las demás: `authRequired` está en todas las rutas
   con sesión.

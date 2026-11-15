@@ -7,7 +7,8 @@ import { formatNumber, pluralize } from '../../utils/adminPanel.js';
 import { catalogPrice } from '../../utils/money.js';
 import { imagenAjustada } from '../../utils/imagenes.js';
 import {
-  inShowcase, isActive, recentlyChanged, showcaseLead, stockOf, storeAttention, storeHref, storeTotals, whatsappStatus,
+  inShowcase, isActive, recentlyChanged, salesAttention, showcaseLead, stockOf, storeAttention, storeHref, storeTotals,
+  whatsappStatus,
 } from '../../utils/storePanel.js';
 import { StoreEyebrow } from './StoreWorkspace.jsx';
 import { ProductPrice, ProductStock, ProductThumb } from './StoreProductBits.jsx';
@@ -15,7 +16,9 @@ import { ProductPrice, ProductStock, ProductThumb } from './StoreProductBits.jsx
 // La primera pantalla del panel de una tienda contesta, en este orden: qué te
 // toca resolver, qué moviste al último y qué ve el público. Es lo que abre quien
 // acaba de vender la última talla M: el producto está a un clic de aquí.
-export default function StoreOverviewSection({ store, org, products, orgError, productsError, setModal }) {
+export default function StoreOverviewSection({
+  store, org, products, orgError, productsError, setModal, sales, porPreparar = 0,
+}) {
   const totals = products ? storeTotals(products) : null;
   const ready = Boolean(org && products);
   const isPublic = org ? org.is_public : store.is_public;
@@ -69,7 +72,7 @@ export default function StoreOverviewSection({ store, org, products, orgError, p
 
         {!ready ? !(orgError || productsError) && <SectionLoading /> : (
           <>
-            <Attention items={storeAttention(org, products)} />
+            <Attention items={[...salesAttention(store.id, sales, porPreparar), ...storeAttention(org, products)]} />
 
             {products.length === 0 ? (
               <div className="adm-no-results">

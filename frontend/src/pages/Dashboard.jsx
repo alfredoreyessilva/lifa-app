@@ -10,6 +10,7 @@ import {
   accuracyFigure, firstName, organizationsOf, organizationsSummary, pendingFigure, splitBoard, upcomingFigure,
 } from '../utils/dashboard.js';
 import { figuraDePremios } from '../utils/premios.js';
+import { figuraDePedidos } from '../utils/compras.js';
 import '../components/admin/admin.css';
 import '../components/dashboard/dashboard.css';
 
@@ -26,6 +27,7 @@ export default function Dashboard() {
   const [boardError, setBoardError] = useState('');
   const [stats, setStats] = useState(null);
   const [prizes, setPrizes] = useState(null);
+  const [orders, setOrders] = useState(null);
 
   useEffect(() => {
     if (!token) return undefined;
@@ -48,6 +50,11 @@ export default function Dashboard() {
     api.getMyPrizes(token)
       .then((data) => { if (alive) setPrizes(data.prizes || []); })
       .catch(() => { if (alive) setPrizes([]); });
+    // Lo que compraste en las vitrinas (README, "Compras en la vitrina"). Sin
+    // pedidos no sale su celda.
+    api.getMyOrders(token)
+      .then((data) => { if (alive) setOrders(data.orders || []); })
+      .catch(() => { if (alive) setOrders([]); });
     return () => { alive = false; };
   }, [token]);
 
@@ -70,6 +77,7 @@ export default function Dashboard() {
   const accuracy = accuracyFigure(stats);
   const pending = pendingFigure(stats);
   const prizeCell = figuraDePremios(prizes);
+  const orderCell = figuraDePedidos(orders);
 
   return (
     <div className="adm is-solo">
@@ -92,6 +100,13 @@ export default function Dashboard() {
                 label="Premios"
                 value={prizeCell.value}
                 sub={<Link to="/premios" className="dsh-prizes-link">{prizeCell.sub}</Link>}
+              />
+            )}
+            {orderCell && (
+              <ScoreCell
+                label="Pedidos"
+                value={orderCell.value}
+                sub={<Link to="/pedidos" className="dsh-prizes-link">{orderCell.sub}</Link>}
               />
             )}
           </Scoreboard>

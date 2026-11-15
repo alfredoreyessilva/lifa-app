@@ -6,7 +6,7 @@ import { initials } from '../../utils/matchDisplay.js';
 import { imagenAjustada } from '../../utils/imagenes.js';
 import { storeHref, storeTotals } from '../../utils/storePanel.js';
 import { Status } from '../admin/AdminKit.jsx';
-import { IconBack, IconGift, IconOverview, IconProfile, IconTag, IconUsers } from '../admin/AdminIcons.jsx';
+import { IconBack, IconBag, IconGift, IconOverview, IconProfile, IconTag, IconTruck, IconUsers } from '../admin/AdminIcons.jsx';
 import '../admin/admin.css';
 import '../league/league.css';
 import './store.css';
@@ -25,10 +25,16 @@ import './store.css';
 // Premios además necesita el interruptor (README, "Premios por acertar"): con los
 // premios apagados en Panel Admin → Premios la sección no existe, y sus rutas
 // contestan 404.
+//
+// Las compras igual (README, "Compras en la vitrina"): Cobro y entrega solo con
+// las compras prendidas; Pedidos también, o si la tienda ya tiene pedidos, porque
+// un pedido pagado se sigue atendiendo aunque las apaguen (`encendidos.pedidos`).
 export const STORE_SECTIONS = [
   { key: 'resumen',   label: 'Resumen',   icon: IconOverview, permisos: ['ver'] },
   // El inventario lo maneja cualquier miembro (`isOrgMember`, routes/products.js).
   { key: 'productos', label: 'Productos', icon: IconTag,      permisos: ['ver'] },
+  { key: 'pedidos',   label: 'Pedidos',   icon: IconBag,      permisos: ['pedidos'], interruptor: 'pedidos' },
+  { key: 'cobro',     label: 'Cobro y entrega', icon: IconTruck, permisos: ['pedidos'], interruptor: 'compras' },
   { key: 'premios',   label: 'Premios',   icon: IconGift,     permisos: ['premios'], interruptor: 'premios' },
   { key: 'perfil',    label: 'Perfil',    icon: IconProfile,  permisos: ['perfil'] },
   { key: 'staff',     label: 'Staff',     icon: IconUsers,    permisos: ['miembros'] },
@@ -44,10 +50,10 @@ export const storeSections = (store, encendidos = {}) => STORE_SECTIONS.filter((
 // `store` es la tienda como la manda /auth/me (con tu rol y tus permisos), y
 // `org` la fila completa de GET /organizations/:id, que llega después: mientras
 // tanto, la barra usa el nombre y el logo de la sesión, y no brinca.
-export default function StoreWorkspace({ store, org, products, section, encendidos, children }) {
+export default function StoreWorkspace({ store, org, products, section, encendidos, porPreparar = 0, children }) {
   return (
     <div className="adm lws sws">
-      <StoreRail store={store} org={org} products={products} section={section} encendidos={encendidos} />
+      <StoreRail store={store} org={org} products={products} section={section} encendidos={encendidos} porPreparar={porPreparar} />
       <div className="adm-main">{children}</div>
     </div>
   );
@@ -70,7 +76,7 @@ export function StoreEyebrow({ store }) {
   return <span className="lws-eyebrow-league">{store.name}</span>;
 }
 
-function StoreRail({ store, org, products, section, encendidos }) {
+function StoreRail({ store, org, products, section, encendidos, porPreparar }) {
   const current = useRef(null);
   const shown = org ? { ...store, name: org.name, logo_url: org.logo_url, is_public: org.is_public } : store;
 
@@ -119,6 +125,11 @@ function StoreRail({ store, org, products, section, encendidos }) {
               {key === 'productos' && pending > 0 && (
                 <span className="adm-nav-badge" aria-label={`${pending} por atender`}>
                   {formatNumber(pending)}
+                </span>
+              )}
+              {key === 'pedidos' && porPreparar > 0 && (
+                <span className="adm-nav-badge" aria-label={`${porPreparar} por preparar`}>
+                  {formatNumber(porPreparar)}
                 </span>
               )}
             </Link>

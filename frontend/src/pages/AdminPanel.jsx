@@ -4,7 +4,7 @@ import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { formatNumber, leagueHasRequest, prizesSwitch } from '../utils/adminPanel.js';
 import {
-  IconBell, IconClock, IconGift, IconLeague, IconOrganization, IconOverview, IconSponsor, IconUsers,
+  IconBag, IconBell, IconClock, IconGift, IconLeague, IconOrganization, IconOverview, IconSponsor, IconUsers,
 } from '../components/admin/AdminIcons.jsx';
 import AdminOverviewSection from '../components/admin/AdminOverviewSection.jsx';
 import AdminLeaguesSection from '../components/admin/AdminLeaguesSection.jsx';
@@ -12,6 +12,7 @@ import AdminOrganizationsSection from '../components/admin/AdminOrganizationsSec
 import AdminUsersSection from '../components/admin/AdminUsersSection.jsx';
 import AdminSponsorsSection from '../components/admin/AdminSponsorsSection.jsx';
 import AdminPrizesSection from '../components/admin/AdminPrizesSection.jsx';
+import AdminShopSection from '../components/admin/AdminShopSection.jsx';
 import AdminNotificationsSection from '../components/admin/AdminNotificationsSection.jsx';
 import AdminCronSection, { CRON_STATES } from '../components/admin/AdminCronSection.jsx';
 import '../components/admin/admin.css';
@@ -26,6 +27,7 @@ const SECTIONS = [
   { key: 'usuarios',       label: 'Usuarios',       icon: IconUsers },
   { key: 'patrocinadores', label: 'Patrocinadores', icon: IconSponsor },
   { key: 'premios',        label: 'Premios',        icon: IconGift },
+  { key: 'compras',        label: 'Compras',        icon: IconBag },
   { key: 'notificaciones', label: 'Notificaciones', icon: IconBell },
   { key: 'cron',           label: 'Cron',           icon: IconClock },
 ];
@@ -35,6 +37,7 @@ const SOURCES = {
   cron:          (token) => api.adminGetCron(token),
   notifications: (token) => api.adminGetNotifications(token),
   switches:      (token) => api.adminGetSwitches(token),
+  shop:          (token) => api.adminGetShop(token),
   sponsors:      () => api.getSponsors(),
   leagues:       (token) => api.adminGetLeagues(token),
   organizations: (token) => api.adminGetOrganizations(token),
@@ -124,6 +127,14 @@ export default function AdminPanel() {
             token={token}
           />
         )}
+        {section === 'compras' && (
+          <AdminShopSection
+            data={data.shop}
+            error={errors.shop}
+            reload={() => reload('shop')}
+            token={token}
+          />
+        )}
         {section === 'notificaciones' && (
           <AdminNotificationsSection catalog={data.notifications} error={errors.notifications} />
         )}
@@ -155,6 +166,7 @@ function AdminRail({ section, data }) {
   const unverified = data.organizations?.filter((org) => !org.is_verified).length ?? 0;
   const cronState = data.cron ? CRON_STATES[data.cron.estado] ?? CRON_STATES.sin_señal : null;
   const prizesOn = data.switches ? prizesSwitch(data.switches).enabled : false;
+  const shopOn = data.shop?.switch?.enabled === true;
 
   const badges = { ligas: requests, organizaciones: unverified };
 
@@ -186,6 +198,14 @@ function AdminRail({ section, data }) {
                   role="img"
                   aria-label="Prendidos"
                   title="Prendidos"
+                />
+              )}
+              {key === 'compras' && shopOn && (
+                <span
+                  className="adm-nav-dot is-on"
+                  role="img"
+                  aria-label="Prendidas"
+                  title="Prendidas"
                 />
               )}
               {key === 'cron' && cronState && (

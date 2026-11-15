@@ -18,8 +18,9 @@ import {
   productosParaPremiar, textoDelPremio, validarFormularioDePremio,
 } from '../../utils/premios.js';
 import {
-  EMPTY_PRODUCT, isActive, productPayload, productToForm, validateProductForm,
+  EMPTY_PRODUCT, isActive, productPayload, productToForm, sumaDeTallas, validateProductForm,
 } from '../../utils/storePanel.js';
+import { tallasParaElegir } from '../../utils/compras.js';
 
 // Las ventanas del panel de una tienda. Sobre el lienzo se ven con la piel oscura
 // de admin.css (`body:has(.adm) .modal`), y league.css les pasa sus tokens verdes a
@@ -146,6 +147,8 @@ function ProductModal({ storeId, product, token, onClose, onSaved }) {
   // previa lo dice, en vez de prometer lo que no va a pasar.
   const sale = form.show_on_platform && (!editing || isActive(product));
   const currency = form.currency || 'MXN';
+  const tallas = tallasParaElegir(form.size_variant);
+  const sumaPorTalla = sumaDeTallas(form);
 
   return (
     <Modal title={editing ? 'Editar producto' : 'Nuevo producto'} onClose={onClose}>
@@ -201,13 +204,18 @@ function ProductModal({ storeId, product, token, onClose, onSaved }) {
                   inputMode="numeric"
                   min="0"
                   step="1"
-                  value={form.stock}
+                  value={sumaPorTalla !== null ? sumaPorTalla : form.stock}
+                  disabled={sumaPorTalla !== null}
+                  title={sumaPorTalla !== null ? 'Es la suma de las tallas' : undefined}
                   onChange={(e) => update('stock', e.target.value)}
                   placeholder="10"
                 />
               </div>
             </div>
-            <p className="sws-field-hint">Sin precio, tu vitrina dice «Precio a consultar». Sin existencias, no se lleva la cuenta.</p>
+            <p className="sws-field-hint">
+              Es lo que paga quien compra, con IVA incluido. Sin precio, tu vitrina dice «Precio a consultar». Sin
+              existencias, no se lleva la cuenta.
+            </p>
 
             <div className="field">
               <label htmlFor="sws-p-variant">Tallas o variantes</label>
@@ -218,6 +226,34 @@ function ProductModal({ storeId, product, token, onClose, onSaved }) {
                 placeholder="S, M, L, XL"
               />
             </div>
+
+            {/* Por talla, opcional (README, "Compras en la vitrina"): una tienda de
+                jerseys se queda sin M antes que sin L. Solo con dos o más tallas. */}
+            {tallas.length > 0 && (
+              <fieldset className="sws-size-stock">
+                <legend>Existencias por talla <em>(opcional)</em></legend>
+                <div className="sws-size-stock-grid">
+                  {tallas.map((t) => (
+                    <label key={t}>
+                      <span>{t}</span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min="0"
+                        step="1"
+                        value={form.size_stock?.[t] ?? ''}
+                        onChange={(e) => update('size_stock', { ...form.size_stock, [t]: e.target.value })}
+                        aria-label={`Existencias de la talla ${t}`}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <p className="sws-field-hint">
+                  Vacías, cuenta el número de «Existencias». Llenas, de todas las tallas, ese número es su suma y una
+                  talla en 0 no se puede comprar.
+                </p>
+              </fieldset>
+            )}
 
             <LogoField value={form.image_url} onChange={(v) => update('image_url', v)} label="Foto del producto" />
 

@@ -29,7 +29,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | **P1** | Hoy no daña, pero frena el siguiente paso: la primera liga que cobre, la prueba en cancha, el siguiente cliente |
 | **P2** | Deuda y pulido. Se toma cuando hay tiempo o cuando se toca ese archivo |
 
-## Índice (2026-11-09)
+## Índice (2026-11-14)
 
 | ID | P | Qué | Tipo |
 |-|-|-|-|
@@ -69,6 +69,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-44 | P2 | La página de un torneo se quedó con su portada gigante y sus tarjetas verdes | código |
 | PD-45 | P2 | Un logo que no carga se ve como un cuadro roto | código |
 | PD-47 | P2 | Cancelar un cargo llega a la bandeja como "Pago registrado" | código |
+| PD-48 | P2 | Reconectar Mercado Pago deja sin confirmar una ficha de OXXO que se pague después | código |
 
 ---
 
@@ -686,6 +687,27 @@ al anotarlo. Se resuelve con un tipo propio (`billing_charge_voided`) en los cua
 `PERMISO_POR_AVISO`, `TYPE_META` y el catálogo— y las dos suites e2e de cobranza antes y después;
 los avisos que ya se guardaron se quedan con el tipo viejo (regla 4).
 
+### PD-48 · Reconectar Mercado Pago deja sin confirmar una ficha de OXXO que se pague después
+
+Salió el 2026-11-14 al revisar en el navegador las compras en la vitrina, todavía sin desplegar.
+Un pedido se cobra y se consulta con la conexión de Mercado Pago con la que se hizo
+(`store_orders.payment_account_id`, `permisoDelPedido` en `utils/ventas.js`). Reconectar —aunque
+sea la misma cuenta de Mercado Pago— crea una conexión nueva y le borra las llaves a la anterior.
+Si en ese momento un pedido esperaba una ficha de OXXO y quien compró la paga después, el dinero le
+llega a la tienda pero CFBAMX ya no puede preguntar ese pago: el pedido se queda en "Pago
+pendiente" y a las 72 horas sale "Vencido", y la tienda no tiene cómo marcarlo pagado.
+
+Lo que sí quedó resuelto ese día: la página de un pedido de la conexión anterior ya no ofrece un
+"Pagar" que siempre fallaba; dice que la tienda cambió de cuenta, ofrece hacer el pedido de nuevo
+y, si esperaba una ficha de OXXO, pide avisar a la tienda si ya la pagó (`pay_blocked`, con su caso
+en `compras.e2e.mjs`, sección 18b).
+
+Es P2: las compras están apagadas y sin desplegar, y aun prendidas hace falta que la tienda
+reconecte mientras tiene una ficha a medio pagar; el permiso se renueva solo antes de vencer. Se
+resuelve con que la conexión nueva atienda los pedidos de la anterior **cuando es la misma cuenta
+de Mercado Pago** (`provider_user_id` igual): `permisoDelPedido` y "Pagar" usarían la vigente.
+Con otra cuenta no se puede: ese pago vive en la cuenta de antes.
+
 ---
 
 ## Siguiente alcance (no son defectos)
@@ -694,7 +716,19 @@ Lo que sube un producto de nivel pero no es algo roto. Se decide cuándo entra;
 no bloquea nada de lo de arriba.
 
 - **Cobro en línea**: la Fase 2 del roadmap de negocio y el bloqueador de fondo
-  para cobrar. Ninguna pasarela instalada.
+  para cobrar. La cobranza de ligas y clubes, y el plan Pro, siguen sin
+  pasarela; lo único que ya cobra en línea son las compras en la vitrina (abajo),
+  con el Mercado Pago de cada tienda.
+- **Prender las compras en la vitrina**: botón Comprar, carrito y Mercado Pago de
+  cada tienda, construidas y verificadas el 2026-11-14 contra un Mercado Pago de
+  mentira, sin desplegar; salen apagadas, con su botón en Panel Admin →
+  Compras. Antes de apretarlo: probarlas una vez con las credenciales de prueba de
+  Mercado Pago (una aplicación en Mercado Pago Developers y dos usuarios de
+  prueba), la revisión fiscal y la legal, pasar a los Términos y al Aviso de
+  Privacidad los textos que quedaron redactados, las llaves de producción en
+  Render y una compra real pequeña. Después, su Fase 2: el premio aplicado solo,
+  el aviso en Mis notificaciones y los correos. Ver README, "Compras en la
+  vitrina" → "Antes de prenderlo".
 - **Prender los premios por acertar**: están construidos y verificados, y salen
   apagados; se prenden con el botón de Panel Admin → Premios. Antes de
   apretarlo: la revisión legal (Gobernación, PROFECO y menores de edad) y pasar

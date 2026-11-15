@@ -51,6 +51,9 @@ async function request(path, { method = 'GET', body, token, keepalive = false } 
   if (!res.ok) {
     const err = new Error(data.error || 'Algo salió mal');
     err.status = res.status;
+    // El resto de la respuesta: la compra necesita los problemas del carrito, el
+    // total de hoy o el link de un pedido que no alcanzó a abrir Mercado Pago.
+    err.data = data;
     throw err;
   }
   return data;
@@ -440,6 +443,46 @@ export const api = {
   redeemPrizeCode: (organizationId, code, token) =>
     request(`/prizes/organization/${organizationId}/redeem`, { method: 'POST', body: { code }, token }),
 
+  // Compras en la vitrina (README, "Compras en la vitrina"). Se prenden con un
+  // botón del Panel Admin: apagadas, lo de comprar contesta 404 y un pedido que
+  // ya existe se sigue viendo con su link.
+  getShopStatus: () => request('/shop/status'),
+  getShopStore: (organizationId, token) => request(`/shop/stores/${organizationId}`, { token }),
+  quoteCart: (organizationId, payload, token) =>
+    request(`/shop/stores/${organizationId}/quote`, { method: 'POST', body: payload, token }),
+  createOrder: (organizationId, payload, token) =>
+    request(`/shop/stores/${organizationId}/orders`, { method: 'POST', body: payload, token }),
+  // Con el `payment_id` con el que regresa Mercado Pago, el backend le pregunta
+  // ese pago antes de contestar (por si su aviso tarda).
+  getOrder: (orderToken, { paymentId } = {}, token) =>
+    request(`/shop/orders/${encodeURIComponent(orderToken)}${paymentId ? `?payment_id=${encodeURIComponent(paymentId)}` : ''}`, { token }),
+  payOrder: (orderToken, token) =>
+    request(`/shop/orders/${encodeURIComponent(orderToken)}/pay`, { method: 'POST', token }),
+  claimOrder: (orderToken, token) =>
+    request(`/shop/orders/${encodeURIComponent(orderToken)}/claim`, { method: 'POST', token }),
+  getMyOrders: (token) => request('/shop/mine', { token }),
+
+  // El panel de una tienda, en lo que toca a vender.
+  getStoreSales: (organizationId, token) => request(`/store-sales/${organizationId}`, { token }),
+  saveStoreSalesSettings: (organizationId, payload, token) =>
+    request(`/store-sales/${organizationId}/settings`, { method: 'PUT', body: payload, token }),
+  getMercadoPagoLink: (organizationId, token) =>
+    request(`/store-sales/${organizationId}/mercadopago/link`, { method: 'POST', token }),
+  connectMercadoPago: (organizationId, payload, token) =>
+    request(`/store-sales/${organizationId}/mercadopago/connect`, { method: 'POST', body: payload, token }),
+  disconnectMercadoPago: (organizationId, token) =>
+    request(`/store-sales/${organizationId}/mercadopago/disconnect`, { method: 'POST', token }),
+  getStoreStandMatches: (organizationId, token) => request(`/store-sales/${organizationId}/matches`, { token }),
+  addStoreStand: (organizationId, payload, token) =>
+    request(`/store-sales/${organizationId}/stands`, { method: 'POST', body: payload, token }),
+  withdrawStoreStand: (organizationId, standId, token) =>
+    request(`/store-sales/${organizationId}/stands/${standId}/withdraw`, { method: 'POST', token }),
+  getStoreOrders: (organizationId, token) => request(`/store-sales/${organizationId}/orders`, { token }),
+  getStoreOrder: (organizationId, orderId, token) =>
+    request(`/store-sales/${organizationId}/orders/${orderId}`, { token }),
+  storeOrderAction: (organizationId, orderId, action, payload, token) =>
+    request(`/store-sales/${organizationId}/orders/${orderId}/${action}`, { method: 'POST', body: payload || {}, token }),
+
   // Pruebas de la nueva jerarquía (Rama -> Conferencia)
   createConference: (branchId, payload, token) =>
     request(`/manage/branches/${branchId}/conferences`, { method: 'POST', body: payload, token }),
@@ -623,6 +666,11 @@ export const api = {
   adminGetSwitches: (token) => request('/admin/switches', { token }),
   adminSetSwitch: (key, enabled, token) =>
     request(`/admin/switches/${key}`, { method: 'PUT', body: { enabled }, token }),
+
+  // Admin — las compras en la vitrina: el botón, la comisión y los conteos.
+  adminGetShop: (token) => request('/admin/shop', { token }),
+  adminSetSetting: (key, value, token) =>
+    request(`/admin/settings/${key}`, { method: 'PUT', body: { value }, token }),
 
   // Admin — patrocinadores
   adminCreateSponsor: (payload, token) =>

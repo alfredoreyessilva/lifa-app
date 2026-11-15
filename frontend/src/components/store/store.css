@@ -449,3 +449,168 @@ body:has(.sws) .modal:has(.sws-prize-form) { max-width: 860px; }
   .sws .adm-table.sws-prizes tbody td:nth-child(4) { grid-area: redeemed; }
   .sws .adm-table.sws-prizes tbody td:nth-child(5) { grid-area: actions; }
 }
+
+/* ---------- Pedidos (README, "Compras en la vitrina") ----------
+   La tabla es la de Premios: en el lienzo negro, con el estado en su palabra. Un
+   pedido pagado que espera a la tienda lleva la raya amarilla de lo que te toca. */
+.sws .adm-table.sws-orders tbody tr.is-attention td:first-child { box-shadow: inset 3px 0 0 var(--flag); }
+.sws-order-id { display: block; color: var(--ws-ink); font-size: 15px; font-variant-numeric: tabular-nums; }
+.sws-order-when { display: block; font-size: 12px; white-space: nowrap; }
+.sws-order-who { display: block; color: var(--ws-ink); font-weight: 600; overflow-wrap: anywhere; }
+.sws-order-what { display: block; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+.sws-order-flag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border: 1px solid rgba(255, 210, 63, 0.4);
+  border-radius: 999px;
+  color: var(--flag);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.sws-order-flag.is-block { display: block; margin: var(--space-2) 0 0; padding: 8px 10px; border-radius: var(--radius-md); white-space: normal; line-height: 1.45; }
+.sws-orders-off { margin: 0 0 var(--space-4); }
+
+/* La ventana de un pedido: bloques uno debajo del otro, cada uno con su título chico. */
+.sws-order { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.sws-order-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px var(--space-3); }
+.sws-order-head .adm-faint { font-size: 13px; }
+.sws-order-head .adm-more { margin-left: auto; }
+.sws-order-done { margin: 0; padding: 10px 12px; border-radius: var(--radius-md); background: rgba(74, 222, 128, 0.08); color: var(--positive); font-size: 13.5px; }
+.sws-order-block { padding-top: var(--space-3); border-top: 1px solid var(--ws-line); }
+.sws-order-block h3 {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-eyebrow);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ws-ink-dim);
+}
+.sws-order-block p { margin: 0 0 var(--space-2); color: var(--ws-ink); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.sws-order-items { margin: 0; padding: 0; list-style: none; }
+.sws-order-items li {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 6px 0;
+  color: var(--ws-ink);
+  font-size: 14px;
+}
+.sws-order-thumb { width: 40px; height: 40px; overflow: hidden; border-radius: 6px; background: var(--sf-paper); }
+.sws-order-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.sws-order-item { min-width: 0; overflow-wrap: anywhere; }
+/* En la ventana, la marca baja a su renglón y se parte: de una pieza, a 390 px
+   empujaba la ventana de lado. */
+.sws-order-item .sws-order-flag { display: block; width: fit-content; max-width: 100%; margin: 4px 0 0; padding: 3px 8px; border-radius: var(--radius-sm); white-space: normal; overflow-wrap: normal; line-height: 1.35; }
+.sws-order-qty { white-space: nowrap; }
+.sws-order-totals { display: flex; flex-direction: column; gap: 4px; margin: var(--space-2) 0 0; }
+.sws-order-totals div { display: flex; justify-content: space-between; gap: var(--space-3); color: var(--ws-ink-dim); font-size: 13.5px; }
+.sws-order-totals dd { margin: 0; color: var(--ws-ink); font-variant-numeric: tabular-nums; }
+.sws-order-history { margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.sws-order-history li { display: flex; justify-content: space-between; gap: var(--space-3); padding: 4px 0; color: var(--ws-ink); font-size: 13px; }
+.sws-order-ship { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-3); }
+
+/* ---------- Cobro y entrega ---------- */
+.sws-sales { display: flex; flex-direction: column; gap: var(--space-5); }
+.sws-sales-ok {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid rgba(74, 222, 128, 0.25);
+  border-radius: var(--radius-lg);
+  background: rgba(74, 222, 128, 0.06);
+  color: var(--ws-ink);
+  font-size: 14px;
+}
+.sws-sales-ok a { color: var(--positive); }
+.sws .adm-prizes-before { margin-bottom: 0; }
+.sws-missing { margin: 0; padding-left: 1.2em; color: var(--ws-ink); font-size: 14px; line-height: 1.6; }
+.sws-missing a { color: var(--flag); }
+.sws-sales-block { max-width: 760px; }
+.sws-sales-block > p { margin: 0 0 var(--space-3); color: var(--ws-ink); font-size: 14px; line-height: 1.55; }
+.sws-sales-block .field { margin-bottom: var(--space-3); }
+.sws-sales-block .field input,
+.sws-sales-block .field textarea { width: 100%; }
+.sws-sales-block .sws-field-hint { display: block; margin: 6px 0 0; }
+.sws-sales-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
+.sws-sales-saved { color: var(--positive); font-size: 13px; }
+.sws-sales-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-3); }
+.sws-sales-head .adm-canvas-title { margin: 0; }
+.sws-delivery { margin: 0 0 var(--space-4); padding: 0; border: 0; }
+.sws-delivery legend { margin-bottom: var(--space-2); padding: 0; color: var(--ws-ink-dim); font-size: 13px; }
+.sws-delivery .sws-check { margin-top: var(--space-3); }
+.sws-delivery-detail { margin: var(--space-2) 0 0 26px; }
+.sws-stands { margin: 0; padding: 0; list-style: none; }
+.sws-stands li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--ws-line);
+}
+.sws-stands-match { min-width: 0; }
+.sws-stands-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 12.5px; text-align: right; }
+
+/* Las existencias por talla, en la ventana del producto: una casilla chica por talla. */
+.sws-size-stock { margin: 0 0 var(--space-3); padding: 0; border: 0; }
+.sws-size-stock legend { margin-bottom: var(--space-2); padding: 0; color: var(--ws-ink); font-size: 13px; }
+.sws-size-stock legend em { color: var(--ws-ink-dim); font-style: normal; }
+.sws-size-stock-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: var(--space-2); }
+.sws-size-stock-grid label { display: flex; flex-direction: column; gap: 4px; color: var(--ws-ink-dim); font-size: 12px; }
+.sws-size-stock-grid input { width: 100%; }
+.sws-size-stock .sws-field-hint { margin: var(--space-2) 0 0; }
+
+@container (max-width: 760px) {
+  .sws-col-delivery { display: none; }
+  .sws .adm-table.sws-orders tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "id total"
+      "who who"
+      "state actions";
+    align-items: center;
+    gap: 6px var(--space-3);
+  }
+  .sws .adm-table.sws-orders thead { display: none; }
+  .sws .adm-table.sws-orders tbody td:nth-child(1) { grid-area: id; }
+  .sws .adm-table.sws-orders tbody td:nth-child(2) { grid-area: who; }
+  .sws .adm-table.sws-orders tbody td:nth-child(4) { grid-area: total; }
+  .sws .adm-table.sws-orders tbody td:nth-child(5) { grid-area: state; }
+  .sws .adm-table.sws-orders tbody td:nth-child(6) { grid-area: actions; }
+  .sws-stands li { grid-template-columns: minmax(0, 1fr) auto; }
+  .sws-stands-side { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; align-items: center; text-align: left; }
+}
+@media (max-width: 560px) {
+  .sws-order-ship { grid-template-columns: minmax(0, 1fr); }
+  .sws-delivery-detail { margin-left: 0; }
+}
+
+/* Los campos de Cobro y entrega viven en el lienzo, no en una ventana: llevan la
+   misma piel oscura que los de las ventanas del panel (admin.css), y no el verde
+   de los formularios de la app, que nacen sobre la cancha. */
+.sws-sales .field label { color: var(--ws-ink-dim); }
+.sws-sales .field input,
+.sws-sales .field select,
+.sws-sales .field textarea {
+  border-color: var(--ws-line-strong);
+  background: var(--ws-surface-2);
+  color: var(--ws-ink);
+}
+.sws-sales .field input::placeholder,
+.sws-sales .field textarea::placeholder { color: var(--ws-ink-faint); }
+.sws-sales .field input:focus,
+.sws-sales .field textarea:focus { border-color: var(--flag); outline: none; }
+/* Las casillas de cada talla van sueltas, sin `.field`: llevan su piel a mano. */
+.sws-size-stock-grid input {
+  padding: 8px 10px;
+  border: 1px solid var(--ws-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--ws-surface);
+  color: var(--ws-ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.sws-size-stock-grid input:focus { border-color: var(--flag); outline: none; }

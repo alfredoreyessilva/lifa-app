@@ -408,14 +408,19 @@ export const organizationAdminRequired = asyncHandler(async (req, res, next) => 
 // equipo, porque para ellos `rolesConPermiso()` devuelve una lista vacía. El
 // admin de la plataforma pasa como dueño, como en todas las guardas de este
 // archivo; si la ruta es solo de un tipo, lo revisa ella con `req.organization`.
-function guardaDeOrganizacion(permiso) {
+//
+// La excepción es `sinAdminDePlataforma`: conectar la cuenta de Mercado Pago de
+// una tienda decide a dónde va su dinero, y eso lo hace solo un dueño de verdad
+// (README, "Compras en la vitrina"). El admin de la plataforma que además es
+// dueño de esa tienda pasa por su fila, como cualquiera.
+function guardaDeOrganizacion(permiso, { sinAdminDePlataforma = false } = {}) {
   return asyncHandler(async (req, res, next) => {
     const organizationId = Number(req.params.organizationId);
     if (!Number.isInteger(organizationId)) return res.status(404).json({ error: 'Organización no encontrada' });
     const organization = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(organizationId);
     if (!organization) return res.status(404).json({ error: 'Organización no encontrada' });
 
-    if (req.user.role === 'admin') {
+    if (req.user.role === 'admin' && !sinAdminDePlataforma) {
       req.organization = organization;
       req.orgRole = 'owner';
       return next();
@@ -435,6 +440,11 @@ function guardaDeOrganizacion(permiso) {
 // Los premios de una tienda: ponerlos, retirarlos y cobrar sus códigos
 // (README, "Premios por acertar").
 export const storePrizesRequired = guardaDeOrganizacion('premios');
+
+// Las compras en la vitrina (README, "Compras en la vitrina"): los pedidos y las
+// entregas de una tienda, y su cuenta de Mercado Pago, que solo conecta un dueño.
+export const storeOrdersRequired = guardaDeOrganizacion('pedidos');
+export const storePaymentsRequired = guardaDeOrganizacion('cobros', { sinAdminDePlataforma: true });
 
 export const venueOwnerRequired = asyncHandler(async (req, res, next) => {
   const venueId = Number(req.params.id);

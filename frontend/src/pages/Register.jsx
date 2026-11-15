@@ -97,7 +97,7 @@ export default function Register() {
         <h2>Crear cuenta</h2>
         {reason && (
           <p style={{ color: 'var(--ink-dim)', fontSize: 14, marginBottom: 16 }}>
-            Para {reason}, primero crea tu cuenta. En cuanto termines, sigues directo con el registro.
+            Para {reason}, primero crea tu cuenta. En cuanto termines, sigues directo {location.state?.next ?? 'con el registro'}.
           </p>
         )}
         {error && <div className="form-error">{error}</div>}
