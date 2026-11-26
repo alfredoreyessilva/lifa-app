@@ -29,7 +29,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | **P1** | Hoy no daña, pero frena el siguiente paso: la primera liga que cobre, la prueba en cancha, el siguiente cliente |
 | **P2** | Deuda y pulido. Se toma cuando hay tiempo o cuando se toca ese archivo |
 
-## Índice (2026-11-15)
+## Índice (2026-11-26)
 
 | ID | P | Qué | Tipo |
 |-|-|-|-|
@@ -44,6 +44,7 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-12 | P1 | Nadie avisa si el servicio deja de responder | configuración |
 | PD-13 | P1 | No existe rescate de un equipo cuyo único dueño perdió acceso | código |
 | PD-34 | P1 | El Excel a nivel torneo y "Publicar todos" publican partidos sin equipos enlazados | código |
+| PD-50 | P1 | Ya no existe el botón para enlazar un equipo con sus partidos, y crear el equipo en la liga no los enlaza solo | código |
 | PD-02 | P2 | El push de partido está en pausa: casi nunca salía a tiempo, y nadie lo recibía | operación |
 | PD-15 | P2 | `PUT /manage/teams/:id` no es atómico | código |
 | PD-16 | P2 | El pie del estado de cuenta público es ilegible | decisión |
@@ -321,6 +322,48 @@ de buscar por `teams.league_id`, que es PD-19); que "Publicar todos" resuelva
 los que falten, en la misma sentencia; y qué pasa con los que ya estén
 publicados sin ids: respaldo por nombre al leer (regla 4) o un script de una
 sola vez (regla 3).
+
+### PD-50 · Ya no existe el botón para enlazar un equipo con sus partidos, y crear el equipo en la liga no los enlaza solo
+
+Salió el 2026-11-26, al cargar la Liga Mayor ONEFA 2025. Borregos Tec Querétaro
+no existía en la plataforma y, a pedido de Alfredo, sus 10 partidos se crearon
+con el nombre en texto. Él creó el equipo desde el panel de la liga, con el
+mismo nombre, y lo inscribió en la rama, grupo Bajío; los partidos no se
+enlazaron, y el botón que recordaba, "Conectar equipos con sus partidos", ya no
+está en ninguna pantalla. Se enlazaron a mano con un script de una sola vez
+(regla 3).
+
+- **El botón se fue el 2026-09-03** (`5bce7f5`), con
+  `components/LeagueRoster.jsx`, cuando las pantallas de estructura se juntaron
+  en `LeagueStructurePanel`. Su ruta sigue viva
+  (`PATCH /leagues/:leagueId/roster/sync-matches`, y `api.syncRosterMatches` en
+  `api/client.js`), pero nada la llama. Dos lugares todavía mandan a buscarlo:
+  la ventana de estadísticas de un partido (`MatchStatsModal.jsx`) y el README
+  ("Un partido sin equipos vinculados no se puede pasar lista").
+- **El enlace automático solo está en dos de los cuatro caminos.** Busca los
+  partidos por nombre, sin distinguir mayúsculas, al agregar a la liga un
+  equipo que ya existe (`POST /leagues/:leagueId/roster`) y al inscribirlo a un
+  torneo (`POST /leagues/tournaments/:tournamentId/teams`). No lo hace al crear
+  el equipo en la liga (`POST /manage/leagues/:leagueId/teams`), que lo da de
+  alta en `league_teams` sin buscar nada, ni al inscribirlo en una rama con su
+  conferencia y grupo (`POST /manage/branches/:branchId/teams`).
+
+Un partido sin sus dos ids no cuenta en la tabla, no deriva conferencia ni
+grupo, sale sin logos en el calendario del torneo (ver PD-34), y no se le puede
+pasar lista ni capturar estadísticas.
+
+Es P1, igual que PD-34, que es lo que produce esos partidos. Hoy no daña:
+medido en producción en solo lectura el 2026-11-26, los 427 partidos (ONEFA
+309, LFA 100, PFL 18) tienen sus dos ids. Pero la siguiente liga que capture o
+importe su calendario antes de dar de alta a sus equipos no tiene cómo
+enlazarlos sin un script, y dos pantallas le dicen que use un botón que no
+existe.
+
+Lo que hay que definir antes del código: que crear el equipo en la liga e
+inscribirlo en una rama enlacen solos, con la misma consulta que ya usan los
+otros dos caminos; si además regresa el botón al panel de la liga, para los
+casos viejos o un nombre escrito distinto; y corregir los dos textos que lo
+mencionan.
 
 ---
 
