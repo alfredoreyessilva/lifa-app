@@ -2946,13 +2946,18 @@ Por eso es el único link del que puede haber uno solo.
   equipo), pero el admin de la plataforma sí. Un coach que entrara por esa vía
   haría que `orgTieneMiembros()` diera el equipo por entregado sin que tenga
   dueño: la liga lo perdería y nadie adentro podría repartir su acceso. Con este
-  candado, la primera persona de un equipo entra **siempre** por la entrega.
+  candado, la primera persona de un equipo entra **siempre** por la entrega: por
+  su link o, desde el 2026-11-26, desde el Panel Admin, que solo la da como
+  dueño (ver "Sin link: el Panel Admin agrega a una cuenta que ya existe").
 
 Ese último candado es también lo que mantiene de acuerdo a la pantalla y al
 backend. La fila de la liga decide "entregado" leyendo `owner_user_id`, y el
 backend lo decide con `orgTieneMiembros()`. Las dos coinciden porque la entrega
-escribe las dos cosas en una sola sentencia, y porque la entrega es la única
-forma de poblar un equipo vacío.
+—la del link y la del Panel Admin— escribe las dos cosas en una sola sentencia y
+es la única forma de poblar un equipo vacío, y porque desde el 2026-11-26 un
+equipo entregado ya no se puede vaciar: no se borra la cuenta de su único dueño,
+y si se borra la del principal, el puesto pasa a otro dueño (ver "Borrar una
+cuenta no vacía un equipo").
 
 #### La invitación con rol: las que hagan falta
 
@@ -3054,6 +3059,159 @@ equipo entregado ya no ofrezca ni entregar ni eliminar.
 **Resultado (2026-09-23):** la suite pasó de 59 a **122 comprobaciones, 0
 fallas**, y todo lo del navegador se vio funcionar. El detalle está en el
 CHANGELOG.
+
+### Sin link: el Panel Admin agrega a una cuenta que ya existe
+
+**Decidido y construido el 2026-11-26.** Lo pidió Alfredo después de mandarle a
+alguien un link de dueño de PFL: *"creó su cuenta pero creo que no lo hizo desde
+el link que le mandé, en lugar de pedirle que acceda al link, vamos a crear la
+posibilidad de que yo desde mi panel de admin seleccione a un usuario y poderlo
+nombrar como miembro de cualquier organización que yo administre"*.
+
+El link no había fallado. Quien se registra desde él acepta la invitación en el
+mismo paso (`InviteClaim` la reclama con el token que le acaba de dar el
+registro), y a quien se registró por otro lado el link le sigue sirviendo: lo
+abre, elige "Ya tengo cuenta" y lo acepta. Lo que esto quita es tener que
+pedírselo.
+
+**Dónde está.** Panel Admin → Usuarios → el menú "⋯" de una cuenta → "Agregar a
+una organización". La ventana dice quién es la persona y dónde está hoy, busca
+entre todas las organizaciones y ofrece los roles de la elegida. Al confirmar,
+la persona entra en ese momento, sin link y sin aceptar nada, y queda exactamente
+como si hubiera usado uno: una fila en `organization_members` con ese rol.
+
+Las reglas, y por qué:
+
+1. **Solo el admin de la plataforma.** La invitación existe para que la persona
+   acepte. Meter a alguien sin que acepte solo lo hace quien opera la
+   plataforma, que ya entra a todas las organizaciones y ya podía generar
+   cualquier link para cualquiera: esto no abre una puerta nueva, se ahorra un
+   paso. El dueño de una liga sigue invitando con el link.
+2. **Cualquier organización**: ligas, equipos, medios, tiendas, clínicas y
+   marcas, y no solo aquellas donde Alfredo es miembro: como admin de la
+   plataforma las administra todas. Quedan fuera las que se quedaron sin la liga
+   o el equipo de detrás (`PD-42`), porque ahí no hay nada que administrar.
+3. **Los roles son los de un link**: los del tipo de organización
+   (`rolesDeTipo`), con sus etiquetas, Dueño incluido.
+4. **A un equipo sin nadie adentro solo se entra como dueño, y eso es la
+   entrega.** Lo decidió Alfredo el 2026-11-26. Hace lo mismo que el link de
+   "Entregar perfil", y como él en una sola sentencia: `teams.owner_user_id` y la
+   fila de dueño. El equipo pasa a administrarse solo, su liga deja de ver su
+   padrón y ya no puede entregarlo ni eliminarlo, y le llega "Halcones tomó
+   control de su perfil". **No se deshace**, y la ventana lo dice antes de
+   confirmar. Sirve para el representante que creó su cuenta sin el link de su
+   liga. Ningún otro rol entra primero, por la misma razón que no hay invitación
+   con rol a un equipo sin entregar (ver "La entrega"): un coach haría que
+   `orgTieneMiembros()` diera el equipo por entregado sin que tenga dueño.
+5. **Quien ya está no se toca.** Si ya es miembro, con el rol que sea, la
+   respuesta es 409 y nada cambia: su rol se cambia con "Cambiar rol", en el
+   panel de esa organización. Es la regla 5 de "La invitación con rol" —un link
+   es para alguien que todavía no está— y por la misma razón: volver a dar un
+   rol reescribía el de quien ya estaba.
+6. **Ni a uno mismo ni a otra cuenta de admin de la plataforma.** Ya entran a
+   todo, así que la fila no les daría nada, salvo en una tienda: ahí ser su dueño
+   de verdad es lo único que deja conectar su Mercado Pago, porque el permiso
+   `cobros` deja fuera al admin de la plataforma a propósito (ver "Compras en la
+   vitrina"). Agregarse a sí mismo sería saltarse ese candado con un clic.
+7. **Dueño no es "principal".** `owner_user_id` no se mueve —salvo en la
+   entrega, donde estaba vacío—, igual que con un link de dueño: entra un dueño
+   más, con los mismos permisos que los otros.
+
+**Lo que se entera cada quien.**
+
+- **La liga o el equipo** reciben el aviso de siempre, "Ana López entró a Liga
+  del Valle" (`org_admin_claimed`), con lo que de verdad pasó: *"CFBAMX le dio
+  acceso como Dueño, sin link de invitación."* Antes de crear un aviso se buscó
+  en el catálogo (Panel Admin → Notificaciones), y este ya existía: es el mismo
+  hecho —alguien entró— con otra causa, y lo ven los mismos roles. En la
+  entrega, la liga recibe `team_claimed` con *"CFBAMX le entregó el perfil a Ana
+  López, que ahora administra su información."*, porque el del link dice
+  "inició sesión con el link que le compartiste", y aquí eso no pasó. A un medio
+  o a una tienda no les llega nada, igual que con un link: la bandeja solo
+  recibe avisos de ligas y equipos.
+- **La persona** no recibe nada de la app: la bandeja no tiene avisos por
+  persona y el correo está apagado (`PD-38`). Lo ve en Mi panel la próxima vez
+  que entre. Por eso la ventana termina con "Avisarle por WhatsApp", con el
+  mensaje ya armado.
+
+**El link que no se usó sigue vivo.** La app no sabe a quién se mandó —la nota es
+opcional—, así que no lo cancela sola: podría ser de otra persona. Al terminar,
+la ventana enseña los links sin usar de esa organización, cada uno con
+"Cancelar". Si la misma persona abre el suyo después, recibe 409 ("ya eres
+parte"), el link no se gasta y caduca solo a los 7 días.
+
+**No hay columna nueva.** Quién agregó a quién queda en el aviso, igual que con
+un link queda en `invites`. En un medio o una tienda no queda más que la fila de
+miembro; un registro aparte está en "Fuera de esta versión".
+
+**Esto cierra `PD-13`**, el rescate de un equipo cuyo único dueño perdió acceso a
+su cuenta (a su correo, que es el caso que dejó la recuperación de contraseña):
+su cuenta nueva se agrega como dueño desde aquí. Hasta este día la salida eran
+dos pasos que no estaban en ninguna pantalla —invitarla y cederle el puesto con
+`transfer-owner`—. La cuenta vieja se queda como un dueño más.
+
+#### Borrar una cuenta no vacía un equipo
+
+Salió al construir lo de arriba (`PD-51`, que nació y se cerró ese mismo día):
+**Panel Admin → Usuarios → "Eliminar usuario" podía dejar vacío un equipo
+entregado.** `organization_members` se borra en cascada con la cuenta, así que si
+era la única persona del equipo, `orgTieneMiembros()` lo daba otra vez por **sin
+entregar**. Su liga volvía a ver "Entregar perfil" y podía generar el link,
+reclamarlo ella misma y quedarse con el padrón del club, la puerta trasera que
+"entregado es entregado" había cerrado. Lo alcanzaba solo el admin de la
+plataforma, que es el único que borra cuentas.
+
+Desde el 2026-11-26:
+
+- **No se borra la cuenta del único dueño de un equipo**: la respuesta es 409 y
+  dice cuál. Primero se agrega a otro dueño desde la misma pantalla, con "Agregar
+  a una organización". Un equipo siempre conserva un dueño —quitar o cambiarle el
+  rol a uno no se puede desde su panel—, así que la única persona de un equipo es
+  siempre su único dueño, y la regla cubre los dos casos. Las ligas y las demás
+  organizaciones no llevan este candado: no tienen padrón.
+- **Si se borra la del principal, el puesto pasa a otro dueño.** Antes
+  `owner_user_id` quedaba vacío, y la fila del equipo en el panel de su liga lo
+  enseñaba como "Sin entregar" con "Entregar perfil" y "Eliminar equipo", que el
+  servidor después negaba con 409.
+- **El diálogo dice lo que de verdad se borra.** Decía que se iban "su liga y
+  todos sus datos", y la liga no se borra (`owner_user_id` es `ON DELETE SET
+  NULL`). Lo que sí se va con la cuenta son sus predicciones y sus quinielas —deja
+  de salir en los rankings, incluido el concurso de ONEFA— y su acceso a cada
+  organización.
+
+#### Endpoints
+
+| Método | Ruta | Qué hace |
+|-|-|-|
+| GET | `/admin/users/:id/organizations` | La persona, dónde está hoy y las organizaciones a las que se puede agregar, cada una con sus roles y si es una entrega |
+| POST | `/admin/organizations/:id/members` | Agrega a `user_id` con `role`. En un equipo sin nadie adentro, es la entrega |
+| DELETE | `/admin/users/:id` | Ya existía. Ahora contesta 409 si la cuenta es la del único dueño de un equipo, y pasa el puesto principal a otro dueño |
+
+Las reglas que no necesitan la base viven en `utils/accesoSinLink.js`, con sus
+pruebas; el recorrido completo, en la sección 23 de `invites-roles.e2e.mjs`.
+
+**Verificado el 2026-11-26** contra `desarrollo-local`, sin desplegar.
+`invites-roles.e2e.mjs`: 380 ok y 0 fallas, 58 de ellas nuevas. Cubren quién puede,
+la lista de la ventana, agregar a una liga con su aviso y lo que trae su panel,
+quien ya está, los roles y las cuentas que no valen, el admin agregándose a sí
+mismo o a otro admin a una tienda, la tienda sin aviso, el link que sigue vivo y
+se cancela, la entrega con su aviso y lo que pierde la liga, borrar una cuenta con
+y sin otro dueño —con el puesto principal que pasa— y el rescate de `PD-13`. Hay
+24 unitarias nuevas: 16 del backend (`accesoSinLink.test.mjs`) y 8 del frontend.
+En el navegador, con un escenario armado por la API y sin tocar filas copiadas de
+producción, se revisó a 1280 y a 360 px: agregar como dueño a una liga, cancelar
+desde "Listo" el link que no se usó, la entrega con su advertencia en rojo, el
+equipo apareciendo solo en Organizaciones y "Eliminar usuario" negándose con su
+motivo.
+
+#### Fuera de esta versión
+
+- **Que el dueño de una liga agregue por correo, sin link.** Abriría dos cosas que
+  el link cuida: meter a alguien sin que acepte, y averiguar si un correo tiene
+  cuenta en CFBAMX.
+- **Cambiar el rol o quitar a alguien desde el Panel Admin.** Eso vive en el panel
+  de cada organización, y repetirlo aquí es repetir sus candados.
+- **Un registro de quién agregó a quién** que no dependa del aviso.
 
 ### Cómo está hoy, y qué falta
 
@@ -6186,12 +6344,12 @@ siempre había una:
   **varios dueños a la vez**: quien registra el equipo puede invitar a un
   segundo dueño desde el principio (la invitación con rol `owner` pide el
   permiso `duenos`, que solo un dueño tiene), y perder una cuenta deja de ser
-  fatal. Lo que sigue sin existir es el **rescate**: si el único dueño ya
-  perdió acceso, no hay un flujo para reclamar ese equipo. La salida existe
-  pero es de dos pasos y no está en ninguna pantalla: un administrador de la
-  plataforma invita a la persona como `admin` —a `owner` no puede, ese permiso
-  es solo de un dueño— y después le cede el puesto con `transfer-owner`, que
-  sí lo deja pasar por encima de `duenos`.
+  fatal. ~~Lo que sigue sin existir es el **rescate**~~ — **resuelto el
+  2026-11-26** (era `PD-13`): si el único dueño perdió acceso a su cuenta, el
+  admin de la plataforma agrega su cuenta nueva como dueño desde Panel Admin →
+  Usuarios → "Agregar a una organización". Ver "Sin link: el Panel Admin agrega
+  a una cuenta que ya existe". Hasta ese día la salida eran dos pasos sin
+  pantalla: invitarla y cederle el puesto con `transfer-owner`.
 
 ## Playbook del equipo
 
@@ -7162,7 +7320,7 @@ que moverse entre ellas no obligue a volver a aprender dónde está cada cosa:
 | Resumen | Usuarios, ligas, equipos, partidos, visitas, visitantes únicos | Lo que te toca atender, y cuatro gráficas en un solo tablero |
 | Ligas | Registradas, solicitudes, públicas, privadas, verificadas | Tabla, con las solicitudes arriba |
 | Organizaciones | Registradas, sin verificar y una celda por tipo con filas | Tabla |
-| Usuarios | Registrados, nuevos este mes, dueños de liga, administradores | Tabla |
+| Usuarios | Registrados, nuevos este mes, dueños de liga, administradores | Tabla. Desde el "⋯" de una cuenta, "Agregar a una organización" sin link (ver "Sin link: el Panel Admin agrega a una cuenta que ya existe") |
 | Patrocinadores | Lugares ocupados, impresiones, clics, CTR | Los cuatro lugares de la barra lateral |
 | Premios | Si están prendidos y desde cuándo, premios puestos, tiendas que pueden ponerlos | El botón para prenderlos o apagarlos, qué cambia y quién los movió (ver "Premios por acertar" → "El interruptor") |
 | Compras | Si están prendidas, tiendas que venden, con Mercado Pago, pedidos pagados en 30 días y su monto, la comisión | El botón, la comisión y quién movió cada uno (ver "Compras en la vitrina") |
@@ -7869,7 +8027,8 @@ el partido, sin link.
 
 Hasta ese día no existía. Un admin de liga que se registró con correo y
 contraseña y la olvidaba **se quedaba fuera**, y con él su organización, porque
-tampoco hay rescate de un equipo (`PD-13`). Era el `PD-04`, y no estaba anotado
+tampoco había rescate de un equipo (`PD-13`, que se cerró el 2026-11-26 con "Sin
+link: el Panel Admin agrega a una cuenta que ya existe"). Era el `PD-04`, y no estaba anotado
 en ninguna lista hasta la revisión del 2026-09-23.
 
 **Un código de 6 dígitos por correo, no un link.** Lo decidió Alfredo. El

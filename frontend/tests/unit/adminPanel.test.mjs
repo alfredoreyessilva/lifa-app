@@ -6,10 +6,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  ORGANIZATION_FILTERS, LEAGUE_FILTERS, attentionItems, clickRate, countFilters, fillDays, formatNumber,
-  isHandedOverTeam, isNewThisMonth, leagueHasRequest, matchesSearch, niceScale, normalize, paginate,
-  planStatus, pluralize, prizesSwitch, sortLeagues, sponsorTotals, switchChangedBy, toNumber, topRows,
-  userFilters,
+  ORGANIZATION_FILTERS, LEAGUE_FILTERS, accessMessage, addMemberNotice, attentionItems, clickRate, countFilters,
+  fillDays, formatNumber, handoverWarning, isHandedOverTeam, isNewThisMonth, leagueHasRequest, matchesSearch,
+  membershipsLine, niceScale, normalize, organizationKind, organizationOptions, paginate, planStatus, pluralize,
+  prizesSwitch, registeredLeaguesNote, sortLeagues, sponsorTotals, switchChangedBy, toNumber, topRows, userFilters,
 } from '../../src/utils/adminPanel.js';
 
 test('un conteo que llega como texto se lee como número', () => {
@@ -233,4 +233,85 @@ test('sin historial nadie lo ha movido: apagado, sin fecha y sin cifras inventad
   assert.deepEqual(premios.history, []);
   assert.equal(premios.active, 0);
   assert.equal(premios.stores, 0);
+});
+
+// ── Usuarios: agregar a una organización, sin link ─────────────────────────
+// Con la forma de GET /admin/users/:id/organizations.
+
+const PFL = { id: 1, type: 'league', name: 'PFL', league_name: null, handover: false };
+const COYOTES = { id: 2, type: 'team', name: 'Coyotes', league_name: 'PFL', handover: true };
+const HALCONES = { id: 3, type: 'team', name: 'Halcones', league_name: 'Liga del Valle', handover: false };
+const GRIZZLIES = { id: 4, type: 'team', name: 'GRIZZLIES', league_name: null, handover: false };
+const HUERFANO = { id: 5, type: 'team', name: 'Toros', league_name: null, handover: true };
+const TIENDA = { id: 6, type: 'store', name: 'Deportes Cancún', league_name: null, handover: false };
+
+test('dónde está hoy una cuenta, en una línea', () => {
+  assert.equal(membershipsLine([]), '');
+  assert.equal(membershipsLine(undefined), '');
+  assert.equal(
+    membershipsLine([{ name: 'PFL', role: 'owner', role_label: 'Dueño' }, { name: 'Halcones', role: 'coach', role_label: 'Coach' }]),
+    'Dueño de PFL · Coach de Halcones',
+  );
+});
+
+test('cada organización dice qué es, y un equipo de qué liga y si es su entrega', () => {
+  assert.equal(organizationKind(PFL), 'Liga');
+  assert.equal(organizationKind(COYOTES), 'Equipo sin entregar · PFL');
+  assert.equal(organizationKind(HALCONES), 'Equipo · Liga del Valle');
+  assert.equal(organizationKind(GRIZZLIES), 'Equipo independiente');
+  assert.equal(organizationKind(HUERFANO), 'Equipo independiente, sin nadie adentro');
+  assert.equal(organizationKind(TIENDA), 'Tienda / proveedor');
+});
+
+test('la búsqueda mira el nombre, lo que es y su liga: "pfl" trae la liga y sus equipos', () => {
+  const todas = [PFL, COYOTES, HALCONES, GRIZZLIES, HUERFANO, TIENDA];
+  assert.deepEqual(organizationOptions(todas, 'pfl').rows.map((o) => o.name), ['PFL', 'Coyotes']);
+  assert.deepEqual(organizationOptions(todas, 'sin entregar').rows.map((o) => o.name), ['Coyotes']);
+  assert.deepEqual(organizationOptions(todas, 'TIENDA').rows.map((o) => o.name), ['Deportes Cancún']);
+  assert.deepEqual(organizationOptions(todas, 'cancun').rows.map((o) => o.name), ['Deportes Cancún']);
+});
+
+test('la lista enseña a lo más un tope, y dice cuántas hay en total', () => {
+  const muchas = Array.from({ length: 120 }, (_, i) => ({ id: i, type: 'team', name: `Equipo ${i}`, league_name: 'ONEFA' }));
+  const vista = organizationOptions(muchas, '');
+  assert.equal(vista.rows.length, 40);
+  assert.equal(vista.total, 120);
+  // Busca por pedazos, como el resto del panel: "Equipo 11" también encuentra del 110 al 119.
+  assert.equal(organizationOptions(muchas, 'Equipo 11').total, 11);
+  assert.equal(organizationOptions(muchas, 'Equipo 119').total, 1);
+  assert.equal(organizationOptions(undefined, '').total, 0);
+});
+
+test('la entrega se advierte con lo que pierde la liga, y solo en la entrega', () => {
+  assert.match(handoverWarning(COYOTES), /entrega de Coyotes/);
+  assert.match(handoverWarning(COYOTES), /PFL deja de ver su padrón/);
+  assert.match(handoverWarning(COYOTES), /No se deshace/);
+  assert.match(handoverWarning(HUERFANO), /queda como su dueño/);
+  assert.equal(handoverWarning(HALCONES), '');
+  assert.equal(handoverWarning(PFL), '');
+  assert.equal(handoverWarning(null), '');
+});
+
+test('quién se entera es lo que escribe el backend: la liga, el equipo, o nadie', () => {
+  assert.equal(addMemberNotice(PFL, 'Ana López'), 'A PFL le llega el aviso «Ana López entró a PFL».');
+  assert.equal(addMemberNotice(HALCONES, 'Ana López'), 'A Halcones le llega el aviso «Ana López entró a Halcones».');
+  assert.equal(addMemberNotice(COYOTES, 'Ana López'), 'A PFL le llega el aviso «Coyotes tomó control de su perfil».');
+  assert.match(addMemberNotice(HUERFANO, 'Ana López'), /no tiene liga/);
+  assert.match(addMemberNotice(TIENDA, 'Ana López'), /solo recibe los de ligas y equipos/);
+  assert.equal(addMemberNotice(null, 'Ana López'), '');
+});
+
+test('el mensaje de WhatsApp dice a qué entró, con qué rol y con qué cuenta', () => {
+  assert.equal(
+    accessMessage({ orgName: 'PFL', roleLabel: 'Dueño', email: 'ana@example.com' }),
+    'Ya tienes acceso a PFL en CFBAMX como Dueño. Entra con tu cuenta (ana@example.com) y lo vas a ver en Mi panel:',
+  );
+});
+
+test('el diálogo de borrar dice que sus ligas no se borran, en singular, plural o nada', () => {
+  // El conteo llega como texto, como todo COUNT(*) del panel.
+  assert.equal(registeredLeaguesNote('0'), null);
+  assert.equal(registeredLeaguesNote(undefined), null);
+  assert.equal(registeredLeaguesNote('1'), 'La liga que registró no se borra.');
+  assert.equal(registeredLeaguesNote('3'), 'Las 3 ligas que registró no se borran.');
 });

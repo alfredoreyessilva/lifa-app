@@ -2,13 +2,16 @@ import { useMemo, useState } from 'react';
 import { api } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import ConfirmDialog from '../ConfirmDialog.jsx';
-import { countFilters, formatNumber, matchesSearch, toNumber, userFilters } from '../../utils/adminPanel.js';
+import AdminAddMemberModal from './AdminAddMemberModal.jsx';
+import { countFilters, formatNumber, matchesSearch, registeredLeaguesNote, userFilters } from '../../utils/adminPanel.js';
 import {
   Band, FilterScoreboard, Identity, NoResults, RowMenu, SearchBox, SectionError, SectionLoading,
   Status, TableFooter, formatDate, useSectionFilter, useTableView,
 } from './AdminKit.jsx';
 
-export default function AdminUsersSection({ users, error, reload, token }) {
+// `onMembersChanged` recarga Organizaciones: un equipo que se entrega desde aquí
+// empieza a salir en esa pestaña, igual que si hubiera usado el link.
+export default function AdminUsersSection({ users, error, reload, onMembersChanged, token }) {
   const { user: me } = useAuth();
   const [modal, setModal] = useState(null);
 
@@ -76,15 +79,24 @@ export default function AdminUsersSection({ users, error, reload, token }) {
                           <td className="col-num adm-num">{formatNumber(u.league_count)}</td>
                           <td className="adm-col-date adm-faint">{formatDate(u.created_at)}</td>
                           <td className="col-actions">
+                            {/* A una cuenta de admin no se le agrega a nada ni se borra: ya
+                                entra a todo (README, "Sin link: el Panel Admin agrega a una
+                                cuenta que ya existe"). */}
                             {u.role !== 'admin' && u.id !== me?.id && (
                               <div className="adm-row-actions">
                                 <RowMenu
                                   label={`Más acciones de ${u.name}`}
-                                  items={[{
-                                    label: 'Eliminar usuario',
-                                    danger: true,
-                                    onSelect: () => setModal({ type: 'delete', user: u }),
-                                  }]}
+                                  items={[
+                                    {
+                                      label: 'Agregar a una organización',
+                                      onSelect: () => setModal({ type: 'add', user: u }),
+                                    },
+                                    {
+                                      label: 'Eliminar usuario',
+                                      danger: true,
+                                      onSelect: () => setModal({ type: 'delete', user: u }),
+                                    },
+                                  ]}
                                 />
                               </div>
                             )}
@@ -101,10 +113,25 @@ export default function AdminUsersSection({ users, error, reload, token }) {
         )}
       </div>
 
+      {modal?.type === 'add' && (
+        <AdminAddMemberModal
+          user={modal.user}
+          token={token}
+          onAdded={() => onMembersChanged?.()}
+          onClose={() => setModal(null)}
+        />
+      )}
+
+      {/* Lo que de verdad se borra (README, "Borrar una cuenta no vacía un equipo"):
+          hasta el 2026-11-26 decía que se iban sus ligas, y una liga no se borra con la
+          cuenta. Lo que sí se va son sus predicciones, y con ellas su lugar en los
+          rankings. Si es la del único dueño de un equipo, el servidor no la borra y
+          aquí sale por qué. */}
       {modal?.type === 'delete' && (
         <ConfirmDialog
           title="Eliminar usuario"
-          message={`¿Seguro que quieres eliminar a ${modal.user.name} (${modal.user.email})? Se eliminarán también ${toNumber(modal.user.league_count) === 1 ? 'su liga' : 'sus ligas'} y todos sus datos.`}
+          message={`¿Seguro que quieres eliminar a ${modal.user.name} (${modal.user.email})? Se borran su cuenta, sus predicciones y quinielas —deja de salir en los rankings— y su acceso a las organizaciones donde está.`}
+          warning={registeredLeaguesNote(modal.user.league_count)}
           confirmLabel="Eliminar usuario"
           danger
           onConfirm={async () => {

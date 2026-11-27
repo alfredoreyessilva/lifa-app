@@ -691,21 +691,28 @@ export const CATALOGO_DE_AVISOS = [
     como: 'guardado',
     para: ['liga'],
     canales: ['bandeja'],
-    cuando: 'Cuando un equipo abre el link de entrega que le mandó su liga y se queda con su perfil.',
+    cuando: 'Cuando un equipo abre el link de entrega que le mandó su liga y se queda con su perfil, o cuando CFBAMX se lo entrega desde el Panel Admin.',
     sinRepetir: ['Una sola vez por equipo: la entrega no se repite.'],
-    ojo: ['No trae botón: no lleva a ninguna pantalla.'],
+    ojo: [
+      'No trae botón: no lleva a ninguna pantalla.',
+      'Si lo entregó CFBAMX, el texto lo dice: no hubo link (README, «Sin link: el Panel Admin agrega a una cuenta que ya existe»).',
+    ],
     muestra: {
       de: LIGA,
       titulo: 'Halcones tomó control de su perfil',
       cuerpo: 'El equipo ya inició sesión con el link que le compartiste y ahora administra su propia información.',
       boton: false,
     },
+    variantes: [
+      { titulo: 'Halcones tomó control de su perfil', cuerpo: 'CFBAMX le entregó el perfil a Ana López, que ahora administra su información.' },
+    ],
     fuentes: {
       [INVITACIONES]: [
         "'team_claimed'",
         ' tomó control de su perfil',
         'El equipo ya inició sesión con el link que le compartiste y ahora administra su propia información.',
       ],
+      [ADMIN]: ["'team_claimed'", ' tomó control de su perfil', 'CFBAMX le entregó el perfil a ', ', que ahora administra su información.'],
     },
   },
   {
@@ -714,11 +721,12 @@ export const CATALOGO_DE_AVISOS = [
     como: 'guardado',
     para: ['liga', 'equipo'],
     canales: ['bandeja'],
-    cuando: 'Cuando alguien acepta una invitación con rol a una liga o a un equipo.',
+    cuando: 'Cuando alguien acepta una invitación con rol a una liga o a un equipo, o cuando CFBAMX le da acceso desde el Panel Admin, sin link.',
     sinRepetir: [],
     ojo: [
       'Si la invitación es a un medio o a una tienda, no le llega a nadie: la bandeja solo recibe avisos de ligas y equipos.',
       'No trae botón: no lleva a ninguna pantalla.',
+      'A quien entró no le llega nada suyo: lo ve en la bandeja de la organización solo si su rol ve este aviso.',
     ],
     muestra: {
       de: LIGA,
@@ -726,7 +734,13 @@ export const CATALOGO_DE_AVISOS = [
       cuerpo: 'Aceptó la invitación y entró como Tesorero de liga.',
       boton: false,
     },
-    fuentes: { [INVITACIONES]: ["'org_admin_claimed'", ' entró a ', 'Aceptó la invitación y entró como '] },
+    variantes: [
+      { titulo: 'Ana López entró a Liga del Valle', cuerpo: 'CFBAMX le dio acceso como Dueño, sin link de invitación.' },
+    ],
+    fuentes: {
+      [INVITACIONES]: ["'org_admin_claimed'", ' entró a ', 'Aceptó la invitación y entró como '],
+      [ADMIN]: ["'org_admin_claimed'", ' entró a ', 'CFBAMX le dio acceso como ', ', sin link de invitación.'],
+    },
   },
   {
     tipo: 'broadcast_added',

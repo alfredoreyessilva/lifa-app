@@ -729,6 +729,13 @@ export const api = {
   adminGetUsers: (token) => request('/admin/users', { token }),
   adminDeleteUser: (id, token) =>
     request(`/admin/users/${id}`, { method: 'DELETE', token }),
+  // Agregar a una cuenta que ya existe a una organización, sin link (README, "Sin
+  // link: el Panel Admin agrega a una cuenta que ya existe"). La lista trae, de
+  // cada organización, los roles que ahí se dan y si agregar es su entrega.
+  adminGetUserOrganizations: (userId, token) =>
+    request(`/admin/users/${userId}/organizations`, { token }),
+  adminAddOrganizationMember: (organizationId, userId, role, token) =>
+    request(`/admin/organizations/${organizationId}/members`, { method: 'POST', body: { user_id: userId, role }, token }),
 
   // Invitaciones (entregar el perfil de un equipo a su representante). Es la
   // única que cancela la anterior al generar otra, así que el modal primero

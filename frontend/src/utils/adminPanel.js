@@ -163,6 +163,77 @@ export function planStatus(org, now = new Date()) {
   return { active, expires };
 }
 
+/* ---------- Usuarios: agregar a una organización, sin link ---------- */
+
+// La ventana de Usuarios → "Agregar a una organización" (README, "Sin link: el
+// Panel Admin agrega a una cuenta que ya existe"). Quién puede entrar y con qué
+// rol lo decide el backend; esto es cómo se dice en pantalla.
+
+// Dónde está hoy una cuenta, en una línea: "Dueño de PFL · Coach de Halcones".
+export function membershipsLine(memberships) {
+  return (memberships ?? []).map((m) => `${m.role_label || m.role} de ${m.name}`).join(' · ');
+}
+
+// Qué es cada organización de la lista. Un equipo dice de qué liga es, y si
+// agregar a alguien ahí es su entrega, que no se deshace.
+export function organizationKind(org) {
+  if (org.type === 'league') return 'Liga';
+  if (org.type === 'team') {
+    if (org.league_name) return org.handover ? `Equipo sin entregar · ${org.league_name}` : `Equipo · ${org.league_name}`;
+    return org.handover ? 'Equipo independiente, sin nadie adentro' : 'Equipo independiente';
+  }
+  return ORG_TYPE_LABELS[org.type] || org.type;
+}
+
+// La lista ya buscada, con a lo más `limit` renglones: sin buscar son cientos, y la
+// ventana no es para recorrerlos. La búsqueda mira el nombre, lo que es y su liga:
+// "pfl" encuentra la liga y sus equipos.
+export function organizationOptions(organizations, query, limit = 40) {
+  const found = (organizations ?? [])
+    .filter((org) => matchesSearch(query, [org.name, organizationKind(org), org.league_name]));
+  return { rows: found.slice(0, limit), total: found.length };
+}
+
+// Agregar a un equipo sin nadie adentro es su entrega. Se dice antes de confirmar,
+// con lo que pierde la liga, porque no se deshace.
+export function handoverWarning(org) {
+  if (!org?.handover) return '';
+  return org.league_name
+    ? `Esto es la entrega de ${org.name}: pasa a administrarse solo, ${org.league_name} deja de ver su padrón y ya no lo puede entregar ni eliminar. No se deshace.`
+    : `Esto es la entrega de ${org.name}: quien entre queda como su dueño y reparte su acceso. No se deshace.`;
+}
+
+// Quién se entera, como lo dice la ventana antes de confirmar. Es el aviso que
+// escribe POST /admin/organizations/:id/members.
+export function addMemberNotice(org, userName) {
+  if (!org) return '';
+  if (org.handover) {
+    return org.league_name
+      ? `A ${org.league_name} le llega el aviso «${org.name} tomó control de su perfil».`
+      : 'No le llega aviso a nadie: el equipo no tiene liga.';
+  }
+  if (org.type === 'league' || org.type === 'team') {
+    return `A ${org.name} le llega el aviso «${userName} entró a ${org.name}».`;
+  }
+  return 'No le llega aviso a nadie: la bandeja solo recibe los de ligas y equipos.';
+}
+
+// Lo que el diálogo de "Eliminar usuario" dice de sus ligas. Hasta el 2026-11-26
+// decía que se borraban con la cuenta, y no: `leagues.owner_user_id` es ON DELETE
+// SET NULL. Sin ligas no dice nada. `count` llega como texto (ver arriba).
+export function registeredLeaguesNote(count) {
+  const n = toNumber(count);
+  if (n === 0) return null;
+  return n === 1 ? 'La liga que registró no se borra.' : `Las ${formatNumber(n)} ligas que registró no se borran.`;
+}
+
+// El mensaje para avisarle por WhatsApp, porque la app no se lo dice: la bandeja
+// no tiene avisos por persona y el correo está apagado (PD-38). El link a Mi
+// panel va aparte, en su propio renglón (`enlaceWhatsApp`).
+export function accessMessage({ orgName, roleLabel, email }) {
+  return `Ya tienes acceso a ${orgName} en CFBAMX como ${roleLabel}. Entra con tu cuenta (${email}) y lo vas a ver en Mi panel:`;
+}
+
 /* ---------- Premios: el interruptor ---------- */
 
 // Lo que contesta GET /admin/switches, como lo pinta la sección Premios (README,

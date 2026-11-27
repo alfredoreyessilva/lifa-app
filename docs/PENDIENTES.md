@@ -42,7 +42,6 @@ del README y ninguna tenía prioridad; así fue como un pendiente cerrado el
 | PD-10 | P1 | Nadie le dice al visor que instale la app | decisión |
 | PD-11 | P1 | `main` sin protección y el CI no frena el despliegue | configuración |
 | PD-12 | P1 | Nadie avisa si el servicio deja de responder | configuración |
-| PD-13 | P1 | No existe rescate de un equipo cuyo único dueño perdió acceso | código |
 | PD-34 | P1 | El Excel a nivel torneo y "Publicar todos" publican partidos sin equipos enlazados | código |
 | PD-50 | P1 | Ya no existe el botón para enlazar un equipo con sus partidos, y crear el equipo en la liga no los enlaza solo | código |
 | PD-02 | P2 | El push de partido está en pausa: casi nunca salía a tiempo, y nadie lo recibía | operación |
@@ -268,16 +267,6 @@ va después de esto.
 Sentry avisa de errores, pero si el backend simplemente no contesta, nadie se
 entera. Un monitor externo contra `/api/health` lo resuelve y, de paso, ayuda
 con PD-03. Es la Fase 3 del roadmap de negocio.
-
-### PD-13 · No existe rescate de un equipo cuyo único dueño perdió acceso
-
-Desde el 2026-09-20 un equipo puede tener varios dueños, así que perder una
-cuenta deja de ser fatal **si** alguien invitó a un segundo. Si no, no hay flujo
-para reclamarlo. La salida existe pero no está en ninguna pantalla: un admin de
-la plataforma invita a la persona como `admin` y después le cede el puesto con
-`transfer-owner`. Ver "Equipos independientes" en el README. Desde el
-2026-10-17 se puede recuperar la contraseña con un código por correo (era
-PD-04), así que el caso que queda es el de quien perdió el acceso a su correo.
 
 ### PD-34 · El Excel a nivel torneo y "Publicar todos" publican partidos sin equipos enlazados
 

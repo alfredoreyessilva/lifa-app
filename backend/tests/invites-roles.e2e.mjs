@@ -1133,6 +1133,185 @@ ok((await call(`/admin/organizations/${MEDIA}/unpublish`, { method: 'PUT', token
 await pool.query("UPDATE users SET role='rep' WHERE id=$1", [idPlat]);
 
 
+console.log('\n=== 23. Sin link: el admin de la plataforma agrega a una cuenta que ya existe ===');
+// Lo pidió Alfredo el 2026-11-26 (README, "Sin link: el Panel Admin agrega a una
+// cuenta que ya existe"): alguien creó su cuenta sin usar el link de dueño que le
+// mandaron. Sin altas nuevas: la suite ya gasta 19 de los 20 registros y entradas
+// que deja el limitador de /auth, así que se reusan las cuentas de arriba. PLAT2
+// sigue siendo admin en su token; la base se pone igual para que diga lo mismo.
+await pool.query("UPDATE users SET role='admin' WHERE id=$1", [idPlat]);
+// `idCoach` e `idRep` ya vienen de arriba (secciones 8c y 15b).
+const [idFan, idViejo, idNuevo, idLiga] = await Promise.all(['Fan', 'Viejo', 'Nuevo', 'Liga'].map((quien) => idDe(quien)));
+const agregarSinLink = (orgId, userId, role, token = PLAT2) =>
+  call(`/admin/organizations/${orgId}/members`, { method: 'POST', token, body: { user_id: userId, role } });
+const ventana = (userId, token = PLAT2) => call(`/admin/users/${userId}/organizations`, { token });
+const avisos = async (tipo, id, type) => (await pool.query(
+  'SELECT title, body FROM notifications WHERE recipient_type=$1 AND recipient_id=$2 AND type=$3 ORDER BY id',
+  [tipo, id, type]
+)).rows;
+const totalDeAvisos = async () => Number((await pool.query('SELECT COUNT(*)::int n FROM notifications')).rows[0].n);
+const NOMBRE_LIGA = `Liga Roles ${stamp}`;
+
+// ── Quién puede ──
+ok((await agregarSinLink(ORGLIGA, idFan, 'treasurer', LIGA)).status === 403,
+  'la dueña de la liga no agrega sin link: eso es solo del admin de la plataforma');
+ok((await agregarSinLink(ORGLIGA, idFan, 'treasurer', NUEVO)).status === 403, 'tampoco su administrador');
+ok((await agregarSinLink(ORGLIGA, idFan, 'treasurer', null)).status === 401, 'y sin sesión, 401');
+ok((await ventana(idFan, LIGA)).status === 403, 'la lista de la ventana tampoco la abre una liga');
+ok(await rolDe(ORGLIGA, idFan) === null, 'y nadie entró');
+
+// ── La lista de la ventana ──
+const deFan = await ventana(idFan);
+ok(deFan.status === 200 && deFan.data.user?.email === `fan${stamp}@example.com`, 'la ventana dice quién es la persona', `=${deFan.status}`);
+ok(Array.isArray(deFan.data.memberships) && deFan.data.memberships.length === 0, 'y que hoy no está en ninguna organización',
+  JSON.stringify(deFan.data.memberships));
+const ligaEnLista = deFan.data.organizations?.find((o) => o.id === ORGLIGA);
+ok(ligaEnLista?.type === 'league' && ligaEnLista.name === NOMBRE_LIGA && ligaEnLista.handover === false,
+  'la liga sale en la lista, con su nombre y sin ser entrega', JSON.stringify(ligaEnLista));
+ok(JSON.stringify(ligaEnLista?.roles.map((r) => r.value)) === JSON.stringify(['owner', 'admin', 'treasurer', 'editor'])
+  && ligaEnLista.roles.find((r) => r.value === 'treasurer')?.label === 'Tesorero de liga',
+  'con los roles de una liga y sus etiquetas', JSON.stringify(ligaEnLista?.roles));
+ok(!deFan.data.organizations.some((o) => o.id === ORG4),
+  'una organización que se quedó sin su equipo (PD-42) no sale: no hay nada que administrar');
+const deRep = await ventana(idRep);
+ok(deRep.data.memberships?.some((m) => m.organization_id === ORG && m.role === 'owner' && m.role_label === 'Dueño'),
+  'de quien ya está en algo, dice dónde y con qué rol', JSON.stringify(deRep.data.memberships));
+ok(deRep.data.organizations?.find((o) => o.id === ORG)?.member_role === 'owner', 'y su organización sale marcada con su rol');
+ok((await ventana(999999999)).status === 404, 'una cuenta que no existe, 404');
+
+// ── Agregar a una liga ──
+const avisosLigaAntes = (await avisos('league', LEAGUE, 'org_admin_claimed')).length;
+const aTeso = await agregarSinLink(ORGLIGA, idFan, 'treasurer');
+ok(aTeso.status === 201 && aTeso.data.role === 'treasurer' && aTeso.data.role_label === 'Tesorero de liga' && aTeso.data.handover === false,
+  'el admin de la plataforma la agrega como tesorera de liga, sin link', `=${aTeso.status} ${JSON.stringify(aTeso.data)}`);
+ok(await rolDe(ORGLIGA, idFan) === 'treasurer', 'y queda como si hubiera usado un link: su fila en organization_members');
+const meFan = await call('/auth/me', { token: FAN });
+const ligaDeFan = meFan.data.leagues?.find((l) => l.id === LEAGUE);
+ok(ligaDeFan?.my_role === 'treasurer' && ligaDeFan.my_permissions?.includes('cobranza_liga') && !ligaDeFan.my_permissions?.includes('estructura'),
+  'su panel ya trae la liga, con lo que su rol puede y nada más', JSON.stringify(ligaDeFan && { r: ligaDeFan.my_role, p: ligaDeFan.my_permissions }));
+const avisosLiga = await avisos('league', LEAGUE, 'org_admin_claimed');
+ok(avisosLiga.length === avisosLigaAntes + 1, 'a la liga le llega un aviso', `${avisosLigaAntes} → ${avisosLiga.length}`);
+ok(avisosLiga.at(-1)?.title === `Fan entró a ${NOMBRE_LIGA}`
+  && avisosLiga.at(-1)?.body === 'CFBAMX le dio acceso como Tesorero de liga, sin link de invitación.',
+  'el de siempre, «entró a», pero diciendo que no hubo link', JSON.stringify(avisosLiga.at(-1)));
+
+// ── Quien ya está no se toca ──
+const otraVez = await agregarSinLink(ORGLIGA, idFan, 'owner');
+ok(otraVez.status === 409 && /ya es parte de/.test(otraVez.data.error) && /Cambiar rol/.test(otraVez.data.error),
+  'agregar otra vez a quien ya está es 409, y dice dónde se cambia su rol', `=${otraVez.status} ${otraVez.data.error}`);
+ok(await rolDe(ORGLIGA, idFan) === 'treasurer', 'y su rol no cambió: no se volvió dueña');
+ok((await agregarSinLink(ORGLIGA, idLiga, 'treasurer')).status === 409, 'a la dueña tampoco se le baja el rol por aquí');
+ok(await rolDe(ORGLIGA, idLiga) === 'owner', 'sigue de dueña');
+
+// ── Roles, cuentas y organizaciones que no valen ──
+const coachEnLiga = await agregarSinLink(ORGLIGA, idViejo, 'coach');
+ok(coachEnLiga.status === 400 && Array.isArray(coachEnLiga.data.roles), 'un coach en una liga es 400, con los roles que sí valen',
+  `=${coachEnLiga.status} ${JSON.stringify(coachEnLiga.data)}`);
+ok((await agregarSinLink(ORGLIGA, 999999999, 'treasurer')).status === 404, 'una cuenta que no existe, 404');
+ok((await agregarSinLink(999999999, idViejo, 'treasurer')).status === 404, 'una organización que no existe, 404');
+ok((await agregarSinLink(ORG4, idViejo, 'owner')).status === 404, 'y una que se quedó sin su equipo, también');
+
+// ── Ni a uno mismo ni a otro admin: en una tienda, eso saltaría el candado de su Mercado Pago ──
+const aMiMismo = await agregarSinLink(TIENDA, idPlat, 'owner');
+ok(aMiMismo.status === 400 && /No te agregas a ti/.test(aMiMismo.data.error), 'el admin no se agrega a sí mismo como dueño de una tienda',
+  `=${aMiMismo.status} ${aMiMismo.data.error}`);
+await pool.query("UPDATE users SET role='admin' WHERE id=$1", [idViejo]);
+const aOtroAdmin = await agregarSinLink(TIENDA, idViejo, 'owner');
+await pool.query("UPDATE users SET role='rep' WHERE id=$1", [idViejo]);
+ok(aOtroAdmin.status === 400 && /admin de la plataforma/.test(aOtroAdmin.data.error), 'ni a otra cuenta de admin de la plataforma',
+  `=${aOtroAdmin.status} ${aOtroAdmin.data.error}`);
+ok(await rolDe(TIENDA, idPlat) === null && await rolDe(TIENDA, idViejo) === null, 'y ninguna de las dos entró a la tienda');
+
+// ── A una tienda sí, y no le llega aviso a nadie ──
+const avisosAntesTienda = await totalDeAvisos();
+const aTienda = await agregarSinLink(TIENDA, idNuevo, 'admin');
+ok(aTienda.status === 201 && await rolDe(TIENDA, idNuevo) === 'admin', 'a una tienda se agrega a su administrador', `=${aTienda.status}`);
+ok((await call(`/organizations/${TIENDA}/members`, { token: NUEVO })).status === 200, 'y ya ve quién tiene acceso, como cualquier administrador');
+ok(await totalDeAvisos() === avisosAntesTienda, 'a una tienda no le llega aviso: la bandeja solo recibe los de ligas y equipos');
+
+// ── El link que no se usó sigue vivo, y se cancela aparte ──
+const linkDueno = await call(`/invites/organizations/${ORGLIGA}/admins`, {
+  method: 'POST', token: LIGA, body: { role: 'owner', note: 'Rep' },
+});
+const aDueno = await agregarSinLink(ORGLIGA, idRep, 'owner');
+ok(aDueno.status === 201 && await rolDe(ORGLIGA, idRep) === 'owner', 'a quien no usó su link de dueño se le agrega como dueño',
+  `=${aDueno.status} ${aDueno.data.error ?? ''}`);
+const { rows: [{ owner_user_id: principalLiga }] } = await pool.query('SELECT owner_user_id FROM leagues WHERE id=$1', [LEAGUE]);
+ok(principalLiga === idLiga, 'y entra como un dueño más: el principal de la liga no se mueve', `principal=${principalLiga}`);
+const abreSuLink = await call(`/invites/${linkDueno.data.token}/claim`, { method: 'POST', token: REP });
+ok(abreSuLink.status === 409 && await sinUsar(linkDueno.data.token), 'si después abre el link, 409 y el link no se gasta',
+  `=${abreSuLink.status}`);
+const pendientesLiga = await call(`/invites/organizations/${ORGLIGA}`, { token: PLAT2 });
+const elLink = pendientesLiga.data.invites?.find((i) => i.id === linkDueno.data.id);
+ok(elLink?.token === linkDueno.data.token && elLink.can_cancel === true && elLink.note === 'Rep',
+  'el admin lo ve en los links sin usar, completo y con su nota, para cancelarlo', JSON.stringify(elLink));
+ok((await call(`/invites/organizations/${ORGLIGA}/${linkDueno.data.id}`, { method: 'DELETE', token: PLAT2 })).status === 200
+  && (await call(`/invites/${linkDueno.data.token}`)).status === 404, 'y lo cancela: deja de servir');
+
+// ── A un equipo sin nadie adentro, solo como dueño: es la entrega ──
+const tmSL = await call(`/manage/leagues/${LEAGUE}/teams`, { method: 'POST', token: LIGA, body: { name: `Equipo Sin Link ${stamp}` } });
+const TEAM_SL = tmSL.data.team?.id ?? tmSL.data.id;
+// El nombre se lee de la base: al crear un equipo, la app lo guarda en mayúsculas.
+const { rows: [{ organization_id: ORG_SL, name: NOMBRE_SL }] } = await pool.query('SELECT organization_id, name FROM teams WHERE id=$1', [TEAM_SL]);
+ok(!!TEAM_SL && (await miembros(ORG_SL)).length === 0, 'un equipo nuevo de la liga, sin entregar', `team=${TEAM_SL}`);
+const enLaVentana = (await ventana(idCoach)).data.organizations?.find((o) => o.id === ORG_SL);
+ok(enLaVentana?.handover === true && JSON.stringify(enLaVentana.roles) === JSON.stringify([{ value: 'owner', label: 'Dueño' }])
+  && enLaVentana.league_name === NOMBRE_LIGA,
+  'la ventana lo enseña como entrega, de qué liga es, y con un solo rol: Dueño', JSON.stringify(enLaVentana));
+const coachPrimero = await agregarSinLink(ORG_SL, idCoach, 'coach');
+ok(coachPrimero.status === 409 && /todavía no se entrega/.test(coachPrimero.data.error),
+  'un coach no entra primero: daría el equipo por entregado sin dueño', `=${coachPrimero.status} ${coachPrimero.data.error}`);
+ok((await miembros(ORG_SL)).length === 0, 'y el equipo sigue vacío');
+const avisosEntregaAntes = (await avisos('league', LEAGUE, 'team_claimed')).length;
+const entrega = await agregarSinLink(ORG_SL, idCoach, 'owner');
+ok(entrega.status === 201 && entrega.data.handover === true, 'como dueño sí: es la entrega', `=${entrega.status} ${JSON.stringify(entrega.data)}`);
+const { rows: [{ owner_user_id: duenoSL }] } = await pool.query('SELECT owner_user_id FROM teams WHERE id=$1', [TEAM_SL]);
+const mSL = await miembros(ORG_SL);
+ok(duenoSL === idCoach && mSL.length === 1 && mSL[0].user_id === idCoach && mSL[0].role === 'owner',
+  'escribe las dos cosas que escribe el link: owner_user_id y la fila de dueño', JSON.stringify({ duenoSL, mSL }));
+const avisosEntrega = await avisos('league', LEAGUE, 'team_claimed');
+ok(avisosEntrega.length === avisosEntregaAntes + 1
+  && avisosEntrega.at(-1)?.title === `${NOMBRE_SL} tomó control de su perfil`
+  && avisosEntrega.at(-1)?.body === 'CFBAMX le entregó el perfil a Coach, que ahora administra su información.',
+  'a la liga le llega «tomó control de su perfil», diciendo que se lo entregó CFBAMX', JSON.stringify(avisosEntrega.at(-1)));
+ok((await call(`/invites/teams/${TEAM_SL}`, { method: 'POST', token: LIGA })).status === 409,
+  'la liga ya no le puede generar su link de entrega: ya se administra solo');
+ok((await call(`/player-billing/teams/${TEAM_SL}/overview`, { token: LIGA })).status === 403, 'ni entra a su padrón');
+ok((await call(`/player-billing/teams/${TEAM_SL}/overview`, { token: COACH })).status === 200, 'su nuevo dueño sí');
+ok((await call(`/manage/teams/${TEAM_SL}`, { method: 'DELETE', token: LIGA })).status === 409, 'y la liga ya no lo puede eliminar');
+
+// ── Borrar una cuenta no vacía un equipo ──
+const borrarCoach = await call(`/admin/users/${idCoach}`, { method: 'DELETE', token: PLAT2 });
+ok(borrarCoach.status === 409 && borrarCoach.data.error?.includes(NOMBRE_SL)
+  && /Agregar a una organización/.test(borrarCoach.data.error),
+  'la cuenta del único dueño de un equipo no se borra, y dice cuál y qué hacer antes', `=${borrarCoach.status} ${borrarCoach.data.error}`);
+ok(!!(await idDe('Coach')) && (await miembros(ORG_SL)).length === 1, 'la cuenta y el equipo siguen como estaban');
+const avisosEquipoAntes = (await avisos('team', TEAM_SL, 'org_admin_claimed')).length;
+const otroDueno = await agregarSinLink(ORG_SL, idViejo, 'owner');
+ok(otroDueno.status === 201 && otroDueno.data.handover === false && await rolDe(ORG_SL, idViejo) === 'owner',
+  'ya entregado, se le agrega otro dueño como a cualquier equipo', `=${otroDueno.status} ${JSON.stringify(otroDueno.data)}`);
+const avisosEquipo = await avisos('team', TEAM_SL, 'org_admin_claimed');
+ok(avisosEquipo.length === avisosEquipoAntes + 1 && avisosEquipo.at(-1)?.body === 'CFBAMX le dio acceso como Dueño, sin link de invitación.',
+  'y el aviso le llega al equipo, no a la liga', JSON.stringify(avisosEquipo.at(-1)));
+const borrarCoach2 = await call(`/admin/users/${idCoach}`, { method: 'DELETE', token: PLAT2 });
+ok(borrarCoach2.status === 200 && !(await idDe('Coach')), 'con otro dueño, la cuenta ya se borra', `=${borrarCoach2.status} ${borrarCoach2.data.error ?? ''}`);
+const { rows: [{ owner_user_id: principalSL }] } = await pool.query('SELECT owner_user_id FROM teams WHERE id=$1', [TEAM_SL]);
+ok(principalSL === idViejo, 'y el puesto principal pasa al otro dueño: la fila de la liga no lo vuelve a ver «Sin entregar»',
+  `principal=${principalSL}`);
+ok((await call(`/invites/teams/${TEAM_SL}`, { method: 'POST', token: LIGA })).status === 409,
+  'la liga sigue sin poder entregarlo otra vez');
+
+// ── PD-13: el rescate de un equipo cuyo dueño perdió su cuenta ──
+// REP es el único dueño de TEAM. Su "cuenta nueva" se agrega como dueño, y entra al padrón.
+const rescate = await agregarSinLink(ORG, idFan, 'owner');
+ok(rescate.status === 201 && await rolDe(ORG, idFan) === 'owner', 'la cuenta nueva de quien perdió la suya se agrega como dueño',
+  `=${rescate.status} ${rescate.data.error ?? ''}`);
+ok((await call(`/player-billing/teams/${TEAM}/overview`, { token: FAN })).status === 200, 'y entra al padrón del club: el equipo quedó rescatado');
+ok(await rolDe(ORG, idRep) === 'owner', 'la cuenta vieja se queda como un dueño más');
+
+await pool.query("UPDATE users SET role='rep' WHERE id=$1", [idPlat]);
+
+
 console.log(`\n========  ${pass} ok, ${fail} fallas  ========`);
 await pool.end();
 process.exit(fail ? 1 : 0);

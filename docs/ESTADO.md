@@ -4,7 +4,7 @@ Una foto de qué productos hay y a qué nivel está cada uno, para no tener que
 reconstruirla leyendo el README. Lo que falta vive en
 [`PENDIENTES.md`](PENDIENTES.md), con ID y prioridad; aquí solo se nombra.
 
-**Actualizado: 2026-11-15.** Cuando un producto cambia de nivel, su renglón se
+**Actualizado: 2026-11-26.** Cuando un producto cambia de nivel, su renglón se
 mueve en el mismo commit que lo movió.
 
 ## Los niveles
@@ -64,8 +64,9 @@ respaldos se resolvieron el 2026-09-23.
 | Producto | Nivel | Evidencia | Qué lo detiene |
 |-|-|-|-|
 | Estructura y panel de liga (torneo → categoría → rama → partido, importador de Excel) | 4 | Las ligas públicas las captura Alfredo. El panel con secciones (2026-11-07) se verificó en el navegador con el árbol real de `desarrollo-local` en solo lectura y la sesión simulada (ONEFA, LFA, una liga sin categorías y una vacía, los cuatro roles, 10 secciones en 11 anchos, las 18 ventanas, 25 comprobaciones de controles que mandan las mismas peticiones que antes). Desplegado ese día (`24ad096`): CI verde, Vercel sirve las mismas hojas que la compilación revisada, y en el sitio público salen sus siete secciones, en escritorio y en celular, sin errores ni peticiones a la API. Sin probar con una cuenta real en producción ni en un teléfono | PD-26, PD-34 |
-| Equipos independientes | **5** | Un caso: GRIZZLIES | PD-13 |
+| Equipos independientes | **5** | Un caso: GRIZZLIES. Desde el 2026-11-26 tienen rescate: si su único dueño perdió su cuenta, la nueva se agrega como dueño desde el Panel Admin (cerró PD-13; ver el renglón de "Agregar sin link") | — |
 | Roles, invitaciones y entrega de equipos | **5** | Un caso: GRIZZLIES tiene un administrador invitado | PD-07, PD-32 |
+| Agregar sin link desde el Panel Admin (Usuarios → "Agregar a una organización", con la entrega de un equipo) y no borrar la cuenta del único dueño de un equipo | 3 | Construido y verificado el 2026-11-26 contra `desarrollo-local`, **sin desplegar**: `invites-roles.e2e.mjs` con 380 ok y 0 fallas, 58 de ellas nuevas (sección 23), y en el navegador a 1280 y 360 px con un escenario armado por la API (agregar a una liga, cancelar el link sin usar, la entrega, el diálogo de borrar negándose). Sin probar con la cuenta de Alfredo en producción | Desplegarlo |
 | Playbook del equipo (imágenes de jugadas del cuerpo técnico) | 4 | Verificado el 2026-10-08 contra `desarrollo-local`: `invites-roles.e2e.mjs` (sección 15b, con una subida real a Cloudinary) y recorrido en el navegador, escritorio y celular. Desplegado ese día (`2d88ce5`): Render responde `/api/playbook` (401 sin sesión) y el bundle de Vercel ya trae la pestaña | — |
 | Cobranza liga → equipo (varias ligas) | 4 | **0 movimientos** en producción | PD-06; cobro en línea |
 | Cuotas del club y estado de cuenta del papá | 4 | **0 filas de padrón** en producción | PD-16, PD-17, PD-27 |
@@ -84,7 +85,7 @@ respaldos se resolvieron el 2026-09-23.
 | Disponibilidad | ⚠️ Render gratuito: **41.5 s** en frío (medido 2026-09-23) | PD-03 |
 | Cron | ⚠️ Una llamada cada ~4 h (GitHub). El externo de antes ya no llama. Alcanza para la cobranza, no para los avisos de partido | PD-02 (P2) |
 | Monitoreo | Sentry en frontend y backend ✅ · caída del servicio ❌ | PD-12 |
-| Pruebas | **836 unitarias** (422 backend + 414 frontend) en el CI ✅ · **9 suites e2e** que se corren a mano | PD-11, PD-25 |
+| Pruebas | **860 unitarias** (438 backend + 422 frontend) en el CI ✅ · **9 suites e2e** que se corren a mano | PD-11, PD-25 |
 | Despliegue | Push a `main` = producción, sin protección ni espera al CI | PD-11 |
 | Seguridad | JWT obligatorio, límite de intentos en login y en el estado de cuenta público, CORS con lista, SQL parametrizado, candado contra producción, invitaciones que caducan a los 7 días ✅ · Recuperar la contraseña con un código por correo, que cierra las sesiones abiertas: verificado el 2026-10-17 contra `desarrollo-local` (`recuperar-contrasena.e2e.mjs` y navegador) y desplegado ese día (`ff73a8b`), pero **apagado en producción**: Render no tiene Resend y la ruta contesta 503 | PD-38, PD-20, PD-21 |
 | Páginas legales | ✅ Completas desde el 2026-09-19 | — |

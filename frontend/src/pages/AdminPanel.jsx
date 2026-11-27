@@ -107,6 +107,7 @@ export default function AdminPanel() {
             users={data.users}
             error={errors.users}
             reload={() => reload('users')}
+            onMembersChanged={() => reload('organizations')}
             token={token}
           />
         )}

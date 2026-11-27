@@ -15,6 +15,46 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
+- **Agregar sin link desde el Panel Admin, y borrar una cuenta ya no vacía un equipo
+  (2026-11-26, sin desplegar). Cierra `PD-13`; `PD-51` nació y se cerró ese mismo día.**
+  Lo pidió Alfredo: le mandó a alguien un link de dueño de PFL, la persona creó su cuenta
+  sin usarlo, y en vez de pedirle que lo abriera quiso poder nombrarla desde su panel. El
+  link no había fallado —registrarse desde él lo acepta en el mismo paso, y con "Ya tengo
+  cuenta" le sigue sirviendo a quien se registró por otro lado—; lo que se quitó es tener
+  que pedírselo. Se escribió primero en el README ("Sin link: el Panel Admin agrega a una
+  cuenta que ya existe"), con una decisión suya: a un equipo que su liga todavía no
+  entrega se entra **solo como dueño, y eso es la entrega**.
+
+  Lo que hay: Panel Admin → Usuarios → "⋯" → "Agregar a una organización", una ventana que
+  dice dónde está hoy la persona, busca entre todas las organizaciones y ofrece los roles
+  de la elegida (`AdminAddMemberModal.jsx`); al terminar enseña los links sin usar de esa
+  organización con "Cancelar" y un botón para avisarle por WhatsApp, porque la app no le
+  avisa. En el backend, `GET /admin/users/:id/organizations` y `POST
+  /admin/organizations/:id/members`, con las reglas puras en `utils/accesoSinLink.js`: solo
+  el admin de la plataforma, ni a sí mismo ni a otro admin (en una tienda le saltaría el
+  candado de su Mercado Pago), quien ya está no se toca, y la entrega escribe
+  `owner_user_id` y la fila de dueño en una sola sentencia, como el link. Los avisos son los
+  que ya existían —`org_admin_claimed` y `team_claimed`— con un texto que dice que no hubo
+  link, y el catálogo los trae como variantes.
+
+  Al revisar el rescate de `PD-13` salió **`PD-51` (P0)**: "Eliminar usuario" podía dejar
+  vacío un equipo entregado —`organization_members` se borra en cascada—, y con eso su liga
+  podía volver a entregárselo a sí misma y quedarse con el padrón. Ahora la cuenta del
+  único dueño de un equipo no se borra (409 con el motivo), y si se borra la del principal
+  el puesto pasa a otro dueño, para que la fila de la liga no lo vuelva a ver "Sin
+  entregar". El diálogo decía que se borraban sus ligas y no es cierto; ahora dice lo que sí
+  se va: sus predicciones, con su lugar en los rankings.
+
+  Verificado contra `desarrollo-local`: 860 unitarias (16 nuevas del backend y 8 del
+  frontend); `invites-roles.e2e.mjs` con 380 ok y 0 fallas, 58 de ellas nuevas (sección
+  23). La primera corrida dio 2 fallas de la propia prueba, que esperaba el nombre del
+  equipo como se tecleó y la app lo guarda en mayúsculas. En el navegador, con
+  `.playwright-mcp/sin-link-escenario.mjs` (cuentas `@example.com` armadas por la API), a
+  1280 y 360 px: agregar como dueño a una liga, cancelar el link sin usar desde "Listo", la
+  entrega con su advertencia, el equipo apareciendo solo en Organizaciones y "Eliminar
+  usuario" negándose con su motivo; de ahí salió darle barras de desplazamiento oscuras a la
+  ventana. Sin probar con la cuenta de Alfredo en producción ni en un teléfono real.
+
 - **Compras en la vitrina: botón Comprar, carrito y Mercado Pago de cada tienda; construidas
   (2026-11-14) y en producción, apagadas (2026-11-15).** Lo pidió Alfredo el 2026-11-14: continuar con "comprar"
   y "carrito", que los premios habían dejado para la fase siguiente. Se definió primero en el

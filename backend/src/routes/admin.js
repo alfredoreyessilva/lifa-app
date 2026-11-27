@@ -10,6 +10,8 @@ import {
 } from '../utils/ajustesDePlataforma.js';
 import { faltanVariables, mercadoPagoConfigurado } from '../utils/mercadoPago.js';
 import { orgTieneMiembrosSql } from '../utils/orgMembers.js';
+import { etiquetaDeRol } from '../utils/orgRoles.js';
+import { motivoParaNoAgregar, motivoParaNoBorrarCuenta, rolesSinLink } from '../utils/accesoSinLink.js';
 import { armarCatalogo } from '../utils/catalogoDeAvisos.js';
 import { pushEncendido } from '../utils/pushNotifier.js';
 import { emailAvailable } from '../utils/email.js';
@@ -654,12 +656,243 @@ router.get('/users', authRequired, adminRequired, asyncHandler(async (req, res) 
   res.json(users);
 }));
 
+// Borrar una cuenta no vacía un equipo (README, "Borrar una cuenta no vacía un
+// equipo", 2026-11-26). `organization_members` se va en cascada con la cuenta, y
+// hasta ese día borrar a la única persona de un equipo entregado lo dejaba "sin
+// entregar": su liga podía volver a generar el link, reclamarlo ella misma y
+// quedarse con el padrón del club. Dos cosas, antes del DELETE:
+//
+//   1. La cuenta del único dueño de un equipo no se borra. Primero se agrega a
+//      otro dueño, desde la misma pantalla.
+//   2. Si era la del principal (`teams.owner_user_id`), el puesto pasa a otro
+//      dueño. Con la columna vacía, la fila del equipo en el panel de su liga lo
+//      enseñaba "Sin entregar", con botones que el servidor después negaba.
+//
+// Son dos sentencias y no una: si el DELETE fallara después de mover el puesto,
+// queda principal otro de sus dueños, que también lo es. Nada que deshacer.
 router.delete('/users/:id', authRequired, adminRequired, asyncHandler(async (req, res) => {
-  const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+  const id = Number(req.params.id);
+  const user = Number.isInteger(id) ? await db.prepare('SELECT * FROM users WHERE id = ?').get(id) : null;
   if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
   if (user.role === 'admin') return res.status(400).json({ error: 'No puedes eliminar una cuenta de admin' });
-  await db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+
+  const soloEl = await db.prepare(`
+    SELECT COALESCE(t.name, o.name) AS name
+    FROM organization_members om
+    JOIN organizations o ON o.id = om.organization_id AND o.type = 'team'
+    LEFT JOIN teams t ON t.organization_id = o.id
+    WHERE om.user_id = ? AND om.status = 'active' AND om.role = 'owner'
+      AND NOT EXISTS (
+        SELECT 1 FROM organization_members otro
+         WHERE otro.organization_id = om.organization_id AND otro.user_id <> om.user_id
+           AND otro.status = 'active' AND otro.role = 'owner'
+      )
+    ORDER BY LOWER(COALESCE(t.name, o.name))
+  `).all(user.id);
+  const motivo = motivoParaNoBorrarCuenta(soloEl.map((e) => e.name));
+  if (motivo) return res.status(motivo.status).json({ error: motivo.error });
+
+  // El dueño más antiguo que quede. Sin otro dueño, la subconsulta da NULL, que es
+  // lo que haría el ON DELETE SET NULL de todos modos; con el candado de arriba,
+  // eso solo le pasa a una fila vieja sin su miembro.
+  await db.prepare(`
+    UPDATE teams t SET owner_user_id = (
+      SELECT om.user_id FROM organization_members om
+       WHERE om.organization_id = t.organization_id AND om.user_id <> ?
+         AND om.status = 'active' AND om.role = 'owner'
+       ORDER BY om.created_at, om.id
+       LIMIT 1
+    )
+    WHERE t.owner_user_id = ?
+  `).run(user.id, user.id);
+
+  await db.prepare('DELETE FROM users WHERE id = ?').run(user.id);
   res.json({ ok: true });
+}));
+
+/* ===================== AGREGAR SIN LINK ===================== */
+
+// Panel Admin → Usuarios → "Agregar a una organización": a una cuenta que ya
+// existe se le da un rol en una organización, sin link y sin que tenga que
+// aceptar (README, "Sin link: el Panel Admin agrega a una cuenta que ya existe",
+// 2026-11-26). Queda exactamente como si hubiera usado un link. Las reglas que no
+// necesitan la base están en utils/accesoSinLink.js.
+
+// La organización con lo que hace falta para decidir: su nombre como se edita —en
+// la liga o el equipo de detrás, igual que en GET /admin/organizations—, con quién
+// avisar, y si es un equipo sin nadie adentro, donde agregar es la entrega.
+const ORGANIZACION_PARA_AGREGAR = `
+  SELECT o.id, o.type,
+         COALESCE(l.name, t.name, o.name) AS name,
+         COALESCE(l.logo_url, t.logo_url, o.logo_url) AS logo_url,
+         l.id AS league_id, t.id AS team_id, t.league_id AS team_league_id, tl.name AS league_name,
+         (o.type = 'team' AND NOT ${orgTieneMiembrosSql('o')}) AS vacio
+  FROM organizations o
+  LEFT JOIN leagues l  ON l.organization_id = o.id
+  LEFT JOIN teams t    ON t.organization_id = o.id
+  LEFT JOIN leagues tl ON tl.id = t.league_id
+`;
+
+// Una liga o un equipo que se borró y dejó su organización (PD-42).
+const sinEntidad = (org) => (org.type === 'league' && !org.league_id) || (org.type === 'team' && !org.team_id);
+
+const rolesConEtiqueta = (tipo, vacio) => rolesSinLink(tipo, { vacio })
+  .map((value) => ({ value, label: etiquetaDeRol(value, tipo) }));
+
+// Lo que pinta la ventana: la persona, dónde está hoy y las organizaciones a las
+// que se puede agregar, cada una con los roles que ahí se dan y si es una entrega.
+// Las ligas primero, luego los equipos y al final las demás, por nombre.
+router.get('/users/:id/organizations', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const user = Number.isInteger(id)
+    ? await db.prepare('SELECT id, name, email, role, created_at FROM users WHERE id = ?').get(id)
+    : null;
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+  const filas = await db.prepare(`
+    SELECT org.*, mine.role AS member_role
+    FROM (${ORGANIZACION_PARA_AGREGAR}) org
+    LEFT JOIN organization_members mine
+           ON mine.organization_id = org.id AND mine.user_id = ? AND mine.status = 'active'
+    ORDER BY CASE org.type WHEN 'league' THEN 0 WHEN 'team' THEN 1 ELSE 2 END, LOWER(org.name), org.id
+  `).all(user.id);
+
+  const organizations = filas
+    .filter((org) => !sinEntidad(org))
+    .map((org) => ({
+      id: org.id,
+      type: org.type,
+      name: org.name,
+      logo_url: org.logo_url,
+      league_name: org.league_name,
+      handover: org.vacio === true,
+      roles: rolesConEtiqueta(org.type, org.vacio === true),
+      member_role: org.member_role,
+      member_role_label: org.member_role ? etiquetaDeRol(org.member_role, org.type) : null,
+    }));
+
+  res.json({
+    user,
+    memberships: organizations
+      .filter((org) => org.member_role)
+      .map((org) => ({ organization_id: org.id, name: org.name, type: org.type, role: org.member_role, role_label: org.member_role_label })),
+    organizations,
+  });
+}));
+
+// Agrega a `user_id` con `role`. En un equipo sin nadie adentro es la entrega: el
+// dueño y `teams.owner_user_id` en una sola sentencia, como el claim de un link de
+// entrega (routes/invites.js), y el aviso a su liga.
+//
+// El aviso va después y aparte, igual que en el claim: es una fila de
+// `notifications` con su INSERT … VALUES, que es lo que la prueba del catálogo de
+// avisos sabe leer. Si fallara, la persona ya entró, que es lo que importa.
+router.post('/organizations/:id/members', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const org = Number.isInteger(id) ? await db.prepare(`${ORGANIZACION_PARA_AGREGAR} WHERE o.id = ?`).get(id) : null;
+
+  const userId = Number(req.body?.user_id);
+  const cuenta = Number.isInteger(userId)
+    ? await db.prepare('SELECT id, name, email, role FROM users WHERE id = ?').get(userId)
+    : null;
+  const actual = org && cuenta
+    ? await db.prepare(
+      `SELECT role FROM organization_members WHERE organization_id = ? AND user_id = ? AND status = 'active'`
+    ).get(org.id, cuenta.id)
+    : null;
+
+  const role = req.body?.role;
+  const vacio = org?.vacio === true;
+  const motivo = motivoParaNoAgregar({
+    organizacion: org && { name: org.name, type: org.type, sinEntidad: sinEntidad(org) },
+    cuenta,
+    quienAgrega: req.user,
+    rol: role,
+    rolActual: actual?.role ?? null,
+    vacio,
+  });
+  if (motivo) return res.status(motivo.status).json({ error: motivo.error, ...(motivo.roles ? { roles: motivo.roles } : {}) });
+
+  const roleLabel = etiquetaDeRol(role, org.type);
+  const yaEstaba = () => res.status(409).json({
+    error: `${cuenta.name} ya es parte de ${org.name}. Su rol se cambia desde el panel de ${org.name}, con «Cambiar rol».`,
+  });
+
+  if (vacio) {
+    // `owner_user_id IS NULL` cierra la carrera con un link de entrega que alguien
+    // reclame al mismo instante: el segundo espera el candado de la fila, la
+    // vuelve a leer ya con dueño y no la toca.
+    const r = await db.prepare(`
+      WITH entregado AS (
+        UPDATE teams SET owner_user_id = ?
+         WHERE organization_id = ? AND owner_user_id IS NULL
+        RETURNING organization_id
+      ), alta AS (
+        INSERT INTO organization_members (organization_id, user_id, role, status)
+        SELECT organization_id, ?, 'owner', 'active' FROM entregado
+        ON CONFLICT (organization_id, user_id)
+        DO UPDATE SET role = 'owner', status = 'active'
+        RETURNING 1
+      )
+      SELECT (SELECT COUNT(*) FROM entregado)::int AS entregados
+    `).get(cuenta.id, org.id, cuenta.id);
+    if (r.entregados === 0) {
+      return res.status(409).json({
+        error: `${org.name} se acaba de entregar por otro lado. Vuelve a abrir la ventana para ver quién lo administra.`,
+      });
+    }
+
+    if (org.team_league_id) {
+      await db.prepare(`
+        INSERT INTO notifications (recipient_type, recipient_id, type, title, body, data)
+        VALUES ('league', ?, 'team_claimed', ?, ?, ?)
+      `).run(
+        org.team_league_id,
+        `${org.name} tomó control de su perfil`,
+        `CFBAMX le entregó el perfil a ${cuenta.name}, que ahora administra su información.`,
+        JSON.stringify({ team_id: org.team_id, team_name: org.name, user_id: cuenta.id, user_name: cuenta.name, by: 'admin' })
+      );
+    }
+  } else {
+    // El ON CONFLICT solo alcanza a una fila que no esté activa; a un miembro
+    // activo ya se le contestó arriba. Si entró en el instante de en medio, no
+    // regresa fila y se le dice lo mismo.
+    const alta = await db.prepare(`
+      INSERT INTO organization_members (organization_id, user_id, role, status)
+      VALUES (?, ?, ?, 'active')
+      ON CONFLICT (organization_id, user_id)
+      DO UPDATE SET role = EXCLUDED.role, status = 'active'
+      WHERE organization_members.status <> 'active'
+      RETURNING id
+    `).get(org.id, cuenta.id, role);
+    if (!alta) return yaEstaba();
+
+    // A la bandeja de la liga o del equipo de detrás, como el claim de un link.
+    // A un medio o una tienda no les llega nada: `notifications` solo recibe
+    // avisos de ligas y equipos.
+    const destino = org.league_id ? { tipo: 'league', id: org.league_id } : org.team_id ? { tipo: 'team', id: org.team_id } : null;
+    if (destino) {
+      await db.prepare(`
+        INSERT INTO notifications (recipient_type, recipient_id, type, title, body, data)
+        VALUES (?, ?, 'org_admin_claimed', ?, ?, ?)
+      `).run(
+        destino.tipo,
+        destino.id,
+        `${cuenta.name} entró a ${org.name}`,
+        `CFBAMX le dio acceso como ${roleLabel}, sin link de invitación.`,
+        JSON.stringify({ organization_id: org.id, user_id: cuenta.id, user_name: cuenta.name, role, by: 'admin' })
+      );
+    }
+  }
+
+  res.status(201).json({
+    ok: true,
+    organization_id: org.id,
+    user_id: cuenta.id,
+    role,
+    role_label: roleLabel,
+    handover: vacio,
+  });
 }));
 
 /* ===================== PATROCINADORES ===================== */
