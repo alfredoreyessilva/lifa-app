@@ -3190,7 +3190,8 @@ Desde el 2026-11-26:
 Las reglas que no necesitan la base viven en `utils/accesoSinLink.js`, con sus
 pruebas; el recorrido completo, en la sección 23 de `invites-roles.e2e.mjs`.
 
-**Verificado el 2026-11-26** contra `desarrollo-local`, sin desplegar.
+**En producción desde el 2026-11-26** (`f078ab3`; el despliegue está en el
+CHANGELOG). Antes de subirlo se verificó contra `desarrollo-local`.
 `invites-roles.e2e.mjs`: 380 ok y 0 fallas, 58 de ellas nuevas. Cubren quién puede,
 la lista de la ventana, agregar a una liga con su aviso y lo que trae su panel,
 quien ya está, los roles y las cuentas que no valen, el admin agregándose a sí

@@ -15,8 +15,9 @@ entradas traen el post-mortem del bug que las provocó.
 
 ### Cambios
 
-- **Agregar sin link desde el Panel Admin, y borrar una cuenta ya no vacía un equipo
-  (2026-11-26, sin desplegar). Cierra `PD-13`; `PD-51` nació y se cerró ese mismo día.**
+- **Agregar sin link desde el Panel Admin, y borrar una cuenta ya no vacía un equipo;
+  construido y en producción el 2026-11-26. Cierra `PD-13`; `PD-51` nació y se cerró ese
+  mismo día.**
   Lo pidió Alfredo: le mandó a alguien un link de dueño de PFL, la persona creó su cuenta
   sin usarlo, y en vez de pedirle que lo abriera quiso poder nombrarla desde su panel. El
   link no había fallado —registrarse desde él lo acepta en el mismo paso, y con "Ya tengo
@@ -53,7 +54,15 @@ entradas traen el post-mortem del bug que las provocó.
   1280 y 360 px: agregar como dueño a una liga, cancelar el link sin usar desde "Listo", la
   entrega con su advertencia, el equipo apareciendo solo en Organizaciones y "Eliminar
   usuario" negándose con su motivo; de ahí salió darle barras de desplazamiento oscuras a la
-  ventana. Sin probar con la cuenta de Alfredo en producción ni en un teléfono real.
+  ventana.
+
+  **Desplegado esa noche** a pedido de Alfredo ("commit y push a main"): `f078ab3`. CI verde;
+  Vercel publicó la misma hoja del panel que la compilación revisada (`admin-Gb76wtbW.css`),
+  todas las hojas con el mismo nombre y los textos nuevos en su JS; Render contestó 401 "No
+  autenticado" en `GET /admin/users/:id/organizations` y `POST /admin/organizations/:id/members`
+  a los 57 s del push, donde antes daba 404, y `/health` y el directorio público siguen
+  igual. Sin migraciones: no hay columna nueva. Sin probar con la cuenta de Alfredo en
+  producción ni en un teléfono real.
 
 - **Compras en la vitrina: botón Comprar, carrito y Mercado Pago de cada tienda; construidas
   (2026-11-14) y en producción, apagadas (2026-11-15).** Lo pidió Alfredo el 2026-11-14: continuar con "comprar"
